@@ -64,7 +64,7 @@ export function KpiGrid({
   return (
     <div
       className={clsx(
-        "grid items-stretch",
+        "addr-drop grid items-stretch",
         dense ? "gap-2" : "gap-3",
         before ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4" : colsFor(n),
         className

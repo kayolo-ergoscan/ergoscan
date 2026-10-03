@@ -241,7 +241,7 @@ export function NamesView() {
 
   return (
     <Shell>
-      <div className="mb-3 grid grid-cols-2 items-stretch gap-2 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="addr-drop mb-3 grid grid-cols-2 items-stretch gap-2 sm:grid-cols-3 lg:grid-cols-6">
         {TILES.map((id, i) => (
           <AddressStatTile
             key={id}

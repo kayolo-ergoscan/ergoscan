@@ -516,7 +516,7 @@ export function NetworkOrbit({ enter = 0 }: { enter?: number }) {
 
   return (
     <section
-      className="home-tile-enter min-w-0 max-lg:order-5 lg:h-full"
+      className="home-tile-enter home-meet-right min-w-0 max-lg:order-5 lg:h-full"
       style={{ "--enter": enter } as CSSProperties}
     >
       <article className="mod flex h-full min-h-0 flex-col rounded-[20px] border border-[var(--border)] bg-[var(--module)]">

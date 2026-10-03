@@ -165,7 +165,7 @@ export function Shell({
           </header>
 
           <main className="stage-main flex-1 py-5 pb-[max(2rem,env(safe-area-inset-bottom))] max-lg:pb-5 lg:py-5">
-            <div className="stage-width plane-stage px-4 sm:px-6 lg:px-8">{children}</div>
+            <div className={clsx("stage-width plane-stage px-4 sm:px-6 lg:px-8", path === "/" && "home-stage")}>{children}</div>
           </main>
 
           <footer className="pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 max-lg:pb-4">

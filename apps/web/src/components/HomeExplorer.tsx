@@ -803,7 +803,7 @@ export function HomeExplorer({
           style={enterAt(9)}
         />
         <section
-          className="home-tile-enter mod flex h-full min-h-0 flex-col rounded-[20px] border border-[var(--border)] bg-[var(--module)] px-3.5 py-3 max-lg:order-3 lg:col-start-2 lg:row-start-3"
+          className="home-tile-enter home-meet-right mod flex h-full min-h-0 flex-col rounded-[20px] border border-[var(--border)] bg-[var(--module)] px-3.5 py-3 max-lg:order-3 lg:col-start-2 lg:row-start-3"
           style={enterAt(11)}
         >
           <p className="text-[17px] font-semibold tracking-tight">{t("home.versionNodes")}</p>
@@ -851,7 +851,7 @@ function HomeActivityTile({
 }) {
   return (
     <section
-      className="home-tile-enter mod flex h-full min-h-0 flex-1 flex-col rounded-[20px] border border-[var(--border)] bg-[var(--module)]"
+      className="home-tile-enter home-meet-right mod flex h-full min-h-0 flex-1 flex-col rounded-[20px] border border-[var(--border)] bg-[var(--module)]"
       style={enterAt(enter)}
     >
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[20px] px-4 py-2.5 sm:px-5">
@@ -1557,7 +1557,7 @@ function HomeMempoolTile({
 
   return (
     <section
-      className="home-tile-enter mod flex h-full min-w-0 flex-col rounded-[20px] border border-[var(--border)] bg-[var(--module)] px-3.5 py-3 sm:px-5"
+      className="home-tile-enter home-meet-right mod flex h-full min-w-0 flex-col rounded-[20px] border border-[var(--border)] bg-[var(--module)] px-3.5 py-3 sm:px-5"
       style={enterAt(1)}
     >
       <div className="mb-2 flex h-[22px] items-center justify-between gap-3">

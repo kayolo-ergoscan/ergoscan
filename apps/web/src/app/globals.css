@@ -2729,31 +2729,44 @@ html[data-ink="day"] .token-tx-tape a[data-addr].is-twin {
   }
 }
 
+/* Pages except home: slide in from the right. Home meets from both sides. */
 .home-tile-enter {
-  animation:
-    addr-tile-drop 400ms linear backwards,
-    addr-tile-in 400ms linear backwards;
-  animation-delay: 0ms, 0ms;
-  transform-origin: center center;
+  animation: addr-sheet-lay 480ms var(--ease) both;
 }
 
-/*
- * /addresses tiles. They come from the viewer onto the screen plane.
- * perspective 640px, start translateZ(160px) ≈ 1.33× (640 / 480).
- * Flight keeps scale 1 and only loses the near-camera size.
- * Same finish as the list row enter: 400ms, delay 0.
- * Land at 58% (232ms). Expand peaks at 74% (296ms).
- * Opacity fades on its own so it does not split the motion.
- * Fill is backwards: the opening frame is held, the landing frame is not.
- */
+@keyframes home-sheet-from-left {
+  from {
+    opacity: 0;
+    transform: translateX(-40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Home: left column from the left, right column from the right — they meet. */
+.home-stage .home-tile-enter {
+  animation: home-sheet-from-left 480ms var(--ease) both;
+}
+
+.home-stage .home-tile-enter.home-meet-right {
+  animation: addr-sheet-lay 480ms var(--ease) both;
+}
+
+@keyframes addr-sheet-lay {
+  from {
+    opacity: 0;
+    transform: translateX(40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 .addr-drop {
-  perspective: 640px;
-  perspective-origin: center center;
-}
-
-.addr-drop,
-.addr-drop > * {
-  transform-style: preserve-3d;
+  animation: addr-sheet-lay 480ms var(--ease) both;
 }
 
 @keyframes addr-tile-drop {
@@ -2790,8 +2803,7 @@ html[data-ink="day"] .token-tx-tape a[data-addr].is-twin {
   transform-style: preserve-3d;
 }
 
-.plane-drop,
-.addr-drop .home-tile-enter {
+.plane-drop {
   animation:
     addr-tile-drop 400ms linear backwards,
     addr-tile-in 400ms linear backwards;
@@ -2799,8 +2811,19 @@ html[data-ink="day"] .token-tx-tape a[data-addr].is-twin {
   transform-origin: center center;
 }
 
+.addr-drop .home-tile-enter {
+  animation: none;
+}
+
+.addr-drop .kpi-scale-up {
+  animation: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .home-tile-enter,
+  .home-stage .home-tile-enter,
+  .home-stage .home-tile-enter.home-meet-right,
+  .addr-drop,
   .addr-drop .home-tile-enter,
   .plane-drop {
     animation: none;

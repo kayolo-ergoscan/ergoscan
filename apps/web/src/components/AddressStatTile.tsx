@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { KpiNum, KpiTileRail } from "@/components/KpiGrid";
+import { KpiTileRail } from "@/components/KpiGrid";
 import clsx from "clsx";
 
 const TIP_W = 220;
@@ -144,7 +144,7 @@ export function AddressStatTile({
             n <= 0 && "text-[var(--muted)]"
           )}
         >
-          {n > 0 ? <KpiNum>{n.toLocaleString(loc)}</KpiNum> : "—"}
+          {n > 0 ? n.toLocaleString(loc) : "—"}
         </p>
         <p className="mt-0.5 truncate text-[12px] leading-[1.15] text-[var(--muted-2)]">{caption}</p>
       </div>
