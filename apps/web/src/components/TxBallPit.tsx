@@ -9,6 +9,7 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { formatErgPrecise, shortId } from "@/lib/format";
+import { txChipCaption } from "@/lib/tx-lock";
 import { usePageSync, useStreamMempool } from "@/lib/page-sync";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import {
@@ -46,6 +47,8 @@ export type TxBallSeed = {
   fee?: number;
   feeRate?: number;
   category?: string;
+  action?: string | null;
+  platform?: string | null;
   firstSeen?: number;
   /** Omit → `/tx/:id`. `null` → no navigation (ERG / fee mix). */
   href?: string | null;
@@ -377,6 +380,8 @@ function asWellSeed(s: TxBallSeed): WellSeed {
     feeRate: s.feeRate,
     color: s.color,
     category: s.category,
+    action: s.action,
+    platform: s.platform,
     firstSeen: s.firstSeen,
     href: seedHref(s),
     title: s.title || shortId(s.id, 8),
@@ -392,6 +397,8 @@ function seedFromBody(b: WellBody): WellSeed {
     feeRate: b.feeRate,
     color: b.color,
     category: b.category,
+    action: b.action,
+    platform: b.platform,
     href: b.href,
     title: b.title,
     value: b.value,
@@ -416,10 +423,13 @@ function tipHash(id: string): string {
   return `${id.slice(0, 8)}..${id.slice(-6)}`;
 }
 
-function catLabelOf(t: (k: string) => string, category: string): string {
-  const key = `tx.cat.${category || "unknown"}`;
-  const label = t(key);
-  return label !== key ? label : category || t("tx.cat.unknown");
+function catLabelOf(
+  t: (k: string) => string,
+  category: string,
+  action?: string | null,
+  platform?: string | null
+): string {
+  return txChipCaption(category, platform, action, t);
 }
 
 const TIP_EASE: [number, number, number, number] = [0.4, 0, 0.2, 1];
@@ -915,7 +925,8 @@ export function TxBallPit({
         if (wellTipRef.current) setWellTipRef.current(null);
         return;
       }
-      if (wellTipRef.current?.id === b.id) {
+      const nextCat = b.more ? "" : catLabelOf(tRef.current, b.category, b.action, b.platform);
+      if (wellTipRef.current?.id === b.id && wellTipRef.current.cat === nextCat) {
         placeTip(b);
         return;
       }
@@ -936,7 +947,7 @@ export function TxBallPit({
       setWellTipRef.current({
         id: b.id,
         hash: tipHash(b.id),
-        cat: catLabelOf(tr, b.category),
+        cat: catLabelOf(tr, b.category, b.action, b.platform),
         color: b.color,
         amount: formatErgPrecise(b.value, localeRef.current),
       });
@@ -1102,7 +1113,7 @@ export function TxBallPit({
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: 8 }}
-                      transition={{ duration: reduceTip ? 0 : 0.4, ease: TIP_EASE }}
+                      transition={{ duration: reduceTip ? 0 : 0.42, ease: TIP_EASE }}
                     >
                       <div className="rounded-[16px] border border-[var(--border)] bg-[var(--module)] px-3 py-2 shadow-[var(--float-shadow)]">
                         {wellTip.more ? (

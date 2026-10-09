@@ -30,6 +30,7 @@ export type StreamMempoolBall = {
   firstSeen: number;
   category: string;
   platform: string | null;
+  action?: string | null;
   value: number;
 };
 
@@ -114,6 +115,7 @@ function parseStreamBall(raw: unknown): StreamMempoolBall | null {
     firstSeen: Number(b.firstSeen) || 0,
     category: typeof b.category === "string" && b.category ? b.category : "unknown",
     platform: typeof b.platform === "string" && b.platform ? b.platform : null,
+    action: typeof b.action === "string" && b.action ? b.action : null,
     value: Number.isFinite(Number(b.value)) ? Number(b.value) : 0,
   };
 }

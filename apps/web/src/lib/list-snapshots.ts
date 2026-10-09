@@ -50,6 +50,7 @@ export type TxListItem = {
   category: string;
   color: string;
   platform: string | null;
+  action?: string | null;
   inputs: number;
   outputs: number;
   value: number | null;
@@ -951,6 +952,7 @@ function asTxListItem(row: unknown, i: number): TxListItem | null {
     category: typeof r.category === "string" && r.category.length ? r.category : "unknown",
     color: typeof r.color === "string" && r.color.length ? r.color : "#64748B",
     platform: typeof r.platform === "string" && r.platform.length ? r.platform : null,
+    action: typeof r.action === "string" && r.action.length ? r.action : null,
     inputs: ioCount(r.inputs, r.inputCount),
     outputs: ioCount(r.outputs, r.outputCount),
     value:
@@ -1090,6 +1092,7 @@ export type TxPageSnapshot = {
   category: string;
   shape?: string;
   protocol?: string | null;
+  action?: string | null;
   /** rent | rent-renew when the rent writer has a protocol row. Null otherwise. */
   rent?: string | null;
   source?: string;
@@ -1485,6 +1488,7 @@ export type MempoolBall = {
   category: string;
   color: string;
   platform?: string;
+  action?: string | null;
   value: number;
   inputCount: number;
   outputCount: number;
@@ -1505,6 +1509,7 @@ export function mempoolBallToTx(b: MempoolBall): TxListItem {
     category: b.category,
     color: b.color,
     platform: b.platform ?? null,
+    action: b.action ?? null,
     inputs: b.inputCount ?? 0,
     outputs: b.outputCount ?? 0,
     value: b.value ?? null,

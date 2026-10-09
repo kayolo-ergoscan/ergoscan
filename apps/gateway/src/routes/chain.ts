@@ -11,6 +11,7 @@ import {
   DEFAULT_RENT_PARAMS,
   KNOWN_TOKENS,
   classifyTxShape,
+  pickTxAction,
   classifyAddrFlow,
   eip4MintOfOutputs,
   netValueParties,
@@ -23,6 +24,7 @@ import {
   decodeSigmaConstantMap,
 } from "@ergoscan/shared";
 import { laterTs } from "../lib/later-ts.js";
+import { stampTemplateHashes } from "../lib/txTemplateHash.js";
 import { pageLimit } from "../lib/page-limit.js";
 import { addressFromErgoTree, ergoTreeFromAddress, normErgoTree } from "../lib/ergoAddress.js";
 import { decodeErgoTree, type ErgoTreeDecode } from "../lib/ergoTree.js";
@@ -784,6 +786,8 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
       const outputs = hydratedOutputs.items;
       cacheNoStore(res);
       const shaped = shapeFromIo(false, inputs, outputs);
+      await stampTemplateHashes([...inputs, ...outputs]);
+      const action = pickTxAction({ inputs, outputs }, shaped.shape);
       const tokenMeta = await tokenMetaForIo(inputs, outputs);
       const lock = lockFromIo(inputs, outputs, mem.dataInputs);
       return res.json({
@@ -796,10 +800,12 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
         category: shaped.category,
         shape: shaped.shape,
         protocol: shaped.protocol,
+        action,
         ball: {
           ...ball,
           category: shaped.category,
           platform: lock ?? shaped.protocol ?? ball.platform,
+          action: action ?? undefined,
         },
         inputs,
         outputs,
@@ -837,11 +843,13 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
         : null;
     const feeNum = idx.fee != null && idx.fee !== "" ? Number(idx.fee) : NaN;
     const shaped = shapeFromIo(idx.indexInBlock === 0, inputs, outputs);
+    await stampTemplateHashes([...inputs, ...outputs]);
     const tokenMeta = await tokenMetaForIo(inputs, outputs);
     const lock = lockFromIo(inputs, outputs);
     const rent =
       height != null ? (await rentTapeMarks([id], height, height)).get(id) ?? null : null;
     const category = rent?.category ?? shaped.category;
+    const action = rent ? null : pickTxAction({ inputs, outputs }, shaped.shape);
     cacheNoStore(res);
     return res.json({
       id,
@@ -855,12 +863,14 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
       category,
       shape: shaped.shape,
       protocol: shaped.protocol,
+      action,
       rent: rent?.category ?? null,
       ball: {
         ...ball,
         category,
         color: rent?.color ?? ball.color,
         platform: lock ?? shaped.protocol ?? ball.platform,
+        action: action ?? undefined,
       },
       inputs,
       outputs,

@@ -6,7 +6,7 @@ import { TxIoMark } from "@/components/TxIoMark";
 import { FavoriteHeart } from "@/components/FavoriteHeart";
 import { ListWhen } from "@/components/ListWhen";
 import { formatBytes, formatErgPrecise, formatFeeRate, shortId, toBigIntAmt } from "@/lib/format";
-import { lockCaption } from "@/lib/tx-lock";
+import { txChipCaption } from "@/lib/tx-lock";
 import type { TxListItem } from "@/lib/list-snapshots";
 
 export function TxLaneRow({
@@ -36,10 +36,7 @@ export function TxLaneRow({
   favTitle?: string;
   onToggleFav?: () => void;
 }) {
-  const catKey = `tx.cat.${row.category}`;
-  const cat = t(catKey) !== catKey ? t(catKey) : row.category;
-  const lock = lockCaption(row.platform, t);
-  const caption = lock && lock !== cat ? `${cat} · ${lock}` : cat;
+  const caption = txChipCaption(row.category, row.platform, row.action, t);
   const tokens = row.tokenCount != null && row.tokenCount > 0 ? row.tokenCount : null;
   const unconfirmed = !row.confirmed;
   return (

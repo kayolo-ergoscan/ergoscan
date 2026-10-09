@@ -18,6 +18,7 @@ export type HomePitSeed = {
   firstSeen?: number;
   category?: string;
   platform?: string | null;
+  action?: string | null;
   value?: number;
 };
 
@@ -45,6 +46,8 @@ export function HomeMempoolStage({
     fee: b.fee,
     feeRate: b.feeRate,
     category: b.category,
+    action: b.action,
+    platform: b.platform,
     firstSeen: b.firstSeen,
     value: b.value,
   }));

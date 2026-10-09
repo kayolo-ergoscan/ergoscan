@@ -44,6 +44,8 @@ export function asTxShape(s: string | null | undefined): TxShape {
 export type ShapeBox = {
   ergoTree?: string | null;
   address?: string | null;
+  /** SHA-256 of ErgoTree template bytes, 64 hex. Set by the indexer or the mempool poll. */
+  templateHash?: string | null;
   assets?: Array<{ tokenId?: string | null; amount?: string | number | null }>;
 };
 

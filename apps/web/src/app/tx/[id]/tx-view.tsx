@@ -33,7 +33,7 @@ import {
   toBigIntAmt,
 } from "@/lib/format";
 import { describeParty } from "@/lib/address-labels";
-import { lockCaption, lockIdFromIo } from "@/lib/tx-lock";
+import { lockCaption, lockIdFromIo, txChipCaption } from "@/lib/tx-lock";
 import { tokenDecimals, tokenSymbol } from "@/lib/token-meta";
 import {
   groupParties,
@@ -341,8 +341,6 @@ export function TxView({
     return seeds;
   }, [amountNano, feeShown, ranked, tokens, t]);
 
-  const catKey = `tx.cat.${data?.category ?? "unknown"}`;
-  const catLabel = data ? (t(catKey) !== catKey ? t(catKey) : data.category) : "";
   const rentChip = data?.category === "rent" || data?.category === "rent-renew";
   const lockId =
     data && !rentChip
@@ -351,6 +349,10 @@ export function TxView({
         null
       : null;
   const lockLabel = lockCaption(lockId, t);
+  const chip =
+    data != null
+      ? txChipCaption(data.category, lockId, rentChip ? null : data.action, t)
+      : "";
   const catColor =
     data?.ball?.color ||
     CATEGORY_COLORS[(data?.category as keyof typeof CATEGORY_COLORS) ?? "unknown"] ||
@@ -406,20 +408,13 @@ export function TxView({
                 </h1>
                 <p
                   className="mt-1 flex min-w-0 items-start gap-1.5 text-[12px] leading-snug text-[var(--muted)]"
-                  title={
-                    lockLabel && lockLabel !== catLabel
-                      ? `${catLabel} · ${lockLabel}`
-                      : catLabel
-                  }
+                  title={chip}
                 >
                   <span
                     className="mt-[4px] inline-block h-1.5 w-1.5 shrink-0 rounded-full"
                     style={{ background: catColor }}
                   />
-                  <span>
-                    {catLabel}
-                    {lockLabel && lockLabel !== catLabel ? ` · ${lockLabel}` : ""}
-                  </span>
+                  <span>{chip}</span>
                 </p>
               </AddrFactCard>
               <SegBar cols={3} className="shrink-0">

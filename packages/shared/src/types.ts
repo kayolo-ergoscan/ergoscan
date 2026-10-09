@@ -48,6 +48,8 @@ export interface LoomThread {
   /** nanoERG sum of outputs (approx) */
   value: number;
   platform?: string;
+  /** Template-hash action. Shape stays on category. */
+  action?: string;
   isYours?: boolean;
   firstSeen: number;
 }

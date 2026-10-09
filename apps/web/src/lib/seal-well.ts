@@ -49,6 +49,8 @@ export type WellSeed = {
   feeRate?: number;
   color: string;
   category?: string;
+  action?: string | null;
+  platform?: string | null;
   firstSeen?: number;
   href?: string | null;
   title?: string;
@@ -67,6 +69,8 @@ export type WellBody = {
   fee: number;
   feeRate: number;
   category: string;
+  action: string | null;
+  platform: string | null;
   value: number;
   theta: number;
   omega: number;
@@ -456,6 +460,8 @@ export function makeWellBody(
     old.fee = s.fee ?? old.fee;
     old.feeRate = rate;
     old.category = s.category || old.category || "unknown";
+    old.action = s.action ?? old.action ?? null;
+    old.platform = s.platform ?? old.platform ?? null;
     old.value = typeof s.value === "number" && Number.isFinite(s.value) ? s.value : old.value;
     if (opts?.title) old.title = opts.title;
     if (opts?.href !== undefined) old.href = opts.href;
@@ -486,6 +492,8 @@ export function makeWellBody(
     fee: s.fee ?? 0,
     feeRate: rate,
     category: s.category || "unknown",
+    action: s.action ?? null,
+    platform: s.platform ?? null,
     value: Number.isFinite(s.value) ? Number(s.value) : 0,
     theta,
     omega,

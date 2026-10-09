@@ -51,6 +51,7 @@ export interface RawOutput {
   assets?: RawAsset[];
   address?: string;
   ergoTree?: string;
+  templateHash?: string | null;
   additionalRegisters?: Record<string, string>;
   creationHeight?: number;
   transactionId?: string;
@@ -62,6 +63,7 @@ export interface RawInput {
   value?: number;
   assets?: RawAsset[];
   ergoTree?: string;
+  templateHash?: string | null;
   address?: string;
   additionalRegisters?: Record<string, string>;
   creationHeight?: number;

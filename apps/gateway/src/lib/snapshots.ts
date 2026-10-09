@@ -33,7 +33,7 @@ import {
   type RentTab,
   type RentWindow,
 } from "./rentIndex.js";
-import { classifyTxShape, txTapeFields, rentTapePaint, MINERS_FEE_ADDRESS, MINERS_FEE_TREE, fillRentWeekGaps, parseRentSeries, parseRentTape, parseRentEpochBoxes, parseRentEpochNano, pickTxLock, LITHOS_COLLAT_ADDRESS, LITHOS_COLLAT_TOKEN_ID, LITHOS_MINED_HEIGHTS_SQL, type RentTapeCategory, type RentTapeRow, type ShapeBox } from "@ergoscan/shared";
+import { classifyTxShape, pickTxAction, txTapeFields, rentTapePaint, MINERS_FEE_ADDRESS, MINERS_FEE_TREE, fillRentWeekGaps, parseRentSeries, parseRentTape, parseRentEpochBoxes, parseRentEpochNano, pickTxLock, LITHOS_COLLAT_ADDRESS, LITHOS_COLLAT_TOKEN_ID, LITHOS_MINED_HEIGHTS_SQL, type RentTapeCategory, type RentTapeRow, type ShapeBox } from "@ergoscan/shared";
 import { blockHeaderFromRow, type BlockHeaderView } from "./blockHeader.js";
 
 export const SNAP_BLOCKS = "blocks_latest";
@@ -78,6 +78,8 @@ export type TxListItem = {
   category: string;
   color: string;
   platform: string | null;
+  /** Template action. Absent when the script is not in the dictionary. */
+  action?: string | null;
   inputs: number;
   outputs: number;
   value: number;
@@ -492,12 +494,16 @@ async function attachTxLocks(items: TxListItem[]): Promise<TxListItem[]> {
       spent_tx_id: string | null;
       address: string | null;
       ergo_tree: string | null;
+      template_hash: string | null;
     }>(
       packedReadEnabled()
         ? `SELECT encode(b.box_id, 'hex') AS box_id,
                   encode(b.creation_tx_id, 'hex') AS creation_tx_id,
                   encode(b.spent_tx_id, 'hex') AS spent_tx_id,
-                  ad.address, sc.ergo_tree
+                  ad.address, sc.ergo_tree,
+                  CASE WHEN octet_length(sc.template_hash) = 32
+                       THEN encode(sc.template_hash, 'hex')
+                       ELSE NULL END AS template_hash
              FROM (
                SELECT * FROM packed.boxes
                 WHERE creation_tx_id IN (SELECT decode(lower(x), 'hex') FROM unnest($1::text[]) AS x)
@@ -507,7 +513,8 @@ async function attachTxLocks(items: TxListItem[]): Promise<TxListItem[]> {
              ) b
              LEFT JOIN packed.addr ad ON ad.id = b.addr_id
              LEFT JOIN packed.script sc ON sc.id = b.script_id`
-        : `SELECT box_id, creation_tx_id, spent_tx_id, address, ergo_tree
+        : `SELECT box_id, creation_tx_id, spent_tx_id, address, ergo_tree,
+                  NULL::text AS template_hash
        FROM boxes
        WHERE creation_tx_id = ANY($1::text[])
           OR spent_tx_id = ANY($1::text[])`,
@@ -541,6 +548,7 @@ async function attachTxLocks(items: TxListItem[]): Promise<TxListItem[]> {
       const shape: ShapeBox = {
         address: b.address,
         ergoTree: b.ergo_tree,
+        templateHash: b.template_hash,
         assets: assetsByBox.get(b.box_id),
       };
       if (b.spent_tx_id) byTx.get(b.spent_tx_id)?.inputs.push(shape);
@@ -558,11 +566,13 @@ async function attachTxLocks(items: TxListItem[]): Promise<TxListItem[]> {
       });
       const paint = txTapeFields(shaped.shape, shaped.protocol);
       const lock = pickTxLock(io, hints);
+      const action = pickTxAction(io, shaped.shape);
       return {
         ...t,
         category: paint.category,
         color: paint.color,
         platform: lock?.id ?? paint.platform,
+        action,
       };
     });
   } catch {
@@ -651,7 +661,7 @@ async function attachRentMarks(items: TxListItem[]): Promise<TxListItem[]> {
     return items.map((item) => {
       const mark = marks.get(item.id);
       if (!mark) return item;
-      return { ...item, category: mark.category, color: mark.color, platform: null };
+      return { ...item, category: mark.category, color: mark.color, platform: null, action: null };
     });
   } catch {
     return items;

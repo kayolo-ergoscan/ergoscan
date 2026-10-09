@@ -10,7 +10,9 @@ import {
   buildFeeHistogram,
   estimateFee,
   generateMockBalls,
+  asTxShape,
   txToBall,
+  pickTxAction,
   pickTxLock,
   type BallProps,
   type BlockEta,
@@ -22,6 +24,7 @@ import {
   type WsServerEvent,
 } from "@ergoscan/shared";
 import { createNodeClient } from "./lib/node.js";
+import { stampTemplateHashes } from "./lib/txTemplateHash.js";
 import { SubblockEngine } from "./lib/subblocks.js";
 import { SealWatcher } from "./lib/seal.js";
 import { registerExplorerRoutes } from "./routes/explorer.js";
@@ -518,6 +521,7 @@ async function pollMempool(): Promise<void> {
     // Node dump has trees, not Base58. Encode locally so v3 (88/fee) sees addresses.
     // Do not turn on ENRICH_ADDRESSES.
     const filled = txs.map((t) => txWithTreeAddresses(t, NETWORK));
+    await stampTemplateHashes(filled.flatMap((t) => [...(t.inputs ?? []), ...(t.outputs ?? [])]));
     const next = new Map<string, BallProps>();
     const prelim = filled.map((t) => txToBall(t, balls.get(t.id)?.firstSeen ?? Date.now()));
     const hist = buildFeeHistogram(prelim);
@@ -543,11 +547,16 @@ async function pollMempool(): Promise<void> {
           addresses = prev.addresses;
         }
         const lock = pickTxLock(tx, cachedDexLockHints());
+        const action = pickTxAction(
+          { inputs: tx.inputs, outputs: tx.outputs },
+          asTxShape(ball.category)
+        );
         return {
           ball: {
             ...ball,
             addresses: addresses?.length ? addresses : undefined,
             platform: lock?.id ?? ball.platform,
+            action: action ?? undefined,
           },
           isNew: !prev,
         };
