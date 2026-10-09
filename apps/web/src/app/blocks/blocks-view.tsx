@@ -316,10 +316,10 @@ export function BlocksView({
               <div className="block-lane-pair">
                 <div className="min-w-0">{t("blocks.height")}</div>
                 <div className="lithos-col" />
-                <div className="min-w-0 justify-end">{t("blocks.id")}</div>
+                <div className="min-w-0 justify-end">{t("blocks.txs")}</div>
               </div>
               <div className="block-lane-pair">
-                <div className="min-w-0">{t("blocks.time")}</div>
+                <div className="min-w-0">{t("blocks.interval")}</div>
                 <div className="min-w-0 justify-end">{t("blocks.blockTime")}</div>
               </div>
               <div className="block-lane-pair">
@@ -327,7 +327,7 @@ export function BlocksView({
                 <div className="min-w-0 justify-end">{t("blocks.transferred")}</div>
               </div>
               <div className="block-lane-pair">
-                <div className="min-w-0">{t("blocks.txs")}</div>
+                <div className="min-w-0">{t("blocks.id")}</div>
                 <div className="min-w-0 justify-end">{t("blocks.size")}</div>
               </div>
             </div>
@@ -475,13 +475,11 @@ export function BlockTapeRow({
             </Link>
           ) : null}
         </div>
-        <div className="px-3 text-right">
-          <Link
-            href={`/block/${row.id}`}
-            className="block whitespace-nowrap font-mono text-accent hover:underline"
-          >
-            {shortId(row.id, 8)}
-          </Link>
+        <div className="flex min-w-0 items-center justify-end gap-1.5 whitespace-nowrap px-3 text-right tabular-nums">
+          {row.txCount === 1 ? (
+            <span className="text-[11px] font-normal text-[var(--muted)]">{t("blocks.coinbaseOnly")}</span>
+          ) : null}
+          <span>{row.txCount != null ? row.txCount.toLocaleString(loc(locale)) : miss}</span>
         </div>
       </div>
       <div className="block-lane-pair">
@@ -517,11 +515,13 @@ export function BlockTapeRow({
         </div>
       </div>
       <div className="block-lane-pair">
-        <div className="min-w-0 px-3 tabular-nums">
-          {row.txCount != null ? row.txCount.toLocaleString(loc(locale)) : miss}
-          {row.txCount === 1 ? (
-            <p className="mt-0.5 text-[11px] font-normal text-[var(--muted)]">{t("blocks.coinbaseOnly")}</p>
-          ) : null}
+        <div className="min-w-0 px-3">
+          <Link
+            href={`/block/${row.id}`}
+            className="block whitespace-nowrap font-mono text-accent hover:underline"
+          >
+            {shortId(row.id, 8)}
+          </Link>
         </div>
         <div className="min-w-0 px-3">
           <p className="text-right tabular-nums text-[var(--text)]">{formatBytes(row.size)}</p>

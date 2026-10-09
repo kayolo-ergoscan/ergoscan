@@ -1844,12 +1844,12 @@ html[data-ink="day"] {
     grid-template-columns: 7.75rem 9.75rem 7.25rem 11.5rem 8.5rem 8.5rem 4.75rem 8.25rem;
   }
 
-  /* Lithos mark sits between Time and Block time. Those two tracks stay put. */
+  /* Height, Lithos, Txs, then Time. Id keeps the wide track, in front of Size. */
   .addr-pan .addr-lane.block-lane.blocks-tape,
   .addr-pan .addr-head.block-lane.blocks-tape {
     width: 69.65rem;
     min-width: 69.65rem;
-    grid-template-columns: 7.75rem 1.5rem 9.75rem 7.25rem 11.5rem 8.5rem 8.5rem 4.75rem 8.25rem;
+    grid-template-columns: 7.75rem 1.5rem 4.75rem 7.25rem 11.5rem 8.5rem 8.5rem 9.75rem 8.25rem;
   }
 
   .addr-pan .addr-lane.block-lane.lithos-finds,

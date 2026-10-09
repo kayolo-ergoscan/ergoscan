@@ -567,11 +567,11 @@ export function FavoritesView() {
                     >
                       <div className="block-lane-pair">
                         {col(t("blocks.height"))}
-                        {col(t("blocks.id"), "right")}
+                        <div className="lithos-col" aria-hidden />
+                        {col(t("blocks.txs"), "right")}
                       </div>
                       <div className="block-lane-pair">
-                        {col(t("blocks.time"))}
-                        <div className="lithos-col" aria-hidden />
+                        {col(t("blocks.interval"))}
                         {col(t("blocks.blockTime"), "right")}
                       </div>
                       <div className="block-lane-pair">
@@ -579,7 +579,7 @@ export function FavoritesView() {
                         {col(t("blocks.transferred"), "right")}
                       </div>
                       <div className="block-lane-pair">
-                        {col(t("blocks.txs"))}
+                        {col(t("blocks.id"))}
                         {col(t("blocks.size"), "right")}
                       </div>
                     </div>
