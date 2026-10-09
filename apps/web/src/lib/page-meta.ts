@@ -271,8 +271,8 @@ export function addressPageMeta(
   const book = lookupAddress(data.address);
   const label = book?.name || shortId(data.address, 8);
   const title = book?.name ? book.name : `Address ${shortId(data.address, 8)}`;
-  const erg = formatErgFixed(data.balance.confirmedNanoErg);
-  const tokens = data.tokenCount ?? data.balance.tokens.length;
+  const erg = formatErgFixed(data.balance?.confirmedNanoErg);
+  const tokens = data.tokenCount ?? data.balance?.tokens?.length ?? 0;
   const kind = book?.kind && book.kind !== "unknown" ? ` ${book.kind}` : "";
   return pageMeta({
     title,

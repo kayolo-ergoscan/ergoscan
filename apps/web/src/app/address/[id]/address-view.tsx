@@ -174,16 +174,18 @@ const ADDR_TABS = ["activity", "tokens", "nfts", "boxes"] as const;
 type AddrTab = (typeof ADDR_TABS)[number];
 
 function moreTxCursor(data: AddrData): string | null {
+  const recent = data.recentTxs ?? [];
   return (
-    data.pagination?.txs.nextCursor ||
-    txKeysetCursor(data.recentTxs[data.recentTxs.length - 1])
+    data.pagination?.txs?.nextCursor ||
+    (recent.length ? txKeysetCursor(recent[recent.length - 1]) : null)
   );
 }
 
 function activityRows(data: AddrData): TxRow[] {
-  const confirmed = new Set(data.recentTxs.map((t) => t.id));
-  const pending = (data.mempoolTxs ?? []).filter((t) => !confirmed.has(t.id));
-  return [...pending, ...data.recentTxs];
+  const recent = data.recentTxs ?? [];
+  const confirmed = new Set(recent.map((t) => t.id));
+  const pending = (data.mempoolTxs ?? []).filter((t) => t?.id && !confirmed.has(t.id));
+  return [...pending, ...recent];
 }
 
 function isHeaderOnly(d: AddrData | null): boolean {
@@ -217,9 +219,10 @@ function mergeHeader(prev: AddrData | null, header: AddrData): AddrData {
       balance: {
         ...prev.balance,
         confirmedNanoErg:
-          header.balance?.confirmedNanoErg ?? prev.balance.confirmedNanoErg,
+          header.balance?.confirmedNanoErg ?? prev.balance?.confirmedNanoErg ?? "0",
         unconfirmedNanoErg:
-          header.balance?.unconfirmedNanoErg ?? prev.balance.unconfirmedNanoErg,
+          header.balance?.unconfirmedNanoErg ?? prev.balance?.unconfirmedNanoErg ?? "0",
+        tokens: prev.balance?.tokens ?? header.balance?.tokens ?? [],
       },
     };
   }
@@ -399,7 +402,7 @@ export function AddressView({
         setTxPage(txCursorStack.current.length);
         return;
       }
-      if (opts?.pageBox && !j.unspentBoxes.length && boxOff > 0) {
+      if (opts?.pageBox && !(j.unspentBoxes?.length) && boxOff > 0) {
         setBoxOffset(Math.max(0, boxOff - BOX_PAGE));
         return;
       }
@@ -408,7 +411,7 @@ export function AddressView({
         const tokens =
           j.balance?.tokens?.length
             ? j.balance.tokens
-            : (prev?.balance.tokens ?? j.balance?.tokens ?? []);
+            : (prev?.balance?.tokens ?? j.balance?.tokens ?? []);
         const activity = {
           ...(opts?.pageBox || opts?.pageTx ? prev?.activity ?? {} : {}),
           ...(j.activity ?? {}),
@@ -419,7 +422,7 @@ export function AddressView({
           const recentTxs = j.recentTxs ?? [];
           txEnter.mark(
             enteringIds(
-              [...(prev.mempoolTxs ?? []), ...prev.recentTxs],
+              [...(prev.mempoolTxs ?? []), ...(prev.recentTxs ?? [])],
               [...(j.mempoolTxs ?? prev.mempoolTxs ?? []), ...recentTxs]
             )
           );
@@ -430,7 +433,7 @@ export function AddressView({
             unspentBoxes: prev.unspentBoxes,
             firstTs: j.firstTs ?? prev.firstTs,
             lastTs: j.lastTs ?? prev.lastTs,
-            balance: { ...(j.balance ?? prev.balance), tokens: prev.balance.tokens },
+            balance: { ...(j.balance ?? prev.balance), tokens: prev.balance?.tokens ?? [] },
             tokenCount: prev.tokenCount ?? tokenCount,
             activity,
             pagination: {
@@ -448,8 +451,8 @@ export function AddressView({
         } else if (opts?.pageBox && prev) {
           boxEnter.mark(
             enteringIds(
-              prev.unspentBoxes.map((b) => ({ id: b.boxId })),
-              j.unspentBoxes.map((b) => ({ id: b.boxId }))
+              (prev.unspentBoxes ?? []).map((b) => ({ id: b.boxId })),
+              (j.unspentBoxes ?? []).map((b) => ({ id: b.boxId }))
             )
           );
           next = {
@@ -460,8 +463,8 @@ export function AddressView({
             lastTs: j.lastTs ?? prev.lastTs,
             balance: {
               ...(j.balance ?? prev.balance),
-              tokens: prev.balance.tokens,
-              unconfirmedNanoErg: prev.balance.unconfirmedNanoErg,
+              tokens: prev.balance?.tokens ?? [],
+              unconfirmedNanoErg: prev.balance?.unconfirmedNanoErg,
             },
             tokenCount: prev.tokenCount ?? tokenCount,
             activity,
@@ -480,21 +483,21 @@ export function AddressView({
           if (prev) {
             txEnter.mark(
               enteringIds(
-                [...(prev.mempoolTxs ?? []), ...prev.recentTxs],
-                [...(j.mempoolTxs ?? []), ...j.recentTxs]
+                [...(prev.mempoolTxs ?? []), ...(prev.recentTxs ?? [])],
+                [...(j.mempoolTxs ?? []), ...(j.recentTxs ?? [])]
               )
             );
             boxEnter.mark(
               enteringIds(
-                prev.unspentBoxes.map((b) => ({ id: b.boxId })),
-                j.unspentBoxes.map((b) => ({ id: b.boxId }))
+                (prev.unspentBoxes ?? []).map((b) => ({ id: b.boxId })),
+                (j.unspentBoxes ?? []).map((b) => ({ id: b.boxId }))
               )
             );
           } else {
             txEnter.mark(
-              [...(j.mempoolTxs ?? []), ...j.recentTxs].map((tx) => tx.id)
+              [...(j.mempoolTxs ?? []), ...(j.recentTxs ?? [])].map((tx) => tx.id)
             );
-            boxEnter.mark(j.unspentBoxes.map((b) => b.boxId));
+            boxEnter.mark((j.unspentBoxes ?? []).map((b) => b.boxId));
           }
           next = {
             ...j,
@@ -592,7 +595,7 @@ export function AddressView({
               balance: {
                 ...prev.balance,
                 unconfirmedNanoErg:
-                  j.balance?.unconfirmedNanoErg ?? prev.balance.unconfirmedNanoErg,
+                  j.balance?.unconfirmedNanoErg ?? prev.balance?.unconfirmedNanoErg,
               },
             };
           });
@@ -813,13 +816,13 @@ export function AddressView({
       return;
     }
     if (tab !== "tokens") return;
-    const rows = (data?.balance.tokens ?? []).filter(
+    const rows = (data?.balance?.tokens ?? []).filter(
       (row) => row.emission !== 1 && !nftIds.has(row.tokenId)
     );
     tokenEnter.mark(
       rows.slice(tokenOffset, tokenOffset + TOKEN_PAGE).map((row) => row.tokenId)
     );
-  }, [tokenOffset, tab, tokenEnter.mark, data?.balance.tokens, nftIds]);
+  }, [tokenOffset, tab, tokenEnter.mark, data?.balance?.tokens, nftIds]);
 
   useEffect(() => {
     if (opened.current) return;
@@ -839,7 +842,7 @@ export function AddressView({
       boxEnter.mark((data?.unspentBoxes ?? []).map((b) => b.boxId));
     } else if (tab === "tokens") {
       tokenEnter.mark(
-        (data?.balance.tokens ?? [])
+        (data?.balance?.tokens ?? [])
           .filter((row) => row.emission !== 1 && !nftIds.has(row.tokenId))
           .slice(tokenOffset, tokenOffset + TOKEN_PAGE)
           .map((row) => row.tokenId)
@@ -866,7 +869,7 @@ export function AddressView({
     );
     obs.observe(el);
     return () => obs.disconnect();
-  }, [tab, data?.recentTxs.length, data?.unspentBoxes.length, data?.balance.tokens.length, txPage, boxOffset, tokenOffset]);
+  }, [tab, data?.recentTxs?.length, data?.unspentBoxes?.length, data?.balance?.tokens?.length, txPage, boxOffset, tokenOffset]);
 
   useEffect(() => {
     void fetch(`${getGateway()}/v1/prices/erg`)
@@ -878,7 +881,7 @@ export function AddressView({
   useEffect(() => {
     if (tab !== "tokens" || !address) return;
     if (tokensFetched.current || tokensInflight.current) return;
-    if ((data?.balance.tokens.length ?? 0) > 0) {
+    if ((data?.balance?.tokens?.length ?? 0) > 0) {
       tokensFetched.current = true;
       setTokensSettled(true);
       return;
@@ -951,7 +954,7 @@ export function AddressView({
     return () => {
       dead = true;
     };
-  }, [tab, address, data?.balance.tokens.length]);
+  }, [tab, address, data?.balance?.tokens?.length]);
 
   useEffect(() => {
     if (tab !== "nfts" || !address) return;
@@ -994,15 +997,16 @@ export function AddressView({
     };
   }, [tab, address, nftOffset, nftEnter.mark, nfts.length, nftsPackKey]);
 
-  const confirmed = toBigIntAmt(data?.balance.confirmedNanoErg);
-  const unconfirmed = toBigIntAmt(data?.balance.unconfirmedNanoErg);
+  const confirmed = toBigIntAmt(data?.balance?.confirmedNanoErg);
+  const unconfirmed = toBigIntAmt(data?.balance?.unconfirmedNanoErg);
   const usd = nanoToUsd(confirmed, ergUsd);
   const tokenMeta = useMemo(() => {
     const m = new Map<string, TokenRow>();
-    for (const row of data?.balance.tokens ?? []) {
+    for (const row of data?.balance?.tokens ?? []) {
       if (row.tokenId) m.set(row.tokenId.toLowerCase(), row);
     }
     for (const act of Object.values(data?.activity ?? {})) {
+      if (!act) continue;
       for (const tok of act.tokens ?? []) {
         if (!tok.tokenId) continue;
         const k = tok.tokenId.toLowerCase();
@@ -1020,7 +1024,7 @@ export function AddressView({
       }
     }
     return m;
-  }, [data?.balance.tokens, data?.activity]);
+  }, [data?.balance?.tokens, data?.activity]);
 
   const lastTs = useMemo(() => {
     const times: Array<number | null | undefined> = [data?.lastTs];
@@ -1033,9 +1037,9 @@ export function AddressView({
   const firstTs = useMemo(() => {
     const fromSnap = toEpochMs(data?.firstTs);
     if (fromSnap != null) return fromSnap;
-    if (!data?.pagination || data.pagination.txs.hasMore) return null;
+    if (!data?.pagination || data.pagination?.txs?.hasMore) return null;
     let min: number | null = null;
-    for (const tx of data.recentTxs) {
+    for (const tx of data.recentTxs ?? []) {
       const ms = toEpochMs(tx.timestamp);
       if (ms == null) continue;
       if (min == null || ms < min) min = ms;
@@ -1043,11 +1047,11 @@ export function AddressView({
     return min;
   }, [data]);
 
-  const boxCount = data?.pagination?.boxes.total ?? data?.unspentBoxes.length ?? 0;
-  const txCount = data?.pagination?.txs.total ?? data?.recentTxs.length ?? 0;
+  const boxCount = data?.pagination?.boxes?.total ?? data?.unspentBoxes?.length ?? 0;
+  const txCount = data?.pagination?.txs?.total ?? data?.recentTxs?.length ?? 0;
   const tapeRows = data ? activityRows(data) : [];
   const tokenRows = useMemo(() => {
-    const rows = (data?.balance.tokens ?? []).filter(
+    const rows = (data?.balance?.tokens ?? []).filter(
       (row) => row.emission !== 1 && !nftIds.has(row.tokenId)
     );
     return [...rows].sort((a, b) => {
@@ -1066,7 +1070,7 @@ export function AddressView({
       }
       return a.tokenId.localeCompare(b.tokenId);
     });
-  }, [data?.balance.tokens, nftIds]);
+  }, [data?.balance?.tokens, nftIds]);
   const tokenCount =
     (data?.tokenCount ?? 0) > 0 ? (data?.tokenCount ?? 0) : tokenRows.length;
   const rentTone = rentBlocks == null ? null : rentTapeTone(rentBlocks);
@@ -1074,13 +1078,13 @@ export function AddressView({
   const tokenUsd = useMemo(() => {
     let sum = 0;
     let any = false;
-    for (const row of data?.balance.tokens ?? []) {
+    for (const row of data?.balance?.tokens ?? []) {
       if (row.valueUsd == null) continue;
       any = true;
       sum += row.valueUsd;
     }
     return any ? sum : null;
-  }, [data?.balance.tokens]);
+  }, [data?.balance?.tokens]);
   const typeLabel = t(`address.type.${party.kind}`);
 
   const name = party.known ?? data?.name?.name ?? address;
@@ -1091,7 +1095,7 @@ export function AddressView({
     !nftsFailed &&
     nftsPackKey !== `${address}:${nftOffset}`;
   const boxesFirstWait =
-    listsPending && !(data?.unspentBoxes.length) && boxOffset === 0;
+    listsPending && !(data?.unspentBoxes?.length) && boxOffset === 0;
   const activityFirstWait =
     !listReady && !err && tapeRows.length === 0 && txPage === 0;
   const tabScanWait =
@@ -1126,7 +1130,7 @@ export function AddressView({
                 mark={
                   <AddressPip
                     address={address}
-                    nanoerg={String(data.balance.confirmedNanoErg ?? "0")}
+                    nanoerg={String(data.balance?.confirmedNanoErg ?? "0")}
                     kindLabel={name}
                     kindGlyph
                     className="h-10 w-10"
@@ -1258,7 +1262,7 @@ export function AddressView({
               <p className="mt-0.5 text-[22px] font-semibold leading-[1.15] tabular-nums tracking-tight">
                 <KpiNum>
                   {`${boxCount.toLocaleString(loc(locale))}${
-                    data.pagination?.boxes.hasMore && data.pagination.boxes.total == null ? "+" : ""
+                    data.pagination?.boxes?.hasMore && data.pagination?.boxes?.total == null ? "+" : ""
                   }`}
                 </KpiNum>
               </p>
@@ -1383,12 +1387,12 @@ export function AddressView({
                   <RankWindow
                     offset={txPage * TX_PAGE}
                     pageSize={TX_PAGE}
-                    shown={data.recentTxs.length}
+                    shown={(data.recentTxs?.length ?? 0)}
                     total={txCount > 0 ? txCount : null}
                     hasMore={addrTapeHasMore(
-                      data.recentTxs.length,
+                      (data.recentTxs?.length ?? 0),
                       txCount,
-                      data.pagination?.txs.hasMore
+                      data.pagination?.txs?.hasMore
                     )}
                     scrub={false}
                     loc={loc(locale)}
@@ -1415,9 +1419,9 @@ export function AddressView({
                       const nxt = moreTxCursor(data);
                       if (
                         !addrTapeHasMore(
-                          data.recentTxs.length,
+                          (data.recentTxs?.length ?? 0),
                           txCount,
-                          data.pagination?.txs.hasMore
+                          data.pagination?.txs?.hasMore
                         ) ||
                         !nxt
                       ) {
@@ -1552,19 +1556,19 @@ export function AddressView({
           {tab === "boxes" && (
             <div className="addr-facts-body mt-6">
               {!listsPending &&
-                !data.unspentBoxes.length &&
+                !(data.unspentBoxes?.length ?? 0) &&
                 boxOffset === 0 &&
                 data.sources?.boxes === "stale" && (
                 <p className="text-[var(--muted)]">{t("address.boxesTimeout")}</p>
               )}
               {!listsPending &&
-                !data.unspentBoxes.length &&
+                !(data.unspentBoxes?.length ?? 0) &&
                 boxOffset === 0 &&
                 data.sources?.boxes !== "stale" &&
                 data.sources?.boxes !== "deferred" && (
                 <FavKayolo line={t("address.noBoxes")} />
               )}
-              {(data.unspentBoxes.length > 0 || boxOffset > 0) && (
+              {((data.unspentBoxes?.length ?? 0) > 0 || boxOffset > 0) && (
                 <div className="addr-sheet">
                   <div ref={pinRef} className="h-px w-full" aria-hidden />
                   <div
@@ -1582,7 +1586,7 @@ export function AddressView({
                       <div className="min-w-0 justify-end">{t("address.colTx")}</div>
                       <div className="min-w-0 justify-end">{t("address.colHeight")}</div>
                     </div>
-                    {data.unspentBoxes.map((b) => (
+                    {(data.unspentBoxes ?? []).map((b) => (
                       <BoxHistoryRow
                         key={b.boxId}
                         box={b}
@@ -1596,7 +1600,7 @@ export function AddressView({
                   <RankWindow
                     offset={boxOffset}
                     pageSize={BOX_PAGE}
-                    shown={data.unspentBoxes.length}
+                    shown={(data.unspentBoxes?.length ?? 0)}
                     total={boxCount > 0 ? boxCount : null}
                     loc={loc(locale)}
                     ofLabel={t("addresses.packOf")}
