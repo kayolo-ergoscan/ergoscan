@@ -10,7 +10,7 @@ import {
   isLikelyNft,
   isNftKind,
   pickArtworkUrl,
-  publicArtworkUrl,
+  previewArtworkUrl,
   DEFAULT_RENT_PARAMS,
   type RawTx,
 } from "@ergoscan/shared";
@@ -33,6 +33,7 @@ import {
   nftNameGroupDetailFromIndex,
   nftIssuersFromIndex,
   nftIssuerItemsFromIndex,
+  readyPreviewCids,
   tokenMetaFromIndex,
   searchTokensFromIndex,
   parseKeysetCursor,
@@ -76,13 +77,13 @@ function rawFromIdxBoxes(
   };
 }
 
-function catalogNftRow(it: IdxNft) {
+function catalogNftRow(it: IdxNft, ready: Set<string>) {
   return {
     tokenId: it.tokenId,
     name: it.name,
-    artworkUrl: publicArtworkUrl(it.artworkUrl),
+    artworkUrl: previewArtworkUrl(it.artworkUrl, ready),
     kind: it.kind,
-    mediaUrl: publicArtworkUrl(it.mediaUrl),
+    mediaUrl: previewArtworkUrl(it.mediaUrl, ready),
     sha256: it.sha256,
     amount: it.amount,
     firstHeight: it.firstHeight ?? it.creationHeight,
@@ -132,6 +133,9 @@ export function registerExplorerRoutes(app: Express, deps: ExplorerDeps) {
           note: "Indexer unavailable.",
         });
       }
+      const ready = await readyPreviewCids(
+        hits.flatMap((h) => [h.artworkUrl, h.mediaUrl])
+      );
       const items = hits.map((h) => ({
         tokenId: h.tokenId,
         name: h.name,
@@ -140,9 +144,9 @@ export function registerExplorerRoutes(app: Express, deps: ExplorerDeps) {
         firstHeight: h.firstHeight,
         unspentBoxes: h.unspentBoxes,
         isNftLike: h.isNftLike || h.emission === 1,
-        artworkUrl: publicArtworkUrl(h.artworkUrl),
+        artworkUrl: previewArtworkUrl(h.artworkUrl, ready),
         kind: h.kind,
-        mediaUrl: publicArtworkUrl(h.mediaUrl),
+        mediaUrl: previewArtworkUrl(h.mediaUrl, ready),
         source: "indexer",
       }));
       res.json({
@@ -187,7 +191,10 @@ export function registerExplorerRoutes(app: Express, deps: ExplorerDeps) {
           note: "Indexer unavailable.",
         });
       }
-      const items = cat.items.map(catalogNftRow);
+      const ready = await readyPreviewCids(
+        cat.items.flatMap((it) => [it.artworkUrl, it.mediaUrl])
+      );
+      const items = cat.items.map((it) => catalogNftRow(it, ready));
       return res.json({
         items,
         count: items.length,
@@ -228,14 +235,17 @@ export function registerExplorerRoutes(app: Express, deps: ExplorerDeps) {
         const idx = await recentNftsFromIndex(limit);
         if (idx == null) ready = false;
         else {
+          const artReady = await readyPreviewCids(
+            idx.flatMap((it) => [it.artworkUrl, it.mediaUrl])
+          );
           for (const it of idx) {
             items.push({
               txId: it.creationTxId,
               tokenId: it.tokenId,
               name: it.name,
-              artworkUrl: publicArtworkUrl(it.artworkUrl),
+              artworkUrl: previewArtworkUrl(it.artworkUrl, artReady),
               kind: it.kind,
-              mediaUrl: publicArtworkUrl(it.mediaUrl),
+              mediaUrl: previewArtworkUrl(it.mediaUrl, artReady),
               category: "nft",
               fee: null,
               firstSeen: null,
@@ -311,13 +321,16 @@ export function registerExplorerRoutes(app: Express, deps: ExplorerDeps) {
           note: "Indexer unavailable.",
         });
       }
+      const ready = await readyPreviewCids(
+        collections.flatMap((c) => [c.coverUrl, ...c.sample.map((s) => s.artworkUrl)])
+      );
       res.json({
         collections: collections.map((c) => ({
           ...c,
-          coverUrl: publicArtworkUrl(c.coverUrl),
+          coverUrl: previewArtworkUrl(c.coverUrl, ready),
           sample: c.sample.map((s) => ({
             ...s,
-            artworkUrl: publicArtworkUrl(s.artworkUrl),
+            artworkUrl: previewArtworkUrl(s.artworkUrl, ready),
           })),
         })),
         scannedTokens: collections.reduce((n, c) => n + c.count, 0),
@@ -352,8 +365,11 @@ export function registerExplorerRoutes(app: Express, deps: ExplorerDeps) {
       if (!detail.items.length && detail.total === 0) {
         return res.status(404).json({ error: "collection_not_found", slug });
       }
+      const ready = await readyPreviewCids(
+        detail.items.flatMap((it) => [it.artworkUrl, it.mediaUrl])
+      );
       const items = detail.items.map((it) => ({
-        ...catalogNftRow(it),
+        ...catalogNftRow(it, ready),
         height: it.firstHeight ?? it.creationHeight,
       }));
       res.json({
@@ -393,10 +409,11 @@ export function registerExplorerRoutes(app: Express, deps: ExplorerDeps) {
           note: "Indexer unavailable.",
         });
       }
+      const ready = await readyPreviewCids(issuers.map((it) => it.coverUrl));
       res.json({
         issuers: issuers.map((it) => ({
           ...it,
-          coverUrl: publicArtworkUrl(it.coverUrl),
+          coverUrl: previewArtworkUrl(it.coverUrl, ready),
         })),
         count: issuers.length,
         ready: true,
@@ -426,8 +443,11 @@ export function registerExplorerRoutes(app: Express, deps: ExplorerDeps) {
           items: [],
         });
       }
+      const ready = await readyPreviewCids(
+        page.items.flatMap((it) => [it.artworkUrl, it.mediaUrl])
+      );
       const items = page.items.map((it) => ({
-        ...catalogNftRow(it),
+        ...catalogNftRow(it, ready),
         height: it.firstHeight ?? it.creationHeight,
       }));
       res.json({
@@ -671,13 +691,20 @@ export function registerExplorerRoutes(app: Express, deps: ExplorerDeps) {
       emissionAmount: emission,
       name,
     });
-    const artworkUrl = publicArtworkUrl(idx?.artworkUrl ?? pickArtworkUrl(decoded));
+    const rawArt = idx?.artworkUrl ?? pickArtworkUrl(decoded);
+    const ready = await readyPreviewCids([
+      rawArt,
+      idx?.nft?.url,
+      idx?.nft?.coverUrl,
+      ...(idx?.nft?.extraUrls ?? []),
+    ]);
+    const artworkUrl = previewArtworkUrl(rawArt, ready);
     const nft = idx?.nft
       ? {
           ...idx.nft,
-          url: publicArtworkUrl(idx.nft.url) ?? idx.nft.url,
-          coverUrl: publicArtworkUrl(idx.nft.coverUrl) ?? idx.nft.coverUrl,
-          extraUrls: (idx.nft.extraUrls ?? []).map((u) => publicArtworkUrl(u) ?? u),
+          url: previewArtworkUrl(idx.nft.url, ready) ?? idx.nft.url,
+          coverUrl: previewArtworkUrl(idx.nft.coverUrl, ready) ?? idx.nft.coverUrl,
+          extraUrls: (idx.nft.extraUrls ?? []).map((u) => previewArtworkUrl(u, ready) ?? u),
         }
       : null;
     const price = skipMarket

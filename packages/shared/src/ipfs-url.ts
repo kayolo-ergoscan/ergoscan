@@ -113,3 +113,13 @@ export function ipfsCidFromPath(path: string | null | undefined): string | null 
   const head = path.split("/")[0] ?? "";
   return CID_HEAD.test(head) || CID_LOOSE.test(head) ? head : null;
 }
+
+/** Same-origin preview once the writer has stored this CID. Otherwise the public URL. */
+export function previewArtworkUrl(
+  url: string | null | undefined,
+  ready: ReadonlySet<string> | null | undefined
+): string | null {
+  const cid = ipfsCidFromPath(ipfsPathFromHref(url));
+  if (cid && ready?.has(cid)) return `https://ergoscan.me/nft/${cid}.webp`;
+  return publicArtworkUrl(url);
+}

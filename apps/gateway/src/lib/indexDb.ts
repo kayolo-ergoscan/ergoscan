@@ -15,6 +15,8 @@ import {
   isAgeUsdBankNft,
   MINERS_FEE_ADDRESS,
   isNftKind,
+  ipfsCidFromPath,
+  ipfsPathFromHref,
   minerFeeFromOutputs,
   ORACLE_POOL_NFTS,
   parseNanoErg,
@@ -136,7 +138,30 @@ export function getReadPool(): pg.Pool | null {
   return readPool;
 }
 
-/** Gateway reads. Alias of getReadPool. */
+/** CIDs whose preview webp is already on disk. Empty if the table is missing. */
+export async function readyPreviewCids(
+  urls: Array<string | null | undefined>
+): Promise<Set<string>> {
+  const cids = [
+    ...new Set(
+      urls
+        .map((u) => ipfsCidFromPath(ipfsPathFromHref(u)))
+        .filter((c): c is string => !!c)
+    ),
+  ];
+  if (!cids.length) return new Set();
+  const pool = getReadPool();
+  if (!pool) return new Set();
+  try {
+    const r = await pool.query<{ cid: string }>(
+      `SELECT cid FROM nft_preview WHERE status = 'ready' AND cid = ANY($1::text[])`,
+      [cids]
+    );
+    return new Set(r.rows.map((row) => row.cid));
+  } catch {
+    return new Set();
+  }
+}
 export function getIndexPool(): pg.Pool | null {
   return getReadPool();
 }

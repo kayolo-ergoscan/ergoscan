@@ -6,6 +6,7 @@ import {
   isSafeIpfsPath,
   preferIpfsUrl,
   publicArtworkUrl,
+  previewArtworkUrl,
 } from "./ipfs-url.js";
 
 test("ipfsPathFromHref: proto, gateway, subdomain, bare CID + file", () => {
@@ -62,4 +63,14 @@ test("preferIpfsUrl rewrites ipfs.io, keeps blockfrost and http", () => {
   assert.equal(falls[0], "https://nftstorage.link/ipfs/bafyabc");
   assert.ok(falls.includes("https://ipfs.io/ipfs/bafyabc"));
   assert.ok(falls.includes("https://ipfs.blockfrost.dev/ipfs/bafyabc"));
+});
+
+test("a ready preview replaces the public gate", () => {
+  const url = "https://nftstorage.link/ipfs/bafyabc";
+  assert.equal(
+    previewArtworkUrl(url, new Set(["bafyabc"])),
+    "https://ergoscan.me/nft/bafyabc.webp"
+  );
+  assert.equal(previewArtworkUrl(url, new Set()), "https://nftstorage.link/ipfs/bafyabc");
+  assert.equal(previewArtworkUrl("data:image/png;base64,aaa", new Set()), "data:image/png;base64,aaa");
 });

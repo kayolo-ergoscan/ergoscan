@@ -20,7 +20,7 @@ import {
   type AddrFlowKind,
   type BallProps,
   type RawTx,
-  publicArtworkUrl,
+  previewArtworkUrl,
   decodeSigmaConstantMap,
 } from "@ergoscan/shared";
 import { laterTs } from "../lib/later-ts.js";
@@ -55,6 +55,7 @@ import {
   joinAddressFilter,
   normalizeAddressFilter,
   parseKeysetCursor,
+  readyPreviewCids,
   tokenMetaMany,
   unspentBoxesByTokenId,
   refreshSpectrumPoolNfts,
@@ -1511,10 +1512,11 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
       res.status(503).json({ error: "stale", stale: true });
       return;
     }
+    const ready = await readyPreviewCids(tape.items.map((tok) => tok.artworkUrl));
     const tokens = tape.items.map((tok) => ({
       ...tok,
       name: tok.name ?? KNOWN_TOKENS[tok.tokenId]?.name ?? null,
-      artworkUrl: publicArtworkUrl(tok.artworkUrl),
+      artworkUrl: previewArtworkUrl(tok.artworkUrl, ready),
     }));
     res.json({
       address,
@@ -1534,10 +1536,13 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
       res.status(503).json({ error: "stale", stale: true, items: [], total: 0 });
       return;
     }
+    const ready = await readyPreviewCids(
+      page.items.flatMap((it) => [it.artworkUrl, it.mediaUrl])
+    );
     const items = page.items.map((it) => ({
       ...it,
-      artworkUrl: publicArtworkUrl(it.artworkUrl),
-      mediaUrl: publicArtworkUrl(it.mediaUrl),
+      artworkUrl: previewArtworkUrl(it.artworkUrl, ready),
+      mediaUrl: previewArtworkUrl(it.mediaUrl, ready),
     }));
     res.json({
       address,
