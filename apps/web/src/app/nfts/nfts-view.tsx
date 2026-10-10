@@ -29,7 +29,7 @@ import {
   type NftSeriesSnap,
 } from "@/lib/list-snapshots";
 
-const NFT_KIND_CHIPS = ["image", "audio", "video", "collection"] as const;
+const NFT_KIND_CHIPS = ["image", "audio", "video"] as const;
 
 const NFT_NAV = ["catalog", "series", "feed"] as const;
 const NFT_TABS = ["catalog", "series", "feed", "search"] as const;
@@ -414,7 +414,7 @@ export function NftsView({ initial }: { initial: NftHomeSnap }) {
         />
       </div>
 
-      <SegBar cols={7} className="mb-3">
+      <SegBar cols={3} className={tab === "catalog" || tab === "search" ? "mb-2" : "mb-3"}>
         {NFT_NAV.map((idTab) => (
           <a
             key={idTab}
@@ -428,17 +428,28 @@ export function NftsView({ initial }: { initial: NftHomeSnap }) {
             {t(`nfts.tab.${idTab}`)}
           </a>
         ))}
-        {NFT_KIND_CHIPS.map((id) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => onKind(id)}
-            className={segItem(tab === "catalog" && kind === id)}
-          >
-            {t(`nfts.kind.${id}`)}
-          </button>
-        ))}
       </SegBar>
+      {tab === "catalog" || tab === "search" ? (
+        <SegBar cols={4} className="mb-3">
+          <button
+            type="button"
+            onClick={() => onKind("")}
+            className={segItem(!kind)}
+          >
+            {t("nfts.kind.all")}
+          </button>
+          {NFT_KIND_CHIPS.map((id) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => onKind(id)}
+              className={segItem(kind === id)}
+            >
+              {t(`nfts.kind.${id}`)}
+            </button>
+          ))}
+        </SegBar>
+      ) : null}
 
       <div className="addr-sheet">
         {empty && !previewing ? (

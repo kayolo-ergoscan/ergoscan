@@ -82,6 +82,7 @@ export function NftCard({
   const titleName = item.name && !item.name.includes("\uFFFD") ? item.name : null;
   const title = titleName ? `${titleName} · ${item.tokenId}` : item.tokenId;
   const showColl = !!(item.collection && titleName && item.collection !== titleName);
+  const badge = item.kind && item.kind !== "image" ? item.kindLabel : null;
   return (
     <Link
       href={to}
@@ -91,9 +92,9 @@ export function NftCard({
     >
       <span className="addr-nft-thumb relative">
         <NftThumb url={item.artworkUrl} tokenId={item.tokenId} />
-        {item.kindLabel ? (
+        {badge ? (
           <span className="absolute left-2 top-2 rounded-full bg-black/55 px-2 py-0.5 text-[10px] font-medium leading-none text-white/90">
-            {item.kindLabel}
+            {badge}
           </span>
         ) : null}
       </span>
@@ -105,12 +106,9 @@ export function NftCard({
           <span className="truncate text-[12px] text-[var(--muted)]">{item.collection}</span>
         ) : item.meta ? (
           <span className="truncate text-[12px] text-[var(--muted)]">{item.meta}</span>
-        ) : item.kindLabel ? (
-          <span className="truncate text-[12px] text-[var(--muted)]">{item.kindLabel}</span>
+        ) : badge ? (
+          <span className="truncate text-[12px] text-[var(--muted)]">{badge}</span>
         ) : null}
-        <span className="truncate font-mono text-[13px] text-accent">
-          {shortId(item.tokenId, 10)}
-        </span>
       </span>
     </Link>
   );

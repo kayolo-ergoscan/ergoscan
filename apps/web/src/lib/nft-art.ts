@@ -1,5 +1,4 @@
 import { ipfsPathFromHref, ipfsUrlFallbacks, preferIpfsUrl } from "@ergoscan/shared";
-import { getGateway } from "./config";
 import { describeParty } from "./address-labels";
 import { shortId } from "./format";
 
@@ -38,7 +37,7 @@ export function safeMediaUrl(
   return preferIpfsUrl(t) ?? ( /^https?:\/\//i.test(t) ? t : null);
 }
 
-/** Try public IPFS gates as written, then same-origin `/v1/media/ipfs/` in the browser. */
+/** Same-origin `/v1/media/ipfs/` first, then public gates. A hung ipfs.io left the square empty. */
 export function mediaUrlFallbacks(
   url: string | null | undefined,
   kind: "image" | "audio" | "video" | "any" = "image"
@@ -61,9 +60,9 @@ export function mediaUrlFallbacks(
     seen.add(t);
     out.push(t);
   }
-  if (path && typeof window !== "undefined") {
-    const proxy = `${getGateway()}/v1/media/ipfs/${path}`;
-    if (!seen.has(proxy)) out.push(proxy);
+  if (path) {
+    const proxy = `/v1/media/ipfs/${path}`;
+    if (!seen.has(proxy)) out.unshift(proxy);
   }
   return out;
 }
