@@ -1309,6 +1309,8 @@ function protocolTokenIds(): string[] {
  */
 const DANGER_EVERY_MS = 120_000;
 const PRICE_EVERY_MS = 600_000;
+/** A thinner pool cannot price a rent box. Elehmental Book sat at $32M off an 11 ERG pool. Flux is ~64. */
+const DANGER_MIN_POOL_TVL_ERG = 50;
 let dangerCache: { at: number; rows: Record<string, unknown>[] } | null = null;
 let priceCache: { at: number; usd: Map<string, number> } | null = null;
 
@@ -1328,7 +1330,9 @@ async function pricedTokenUsd(pool: Pool): Promise<Map<string, number>> {
        FROM t
        CROSS JOIN LATERAL (
          SELECT p.price_usd FROM defi.price_tick p
-          WHERE p.token_id = t.token_id AND p.price_usd IS NOT NULL AND p.price_usd > 0
+          WHERE p.token_id = t.token_id
+            AND p.price_usd IS NOT NULL AND p.price_usd > 0
+            AND p.tvl_erg >= ${DANGER_MIN_POOL_TVL_ERG}
           ORDER BY p.ts_ms DESC LIMIT 1
        ) l
       WHERE t.token_id IS NOT NULL AND t.token_id ~ '^[0-9a-fA-F]{64}$'`

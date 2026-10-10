@@ -4,6 +4,11 @@ import {
   mergeActivityHeights,
   encodeTokenBalanceTxCountCursor,
   parseTokenBalanceTxCountCursor,
+  encodeLongHolderTxCursor,
+  parseLongHolderTxCursor,
+  holderTxCountNeedsFullHistory,
+  heightWindows,
+  foldHolderTxSlice,
   transferCountDelta,
   TAPE_NOT_MINTBURN_SQL,
   TAPE_NOT_SWAP_PACKED_SQL,
@@ -34,6 +39,30 @@ test("tile tx count follows the tape, not a ride-along", () => {
   assert.match(TAPE_NOT_MINTBURN_SQL, /9007199254740991/);
   assert.match(TAPE_NOT_SWAP_PACKED_SQL, /defi\.trades/);
   assert.match(TAPE_NOT_SWAP_PACKED_SQL, /encode\(m\.tx_id, 'hex'\)/);
+});
+
+test("long holder recount covers contracts and fat wallets only", () => {
+  assert.equal(holderTxCountNeedsFullHistory(51, 10), false);
+  assert.equal(holderTxCountNeedsFullHistory(992, 10), true);
+  assert.equal(holderTxCountNeedsFullHistory(51, 25_000), true);
+  const raw = encodeLongHolderTxCursor("L", "03fa", "9" + "h".repeat(20));
+  assert.deepEqual(parseLongHolderTxCursor(raw), {
+    phase: "L",
+    tokenId: "03fa",
+    address: "9" + "h".repeat(20),
+  });
+  assert.equal(parseLongHolderTxCursor("").phase, "L");
+  assert.deepEqual(heightWindows(150_000, 100_000), [
+    [0, 100_000],
+    [100_000, 200_000],
+  ]);
+  assert.deepEqual(
+    foldHolderTxSlice(
+      { n: 1, first: 10, last: 20 },
+      { n: 4, lo: 5, hi: 30 }
+    ),
+    { n: 5, first: 5, last: 30 }
+  );
 });
 
 test("token_balances tx_count cursor is token_id TAB address", () => {

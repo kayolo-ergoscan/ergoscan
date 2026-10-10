@@ -11,6 +11,7 @@
  * (lower) and new tip (higher) never overlap the seed inserts.
  */
 import type pg from "pg";
+import { capStatements, releaseCapped } from "./db.js";
 import { packedWriteEnabled, textChainBoxesEnabled, textChainHeadersEnabled } from "./packed/flags.js";
 
 type Queryable = { query: pg.Pool["query"] };
@@ -819,6 +820,311 @@ export async function syncTokenBalanceTxCountPage(
     done: false,
     slow,
   };
+}
+
+/**
+ * Long contracts and fat wallets missed the one-shot count: a timeout stored 0,
+ * and that pass does not run again. This pass writes the real
+ * address_tx ∩ token_tx_seen total. It does not write 0 on failure, and it
+ * does not touch short addresses that already counted.
+ * Live +1 stays on. The row lock covers the count, so a tip bump cannot land
+ * in the middle and get added twice.
+ */
+export const LONG_HOLDER_TX_COUNT_KEY = "token_balances_tx_count_long_v1";
+const LONG_HOLDER_TX_CURSOR = "token_balances_tx_count_long_cursor";
+export const LONG_HOLDER_ADDR_LEN = 200;
+export const FAT_HOLDER_ADDR_TXS = 25_000;
+export const HOLDER_TX_COUNT_WINDOW = 100_000;
+const LONG_HOLDER_WAKE_MS = 800;
+const LONG_HOLDER_WAKE_N = 4;
+
+export type LongHolderTxPhase = "L" | "S";
+
+export function holderTxCountNeedsFullHistory(addressLen: number, addrTxs: number | null): boolean {
+  if (addressLen > LONG_HOLDER_ADDR_LEN) return true;
+  return addrTxs != null && addrTxs >= FAT_HOLDER_ADDR_TXS;
+}
+
+export function encodeLongHolderTxCursor(
+  phase: LongHolderTxPhase,
+  tokenId: string,
+  address: string
+): string {
+  return `${phase}\t${tokenId}\t${address}`;
+}
+
+export function parseLongHolderTxCursor(raw: string): {
+  phase: LongHolderTxPhase;
+  tokenId: string;
+  address: string;
+} {
+  const phase: LongHolderTxPhase = raw.startsWith("S\t") ? "S" : "L";
+  const body = raw.startsWith("L\t") || raw.startsWith("S\t") ? raw.slice(2) : raw;
+  const i = body.indexOf("\t");
+  if (i < 0) return { phase, tokenId: body, address: "" };
+  return { phase, tokenId: body.slice(0, i), address: body.slice(i + 1) };
+}
+
+export function heightWindows(tip: number, window = HOLDER_TX_COUNT_WINDOW): Array<[number, number]> {
+  const end = Math.max(0, Math.trunc(tip)) + 1;
+  const out: Array<[number, number]> = [];
+  const step = Math.max(1, Math.trunc(window));
+  for (let h = 0; h < end; h += step) out.push([h, h + step]);
+  return out;
+}
+
+export function foldHolderTxSlice(
+  acc: { n: number; first: number | null; last: number | null },
+  slice: { n: number; lo: number | null; hi: number | null }
+): { n: number; first: number | null; last: number | null } {
+  const lo = slice.lo != null && Number.isFinite(slice.lo) ? slice.lo : null;
+  const hi = slice.hi != null && Number.isFinite(slice.hi) ? slice.hi : null;
+  return {
+    n: acc.n + (Number.isFinite(slice.n) ? slice.n : 0),
+    first: lo == null ? acc.first : acc.first == null ? lo : Math.min(acc.first, lo),
+    last: hi == null ? acc.last : acc.last == null ? hi : Math.max(acc.last, hi),
+  };
+}
+
+const HOLDER_TX_SLICE_SQL = `
+SELECT count(*)::int AS n,
+       min(x.height)::bigint AS lo,
+       max(x.height)::bigint AS hi
+  FROM packed.addr ad
+  JOIN packed.address_tx x
+    ON x.addr_id = ad.id
+   AND x.height >= $3
+   AND x.height < $4
+  JOIN packed.token_tx_seen s
+    ON s.tx_id = x.tx_id
+   AND s.token_id = decode($2, 'hex')
+ WHERE ad.addr_md5 = md5($1)
+   AND ad.address = $1
+`;
+
+const HOLDER_TX_NULL_HEIGHT_SQL = `
+SELECT count(*)::int AS n
+  FROM packed.addr ad
+  JOIN packed.address_tx x
+    ON x.addr_id = ad.id
+   AND x.height IS NULL
+  JOIN packed.token_tx_seen s
+    ON s.tx_id = x.tx_id
+   AND s.token_id = decode($2, 'hex')
+ WHERE ad.addr_md5 = md5($1)
+   AND ad.address = $1
+`;
+
+async function stateValue(db: Queryable, key: string): Promise<string | null> {
+  const r = await db.query<{ value: string }>(
+    `SELECT value FROM indexer_state WHERE key = $1`,
+    [key]
+  );
+  return r.rows[0]?.value ?? null;
+}
+
+async function putState(db: Queryable, key: string, value: string): Promise<void> {
+  await db.query(
+    `INSERT INTO indexer_state (key, value, updated_at)
+     VALUES ($1, $2, now())
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
+    [key, value]
+  );
+}
+
+async function countHolderTokenTx(
+  db: Queryable,
+  tokenId: string,
+  address: string,
+  tip: number,
+  addrTxs: number | null
+): Promise<{ n: number; first: number | null; last: number | null }> {
+  const ranges =
+    addrTxs != null && addrTxs < 8_000 ? [[0, Math.max(0, tip) + 1] as [number, number]] : heightWindows(tip);
+  let acc = { n: 0, first: null as number | null, last: null as number | null };
+  for (const [lo, hi] of ranges) {
+    const r = await db.query<{ n: number; lo: string | null; hi: string | null }>(HOLDER_TX_SLICE_SQL, [
+      address,
+      tokenId,
+      lo,
+      hi,
+    ]);
+    const row = r.rows[0];
+    acc = foldHolderTxSlice(acc, {
+      n: Number(row?.n || 0),
+      lo: row?.lo != null ? Number(row.lo) : null,
+      hi: row?.hi != null ? Number(row.hi) : null,
+    });
+  }
+  const missing = await db.query<{ n: number }>(HOLDER_TX_NULL_HEIGHT_SQL, [address, tokenId]);
+  acc = foldHolderTxSlice(acc, { n: Number(missing.rows[0]?.n || 0), lo: null, hi: null });
+  return acc;
+}
+
+/** Replace the stored total. Caller holds the row lock for this address. */
+async function writeHolderTokenTxCount(
+  db: Queryable,
+  tokenId: string,
+  address: string,
+  counted: { n: number; first: number | null; last: number | null }
+): Promise<void> {
+  await db.query(
+    `UPDATE token_balances
+        SET tx_count = $3,
+            first_height = CASE
+              WHEN $4::bigint IS NULL THEN first_height
+              ELSE LEAST(COALESCE(first_height, $4::bigint), $4::bigint)
+            END,
+            last_height = CASE
+              WHEN $5::bigint IS NULL THEN last_height
+              ELSE GREATEST(COALESCE(last_height, $5::bigint), $5::bigint)
+            END
+      WHERE token_id = $1
+        AND address = $2
+        AND amount > 0`,
+    [tokenId, address, counted.n, counted.first, counted.last]
+  );
+}
+
+async function recountHolderTokenTx(
+  db: Queryable,
+  tokenId: string,
+  address: string,
+  addrTxs: number | null
+): Promise<void> {
+  await db.query("BEGIN");
+  try {
+    await db.query("SET LOCAL statement_timeout = 8000");
+    await db.query("SET LOCAL enable_seqscan = off");
+    await db.query("SET LOCAL jit = off");
+    const locked = await db.query<{ ok: number }>(
+      `SELECT 1 AS ok FROM token_balances
+        WHERE token_id = $1 AND address = $2 AND amount > 0
+        FOR UPDATE`,
+      [tokenId, address]
+    );
+    if (!locked.rows.length) {
+      await db.query("COMMIT");
+      return;
+    }
+    const tipRow = await db.query<{ h: string | null }>(
+      `SELECT height::text AS h FROM packed.blocks ORDER BY height DESC LIMIT 1`
+    );
+    const tip = Number(tipRow.rows[0]?.h || 0);
+    const counted = await countHolderTokenTx(db, tokenId, address, tip, addrTxs);
+    await writeHolderTokenTxCount(db, tokenId, address, counted);
+    await db.query("COMMIT");
+  } catch (e) {
+    try {
+      await db.query("ROLLBACK");
+    } catch {
+      /* aborted */
+    }
+    throw e;
+  }
+}
+
+type LongHolderRow = { token_id: string; address: string; addr_txs: string | null };
+
+async function nextLongHolder(db: Queryable, tokenId: string, address: string): Promise<LongHolderRow | null> {
+  const r = await db.query<LongHolderRow>(
+    `SELECT b.token_id, b.address, s.tx_count::text AS addr_txs
+       FROM token_balances b
+       LEFT JOIN address_summary s ON s.address = b.address
+      WHERE b.amount > 0
+        AND length(b.address) > $3
+        AND (b.token_id, b.address) > ($1, $2)
+      ORDER BY b.token_id, b.address
+      LIMIT 1`,
+    [tokenId, address, LONG_HOLDER_ADDR_LEN]
+  );
+  return r.rows[0] ?? null;
+}
+
+async function nextFatHolder(
+  db: Queryable,
+  tokenId: string,
+  address: string
+): Promise<LongHolderRow | null> {
+  const r = await db.query<LongHolderRow>(
+    `SELECT b.token_id, b.address, s.tx_count::text AS addr_txs
+       FROM address_summary s
+       JOIN token_balances b ON b.address = s.address AND b.amount > 0
+      WHERE s.tx_count >= $3
+        AND length(s.address) <= $4
+        AND (b.token_id, b.address) > ($1, $2)
+      ORDER BY b.token_id, b.address
+      LIMIT 1`,
+    [tokenId, address, FAT_HOLDER_ADDR_TXS, LONG_HOLDER_ADDR_LEN]
+  );
+  return r.rows[0] ?? null;
+}
+
+let longHolderTxRunning = false;
+
+export async function maybeFillLongHolderTxCounts(pool: pg.Pool): Promise<void> {
+  if (longHolderTxRunning) return;
+  if (!packedWriteEnabled()) return;
+  longHolderTxRunning = true;
+  if (await stateValue(pool, LONG_HOLDER_TX_COUNT_KEY)) {
+    longHolderTxRunning = false;
+    return;
+  }
+  void (async () => {
+    const client = await pool.connect();
+    let capped = false;
+    let wrote = 0;
+    try {
+      await capStatements(client, 8000);
+      capped = true;
+      const t0 = Date.now();
+      let cursor = (await stateValue(client, LONG_HOLDER_TX_CURSOR)) ?? encodeLongHolderTxCursor("L", "", "");
+      while (Date.now() - t0 < LONG_HOLDER_WAKE_MS && wrote < LONG_HOLDER_WAKE_N) {
+        const pos = parseLongHolderTxCursor(cursor);
+        const row =
+          pos.phase === "S"
+            ? await nextFatHolder(client, pos.tokenId, pos.address)
+            : await nextLongHolder(client, pos.tokenId, pos.address);
+        if (!row) {
+          if (pos.phase === "L") {
+            cursor = encodeLongHolderTxCursor("S", "", "");
+            await putState(client, LONG_HOLDER_TX_CURSOR, cursor);
+            continue;
+          }
+          await putState(client, LONG_HOLDER_TX_COUNT_KEY, String(Date.now()));
+          console.log(`[indexer] long holder tx_count done wrote=${wrote}`);
+          return;
+        }
+        const addrTxs = row.addr_txs != null ? Number(row.addr_txs) : null;
+        try {
+          await recountHolderTokenTx(client, row.token_id, row.address, addrTxs);
+        } catch (e) {
+          const msg = String(e);
+          console.warn(
+            `[indexer] long holder tx_count ${row.address.slice(0, 12)}…`,
+            msg.slice(0, 220)
+          );
+          if (!/statement timeout/i.test(msg)) throw e;
+          // Leave the stored number. One slow contract must not freeze the pass.
+          cursor = encodeLongHolderTxCursor(pos.phase, row.token_id, row.address);
+          await putState(client, LONG_HOLDER_TX_CURSOR, cursor);
+          continue;
+        }
+        cursor = encodeLongHolderTxCursor(pos.phase, row.token_id, row.address);
+        await putState(client, LONG_HOLDER_TX_CURSOR, cursor);
+        wrote += 1;
+      }
+      if (wrote > 0) {
+        console.log(`[indexer] long holder tx_count wrote=${wrote} at=${cursor.slice(0, 24)}`);
+      }
+    } catch (e) {
+      console.warn("[indexer] long holder tx_count", String(e).slice(0, 300));
+    } finally {
+      longHolderTxRunning = false;
+      if (capped) await releaseCapped(client);
+      else client.release();
+    }
+  })();
 }
 
 function addCount(map: Map<string, number>, key: string, n: number) {
