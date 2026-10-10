@@ -12,11 +12,12 @@ import { MobileTabBar } from "./MobileTabBar";
 import { NavBrand, SideNavDrawer, SideNavRail } from "./SideNav";
 import { SyncChip, useKeepFresh } from "@/lib/page-sync";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
-import { getGateway } from "@/lib/config";
 import { fetchChainStats } from "@/lib/chain-stats";
 import { formatCompact, formatUsd } from "@/lib/format";
 import { HOME, INK } from "@/lib/palette";
 import { HeaderScout } from "./HeaderScout";
+import { ErgUsdContext, PriceTape, useSiteMarket } from "./PriceTape";
+import type { SiteMarket } from "@/lib/site-market";
 import { SCOUT_CUES_EN, SCOUT_CUES_RU } from "@/lib/header-scout";
 
 function registerRailLength() {
@@ -95,10 +96,12 @@ const NestedShell = createContext(false);
 
 export function Shell({
   children,
+  market = null,
 }: {
   children?: ReactNode;
   /** @deprecated chrome is layout-owned; ignored */
   status?: ReactNode;
+  market?: SiteMarket | null;
 }) {
   const nested = useContext(NestedShell);
   const path = usePathname();
@@ -140,9 +143,12 @@ export function Shell({
     };
   }, [menuOpen]);
 
+  const live = useSiteMarket(!nested, market);
+
   if (nested) return <>{children}</>;
 
   return (
+    <ErgUsdContext.Provider value={live.usd}>
     <NestedShell.Provider value={true}>
       <CommandPalette />
       <RouteNavProgress />
@@ -180,7 +186,9 @@ export function Shell({
             </div>
           </header>
 
-          <main className="stage-main flex-1 py-5 pb-[max(2rem,env(safe-area-inset-bottom))] max-lg:pb-5 lg:py-5">
+          <PriceTape rows={live.rows} fresh={live.fresh} />
+
+          <main className="stage-main flex-1 pt-2 pb-[max(2rem,env(safe-area-inset-bottom))] max-lg:pb-5 lg:pt-2 lg:pb-5">
             <div className={clsx("stage-width plane-stage px-4 sm:px-6 lg:px-8", path === "/" && "home-stage")}>{children}</div>
           </main>
 
@@ -201,6 +209,7 @@ export function Shell({
       </div>
       <MobileTabBar moreOpen={menuOpen} onMore={() => setMenuOpen((v) => !v)} />
     </NestedShell.Provider>
+    </ErgUsdContext.Provider>
   );
 }
 
@@ -286,20 +295,10 @@ function SearchSlashIcon() {
 
 function ErgPrice({ compact = false }: { compact?: boolean }) {
   const t = useT();
-  const [usd, setUsd] = useState<number | null>(null);
+  const usd = useContext(ErgUsdContext);
   const [circulating, setCirculating] = useState<number | null>(null);
 
   const load = useCallback(() => {
-    void fetch(`${getGateway()}/v1/prices/erg`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((p) => {
-        const price =
-          p && typeof p === "object" && typeof (p as { usd?: number }).usd === "number"
-            ? (p as { usd: number }).usd
-            : null;
-        setUsd(price != null && price > 0 ? price : null);
-      })
-      .catch(() => null);
     void fetchChainStats().then((s) => {
       if (!s) return;
       setCirculating(s.circulating != null && s.circulating > 0 ? s.circulating : null);

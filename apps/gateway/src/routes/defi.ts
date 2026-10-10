@@ -66,8 +66,6 @@ export type DefiDeps = {
 };
 
 const RANKS_STALE_MS = Number(process.env.DEFI_RANKS_STALE_MS || 3 * 60_000);
-/** Same cap ranks uses for 24h vol — drop LP-sized outliers. */
-const VOL_MAX_TRADE_ERG = Number(process.env.RANKS_MAX_TRADE_ERG || 3_000);
 const VOL_DAYS = new Set([7, 30, 90]);
 const DAY_MS = 24 * 60 * 60_000;
 const POOL_LIST_CAP = 2_000;
@@ -578,13 +576,12 @@ export function registerDefiRoutes(app: Express, _deps: DefiDeps = {}) {
       const poolOk = /^[0-9a-f]{64}$/.test(poolId);
       const until = Math.floor(Date.now() / binMs) * binMs;
       const since = until - days * DAY_MS;
-      const params: unknown[] = [since, until, binMs, VOL_MAX_TRADE_ERG];
+      const params: unknown[] = [since, until, binMs];
       const where = [
         `t.ts_ms >= $1`,
         `t.ts_ms < $2`,
         `t.base_amount IS NOT NULL`,
         `t.base_amount > 0`,
-        `t.base_amount <= $4`,
         `COALESCE(t.token_amount, 0) > 0`,
         `t.${LIVE_TRADE_SOURCES_SQL}`,
         sqlNotAgeUsdBankPool("t.pool_id"),
@@ -1342,12 +1339,11 @@ export function registerDefiRoutes(app: Express, _deps: DefiDeps = {}) {
             (SELECT coalesce(sum(s.base_amount), 0)::float8
                FROM defi.swaps s
               WHERE s.venue = '${LITHOS_DEX_VENUE}'
+                AND s.event_kind = 'swap'
                 AND s.base_amount IS NOT NULL
                 AND s.base_amount > 0
-                AND s.base_amount <= $1
                 AND coalesce(s.token_amount, 0) > 0) AS vol_erg
-          `,
-          [VOL_MAX_TRADE_ERG]
+          `
         ),
         q<{
           pool_id: string;
@@ -1419,7 +1415,7 @@ export function registerDefiRoutes(app: Express, _deps: DefiDeps = {}) {
     /**
      * Spectrum page snapshot — AgeUSD/Lithos-shaped.
      * GET ?limit=25&eventsOffset=&tradersOffset=&eventsSort=&eventsDir=&tokenId=
-     * Tape: defi.swaps CFMM+N2N (eventsCount). tradesCount + volume stay N2T.
+     * Tape: defi.swaps CFMM+N2N (eventsCount). tradesCount and tradersCount match /defi/pool.
      * tokenId filters tape, KPIs, traders, pools. Pools TVL>=100, else fills.
      */
     async spectrum(req: Request, res: Response) {
@@ -1453,28 +1449,23 @@ export function registerDefiRoutes(app: Express, _deps: DefiDeps = {}) {
       const eventCountWhere = tokenOk
         ? `${SPECTRUM_VENUE_SQL} AND ${spectrumEventTokenSql(1)}`
         : SPECTRUM_VENUE_SQL;
-      const n2tCountWhere = tokenOk
-        ? `${SPECTRUM_VENUE_SQL} AND ${SPECTRUM_N2T_SQL} AND token_id = $1`
-        : `${SPECTRUM_VENUE_SQL} AND ${SPECTRUM_N2T_SQL}`;
       const traderWhere = tokenOk
         ? `${SPECTRUM_VENUE_SQL} AND ${spectrumEventTokenSql(3)} AND trader IS NOT NULL AND trader <> ''`
         : `${SPECTRUM_VENUE_SQL} AND ${SPECTRUM_N2T_SQL} AND trader IS NOT NULL AND trader <> ''`;
       const traderCountWhere = tokenOk
-        ? `${SPECTRUM_VENUE_SQL} AND ${spectrumEventTokenSql(1)} AND trader IS NOT NULL AND trader <> ''`
-        : `${SPECTRUM_VENUE_SQL} AND ${SPECTRUM_N2T_SQL} AND trader IS NOT NULL AND trader <> ''`;
+        ? `event_kind = 'swap' AND ${SPECTRUM_VENUE_SQL} AND ${spectrumEventTokenSql(1)} AND trader IS NOT NULL AND trader <> ''`
+        : `event_kind = 'swap' AND ${SPECTRUM_VENUE_SQL} AND trader IS NOT NULL AND trader <> ''`;
       const poolTokenSql = tokenOk ? `AND ${spectrumPoolTokenSql("r", 2)}` : "";
-      const kpiTokenSql = tokenOk ? `AND ${spectrumPoolTokenSql("r", 3)}` : "";
-      const volTokenSql = tokenOk ? `AND s.token_id = $3` : "";
+      const kpiTokenSql = tokenOk ? `AND ${spectrumPoolTokenSql("r", 2)}` : "";
       const kpiParams: unknown[] = tokenOk
-        ? [POOL_LIST_MIN_TVL_ERG, VOL_MAX_TRADE_ERG, tokenId]
-        : [POOL_LIST_MIN_TVL_ERG, VOL_MAX_TRADE_ERG];
+        ? [POOL_LIST_MIN_TVL_ERG, tokenId]
+        : [POOL_LIST_MIN_TVL_ERG];
       const tvlPoolParams: unknown[] = tokenOk
         ? [POOL_LIST_MIN_TVL_ERG, tokenId]
         : [POOL_LIST_MIN_TVL_ERG];
       const [
         events,
         counted,
-        n2tCounted,
         topTraders,
         tradersCounted,
         kpis,
@@ -1504,10 +1495,6 @@ export function registerDefiRoutes(app: Express, _deps: DefiDeps = {}) {
           `SELECT count(*)::text AS c FROM defi.swaps WHERE ${eventCountWhere}`,
           countParams
         ),
-        q<{ c: string }>(
-          `SELECT count(*)::text AS c FROM defi.swaps WHERE ${n2tCountWhere}`,
-          countParams
-        ),
         q<{ trader: string; erg: string | number; deals: string | number }>(
           `
           SELECT trader, coalesce(sum(base_amount), 0) AS erg, count(*)::int AS deals
@@ -1519,15 +1506,19 @@ export function registerDefiRoutes(app: Express, _deps: DefiDeps = {}) {
           `,
           tokenOk ? [limit, tradersOffset, tokenId] : [limit, tradersOffset]
         ),
-        q<{ c: string }>(
-          `SELECT count(*)::text AS c FROM (
-             SELECT 1 FROM defi.swaps
-             WHERE ${traderCountWhere}
-             GROUP BY trader
-           ) t`,
-          countParams
-        ),
-        q<{ tvl_erg: number | null; vol_erg: number | null }>(
+        tokenOk
+          ? q<{ c: string }>(
+              `SELECT count(*)::text AS c FROM (
+                 SELECT 1 FROM defi.swaps
+                 WHERE ${traderCountWhere}
+                 GROUP BY trader
+               ) t`,
+              countParams
+            )
+          : q<{ value: string }>(
+              `SELECT value FROM defi.worker_state WHERE key = 'spectrum_traders'`
+            ),
+        q<{ tvl_erg: number | null; vol_erg: number | null; trades_n: string | null }>(
           `
           SELECT
             (SELECT coalesce(sum(ps.tvl_erg), 0)::float8
@@ -1536,15 +1527,16 @@ export function registerDefiRoutes(app: Express, _deps: DefiDeps = {}) {
               WHERE r.venue IN ('spectrum_cfmm', 'spectrum_n2n')
                 AND coalesce(ps.tvl_erg, 0) >= $1
                 ${kpiTokenSql}) AS tvl_erg,
-            (SELECT coalesce(sum(s.base_amount), 0)::float8
-               FROM defi.swaps s
-              WHERE s.venue IN ('spectrum_cfmm', 'spectrum_n2n')
-                AND (s.base_id IS NULL OR s.base_id = repeat('0', 64))
-                AND s.base_amount IS NOT NULL
-                AND s.base_amount > 0
-                AND s.base_amount <= $2
-                AND coalesce(s.token_amount, 0) > 0
-                ${volTokenSql}) AS vol_erg
+            (SELECT coalesce(sum(ps.vol_erg), 0)::float8
+               FROM defi.pool_registry r
+               JOIN defi.pool_snap ps ON ps.pool_id = r.pool_id
+              WHERE r.venue = 'spectrum_cfmm'
+                ${kpiTokenSql}) AS vol_erg,
+            (SELECT coalesce(sum(ps.trades_n), 0)::text
+               FROM defi.pool_registry r
+               JOIN defi.pool_snap ps ON ps.pool_id = r.pool_id
+              WHERE r.venue = 'spectrum_cfmm'
+                ${kpiTokenSql}) AS trades_n
           `,
           kpiParams
         ),
@@ -1658,9 +1650,13 @@ export function registerDefiRoutes(app: Express, _deps: DefiDeps = {}) {
         listedBy,
         tvlErg: kpi?.tvl_erg != null ? Number(kpi.tvl_erg) : null,
         volErg: kpi?.vol_erg != null ? Number(kpi.vol_erg) : null,
-        tradesCount: n2tCounted?.[0] ? Number(n2tCounted[0].c) : null,
+        tradesCount: kpi?.trades_n != null ? Number(kpi.trades_n) : null,
         eventsCount: counted?.[0] ? Number(counted[0].c) : null,
-        tradersCount: tradersCounted?.[0] ? Number(tradersCounted[0].c) : null,
+        tradersCount: tradersCounted?.[0]
+          ? Number(
+              "value" in tradersCounted[0] ? tradersCounted[0].value : tradersCounted[0].c
+            )
+          : null,
         eventsOffset,
         tradersOffset,
         events: (events ?? []).map((e) => ({

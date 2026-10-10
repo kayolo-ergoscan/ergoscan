@@ -18,6 +18,57 @@ export function wholeTokenQty(amount: number, decimals: number | null | undefine
   return amount;
 }
 
+function isWholeInteger(amount: number): boolean {
+  return amount >= 1 && Math.abs(amount - Math.round(amount)) < 1e-6;
+}
+
+/** Stored as a human amount, plus the raw reading when an integer sits below 10^decimals. */
+export function n2nQtyChoices(amount: number, decimals: number | null | undefined): number[] {
+  const human = wholeTokenQty(amount, decimals);
+  const dec = Math.max(0, Math.min(18, Math.trunc(Number(decimals) || 0)));
+  if (!(dec > 0) || !isWholeInteger(amount) || !(amount < 10 ** dec)) return [human];
+  const raw = amount / 10 ** dec;
+  if (!(raw > 0) || !Number.isFinite(raw) || Math.abs(raw - human) < 1e-18) return [human];
+  return [human, raw];
+}
+
+/**
+ * Pick the scaling of each leg that makes the two ERG values agree.
+ * A raw integer below 10^decimals is not a whole token: 25249041 of an
+ * 8-decimal token is 0.252, and treating it as 25 million blows the volume up.
+ * An exact whole amount such as 2 SigUSD stays human, because that matches the other leg.
+ */
+export function n2nLegs(
+  qAmount: number,
+  qDecimals: number | null | undefined,
+  qPrice: number,
+  bAmount: number,
+  bDecimals: number | null | undefined,
+  bPrice: number
+): { q: number; b: number } {
+  const qs = n2nQtyChoices(qAmount, qDecimals);
+  const bs = n2nQtyChoices(bAmount, bDecimals);
+  let bestQ = qs[0] ?? 0;
+  let bestB = bs[0] ?? 0;
+  let best = Number.POSITIVE_INFINITY;
+  for (const q of qs) {
+    for (const b of bs) {
+      const qe = n2nQuoteErg(q, qPrice);
+      const be = n2nQuoteErg(b, bPrice);
+      let score = 1;
+      if (qe > 0 && be > 0) score = Math.abs(qe - be) / Math.max(qe, be);
+      else if (qe > 25_000 || be > 25_000) score = 1;
+      else score = 0;
+      if (score < best) {
+        best = score;
+        bestQ = q;
+        bestB = b;
+      }
+    }
+  }
+  return { q: bestQ, b: bestB };
+}
+
 /** Quote leg in ERG. 0 when the price or the amount is unusable. */
 export function n2nQuoteErg(qtyWhole: number, priceErg: number): number {
   if (!(qtyWhole > 0) || !(priceErg > 0) || priceErg >= 1e12 || !Number.isFinite(priceErg)) {
@@ -55,8 +106,8 @@ export function n2tErgVolume(
   if (String(venue || "").trim().toLowerCase() !== "spectrum_cfmm") return null;
   const base = String(baseId || "").trim().toLowerCase();
   if (base && base !== ERG_ZERO) return null;
-  const cap = Number.isFinite(maxErg) && maxErg > 0 ? maxErg : POOL_VOL_MAX_ERG_DEFAULT;
-  if (!(baseAmount > 0) || baseAmount > cap) return 0;
+  void maxErg;
+  if (!(baseAmount > 0) || !Number.isFinite(baseAmount)) return 0;
   if (!(tokenAmount > 0)) return 0;
   return baseAmount;
 }
@@ -139,7 +190,6 @@ export async function seedPoolRoll(db: Db, maxErg = poolVolMaxErg()): Promise<{ 
                   WHERE venue = 'spectrum_cfmm'
                     AND (base_id IS NULL OR base_id = repeat('0', 64))
                     AND base_amount > 0
-                    AND base_amount <= $1
                     AND coalesce(token_amount, 0) > 0
                 ), 0)::float8 AS vol_erg
          FROM defi.swaps
@@ -165,8 +215,7 @@ export async function seedPoolRoll(db: Db, maxErg = poolVolMaxErg()): Promise<{ 
          trades_n = EXCLUDED.trades_n,
          vol_erg = EXCLUDED.vol_erg,
          first_ts_ms = EXCLUDED.first_ts_ms,
-         last_ts_ms = EXCLUDED.last_ts_ms`,
-      [maxErg]
+         last_ts_ms = EXCLUDED.last_ts_ms`
     );
     await client.query("COMMIT");
     await setState(db, POOL_ROLL_KEY, "1");

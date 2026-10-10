@@ -561,10 +561,18 @@ export type LithosDexSnap = {
   pools?: DefiPool[];
 };
 
+export type SpectrumTapeRow = {
+  tokenId: string;
+  symbol: string;
+  priceUsd: number;
+  changePct?: number | null;
+};
+
 export type SpectrumDexSnap = LithosDexSnap & {
   minTvlErg?: number | null;
   eventsCount?: number | null;
   listedBy?: "tvl" | "fills" | null;
+  tape?: SpectrumTapeRow[] | null;
 };
 
 export async function fetchLithosDex(opts?: {

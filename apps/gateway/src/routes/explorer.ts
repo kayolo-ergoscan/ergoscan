@@ -1145,7 +1145,7 @@ const OPENAPI_SPEC = {
     "/v1/prices/erg": {
       get: {
         summary:
-          "ERG/USD from snapshot_kv.market (oracle writer CoinGecko); home is a copy. Additive rank, volume24h, change24h. GET does not call CoinGecko. Official pool price is /v1/prices/erg/oracle.",
+          "ERG/USD from snapshot_kv.market (oracle writer CoinGecko); home is a copy. Additive rank, volume24h, change24h. Additive tape: up to 18 Spectrum reserve marks (tokenId, symbol, priceUsd, changePct vs yesterday), cached about 45s. GET does not call CoinGecko or scan swaps. Official pool price is /v1/prices/erg/oracle.",
       },
     },
     "/v1/prices/erg/oracle": {

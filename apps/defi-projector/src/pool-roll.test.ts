@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { n2nQuoteErg, n2tErgVolume, poolVolMaxErg, wholeTokenQty } from "./pool-roll.js";
+import { n2nLegs, n2nQuoteErg, n2tErgVolume, poolVolMaxErg, wholeTokenQty } from "./pool-roll.js";
 
 const ERG = "0".repeat(64);
 
 test("N2T volume follows the Spectrum tile cap", () => {
   assert.equal(n2tErgVolume("spectrum_cfmm", ERG, 12.5, 3, 3000), 12.5);
-  assert.equal(n2tErgVolume("spectrum_cfmm", ERG, 3001, 3, 3000), 0);
+  assert.equal(n2tErgVolume("spectrum_cfmm", ERG, 24096, 3, 3000), 24096);
   assert.equal(n2tErgVolume("spectrum_cfmm", ERG, 10, 0, 3000), 0);
   assert.equal(n2tErgVolume("spectrum_cfmm", null, 4, 1, 3000), 4);
 });
@@ -20,6 +20,17 @@ test("n2n whole qty undoes a raw write and keeps a scaled one", () => {
   assert.equal(wholeTokenQty(0.000100531, 9), 0.000100531);
   assert.equal(wholeTokenQty(4_509_062_468, 3), 4_509_062.468);
   assert.equal(wholeTokenQty(12, 0), 12);
+});
+
+test("a raw integer below 10^decimals is not millions of whole tokens", () => {
+  const legs = n2nLegs(25_249_041, 8, 2.454, 13.431235, 6, 0.0000367);
+  assert.ok(Math.abs(legs.q - 0.25249041) < 1e-9);
+  assert.ok(Math.abs(legs.b - 13.431235) < 1e-9);
+  const usd = n2nLegs(2, 2, 3.42, 2995.8307, 4, 0.002);
+  assert.equal(usd.q, 2);
+  assert.ok(Math.abs(usd.b - 2995.8307) < 1e-6);
+  const lone = n2nLegs(8_433_512, 4, 0, 129_222, 8, 2.454);
+  assert.ok(Math.abs(lone.b - 0.00129222) < 1e-9);
 });
 
 test("n2n quote erg is the whole amount times the ERG-pool price", () => {

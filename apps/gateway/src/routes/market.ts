@@ -20,6 +20,7 @@ import {
   type TokenCatalogSort,
 } from "../lib/indexDb.js";
 import { mapTokenInfo } from "../lib/explorerCompat.js";
+import { loadPriceTapeErg } from "../lib/price-tape.js";
 
 export type MarketDeps = {
   getRawMempool: () => Map<string, RawTx>;
@@ -67,8 +68,18 @@ export function registerMarketRoutes(app: Express, deps: MarketDeps) {
   // ── ERG price ───────────────────────────────────────────────────────────
   app.get("/v1/prices/erg", async (_req, res) => {
     try {
-      const p = await fetchErgMarket();
-      res.json({ asset: "ERG", ...p, ts: Date.now() });
+      const [p, tapeErg] = await Promise.all([fetchErgMarket(), loadPriceTapeErg()]);
+      const usd = p.usd;
+      const tape =
+        usd > 0
+          ? tapeErg.map((row) => ({
+              tokenId: row.tokenId,
+              symbol: row.symbol,
+              priceUsd: row.priceErg * usd,
+              changePct: row.changePct,
+            }))
+          : [];
+      res.json({ asset: "ERG", ...p, ts: Date.now(), tape });
     } catch (e) {
       res.status(502).json({ error: "price_unavailable", detail: String(e) });
     }

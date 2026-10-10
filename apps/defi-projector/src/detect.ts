@@ -5,7 +5,6 @@ import { nftsForDetect, registryForWindow, type PoolReg } from "./registry.js";
 
 const ERG_ZERO = "0".repeat(64);
 const DETECT_TIMEOUT_MS = Number(process.env.DETECT_TIMEOUT_MS || 8_000);
-const MAX_TRADE_ERG = Number(process.env.MAX_TRADE_ERG || 25_000);
 
 export type DetectedSwap = {
   txId: string;
@@ -295,7 +294,6 @@ async function detectChunk(
       const baseAmount = Math.abs(dErg);
       if (tokenRaw < 1 || !(baseAmount > 0)) continue;
       if (move.eventKind === "swap") {
-        if (baseAmount > MAX_TRADE_ERG) continue;
         const poolY = Math.max(yIn, yOut);
         if (poolY > 1000 && tokenRaw / poolY > 0.5) continue;
       } else if (baseAmount > 1e7) {

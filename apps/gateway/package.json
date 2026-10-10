@@ -8,7 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "npx tsx --test src/lib/ergoAddress.test.ts src/lib/names.test.ts src/lib/nftNameGroups.test.ts src/lib/explorerCompat.test.ts src/lib/boxSearch.test.ts src/lib/gix.test.ts src/lib/ergoTree.test.ts src/lib/spectrum-page.test.ts src/lib/address-token-tape.test.ts src/lib/addressListFilter.test.ts src/lib/later-ts.test.ts src/lib/public-health.test.ts src/lib/submit-tx.test.ts src/lib/openapi-intro.test.ts src/lib/siteOrigin.test.ts src/lib/api-contract.test.ts src/lib/page-limit.test.ts src/lib/holder-cursor.test.ts src/lib/token-holder-activity.test.ts src/lib/flow-parties.test.ts src/lib/buyback.test.ts src/lib/resolve.test.ts src/lib/blockHeader.test.ts src/graphql/nautilus.test.ts src/graphql/execute.test.ts"
+    "test": "npx tsx --test src/lib/ergoAddress.test.ts src/lib/names.test.ts src/lib/nftNameGroups.test.ts src/lib/explorerCompat.test.ts src/lib/boxSearch.test.ts src/lib/gix.test.ts src/lib/ergoTree.test.ts src/lib/spectrum-page.test.ts src/lib/price-tape.test.ts src/lib/address-token-tape.test.ts src/lib/addressListFilter.test.ts src/lib/later-ts.test.ts src/lib/public-health.test.ts src/lib/submit-tx.test.ts src/lib/openapi-intro.test.ts src/lib/siteOrigin.test.ts src/lib/api-contract.test.ts src/lib/page-limit.test.ts src/lib/holder-cursor.test.ts src/lib/token-holder-activity.test.ts src/lib/flow-parties.test.ts src/lib/buyback.test.ts src/lib/resolve.test.ts src/lib/blockHeader.test.ts src/graphql/nautilus.test.ts src/graphql/execute.test.ts"
   },
   "dependencies": {
     "@ergoscan/shared": "*",

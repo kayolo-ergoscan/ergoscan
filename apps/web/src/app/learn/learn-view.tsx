@@ -52,7 +52,7 @@ export function LearnView() {
 
         <section
           id="evidence"
-          className="home-tile-enter mod scroll-mt-24 rounded-[20px] border border-[var(--border)] bg-[var(--module)] px-4 py-4"
+          className="home-tile-enter mod rounded-[20px] border border-[var(--border)] bg-[var(--module)] px-4 py-4"
           style={enterAt(1)}
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -105,7 +105,7 @@ export function LearnView() {
         <div className="grid gap-2 lg:grid-cols-2">
           <section
             id="limits"
-            className="home-tile-enter mod scroll-mt-24 rounded-[20px] border border-[var(--border)] bg-[var(--module)] px-4 py-4"
+            className="home-tile-enter mod rounded-[20px] border border-[var(--border)] bg-[var(--module)] px-4 py-4"
             style={enterAt(3)}
           >
             <h2 className="text-[15px] font-semibold text-[var(--text)]">

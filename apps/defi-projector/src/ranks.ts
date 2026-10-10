@@ -14,7 +14,7 @@ import type { Db } from "./db.js";
 import { setState } from "./db.js";
 import { absorbPoolBox, keepWithdrawn, poolNeedsNftTvl, type PoolBox, type PoolBoxRow } from "./ranks-tvl.js";
 import { reserveMarkErg, spectrumFeeRate } from "./pool-mark.js";
-import { n2nQuoteErg, poolVolMaxErg } from "./pool-roll.js";
+import { n2nLegs, n2nQuoteErg, poolVolMaxErg } from "./pool-roll.js";
 import { T2T_VENUE } from "./t2t-registry.js";
 
 const HEX64 = /^[0-9a-f]{64}$/;
@@ -297,85 +297,66 @@ async function fillN2nVolume(
     pool_id: string;
     token_id: string;
     base_id: string;
-    q_all: number;
-    q_24: number;
-    q_30: number;
-    b_all: number;
-    b_24: number;
-    b_30: number;
+    token_amount: number;
+    base_amount: number;
+    ts_ms: string | number | null;
+    q_dec: number | null;
+    b_dec: number | null;
   }>(
     `SELECT s.pool_id,
             lower(s.token_id) AS token_id,
             lower(s.base_id) AS base_id,
-            coalesce(sum(
-              CASE
-                WHEN coalesce(tq.decimals, 0) > 0
-                 AND s.token_amount >= power(10::numeric, tq.decimals)
-                THEN s.token_amount / power(10::numeric, tq.decimals)
-                ELSE s.token_amount
-              END
-            ), 0)::float8 AS q_all,
-            coalesce(sum(
-              CASE
-                WHEN coalesce(tq.decimals, 0) > 0
-                 AND s.token_amount >= power(10::numeric, tq.decimals)
-                THEN s.token_amount / power(10::numeric, tq.decimals)
-                ELSE s.token_amount
-              END
-            ) FILTER (WHERE s.ts_ms >= $1), 0)::float8 AS q_24,
-            coalesce(sum(
-              CASE
-                WHEN coalesce(tq.decimals, 0) > 0
-                 AND s.token_amount >= power(10::numeric, tq.decimals)
-                THEN s.token_amount / power(10::numeric, tq.decimals)
-                ELSE s.token_amount
-              END
-            ) FILTER (WHERE s.ts_ms >= $2), 0)::float8 AS q_30,
-            coalesce(sum(
-              CASE
-                WHEN coalesce(tb.decimals, 0) > 0
-                 AND s.base_amount >= power(10::numeric, tb.decimals)
-                THEN s.base_amount / power(10::numeric, tb.decimals)
-                ELSE s.base_amount
-              END
-            ), 0)::float8 AS b_all,
-            coalesce(sum(
-              CASE
-                WHEN coalesce(tb.decimals, 0) > 0
-                 AND s.base_amount >= power(10::numeric, tb.decimals)
-                THEN s.base_amount / power(10::numeric, tb.decimals)
-                ELSE s.base_amount
-              END
-            ) FILTER (WHERE s.ts_ms >= $1), 0)::float8 AS b_24,
-            coalesce(sum(
-              CASE
-                WHEN coalesce(tb.decimals, 0) > 0
-                 AND s.base_amount >= power(10::numeric, tb.decimals)
-                THEN s.base_amount / power(10::numeric, tb.decimals)
-                ELSE s.base_amount
-              END
-            ) FILTER (WHERE s.ts_ms >= $2), 0)::float8 AS b_30
+            s.token_amount::float8 AS token_amount,
+            s.base_amount::float8 AS base_amount,
+            s.ts_ms,
+            tq.decimals AS q_dec,
+            tb.decimals AS b_dec
      FROM defi.swaps s
      LEFT JOIN tokens tq ON tq.token_id = s.token_id
      LEFT JOIN tokens tb ON tb.token_id = s.base_id
      WHERE s.venue = 'spectrum_n2n'
-       AND s.event_kind = 'swap'
-     GROUP BY s.pool_id, s.token_id, s.base_id`,
-    [sinceMs, since30Ms]
+       AND s.event_kind = 'swap'`
   );
+  const agg = new Map<
+    string,
+    { tokenId: string; baseId: string; all: number; day: number; month: number; pxQ: number }
+  >();
   for (const row of rows.rows) {
-    const acc = byPool.get(String(row.pool_id || "").toLowerCase());
+    const pid = String(row.pool_id || "").toLowerCase();
+    const acc = byPool.get(pid);
     if (!acc || acc.venue !== T2T_VENUE) continue;
-    const pxQ = n2tPx.get(String(row.token_id || "").toLowerCase())?.px ?? 0;
-    const pxB = n2tPx.get(String(row.base_id || "").toLowerCase())?.px ?? 0;
+    const tokenId = String(row.token_id || "").toLowerCase();
+    const baseId = String(row.base_id || "").toLowerCase();
+    const pxQ = n2tPx.get(tokenId)?.px ?? 0;
+    const pxB = n2tPx.get(baseId)?.px ?? 0;
     if (!(pxQ > 0) && !(pxB > 0)) continue;
-    const all = n2nQuoteErg(num(row.q_all), pxQ) || n2nQuoteErg(num(row.b_all), pxB);
-    const day = n2nQuoteErg(num(row.q_24), pxQ) || n2nQuoteErg(num(row.b_24), pxB);
-    const month = n2nQuoteErg(num(row.q_30), pxQ) || n2nQuoteErg(num(row.b_30), pxB);
-    acc.n2nVolErg = all;
-    acc.volumeErg = day;
-    acc.vol30Erg = month;
-    if (pxQ > 0) acc.priceErg = pxQ;
+    const legs = n2nLegs(
+      num(row.token_amount),
+      row.q_dec,
+      pxQ,
+      num(row.base_amount),
+      row.b_dec,
+      pxB
+    );
+    const erg = n2nQuoteErg(legs.q, pxQ) || n2nQuoteErg(legs.b, pxB);
+    if (!(erg > 0)) continue;
+    let g = agg.get(pid);
+    if (!g) {
+      g = { tokenId, baseId, all: 0, day: 0, month: 0, pxQ };
+      agg.set(pid, g);
+    }
+    g.all += erg;
+    const ts = Number(row.ts_ms);
+    if (ts >= since30Ms) g.month += erg;
+    if (ts >= sinceMs) g.day += erg;
+  }
+  for (const [pid, g] of agg) {
+    const acc = byPool.get(pid);
+    if (!acc) continue;
+    acc.n2nVolErg = g.all;
+    acc.volumeErg = g.day;
+    acc.vol30Erg = g.month;
+    if (g.pxQ > 0) acc.priceErg = g.pxQ;
   }
 }
 
@@ -476,20 +457,20 @@ export async function materializeRanks(db: Db): Promise<{ heat: number; pools: n
               coalesce(sum(base_amount) FILTER (
                 WHERE venue = 'spectrum_cfmm'
                   AND (base_id IS NULL OR base_id = repeat('0', 64))
-                  AND base_amount > 0 AND base_amount <= $3
+                  AND base_amount > 0
                   AND coalesce(token_amount, 0) > 0
               ), 0)::float8 AS vol_all,
               coalesce(sum(base_amount) FILTER (
                 WHERE venue = 'spectrum_cfmm'
                   AND (base_id IS NULL OR base_id = repeat('0', 64))
-                  AND base_amount > 0 AND base_amount <= $3
+                  AND base_amount > 0
                   AND coalesce(token_amount, 0) > 0
                   AND ts_ms >= $1
               ), 0)::float8 AS vol_24,
               coalesce(sum(base_amount) FILTER (
                 WHERE venue = 'spectrum_cfmm'
                   AND (base_id IS NULL OR base_id = repeat('0', 64))
-                  AND base_amount > 0 AND base_amount <= $3
+                  AND base_amount > 0
                   AND coalesce(token_amount, 0) > 0
                   AND ts_ms >= $2
               ), 0)::float8 AS vol_30
@@ -498,7 +479,7 @@ export async function materializeRanks(db: Db): Promise<{ heat: number; pools: n
          AND venue IN ('spectrum_cfmm', 'spectrum_n2n')
          AND ${sqlNotAgeUsdBankPool("pool_id")}
        GROUP BY pool_id`,
-      [since, since30, volCap]
+      [since, since30]
     );
     const seen = new Set<string>();
     for (const row of folded.rows) {

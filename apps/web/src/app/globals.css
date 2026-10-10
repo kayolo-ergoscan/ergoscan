@@ -68,6 +68,8 @@ html[data-ink="oled"] {
   --nav-gutter: 0.5rem;
   --nav-inset: calc((var(--rail-collapsed) - var(--nav-gutter) * 2 - var(--nav-icon)) / 2);
   --toolbar: 64px;
+  --price-tape-h: 26px;
+  --price-tape-gap: 0px;
   --tabbar: 0px;
   --stage-max: 1320px;
   --addr-bar: 2.5rem;
@@ -494,8 +496,12 @@ html[data-float="ada"] .home-bento-col {
     box-shadow: none;
   }
 
+  html[data-float="ada"] {
+    --price-tape-gap: var(--float-gap);
+  }
+
   html[data-float="ada"] .addr-head {
-    top: calc(var(--toolbar) + var(--float-pad) + var(--float-gap));
+    top: calc(var(--toolbar) + var(--float-pad) + var(--price-tape-gap) + var(--price-tape-h) + var(--float-gap));
   }
 
   html[data-float="ada"] .addr-foot {
@@ -968,7 +974,7 @@ header button:hover {
 .addr-head {
   position: sticky;
   /* 8px under the toolbar so the 20px corners stay visible, not clipped into a square */
-  top: calc(var(--toolbar) + env(safe-area-inset-top, 0px) + 8px);
+  top: calc(var(--toolbar) + env(safe-area-inset-top, 0px) + var(--price-tape-gap) + var(--price-tape-h) + 8px);
   z-index: 20;
   background: var(--module);
   border-radius: var(--radius) var(--radius) 0 0;
@@ -1644,7 +1650,7 @@ html[data-ink="day"] .token-tx-tape a[data-addr].is-twin {
     bottom: calc(var(--tabbar) + 8px);
   }
   .addr-head {
-    top: calc(var(--toolbar) + 8px);
+    top: calc(var(--toolbar) + var(--price-tape-gap) + var(--price-tape-h) + 8px);
   }
 
   /*
@@ -1659,13 +1665,22 @@ html[data-ink="day"] .token-tx-tape a[data-addr].is-twin {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
+  .stage-col > header.sticky::before {
+    content: "";
+    pointer-events: none;
+    position: absolute;
+    z-index: 0;
+    inset: 0;
+    background: linear-gradient(180deg, var(--bg) 0%, var(--bg) 62%, transparent 100%);
+  }
   .stage-col > header.sticky::after {
     content: "";
     pointer-events: none;
     position: absolute;
     z-index: 0;
-    top: 0;
-    bottom: -4.5rem;
+    top: calc(100% + var(--price-tape-gap) + var(--price-tape-h));
+    bottom: auto;
+    height: 4.5rem;
     left: -0.75rem;
     right: -0.75rem;
     background: linear-gradient(
@@ -2678,6 +2693,148 @@ html[data-ink="day"] {
 .name-marquee:hover .name-marquee-track {
   animation-play-state: paused;
 }
+html {
+  scroll-padding-top: calc(var(--toolbar) + var(--price-tape-gap) + var(--price-tape-h) + 0.75rem);
+}
+@media (min-width: 1024px) {
+  html[data-float="ada"] {
+    scroll-padding-top: calc(
+      var(--float-pad) + var(--toolbar) + var(--price-tape-gap) + var(--price-tape-h) + var(--float-gap)
+    );
+  }
+}
+.price-tape-slot {
+  position: sticky;
+  z-index: 30;
+  top: var(--toolbar);
+  padding-top: var(--price-tape-gap);
+  /* Same inset as the page cards, so the strip is not wider than they are. */
+  padding-inline: 1rem;
+  background: transparent;
+}
+@media (min-width: 640px) {
+  .price-tape-slot {
+    padding-inline: 1.5rem;
+  }
+}
+@media (min-width: 1024px) {
+  .price-tape-slot {
+    top: calc(env(safe-area-inset-top, 0px) + var(--toolbar));
+    padding-inline: 2rem;
+  }
+  html[data-float="ada"] .price-tape-slot {
+    top: calc(var(--float-pad) + env(safe-area-inset-top, 0px) + var(--toolbar));
+  }
+}
+.price-tape {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  height: var(--price-tape-h);
+  overflow: hidden;
+  background: transparent;
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 22%, #000 78%, transparent);
+  mask-image: linear-gradient(to bottom, transparent, #000 22%, #000 78%, transparent);
+}
+.price-tape::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    rgba(60, 162, 255, 0.28),
+    rgba(240, 193, 74, 0.16) 46%,
+    rgba(94, 224, 160, 0.24)
+  );
+  mask-image: linear-gradient(to bottom, transparent, #000 40%, #000 60%, transparent);
+}
+.price-tape-view {
+  position: relative;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}
+.price-tape-view::before,
+.price-tape-view::after {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  width: min(22%, 180px);
+  pointer-events: none;
+}
+.price-tape-view::before {
+  left: 0;
+  background: linear-gradient(
+    90deg,
+    var(--bg) 0%,
+    var(--bg) 14%,
+    color-mix(in srgb, var(--bg) 70%, transparent) 46%,
+    transparent 100%
+  );
+}
+.price-tape-view::after {
+  right: 0;
+  background: linear-gradient(
+    270deg,
+    var(--bg) 0%,
+    var(--bg) 14%,
+    color-mix(in srgb, var(--bg) 70%, transparent) 46%,
+    transparent 100%
+  );
+}
+.price-tape-run {
+  display: flex;
+  width: max-content;
+  animation: price-tape var(--tape-s, 42s) linear infinite;
+  will-change: transform;
+}
+.price-tape-run.is-still,
+.price-tape-run:hover {
+  animation-play-state: paused;
+}
+.price-tape-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--price-tape-h);
+  padding: 0 12px;
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 600;
+  white-space: nowrap;
+  flex: none;
+}
+.price-tape-px {
+  display: inline-block;
+  font-variant-numeric: tabular-nums;
+}
+.price-tape-chip:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+.price-tape-sym {
+  letter-spacing: -0.03em;
+}
+.price-tape-chg {
+  display: inline-block;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 700;
+  transition: color 600ms linear;
+}
+.price-tape-chg.is-up { color: #5ee0a0; }
+.price-tape-chg.is-down { color: var(--down); }
+@keyframes price-tape {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-50%, 0, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .price-tape-run { animation: none; }
+}
+
 @keyframes name-marquee {
   from {
     transform: translateX(0);

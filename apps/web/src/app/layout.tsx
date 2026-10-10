@@ -5,6 +5,7 @@ import { Providers } from "@/components/Providers";
 import { RegistryBook } from "@/components/RegistryBook";
 import { fetchRegistryRows } from "@/lib/names-registry";
 import { Shell } from "@/components/Shell";
+import { loadSiteMarket } from "@/lib/site-market";
 import { SiteHostProvider } from "@/lib/site-host";
 import {
   SITE_DESCRIPTION,
@@ -118,7 +119,7 @@ export const viewport: Viewport = {
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const registryRows = await fetchRegistryRows();
+  const [registryRows, market] = await Promise.all([fetchRegistryRows(), loadSiteMarket()]);
   return (
     <html
       lang="en"
@@ -138,7 +139,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <Providers>
           <SiteHostProvider>
             <RegistryBook rows={registryRows}>
-              <Shell>{children}</Shell>
+              <Shell market={market}>{children}</Shell>
             </RegistryBook>
           </SiteHostProvider>
         </Providers>
