@@ -80,8 +80,8 @@ function fmtErgFull(n: number): string {
 function poolLabel(p: DefiPool): string {
   const meta = resolveTokenMeta(p.tokenId, p.symbol);
   const sym = meta?.symbol || p.symbol || shortId(p.tokenId, 4);
-  if (isErgBase(p.baseId, p.baseSymbol) || !p.baseSymbol) return `${sym}/ERG`;
-  return `${sym}/${p.baseSymbol}`;
+  if (isErgBase(p.baseId, p.baseSymbol)) return `${sym}/ERG`;
+  return `${sym}/${p.baseSymbol || shortId(p.baseId || "", 4)}`;
 }
 
 export function SpectrumView({

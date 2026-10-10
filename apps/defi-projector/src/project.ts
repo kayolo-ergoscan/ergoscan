@@ -23,11 +23,12 @@ export async function persistSwaps(
     const volMax = poolVolMaxErg();
     for (const s of swaps) {
       if (isAgeUsdBankNft(s.poolId)) continue;
+      const kind = s.eventKind === "mint" || s.eventKind === "redeem" ? s.eventKind : "swap";
       const inserted = await client.query(
         `INSERT INTO defi.swaps
           (tx_id, height, ts_ms, venue, pool_id, token_id, base_id, side,
            token_amount, base_amount, price, trader, event_kind, status)
-         VALUES ($1,$2,$3,'spectrum_cfmm',$4,$5,$6,$7,$8,$9,$10,$11,'swap','confirmed')
+         VALUES ($1,$2,$3,'spectrum_cfmm',$4,$5,$6,$7,$8,$9,$10,$11,$12,'confirmed')
          ON CONFLICT (tx_id, pool_id, event_kind) DO NOTHING
          RETURNING tx_id`,
         [
@@ -42,9 +43,10 @@ export async function persistSwaps(
           s.baseAmount,
           s.price,
           s.trader,
+          kind,
         ]
       );
-      if ((inserted.rowCount ?? 0) > 0) {
+      if (kind === "swap" && (inserted.rowCount ?? 0) > 0) {
         await applyPoolRoll(
           client,
           {
@@ -69,7 +71,7 @@ export async function persistSwaps(
              price = $8,
              trader = COALESCE($9, trader),
              token_id = $10
-           WHERE tx_id = $1 AND pool_id = $2 AND event_kind = 'swap'`,
+           WHERE tx_id = $1 AND pool_id = $2 AND event_kind = $11`,
           [
             s.txId,
             s.poolId,
@@ -81,9 +83,13 @@ export async function persistSwaps(
             s.price,
             s.trader,
             s.tokenId,
+            kind,
           ]
         );
       }
+
+      n += 1;
+      if (kind !== "swap") continue;
 
       // Projection into frozen `/v1/defi` trade path
       await client.query(
@@ -116,7 +122,6 @@ export async function persistSwaps(
           s.tsMs,
         ]
       );
-      n += 1;
     }
     await client.query("COMMIT");
   } catch (e) {

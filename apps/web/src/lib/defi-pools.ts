@@ -10,13 +10,13 @@ export type DefiPool = {
   venue?: string | null;
 };
 
-/** /defi/pool row. `traders` stays null until a per-pool set exists. */
+/** /defi/pool row. `traders` is the distinct swap addresses on that pool. */
 export type PoolBoardRow = DefiPool & {
   volErg: number | null;
   priceErg: number | null;
   trades: number | null;
   firstTs: number | null;
-  traders: null;
+  traders: number | null;
 };
 
 export type PoolBoardSort = "tvl" | "vol" | "vol24" | "trades" | "first" | "last";

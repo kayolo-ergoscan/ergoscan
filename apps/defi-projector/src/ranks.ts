@@ -11,12 +11,15 @@ import {
   sqlNotAgeUsdBankPool,
 } from "@ergoscan/shared";
 import type { Db } from "./db.js";
+import { setState } from "./db.js";
 import { absorbPoolBox, keepWithdrawn, poolNeedsNftTvl, type PoolBox, type PoolBoxRow } from "./ranks-tvl.js";
+import { reserveMarkErg, spectrumFeeRate } from "./pool-mark.js";
+import { n2nQuoteErg, poolVolMaxErg } from "./pool-roll.js";
 import { T2T_VENUE } from "./t2t-registry.js";
 
 const HEX64 = /^[0-9a-f]{64}$/;
 const ERG_ZERO = "0".repeat(64);
-const MAX_TRADE_ERG = Number(process.env.RANKS_MAX_TRADE_ERG || 3_000);
+const SPECTRUM_TRADERS_KEY = "spectrum_traders";
 const BOARD = 24;
 const UNIVERSE_N = 80;
 const TVL_CHUNK = Math.max(8, Number(process.env.RANKS_TVL_CHUNK || 40) || 40);
@@ -56,7 +59,18 @@ type PoolAcc = {
   baseDecimals: number | null;
   priceErg: number;
   tvlErg: number;
+  /** 24h ERG. N2T is base ERG. N2N is the quote leg at the ERG-pool price. */
   volumeErg: number;
+  /** All-time N2N volume in ERG. null leaves pool_snap.vol_erg alone. */
+  n2nVolErg: number | null;
+  /** All-time N2T volume from swaps. null leaves pool_snap.vol_erg alone. */
+  volAllErg: number | null;
+  vol30Erg: number | null;
+  tradesN: number | null;
+  tradersN: number | null;
+  /** Last swap print. The public price is the reserve mark. */
+  pricePrintErg: number;
+  feeRate: number | null;
 };
 
 type TokAcc = {
@@ -66,6 +80,7 @@ type TokAcc = {
   tvlErg: number;
   volumeErg: number;
   leadVol: number;
+  leadTvl: number;
 };
 
 type PoolBoxAsk = {
@@ -267,6 +282,103 @@ async function loadPoolBoxes(
  * One snap / tick per pool. Heat and price_tick stay Spectrum — Lithos LIT
  * is not mixed into /defi. No Spectrum/Crux HTTP as truth.
  */
+/**
+ * Fold n2n fills into ERG using the N2T prices already loaded for TVL.
+ * One grouped read. Quote leg only, so the two sides of a swap are not added twice.
+ */
+async function fillN2nVolume(
+  db: Db,
+  byPool: Map<string, PoolAcc>,
+  n2tPx: Map<string, { px: number; vol: number }>,
+  sinceMs: number,
+  since30Ms: number
+): Promise<void> {
+  const rows = await db.query<{
+    pool_id: string;
+    token_id: string;
+    base_id: string;
+    q_all: number;
+    q_24: number;
+    q_30: number;
+    b_all: number;
+    b_24: number;
+    b_30: number;
+  }>(
+    `SELECT s.pool_id,
+            lower(s.token_id) AS token_id,
+            lower(s.base_id) AS base_id,
+            coalesce(sum(
+              CASE
+                WHEN coalesce(tq.decimals, 0) > 0
+                 AND s.token_amount >= power(10::numeric, tq.decimals)
+                THEN s.token_amount / power(10::numeric, tq.decimals)
+                ELSE s.token_amount
+              END
+            ), 0)::float8 AS q_all,
+            coalesce(sum(
+              CASE
+                WHEN coalesce(tq.decimals, 0) > 0
+                 AND s.token_amount >= power(10::numeric, tq.decimals)
+                THEN s.token_amount / power(10::numeric, tq.decimals)
+                ELSE s.token_amount
+              END
+            ) FILTER (WHERE s.ts_ms >= $1), 0)::float8 AS q_24,
+            coalesce(sum(
+              CASE
+                WHEN coalesce(tq.decimals, 0) > 0
+                 AND s.token_amount >= power(10::numeric, tq.decimals)
+                THEN s.token_amount / power(10::numeric, tq.decimals)
+                ELSE s.token_amount
+              END
+            ) FILTER (WHERE s.ts_ms >= $2), 0)::float8 AS q_30,
+            coalesce(sum(
+              CASE
+                WHEN coalesce(tb.decimals, 0) > 0
+                 AND s.base_amount >= power(10::numeric, tb.decimals)
+                THEN s.base_amount / power(10::numeric, tb.decimals)
+                ELSE s.base_amount
+              END
+            ), 0)::float8 AS b_all,
+            coalesce(sum(
+              CASE
+                WHEN coalesce(tb.decimals, 0) > 0
+                 AND s.base_amount >= power(10::numeric, tb.decimals)
+                THEN s.base_amount / power(10::numeric, tb.decimals)
+                ELSE s.base_amount
+              END
+            ) FILTER (WHERE s.ts_ms >= $1), 0)::float8 AS b_24,
+            coalesce(sum(
+              CASE
+                WHEN coalesce(tb.decimals, 0) > 0
+                 AND s.base_amount >= power(10::numeric, tb.decimals)
+                THEN s.base_amount / power(10::numeric, tb.decimals)
+                ELSE s.base_amount
+              END
+            ) FILTER (WHERE s.ts_ms >= $2), 0)::float8 AS b_30
+     FROM defi.swaps s
+     LEFT JOIN tokens tq ON tq.token_id = s.token_id
+     LEFT JOIN tokens tb ON tb.token_id = s.base_id
+     WHERE s.venue = 'spectrum_n2n'
+       AND s.event_kind = 'swap'
+     GROUP BY s.pool_id, s.token_id, s.base_id`,
+    [sinceMs, since30Ms]
+  );
+  for (const row of rows.rows) {
+    const acc = byPool.get(String(row.pool_id || "").toLowerCase());
+    if (!acc || acc.venue !== T2T_VENUE) continue;
+    const pxQ = n2tPx.get(String(row.token_id || "").toLowerCase())?.px ?? 0;
+    const pxB = n2tPx.get(String(row.base_id || "").toLowerCase())?.px ?? 0;
+    if (!(pxQ > 0) && !(pxB > 0)) continue;
+    const all = n2nQuoteErg(num(row.q_all), pxQ) || n2nQuoteErg(num(row.b_all), pxB);
+    const day = n2nQuoteErg(num(row.q_24), pxQ) || n2nQuoteErg(num(row.b_24), pxB);
+    const month = n2nQuoteErg(num(row.q_30), pxQ) || n2nQuoteErg(num(row.b_30), pxB);
+    acc.n2nVolErg = all;
+    acc.volumeErg = day;
+    acc.vol30Erg = month;
+    if (pxQ > 0) acc.priceErg = pxQ;
+  }
+}
+
 export async function materializeRanks(db: Db): Promise<{ heat: number; pools: number }> {
   const ergUsd = await ergUsdPrice(db);
 
@@ -333,36 +445,101 @@ export async function materializeRanks(db: Db): Promise<{ heat: number; pools: n
       priceErg: pe > 0 ? pe : 0,
       tvlErg: num(row.snap_tvl) > 0 ? num(row.snap_tvl) : 0,
       volumeErg: 0,
+      n2nVolErg: null,
+      volAllErg: null,
+      vol30Erg: null,
+      tradesN: null,
+      tradersN: null,
+      pricePrintErg: 0,
+      feeRate: null,
     });
   }
 
   const since = Date.now() - 24 * 60 * 60 * 1000;
-  const vols = await db.query<{
-    pool_id: string;
-    vol_erg: number;
-  }>(
-    `SELECT pool_id,
-            COALESCE(SUM(base_amount), 0)::float8 AS vol_erg
-     FROM defi.trades
-     WHERE ts_ms >= $1
-       AND pool_id IS NOT NULL
-       AND length(pool_id) = 64
-       AND base_amount IS NOT NULL
-       AND base_amount > 0
-       AND base_amount <= $2
-       AND COALESCE(token_amount, 0) > 0
-       AND ${sqlNotAgeUsdBankPool("pool_id")}
-       AND (base_id IS NULL OR base_id = repeat('0', 64))
-     GROUP BY pool_id`,
-    [since, MAX_TRADE_ERG]
-  );
-  for (const row of vols.rows) {
-    const pid = String(row.pool_id || "").toLowerCase();
-    if (!HEX64.test(pid)) continue;
-    const acc = byPool.get(pid);
-    if (!acc) continue;
-    const vol = num(row.vol_erg);
-    acc.volumeErg = vol > 0 && vol < 1e9 ? vol : 0;
+  const since30 = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const volCap = poolVolMaxErg();
+  let statsOk = false;
+  try {
+    const folded = await db.query<{
+      pool_id: string;
+      trades_n: string;
+      traders_n: string;
+      vol_all: number;
+      vol_24: number;
+      vol_30: number;
+    }>(
+      `SELECT pool_id,
+              count(*)::text AS trades_n,
+              count(DISTINCT trader) FILTER (
+                WHERE trader IS NOT NULL AND trader <> ''
+              )::text AS traders_n,
+              coalesce(sum(base_amount) FILTER (
+                WHERE venue = 'spectrum_cfmm'
+                  AND (base_id IS NULL OR base_id = repeat('0', 64))
+                  AND base_amount > 0 AND base_amount <= $3
+                  AND coalesce(token_amount, 0) > 0
+              ), 0)::float8 AS vol_all,
+              coalesce(sum(base_amount) FILTER (
+                WHERE venue = 'spectrum_cfmm'
+                  AND (base_id IS NULL OR base_id = repeat('0', 64))
+                  AND base_amount > 0 AND base_amount <= $3
+                  AND coalesce(token_amount, 0) > 0
+                  AND ts_ms >= $1
+              ), 0)::float8 AS vol_24,
+              coalesce(sum(base_amount) FILTER (
+                WHERE venue = 'spectrum_cfmm'
+                  AND (base_id IS NULL OR base_id = repeat('0', 64))
+                  AND base_amount > 0 AND base_amount <= $3
+                  AND coalesce(token_amount, 0) > 0
+                  AND ts_ms >= $2
+              ), 0)::float8 AS vol_30
+       FROM defi.swaps
+       WHERE event_kind = 'swap'
+         AND venue IN ('spectrum_cfmm', 'spectrum_n2n')
+         AND ${sqlNotAgeUsdBankPool("pool_id")}
+       GROUP BY pool_id`,
+      [since, since30, volCap]
+    );
+    const seen = new Set<string>();
+    for (const row of folded.rows) {
+      const pid = String(row.pool_id || "").toLowerCase();
+      const acc = byPool.get(pid);
+      if (!acc) continue;
+      seen.add(pid);
+      const trades = Number(row.trades_n);
+      const traders = Number(row.traders_n);
+      acc.tradesN = Number.isFinite(trades) ? trades : 0;
+      acc.tradersN = Number.isFinite(traders) ? traders : 0;
+      if (acc.venue === "spectrum_cfmm") {
+        acc.volumeErg = num(row.vol_24);
+        acc.volAllErg = num(row.vol_all);
+        acc.vol30Erg = num(row.vol_30);
+      }
+    }
+    for (const acc of byPool.values()) {
+      if (acc.venue !== "spectrum_cfmm" && acc.venue !== T2T_VENUE) continue;
+      if (seen.has(acc.poolId)) continue;
+      acc.tradesN = 0;
+      acc.tradersN = 0;
+      if (acc.venue === "spectrum_cfmm") {
+        acc.volumeErg = 0;
+        acc.volAllErg = 0;
+        acc.vol30Erg = 0;
+      }
+    }
+    const glob = await db.query<{ n: string }>(
+      `SELECT count(DISTINCT trader)::text AS n
+       FROM defi.swaps
+       WHERE event_kind = 'swap'
+         AND venue IN ('spectrum_cfmm', 'spectrum_n2n')
+         AND trader IS NOT NULL AND trader <> ''
+         AND ${sqlNotAgeUsdBankPool("pool_id")}`
+    );
+    const nGlob = Number(glob.rows[0]?.n);
+    if (Number.isFinite(nGlob)) await setState(db, SPECTRUM_TRADERS_KEY, String(nGlob));
+    statsOk = true;
+  } catch (e) {
+    console.warn(JSON.stringify({ type: "swap_stats_skip", err: String(e) }));
   }
 
   const lastPx = await db.query<{
@@ -386,14 +563,14 @@ export async function materializeRanks(db: Db): Promise<{ heat: number; pools: n
        AND ${sqlNotAgeUsdBankPool("pool_id")}
        AND (base_id IS NULL OR base_id = repeat('0', 64))
      ORDER BY pool_id, ts_ms DESC`,
-    [since, MAX_TRADE_ERG]
+    [since, volCap]
   );
   for (const row of lastPx.rows) {
     const pid = String(row.pool_id || "").toLowerCase();
     const acc = byPool.get(pid);
     if (!acc) continue;
     const pe = num(row.last_px);
-    if (pe > 0 && pe < 1e12) acc.priceErg = pe;
+    if (pe > 0 && pe < 1e12) acc.pricePrintErg = pe;
   }
 
   const n2tAsks = [...byPool.values()]
@@ -437,19 +614,27 @@ export async function materializeRanks(db: Db): Promise<{ heat: number; pools: n
         pendingY = pending.pendingY;
       }
     }
+    const ergSide = Number(box.valueNano) / 1e9;
+    const mark =
+      acc.venue !== T2T_VENUE && acc.venue !== LITHOS_DEX_VENUE
+        ? reserveMarkErg(ergSide, box.quoteRaw, acc.decimals)
+        : null;
+    if (mark) acc.priceErg = mark;
+    const fee = spectrumFeeRate(box.regs);
+    if (fee != null) acc.feeRate = fee;
     const parts = n2tTvlErg({
       valueNano: box.valueNano,
       pendingXNano: pendingX,
       pendingY,
       quoteRaw: box.quoteRaw,
       quoteDecimals: acc.decimals,
-      priceErg: acc.priceErg > 0 ? acc.priceErg : null,
+      priceErg: mark ?? (acc.priceErg > 0 ? acc.priceErg : null),
     });
     acc.tvlErg = parts.tvlErg;
-    if (acc.priceErg > 0) {
+    if (mark && acc.tvlErg > 0) {
       const prev = n2tPx.get(acc.tokenId);
-      if (!prev || acc.volumeErg > prev.vol) {
-        n2tPx.set(acc.tokenId, { px: acc.priceErg, vol: acc.volumeErg });
+      if (!prev || acc.tvlErg > prev.vol) {
+        n2tPx.set(acc.tokenId, { px: mark, vol: acc.tvlErg });
       }
     }
   }
@@ -475,6 +660,8 @@ export async function materializeRanks(db: Db): Promise<{ heat: number; pools: n
     acc.tvlErg = t.tvlErg;
   }
 
+  await fillN2nVolume(db, byPool, n2tPx, since, since30);
+
   const byTok = new Map<string, TokAcc>();
   for (const acc of byPool.values()) {
     if (acc.venue === LITHOS_DEX_VENUE || acc.venue === T2T_VENUE) continue;
@@ -487,16 +674,17 @@ export async function materializeRanks(db: Db): Promise<{ heat: number; pools: n
         tvlErg: 0,
         volumeErg: 0,
         leadVol: -1,
+        leadTvl: -1,
       };
       byTok.set(acc.tokenId, tok);
     }
     tok.tvlErg += acc.tvlErg;
     tok.volumeErg += acc.volumeErg;
     if (acc.symbol && acc.symbol !== "?" && tok.symbol === "?") tok.symbol = acc.symbol;
-    if (acc.priceErg > 0 && acc.volumeErg >= tok.leadVol) {
+    if (acc.priceErg > 0 && acc.tvlErg > tok.leadTvl) {
       tok.priceErg = acc.priceErg;
       tok.poolId = acc.poolId;
-      tok.leadVol = acc.volumeErg;
+      tok.leadTvl = acc.tvlErg;
     } else if (!(tok.priceErg > 0) && acc.priceErg > 0) {
       tok.priceErg = acc.priceErg;
       tok.poolId = acc.poolId;
@@ -584,24 +772,45 @@ export async function materializeRanks(db: Db): Promise<{ heat: number; pools: n
     let poolWrites = 0;
     for (const acc of byPool.values()) {
       if (!acc.poolId || !HEX64.test(acc.poolId)) continue;
+      const vol24 = statsOk || acc.venue === T2T_VENUE ? acc.volumeErg : null;
+      const volAll = acc.venue === T2T_VENUE ? acc.n2nVolErg : statsOk ? acc.volAllErg : null;
+      const vol30 = acc.vol30Erg;
       await client.query(
-        `INSERT INTO defi.pool_snap (pool_id, token_id, symbol, tvl_erg, volume_erg_24h, price_erg, updated_at_ms)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)
+        `INSERT INTO defi.pool_snap (
+           pool_id, token_id, symbol, tvl_erg, volume_erg_24h, price_erg, updated_at_ms, vol_erg,
+           price_print_erg, vol_erg_30d, trades_n, traders_n, fee_rate
+         )
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
          ON CONFLICT (pool_id) DO UPDATE SET
            token_id = EXCLUDED.token_id,
            symbol = COALESCE(NULLIF(EXCLUDED.symbol, '?'), defi.pool_snap.symbol),
            tvl_erg = EXCLUDED.tvl_erg,
-           volume_erg_24h = EXCLUDED.volume_erg_24h,
+           volume_erg_24h = COALESCE(EXCLUDED.volume_erg_24h, defi.pool_snap.volume_erg_24h),
            price_erg = COALESCE(EXCLUDED.price_erg, defi.pool_snap.price_erg),
-           updated_at_ms = EXCLUDED.updated_at_ms`,
+           updated_at_ms = EXCLUDED.updated_at_ms,
+           vol_erg = CASE
+             WHEN $8::float8 IS NULL THEN defi.pool_snap.vol_erg
+             ELSE $8::float8
+           END,
+           price_print_erg = COALESCE(EXCLUDED.price_print_erg, defi.pool_snap.price_print_erg),
+           vol_erg_30d = COALESCE(EXCLUDED.vol_erg_30d, defi.pool_snap.vol_erg_30d),
+           trades_n = COALESCE(EXCLUDED.trades_n, defi.pool_snap.trades_n),
+           traders_n = COALESCE(EXCLUDED.traders_n, defi.pool_snap.traders_n),
+           fee_rate = COALESCE(EXCLUDED.fee_rate, defi.pool_snap.fee_rate)`,
         [
           acc.poolId,
           acc.tokenId,
           acc.symbol,
           acc.tvlErg,
-          acc.volumeErg,
+          vol24,
           acc.priceErg > 0 ? acc.priceErg : null,
           now,
+          volAll,
+          acc.pricePrintErg > 0 ? acc.pricePrintErg : null,
+          vol30,
+          acc.tradesN,
+          acc.tradersN,
+          acc.feeRate,
         ]
       );
       poolWrites += 1;
@@ -646,6 +855,18 @@ export async function materializeRanks(db: Db): Promise<{ heat: number; pools: n
       await client.query(`DELETE FROM defi.price_tick WHERE ts_ms < $1`, [
         now - POOL_TICK_KEEP_MS,
       ]);
+      await client.query(
+        `INSERT INTO defi.price_day (token_id, day, price_erg, price_usd, tvl_erg)
+         SELECT x.token_id, (to_timestamp($2::double precision / 1000.0) AT TIME ZONE 'UTC')::date,
+                x.price_erg, x.price_usd, x.tvl_erg
+         FROM unnest($1::text[], $3::float8[], $4::float8[], $5::float8[])
+           AS x(token_id, price_erg, price_usd, tvl_erg)
+         ON CONFLICT (token_id, day) DO UPDATE SET
+           price_erg = COALESCE(EXCLUDED.price_erg, defi.price_day.price_erg),
+           price_usd = COALESCE(EXCLUDED.price_usd, defi.price_day.price_usd),
+           tvl_erg = COALESCE(EXCLUDED.tvl_erg, defi.price_day.tvl_erg)`,
+        [ids, now, pes, pus, tes]
+      );
     }
 
     const pids: string[] = [];

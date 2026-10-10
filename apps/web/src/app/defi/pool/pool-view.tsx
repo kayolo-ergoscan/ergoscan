@@ -48,8 +48,8 @@ function fmtErgFull(n: number): string {
 function poolLabel(p: PoolBoardRow): string {
   const meta = resolveTokenMeta(p.tokenId, p.symbol);
   const sym = meta?.symbol || p.symbol || shortId(p.tokenId, 4);
-  if (isErgBase(p.baseId, p.baseSymbol) || !p.baseSymbol) return `${sym}/ERG`;
-  return `${sym}/${p.baseSymbol}`;
+  if (isErgBase(p.baseId, p.baseSymbol)) return `${sym}/ERG`;
+  return `${sym}/${p.baseSymbol || shortId(p.baseId || "", 4)}`;
 }
 
 function SortMark({ on, dir }: { on: boolean; dir: PoolBoardDir }) {
@@ -474,14 +474,14 @@ export function PoolTapeRow({
         </div>
         <div className="px-3 text-right">
           <span className="tabular-nums" style={{ color: INK.cyan }}>
-            {row.vol24h != null && row.vol24h > 0 ? fmtErgFull(row.vol24h) : miss}
+            {row.vol24h != null ? fmtErgFull(row.vol24h) : miss}
           </span>
         </div>
       </div>
       <div className="block-lane-pair addr-act-pair">
         <div className="min-w-0 px-3">
           <span className="tabular-nums" style={{ color: INK.violet }}>
-            {miss}
+            {row.traders != null ? row.traders.toLocaleString(loc(locale)) : miss}
           </span>
         </div>
         <AddressActivityWhen

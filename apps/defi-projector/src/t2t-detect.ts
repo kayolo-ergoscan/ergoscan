@@ -2,7 +2,7 @@ import { ergoTokenDecimals, isAgeUsdBankNft } from "@ergoscan/shared";
 import type { Db } from "./db.js";
 import type { DetectedSwap, DetectResult } from "./detect.js";
 import { nftsForDetect } from "./registry.js";
-import { isT2tSwapDelta } from "./t2t-pair.js";
+import { classifyT2tMove } from "./t2t-pair.js";
 import { registryForWindow, type T2tPoolReg } from "./t2t-registry.js";
 
 const DETECT_TIMEOUT_MS = Number(process.env.DETECT_TIMEOUT_MS || 8_000);
@@ -251,12 +251,15 @@ async function detectChunk(
       const dA = aOut - aIn;
       const dB = bOut - bIn;
       const dLp = num(row.lp_out) - num(row.lp_in);
-      if (!isT2tSwapDelta(dA, dB, dLp)) continue;
+      const kind = classifyT2tMove(dA, dB, dLp);
+      if (!kind) continue;
 
-      const poolA = Math.max(aIn, aOut);
-      const poolB = Math.max(bIn, bOut);
-      if (poolA > 1000 && Math.abs(dA) / poolA > 0.5) continue;
-      if (poolB > 1000 && Math.abs(dB) / poolB > 0.5) continue;
+      if (kind === "swap") {
+        const poolA = Math.max(aIn, aOut);
+        const poolB = Math.max(bIn, bOut);
+        if (poolA > 1000 && Math.abs(dA) / poolA > 0.5) continue;
+        if (poolB > 1000 && Math.abs(dB) / poolB > 0.5) continue;
+      }
 
       const ts = Number(row.timestamp_ms) || Date.now();
       const height = Number(row.height) || fromH;
@@ -283,6 +286,7 @@ async function detectChunk(
           symbolB: symB,
           decimalsA: reg.decimals,
           decimalsB: null,
+          eventKind: kind,
         })
       );
     }
@@ -324,14 +328,17 @@ function pairRows(opts: {
   symbolB: string | null;
   decimalsA: number | null;
   decimalsB: number | null;
+  eventKind: "swap" | "mint" | "redeem";
 }): DetectedSwap[] {
   const decA = decOf(opts.tokenA, opts.decimalsA);
   const decB = decOf(opts.tokenB, opts.decimalsB);
   const amtA = Math.abs(opts.dA) / 10 ** decA;
   const amtB = Math.abs(opts.dB) / 10 ** decB;
   if (!(amtA > 0 && amtB > 0) || amtA > 1e12 || amtB > 1e12) return [];
-  const sideA: "buy" | "sell" = opts.dA < 0 ? "buy" : "sell";
-  const sideB: "buy" | "sell" = opts.dB < 0 ? "buy" : "sell";
+  const sideA: DetectedSwap["side"] =
+    opts.eventKind === "swap" ? (opts.dA < 0 ? "buy" : "sell") : opts.eventKind;
+  const sideB: DetectedSwap["side"] =
+    opts.eventKind === "swap" ? (opts.dB < 0 ? "buy" : "sell") : opts.eventKind;
   return [
     {
       txId: opts.txId,
@@ -348,6 +355,7 @@ function pairRows(opts: {
       outBox: opts.outBox,
       decimals: decA,
       symbol: opts.symbolA,
+      eventKind: opts.eventKind,
     },
     {
       txId: opts.txId,
@@ -364,6 +372,7 @@ function pairRows(opts: {
       outBox: opts.outBox,
       decimals: decB,
       symbol: opts.symbolB,
+      eventKind: opts.eventKind,
     },
   ];
 }

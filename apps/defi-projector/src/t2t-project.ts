@@ -22,13 +22,14 @@ export async function persistT2tSwaps(
     for (const s of swaps) {
       if (isAgeUsdBankNft(s.poolId)) continue;
       if (s.baseId === "0".repeat(64)) continue;
-      const swapKey = `${s.txId}:${s.poolId}`;
+      const kind = s.eventKind === "mint" || s.eventKind === "redeem" ? s.eventKind : "swap";
+      const swapKey = `${s.txId}:${s.poolId}:${kind}`;
       if (!wroteSwap.has(swapKey)) {
         const inserted = await client.query(
           `INSERT INTO defi.swaps
             (tx_id, height, ts_ms, venue, pool_id, token_id, base_id, side,
              token_amount, base_amount, price, trader, event_kind, status)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'swap','confirmed')
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'confirmed')
            ON CONFLICT (tx_id, pool_id, event_kind) DO NOTHING
            RETURNING tx_id`,
           [
@@ -44,9 +45,10 @@ export async function persistT2tSwaps(
             s.baseAmount,
             s.price,
             s.trader,
+            kind,
           ]
         );
-        if ((inserted.rowCount ?? 0) > 0) {
+        if (kind === "swap" && (inserted.rowCount ?? 0) > 0) {
           await applyPoolRoll(
             client,
             {
@@ -73,7 +75,7 @@ export async function persistT2tSwaps(
                token_id = $10,
                base_id = $11,
                venue = $12
-             WHERE tx_id = $1 AND pool_id = $2 AND event_kind = 'swap'`,
+             WHERE tx_id = $1 AND pool_id = $2 AND event_kind = $13`,
             [
               s.txId,
               s.poolId,
@@ -87,11 +89,14 @@ export async function persistT2tSwaps(
               s.tokenId,
               s.baseId,
               T2T_VENUE,
+              kind,
             ]
           );
         }
         wroteSwap.add(swapKey);
       }
+
+      if (kind !== "swap") continue;
 
       await client.query(
         `INSERT INTO defi.trades

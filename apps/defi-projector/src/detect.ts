@@ -1,5 +1,6 @@
 import { ergoTokenDecimals, isAgeUsdBankNft } from "@ergoscan/shared";
 import type { Db } from "./db.js";
+import { classifyCfmmMove } from "./pool-mark.js";
 import { nftsForDetect, registryForWindow, type PoolReg } from "./registry.js";
 
 const ERG_ZERO = "0".repeat(64);
@@ -287,18 +288,20 @@ async function detectChunk(
       const dErg = num(row.out_erg) / 1e9 - num(row.in_erg) / 1e9;
       if (dYraw === 0 || dErg === 0) continue;
 
+      const move = classifyCfmmMove(dYraw, dErg);
+      if (!move) continue;
+
       const tokenRaw = Math.abs(dYraw);
       const baseAmount = Math.abs(dErg);
-      if (!(baseAmount > 0 && baseAmount <= MAX_TRADE_ERG)) continue;
-
-      const poolY = Math.max(yIn, yOut);
-      if (poolY > 1000 && tokenRaw / poolY > 0.5) continue;
-      if (tokenRaw < 1) continue;
-
-      let side: "buy" | "sell";
-      if (dYraw < 0 && dErg > 0) side = "buy";
-      else if (dYraw > 0 && dErg < 0) side = "sell";
-      else side = dYraw < 0 ? "buy" : "sell";
+      if (tokenRaw < 1 || !(baseAmount > 0)) continue;
+      if (move.eventKind === "swap") {
+        if (baseAmount > MAX_TRADE_ERG) continue;
+        const poolY = Math.max(yIn, yOut);
+        if (poolY > 1000 && tokenRaw / poolY > 0.5) continue;
+      } else if (baseAmount > 1e7) {
+        continue;
+      }
+      const side = move.side;
 
       const known = ergoTokenDecimals(tokenId);
       const dec =
@@ -336,6 +339,7 @@ async function detectChunk(
         outBox: String(row.out_box),
         decimals: dec,
         symbol: reg?.symbol ?? null,
+        eventKind: move.eventKind,
       });
     }
     return { ok: true, swaps: out };

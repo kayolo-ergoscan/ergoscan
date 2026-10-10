@@ -39,9 +39,22 @@ export function pickT2tPair(assets: T2tAsset[], nftId: string): T2tPair | null {
   return { lp: lp.tokenId, tokenA, tokenB };
 }
 
+/** Swap: reserves move apart and LP stays. Mint/redeem: both reserves and LP move together. */
+export function classifyT2tMove(
+  dA: number,
+  dB: number,
+  dLp: number
+): "swap" | "mint" | "redeem" | null {
+  if (!(dA !== 0 && dB !== 0) || !Number.isFinite(dA) || !Number.isFinite(dB)) return null;
+  if (dA > 0 !== dB > 0) {
+    if (dLp !== 0) return null;
+    return "swap";
+  }
+  if (dA > 0 && dB > 0 && dLp > 0) return "mint";
+  if (dA < 0 && dB < 0 && dLp < 0) return "redeem";
+  return null;
+}
+
 export function isT2tSwapDelta(dA: number, dB: number, dLp: number): boolean {
-  if (!(dA !== 0 && dB !== 0)) return false;
-  if (dA > 0 === dB > 0) return false;
-  if (dLp !== 0) return false;
-  return true;
+  return classifyT2tMove(dA, dB, dLp) === "swap";
 }

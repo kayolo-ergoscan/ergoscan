@@ -23,7 +23,7 @@ test("nextSnapTvl keeps the previous snap when the box is missing", () => {
   assert.equal(nextSnapTvl(0, false, 0), 0);
 });
 
-test("poolNeedsNftTvl skips dead pools with no fill and no snap", () => {
+test("poolNeedsNftTvl walks when the last fill box is missing, including a quiet pool", () => {
   assert.equal(
     poolNeedsNftTvl({ hadBox: true, hadLastSwap: true, prevTvl: 0, volumeErg: 0 }),
     false
@@ -33,16 +33,8 @@ test("poolNeedsNftTvl skips dead pools with no fill and no snap", () => {
     true
   );
   assert.equal(
-    poolNeedsNftTvl({ hadBox: false, hadLastSwap: false, prevTvl: 200, volumeErg: 0 }),
-    true
-  );
-  assert.equal(
-    poolNeedsNftTvl({ hadBox: false, hadLastSwap: false, prevTvl: 0, volumeErg: 3 }),
-    true
-  );
-  assert.equal(
     poolNeedsNftTvl({ hadBox: false, hadLastSwap: false, prevTvl: 0, volumeErg: 0 }),
-    false
+    true
   );
 });
 

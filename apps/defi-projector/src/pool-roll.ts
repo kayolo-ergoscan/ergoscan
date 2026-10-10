@@ -7,10 +7,35 @@ export const POOL_ROLL_KEY = "pool_roll_v1";
 const POOL_ROLL_LOCK = 736202;
 const ERG_ZERO = "0".repeat(64);
 
-/** Same cap as ranks / Spectrum volume tile (`RANKS_MAX_TRADE_ERG`). */
-export const POOL_VOL_MAX_ERG_DEFAULT = 3_000;
+/**
+ * Whole tokens. A raw amount written when decimals were unknown is at least 10^decimals.
+ * Already-scaled amounts stay as they are.
+ */
+export function wholeTokenQty(amount: number, decimals: number | null | undefined): number {
+  if (!(amount > 0) || !Number.isFinite(amount)) return 0;
+  const dec = Math.max(0, Math.min(18, Math.trunc(Number(decimals) || 0)));
+  if (dec > 0 && amount >= 10 ** dec) return amount / 10 ** dec;
+  return amount;
+}
 
-export function poolVolMaxErg(raw: string | undefined = process.env.RANKS_MAX_TRADE_ERG): number {
+/** Quote leg in ERG. 0 when the price or the amount is unusable. */
+export function n2nQuoteErg(qtyWhole: number, priceErg: number): number {
+  if (!(qtyWhole > 0) || !(priceErg > 0) || priceErg >= 1e12 || !Number.isFinite(priceErg)) {
+    return 0;
+  }
+  const v = qtyWhole * priceErg;
+  return Number.isFinite(v) && v > 0 && v < 1e9 ? v : 0;
+}
+
+/**
+ * One cap for the tape and the volume tiles.
+ * Detector stores a swap up to this size (`MAX_TRADE_ERG`). The tile uses the same number.
+ */
+export const POOL_VOL_MAX_ERG_DEFAULT = 25_000;
+
+export function poolVolMaxErg(
+  raw: string | undefined = process.env.MAX_TRADE_ERG || process.env.RANKS_MAX_TRADE_ERG
+): number {
   const n = Number(raw);
   return Number.isFinite(n) && n > 0 ? n : POOL_VOL_MAX_ERG_DEFAULT;
 }

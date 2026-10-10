@@ -98,16 +98,20 @@ export function nextSnapTvl(
   return previous > 0 && Number.isFinite(previous) ? previous : 0;
 }
 
-/** NFT walk only if the last-fill box is gone, or the pool already has TVL/vol. */
+/**
+ * Walk the pool NFT when the last fill did not leave an unspent box.
+ * A quiet pool still has a contract box. Stake keys are not in the registry.
+ */
 export function poolNeedsNftTvl(input: {
   hadBox: boolean;
   hadLastSwap: boolean;
   prevTvl: number;
   volumeErg: number;
 }): boolean {
-  if (input.hadBox) return false;
-  if (input.hadLastSwap) return true;
-  return input.prevTvl > 0 || input.volumeErg > 0;
+  void input.hadLastSwap;
+  void input.prevTvl;
+  void input.volumeErg;
+  return !input.hadBox;
 }
 
 /**

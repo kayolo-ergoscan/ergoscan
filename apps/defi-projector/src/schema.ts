@@ -84,4 +84,26 @@ export async function ensureProjectorSchema(db: Db): Promise<void> {
   await db.query(`ALTER TABLE defi.pool_snap ADD COLUMN IF NOT EXISTS vol_erg DOUBLE PRECISION`);
   await db.query(`ALTER TABLE defi.pool_snap ADD COLUMN IF NOT EXISTS first_ts_ms BIGINT`);
   await db.query(`ALTER TABLE defi.pool_snap ADD COLUMN IF NOT EXISTS last_ts_ms BIGINT`);
+  await db.query(`ALTER TABLE defi.pool_snap ADD COLUMN IF NOT EXISTS price_print_erg DOUBLE PRECISION`);
+  await db.query(`ALTER TABLE defi.pool_snap ADD COLUMN IF NOT EXISTS vol_erg_30d DOUBLE PRECISION`);
+  await db.query(`ALTER TABLE defi.pool_snap ADD COLUMN IF NOT EXISTS traders_n BIGINT`);
+  await db.query(`ALTER TABLE defi.pool_snap ADD COLUMN IF NOT EXISTS fee_rate DOUBLE PRECISION`);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS defi.pool_scanned (
+      pool_id TEXT PRIMARY KEY,
+      height INT NOT NULL
+    )
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS defi.price_day (
+      token_id TEXT NOT NULL,
+      day DATE NOT NULL,
+      price_erg DOUBLE PRECISION,
+      price_usd DOUBLE PRECISION,
+      tvl_erg DOUBLE PRECISION,
+      PRIMARY KEY (token_id, day)
+    )
+  `);
 }

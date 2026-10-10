@@ -2,6 +2,7 @@ import { AGEUSD_BANK_NFTS, isAgeUsdBankNft } from "@ergoscan/shared";
 import type { Db } from "./db.js";
 import { pickT2tPair } from "./t2t-pair.js";
 import { registryForWindow, type PoolReg } from "./registry.js";
+import { SPECTRUM_N2N_TEMPLATE } from "./spectrum-pools.js";
 
 const HEX64 = /^[0-9a-f]{64}$/;
 const BANK_NFTS = [...AGEUSD_BANK_NFTS];
@@ -52,6 +53,7 @@ export async function seedT2tFromUnspent(db: Db): Promise<number> {
     FROM tokens n
     JOIN packed.box_assets nft ON nft.token_id = packed.hex32(n.token_id) AND nft.amount = 1
     JOIN packed.boxes b ON b.box_id = nft.box_id AND b.spent_tx_id IS NULL
+    JOIN packed.script sc ON sc.id = b.script_id AND sc.template_hash = decode($2, 'hex')
     JOIN packed.box_assets ba ON ba.box_id = b.box_id
     LEFT JOIN tokens tok ON tok.token_id = encode(ba.token_id, 'hex')
     WHERE n.emission = 1
@@ -59,7 +61,7 @@ export async function seedT2tFromUnspent(db: Db): Promise<number> {
       AND n.name !~* '^ERG_'
       AND lower(n.token_id) <> ALL($1::text[])
     `,
-    [BANK_NFTS]
+    [BANK_NFTS, SPECTRUM_N2N_TEMPLATE]
   );
     await client.query("COMMIT");
   } catch (e) {

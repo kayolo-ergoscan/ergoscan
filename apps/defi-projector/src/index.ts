@@ -31,12 +31,9 @@
  */
 import { createPool, getState, setState } from "./db.js";
 import { ensureProjectorSchema } from "./schema.js";
-import {
-  listRegistryNfts,
-  registryForWindow,
-  reinforceRegistryFromUnspent,
-  seedRegistryFromPoolSnap,
-} from "./registry.js";
+import { listRegistryNfts, registryForWindow } from "./registry.js";
+import { syncLiveSpectrumPools } from "./spectrum-pools.js";
+import { backfillQuietPools } from "./backfill-quiet.js";
 import { listT2tRegistry, seedT2tFromUnspent } from "./t2t-registry.js";
 import { materializeRanks } from "./ranks.js";
 import { seedPoolRoll } from "./pool-roll.js";
@@ -210,17 +207,6 @@ async function loop(): Promise<void> {
   let seededN2t = 0;
   let seededT2t = 0;
   let seededLithos = 0;
-  if (!n2tReg.length) {
-    seededN2t = await seedRegistryFromPoolSnap(db);
-    console.log(JSON.stringify({ type: "registry_seed", pair: "n2t", upserts: seededN2t }));
-    try {
-      const rein = await reinforceRegistryFromUnspent(db, tip);
-      console.log(JSON.stringify({ type: "registry_reinforce", upserts: rein }));
-    } catch (e) {
-      console.warn(JSON.stringify({ type: "registry_reinforce_skip", err: String(e) }));
-    }
-    n2tReg = await listRegistryNfts(db);
-  }
   if (!t2tReg.length) {
     try {
       seededT2t = await seedT2tFromUnspent(db);
@@ -239,6 +225,18 @@ async function loop(): Promise<void> {
       })
     );
   }
+  try {
+    const synced = await syncLiveSpectrumPools(db);
+    seededN2t = synced.cfmm;
+    console.log(JSON.stringify({ type: "spectrum_sync", ...synced }));
+    n2tReg = await listRegistryNfts(db);
+    t2tReg = await listT2tRegistry(db);
+  } catch (e) {
+    console.warn(JSON.stringify({ type: "spectrum_sync_skip", err: String(e) }));
+  }
+  void backfillQuietPools(db).catch((e) =>
+    console.warn(JSON.stringify({ type: "quiet_backfill_skip", err: String(e) }))
+  );
   if (LITHOS_ON && !lithosReg.length) {
     try {
       seededLithos = await seedLithosRegistry(db);
@@ -430,8 +428,6 @@ async function loop(): Promise<void> {
 
       if (Date.now() - lastRegistry > REGISTRY_MS) {
         try {
-          seededN2t = await seedRegistryFromPoolSnap(db);
-          await reinforceRegistryFromUnspent(db, tip);
           try {
             seededT2t = await seedT2tFromUnspent(db);
           } catch (e) {
@@ -439,6 +435,9 @@ async function loop(): Promise<void> {
               JSON.stringify({ type: "registry_refresh_skip", pair: "t2t", err: String(e) })
             );
           }
+          const synced = await syncLiveSpectrumPools(db);
+          seededN2t = synced.cfmm;
+          console.log(JSON.stringify({ type: "spectrum_sync", ...synced }));
           n2tReg = await listRegistryNfts(db);
           t2tReg = await listT2tRegistry(db);
           if (LITHOS_ON) {

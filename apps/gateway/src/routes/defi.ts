@@ -144,6 +144,112 @@ function looksLikeTicker(s: string, tokenId?: string | null): boolean {
   return true;
 }
 
+/** A side name, including an emoji ticker. A pair string (`rsETH/🤡`) is not one side. */
+function sideLabel(s: string, tokenId?: string | null): string {
+  const t = s.trim();
+  if (!t || t === "?" || t === "SEED" || t.includes("/")) return "";
+  if (t.length > 32) return "";
+  const id = String(tokenId || "").toLowerCase();
+  if (id && id.startsWith(t.toLowerCase()) && /^[0-9a-f]+$/i.test(t) && t.length <= 8) {
+    return "";
+  }
+  return t;
+}
+
+/** ERG per 1 whole token, from that token's deepest Spectrum ERG pool. */
+async function ergPairPrices(tokenIds: string[]): Promise<Map<string, number>> {
+  const ids = [
+    ...new Set(
+      tokenIds
+        .map((id) => id.toLowerCase())
+        .filter((id) => id && id !== ERG_ZERO && /^[0-9a-f]{64}$/.test(id))
+    ),
+  ];
+  const out = new Map<string, number>();
+  if (!ids.length) return out;
+  const rows = await q<{ token_id: string; price_erg: number }>(
+    `
+    SELECT DISTINCT ON (r.quote_token)
+           r.quote_token AS token_id,
+           ps.price_erg::float8 AS price_erg
+    FROM defi.pool_registry r
+    JOIN defi.pool_snap ps ON ps.pool_id = r.pool_id
+    WHERE r.venue = 'spectrum_cfmm'
+      AND (r.base_token IS NULL OR r.base_token = $2)
+      AND r.quote_token = ANY($1::text[])
+      AND ps.price_erg > 0
+      AND ps.price_erg < 1e12
+    ORDER BY r.quote_token, ps.tvl_erg DESC NULLS LAST
+    `,
+    [ids, ERG_ZERO]
+  );
+  for (const row of rows ?? []) {
+    const px = Number(row.price_erg);
+    if (px > 0 && px < 1e12) out.set(String(row.token_id).toLowerCase(), px);
+  }
+  return out;
+}
+
+/**
+ * One n2n swap, in ERG. Amounts are whole tokens when they were scaled at
+ * write time. A raw amount (decimals unknown then) is at least 10^decimals.
+ * Quote side wins so the two legs are not added twice.
+ */
+function n2nLegErg(amount: number, price: number, decimals: number): number {
+  if (!(amount > 0) || !(price > 0) || price >= 1e12) return 0;
+  const dec = Math.max(0, Math.min(18, Math.trunc(decimals) || 0));
+  const whole = dec > 0 && amount >= 10 ** dec ? amount / 10 ** dec : amount;
+  const v = whole * price;
+  return Number.isFinite(v) && v > 0 && v < 1e7 ? v : 0;
+}
+
+async function n2nVolumeErg(
+  poolId: string,
+  quoteId: string,
+  baseId: string,
+  pxQ: number,
+  pxB: number
+): Promise<{ all: number; d30: number } | null> {
+  if (!(pxQ > 0) && !(pxB > 0)) return null;
+  const rows = await q<{
+    token_amount: number;
+    base_amount: number;
+    height: number | null;
+    dec_q: number | null;
+    dec_b: number | null;
+    tip: number | null;
+  }>(
+    `
+    SELECT s.token_amount::float8 AS token_amount,
+           s.base_amount::float8 AS base_amount,
+           s.height,
+           tq.decimals AS dec_q,
+           tb.decimals AS dec_b,
+           (SELECT value::bigint FROM indexer_state WHERE key = 'last_height') AS tip
+    FROM defi.swaps s
+    LEFT JOIN tokens tq ON tq.token_id = s.token_id
+    LEFT JOIN tokens tb ON tb.token_id = s.base_id
+    WHERE s.pool_id = $1
+      AND s.event_kind = 'swap'
+    `,
+    [poolId]
+  );
+  if (!rows) return null;
+  let all = 0;
+  let d30 = 0;
+  const tip = rows[0]?.tip ?? 0;
+  const cut = tip > POOL_APR_BLOCKS ? tip - POOL_APR_BLOCKS : 0;
+  for (const row of rows) {
+    const qv = n2nLegErg(Number(row.token_amount), pxQ, Number(row.dec_q) || 0);
+    const bv = n2nLegErg(Number(row.base_amount), pxB, Number(row.dec_b) || 0);
+    const v = qv > 0 ? qv : bv;
+    if (!(v > 0)) continue;
+    all += v;
+    if (row.height != null && row.height > cut) d30 += v;
+  }
+  return { all, d30 };
+}
+
 function registerHex(v: unknown): string | null {
   if (typeof v === "string" && v) return v;
   if (v && typeof v === "object") {
@@ -225,7 +331,7 @@ function mapPoolJson(r: {
     baseId: ergoBase ? ERG_ZERO : baseId,
     baseSymbol: ergoBase
       ? "ERG"
-      : baseKnown || (looksLikeTicker(baseCol, baseId) ? baseCol : "") || "",
+      : baseKnown || sideLabel(baseCol, baseId) || "",
     tvlErg: Number(r.tvl_erg) || 0,
     vol24h: Number(r.vol24_erg) || 0,
     lastTs: Number(r.last_ts) || 0,
@@ -638,6 +744,7 @@ export function registerDefiRoutes(app: Express, _deps: DefiDeps = {}) {
     /**
      * AMM price history from defi.price_tick (worker ranks cycle).
      * GET ?tokenId=&hours=24  → points[{t, priceErg, priceUsd, tvlErg}]
+     * GET ?tokenId=&days=30   → one point a day from defi.price_day, up to 10 years.
      * Does NOT replace CG /charts majors — additive index path.
      */
     async priceHistory(req: Request, res: Response) {
@@ -650,6 +757,50 @@ export function registerDefiRoutes(app: Express, _deps: DefiDeps = {}) {
           error: "tokenId_required",
           points: [],
           source: "lumen-defi",
+        });
+        return;
+      }
+      const daysRaw = Number(req.query.days);
+      if (Number.isFinite(daysRaw) && daysRaw > 14) {
+        const days = Math.min(3650, Math.max(15, Math.floor(daysRaw)));
+        const daily = await q<{
+          ts_ms: string;
+          price_erg: number | null;
+          price_usd: number | null;
+          tvl_erg: number | null;
+        }>(
+          `SELECT (extract(epoch FROM day) * 1000)::bigint::text AS ts_ms,
+                  price_erg, price_usd, tvl_erg
+           FROM defi.price_day
+           WHERE token_id = $1
+             AND day >= (CURRENT_DATE - $2::int)
+           ORDER BY day ASC
+           LIMIT 4000`,
+          [tokenId, days]
+        );
+        if (!daily) {
+          res.status(503).json({
+            ok: false,
+            error: "db_unreachable",
+            points: [],
+            source: "lumen-defi",
+          });
+          return;
+        }
+        const points = daily.map((r) => ({
+          t: Number(r.ts_ms),
+          priceErg: r.price_erg != null ? Number(r.price_erg) : null,
+          priceUsd: r.price_usd != null ? Number(r.price_usd) : null,
+          tvlErg: r.tvl_erg != null ? Number(r.tvl_erg) : null,
+        }));
+        res.json({
+          ok: true,
+          tokenId,
+          days,
+          points,
+          count: points.length,
+          source: "lumen-defi",
+          at: Date.now(),
         });
         return;
       }
@@ -1554,6 +1705,7 @@ export function registerDefiRoutes(app: Express, _deps: DefiDeps = {}) {
           price_erg: number | null;
           trades_n: string | number | null;
           vol_erg: number | null;
+          traders_n: string | number | null;
           first_ts: string | number | null;
           last_ts: string | number | null;
         }>(
@@ -1570,6 +1722,7 @@ export function registerDefiRoutes(app: Express, _deps: DefiDeps = {}) {
                  ps.price_erg::float8 AS price_erg,
                  ps.trades_n::text AS trades_n,
                  ps.vol_erg::float8 AS vol_erg,
+                 ps.traders_n::text AS traders_n,
                  ps.first_ts_ms AS first_ts,
                  ps.last_ts_ms AS last_ts
           FROM defi.pool_registry r
@@ -1604,14 +1757,8 @@ export function registerDefiRoutes(app: Express, _deps: DefiDeps = {}) {
           `,
           [POOL_LIST_MIN_TVL_ERG]
         ),
-        q<{ c: string }>(
-          `SELECT count(*)::text AS c FROM (
-             SELECT 1 FROM defi.swaps
-             WHERE ${SPECTRUM_VENUE_SQL}
-               AND ${SPECTRUM_N2T_SQL}
-               AND trader IS NOT NULL AND trader <> ''
-             GROUP BY trader
-           ) t`
+        q<{ value: string }>(
+          `SELECT value FROM defi.worker_state WHERE key = 'spectrum_traders'`
         ),
       ]);
       if (!rows || !kpis) {
@@ -1635,7 +1782,7 @@ export function registerDefiRoutes(app: Express, _deps: DefiDeps = {}) {
         tvlErg: kpi?.tvl_erg != null ? Number(kpi.tvl_erg) : null,
         volErg: rolled && kpi?.vol_erg != null ? Number(kpi.vol_erg) : null,
         tradesCount: rolled && kpi?.trades_n != null ? Number(kpi.trades_n) : null,
-        tradersCount: tradersCounted?.[0] ? Number(tradersCounted[0].c) : null,
+        tradersCount: tradersCounted?.[0] ? Number(tradersCounted[0].value) : null,
         pools: rows.map((r) => {
           const base = mapPoolJson({
             pool_id: r.pool_id,
@@ -1649,15 +1796,15 @@ export function registerDefiRoutes(app: Express, _deps: DefiDeps = {}) {
             vol24_erg: r.vol24_erg,
             last_ts: r.last_ts,
           });
-          const n2t = String(r.venue || "") === "spectrum_cfmm";
           const trades = r.trades_n != null && r.trades_n !== "" ? Number(r.trades_n) : null;
+          const traders = r.traders_n != null && r.traders_n !== "" ? Number(r.traders_n) : null;
           return {
             ...base,
-            volErg: n2t && r.vol_erg != null ? Number(r.vol_erg) : null,
+            volErg: r.vol_erg != null ? Number(r.vol_erg) : null,
             priceErg: r.price_erg != null && Number(r.price_erg) > 0 ? Number(r.price_erg) : null,
             trades: trades != null && Number.isFinite(trades) ? trades : null,
             firstTs: r.first_ts != null && Number(r.first_ts) > 0 ? Number(r.first_ts) : null,
-            traders: null,
+            traders: traders != null && Number.isFinite(traders) ? traders : null,
           };
         }),
         source: "lumen-defi",
@@ -1695,6 +1842,8 @@ export function registerDefiRoutes(app: Express, _deps: DefiDeps = {}) {
         price_erg: number | null;
         trades_n: string | null;
         vol_erg: number | null;
+        vol_30: number | null;
+        fee_rate: number | null;
         first_ts: string | number | null;
         last_ts: string | number | null;
       }>(
@@ -1707,6 +1856,8 @@ export function registerDefiRoutes(app: Express, _deps: DefiDeps = {}) {
                ps.price_erg::float8 AS price_erg,
                ps.trades_n::text AS trades_n,
                ps.vol_erg::float8 AS vol_erg,
+               ps.vol_erg_30d::float8 AS vol_30,
+               ps.fee_rate::float8 AS fee_rate,
                ps.first_ts_ms AS first_ts,
                ps.last_ts_ms AS last_ts
         FROM defi.pool_registry r
@@ -1735,11 +1886,10 @@ export function registerDefiRoutes(app: Express, _deps: DefiDeps = {}) {
         vol24_erg: row.vol24_erg,
         last_ts: row.last_ts,
       });
-      const n2t = String(row.venue || "") === "spectrum_cfmm";
       const tradesN = row.trades_n != null && row.trades_n !== "" ? Number(row.trades_n) : null;
       const pool = {
         ...base,
-        volErg: n2t && row.vol_erg != null ? Number(row.vol_erg) : null,
+        volErg: row.vol_erg != null ? Number(row.vol_erg) : null,
         priceErg: row.price_erg != null && Number(row.price_erg) > 0 ? Number(row.price_erg) : null,
         trades: tradesN != null && Number.isFinite(tradesN) ? tradesN : null,
         firstTs: row.first_ts != null && Number(row.first_ts) > 0 ? Number(row.first_ts) : null,
@@ -1747,56 +1897,13 @@ export function registerDefiRoutes(app: Express, _deps: DefiDeps = {}) {
         income30Erg: null as number | null,
         apr30Pct: null as number | null,
       };
-      const spectrum = String(row.venue || "").startsWith("spectrum");
-      const ergBase = !row.base_id || row.base_id === ERG_ZERO;
-      const [feeBox, volRows] = await Promise.all([
-        spectrum
-          ? q<{ regs: unknown }>(
-              `
-              WITH last AS (
-                SELECT tx_id FROM defi.swaps
-                WHERE pool_id = $1 AND event_kind = 'swap'
-                ORDER BY height DESC NULLS LAST, ts_ms DESC
-                LIMIT 1
-              )
-              SELECT b.additional_registers AS regs
-              FROM last
-              JOIN packed.boxes b
-                ON b.creation_tx_id = decode(lower(last.tx_id), 'hex')
-               AND b.spent_tx_id IS NULL
-              JOIN packed.box_assets nft
-                ON nft.box_id = b.box_id
-               AND nft.token_id = decode(lower($1), 'hex')
-               AND nft.amount = 1
-              LIMIT 1
-              `,
-              [poolId]
-            )
-          : Promise.resolve(null),
-        ergBase
-          ? q<{ vol: number | null }>(
-              `
-              SELECT coalesce(sum(base_amount), 0)::float8 AS vol
-              FROM defi.swaps
-              WHERE pool_id = $1 AND event_kind = 'swap'
-                AND base_id = $2
-                AND height > COALESCE(
-                  (SELECT value::bigint FROM indexer_state WHERE key = 'last_height'),
-                  0
-                ) - $3
-              `,
-              [poolId, ERG_ZERO, POOL_APR_BLOCKS]
-            )
-          : Promise.resolve(null),
-      ]);
-      const feeRate = spectrumFeeRate(feeBox?.[0]?.regs);
+      const feeRate = row.fee_rate != null && Number(row.fee_rate) > 0 ? Number(row.fee_rate) : null;
+      const vol30 = row.vol_30 != null && Number(row.vol_30) > 0 ? Number(row.vol_30) : 0;
       pool.feePct = feeRate != null ? feeRate * 100 : null;
-      if (ergBase && feeRate != null && volRows?.[0]) {
-        const vol = Number(volRows[0].vol);
-        const income = Number.isFinite(vol) ? vol * feeRate : null;
+      if (feeRate != null && vol30 > 0 && pool.tvlErg > 0) {
+        const income = vol30 * feeRate;
         pool.income30Erg = income;
-        pool.apr30Pct =
-          income != null && pool.tvlErg > 0 ? (income / pool.tvlErg) * (365 / 30) * 100 : null;
+        pool.apr30Pct = (income / pool.tvlErg) * (365 / 30) * 100;
       }
       if (view === "lp") {
         const boxSql = `
@@ -1973,14 +2080,14 @@ export function registerDefiRoutes(app: Express, _deps: DefiDeps = {}) {
           `
           SELECT tx_id, height, ts_ms, side, token_id, base_id, token_amount, base_amount, trader
           FROM defi.swaps
-          WHERE pool_id = $1 AND event_kind = 'swap'
+          WHERE pool_id = $1 AND event_kind IN ('swap', 'mint', 'redeem')
           ORDER BY ${order}
           LIMIT $2 OFFSET $3
           `,
           [poolId, limit, offset]
         ),
         q<{ c: string }>(
-          `SELECT count(*)::text AS c FROM defi.swaps WHERE pool_id = $1 AND event_kind = 'swap'`,
+          `SELECT count(*)::text AS c FROM defi.swaps WHERE pool_id = $1 AND event_kind IN ('swap', 'mint', 'redeem')`,
           [poolId]
         ),
       ]);
