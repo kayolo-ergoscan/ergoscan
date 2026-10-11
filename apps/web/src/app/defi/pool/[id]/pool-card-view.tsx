@@ -52,6 +52,7 @@ type Trade = {
   tokenId: string;
   tokenName?: string | null;
   baseId: string | null;
+  baseName?: string | null;
   tokenAmount: number;
   baseAmount: number;
   trader: string | null;
@@ -673,7 +674,8 @@ function FlowTapeRow({
   const withdraw = kind === "withdraw" || sid === "redeem" || sid === "withdraw";
   const quote = row.tokenId ? resolveTokenMeta(row.tokenId, row.tokenName) : null;
   const quoteSym = quote?.symbol || (row.tokenId ? shortId(row.tokenId, 4) : "—");
-  const baseSym = isErgBase(row.baseId, null) ? "ERG" : row.baseId ? shortId(row.baseId, 4) : "—";
+  const base = !isErgBase(row.baseId, null) && row.baseId ? resolveTokenMeta(row.baseId, row.baseName) : null;
+  const baseSym = isErgBase(row.baseId, null) ? "ERG" : base?.symbol || (row.baseId ? shortId(row.baseId, 4) : "—");
   const price = row.tokenAmount > 0 && row.baseAmount > 0 ? row.baseAmount / row.tokenAmount : null;
   const word = t(withdraw ? "pool.flowWithdraw" : "pool.flowDeposit");
   return (
