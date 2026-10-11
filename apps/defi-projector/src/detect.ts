@@ -297,14 +297,24 @@ async function detectChunk(
       const side = move.side;
 
       const known = ergoTokenDecimals(tokenId);
+      const tokenDec =
+        row.token_decimals != null && Number.isFinite(Number(row.token_decimals))
+          ? Number(row.token_decimals)
+          : null;
+      const regDec =
+        reg?.decimals != null && Number.isFinite(Number(reg.decimals)) ? Number(reg.decimals) : null;
+      // A stored 0 must not hide a real decimal count. Unknown stays unwritten.
       const dec =
         known != null
           ? known
-          : reg?.decimals != null && Number.isFinite(reg.decimals)
-            ? Number(reg.decimals)
-            : row.token_decimals != null
-              ? Number(row.token_decimals)
-              : 0;
+          : tokenDec != null && tokenDec > 0
+            ? tokenDec
+            : regDec != null && regDec > 0
+              ? regDec
+              : tokenDec === 0 || regDec === 0
+                ? 0
+                : null;
+      if (dec == null) continue;
       const tokenAmount = tokenRaw / 10 ** Math.max(0, Math.min(18, dec));
       if (!(tokenAmount > 0) || tokenAmount > 1e12) continue;
 
