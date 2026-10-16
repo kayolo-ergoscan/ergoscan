@@ -8,6 +8,7 @@ import {
   mapExplorerBox,
   mapExplorerTx,
   registersAsExplorer,
+  registersAsSigma,
   mempoolBalanceDelta,
   mempoolUnspentForAddress,
   sumBalances,
@@ -128,6 +129,20 @@ describe("explorerCompat", () => {
     assert.equal(listed.settlementHeight, 10);
   });
 
+  it("registersAsSigma matches the official box object", () => {
+    const r = registersAsSigma({ R4: "04c60f" });
+    assert.equal(r.R4?.serializedValue, "04c60f");
+    assert.equal(r.R4?.sigmaType, "SInt");
+    assert.equal(r.R4?.renderedValue, "995");
+    const box = mapExplorerBox({
+      boxId: "b5",
+      value: "18767889",
+      additionalRegisters: { R4: "04c60f" },
+    });
+    assert.equal(typeof box.value, "string");
+    assert.equal(box.additionalRegisters.R4?.sigmaType, "SInt");
+  });
+
   it("registersAsExplorer picks serialized hex", () => {
     const r = registersAsExplorer({
       R4: { serializedValue: "0e03555344", renderedValue: "USD" },
@@ -217,6 +232,8 @@ describe("explorerCompat", () => {
     for (const key of ["boxId", "value", "ergoTree", "assets", "additionalRegisters", "creationHeight", "transactionId", "index", "address"]) {
       assert.ok(key in box, key);
     }
+    assert.equal(box.additionalRegisters.R4?.serializedValue, "0702");
+    assert.equal(typeof box.additionalRegisters.R4, "object");
     assert.equal(typeof box.value, "string");
     assert.equal(box.assets[0]?.amount, "10");
     const tx = mapExplorerTx({

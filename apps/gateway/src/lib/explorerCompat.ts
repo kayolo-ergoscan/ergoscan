@@ -2,7 +2,7 @@
  * Official explorer v1 field names + our safer amount strings.
  * Pure mappers — no I/O.
  */
-import { ergoTokenDecimals } from "@ergoscan/shared";
+import { decodeSigmaConstantMap, ergoTokenDecimals, type SigmaConstantInfo } from "@ergoscan/shared";
 export const ERGO_EPOCH_LEN = 1024;
 
 export type ExplorerTokenAmount = {
@@ -66,7 +66,7 @@ export type ExplorerBox = {
   ergoTree: string | null;
   address: string | null;
   assets: { tokenId: string; amount: string }[];
-  additionalRegisters: Record<string, string>;
+  additionalRegisters: Record<string, SigmaConstantInfo>;
   spentTransactionId: string | null;
   mainChain: boolean;
 };
@@ -187,6 +187,13 @@ export function mapBlockHeader(row: {
   };
 }
 
+/** Official explorer register object. Wallet GSON rejects a bare hex string. */
+export function registersAsSigma(
+  raw: Record<string, unknown> | Record<string, string> | null | undefined
+): Record<string, SigmaConstantInfo> {
+  return decodeSigmaConstantMap(raw ?? null);
+}
+
 export function registersAsExplorer(
   raw: Record<string, unknown> | null | undefined
 ): Record<string, string> {
@@ -243,9 +250,7 @@ export function mapExplorerBox(row: ExplorerBoxInput): ExplorerBox {
       tokenId: a.tokenId,
       amount: asDecString(a.amount),
     })),
-    additionalRegisters: registersAsExplorer(
-      row.additionalRegisters as Record<string, unknown> | null | undefined
-    ),
+    additionalRegisters: registersAsSigma(row.additionalRegisters),
     spentTransactionId: row.spentTransactionId ?? null,
     mainChain: true,
   };

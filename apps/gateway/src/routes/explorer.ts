@@ -1300,7 +1300,17 @@ const OPENAPI_SPEC = {
               properties: { tokenId: { type: "string" }, amount: { type: "string" } },
             },
           },
-          additionalRegisters: { type: "object", additionalProperties: { type: "string" } },
+          additionalRegisters: {
+            type: "object",
+            additionalProperties: {
+              type: "object",
+              properties: {
+                serializedValue: { type: "string" },
+                sigmaType: { type: "string" },
+                renderedValue: { type: "string" },
+              },
+            },
+          },
           spentTransactionId: { type: "string", nullable: true },
           mainChain: { type: "boolean" },
         },
