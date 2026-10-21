@@ -1,7 +1,7 @@
 {
   "version": 1,
   "note": "Generated from github.com/kayolo-ergoscan/ergo-names by npm run names:snapshot. Edit the registry, not this file.",
-  "commit": "28ed212",
+  "commit": "58b81f5",
   "entries": [
     {
       "address": "2BggBDgr9n9geTKjCJBCEWMReb2i7wcocw7fjVd3QyM7qFMtmVHyoFr78kChAxGekJxUTZru2aMjyZKcVoPfHX5d12RqNrnEAgzGqUCoJ2v9xCqmT75V5xdhT1JBqQbeRKJZT4XGMg7hZAqVvbMsQF26nkWRPqiCqPoKfy7GZw9zuvr15qaqbB2ZcZXaGTrvqDN2o15SRTJwvVADDx2inzrk3U25cdjFWYBc6ECKSjmYpPWL8fn4msxsBZKNiGbP8vDrYWqQuPtMwJ5Ag",
@@ -186,7 +186,18 @@
       "note": "Lithos protocol",
       "source": "registry",
       "registry": {
-        "by": "ergoscan",
+        "by": "project",
+        "fileUrl": "https://github.com/kayolo-ergoscan/ergo-names/blob/main/projects/lithos-protocol.json"
+      }
+    },
+    {
+      "address": "3VaP5ZZQFaC1ucEnpUue1ZfgmX2bRamvJezvrVxfxNYmzy4fi4c9XFRmc5k3cfzw1YUFLdRHrX74tvGtpoPvh9NXZQSoSDVUS3DqdurRuVr7z6fkZkNRGZDjMZWHPZzSNRAKETELbx34wi1vqmNAqVMqHsHsTWax2XfdVaphxAsvv5HPbNkHp4tPg3APPzcC54WHuvfDqG8VaftmdZvqxh8G9xhfdd9LnUdFGQYRt3hLx6XcSqHmezE3ZH6KAG8pLbPp6LNVgiLdyFuunf9wA6EixdWxtXRaa7FG7CtARqWaRicNGLAdey9jdL5iwwHzYizAa2J42yjgoSxWF5nNz3Ma7LBdAxoQmfQwDsHWaKrP5ovicNkzMurGY8JUFTPMzR5nyCYfY6zoqce5Riubf4hZdqYUTD4vb4prUiJaFhYaUVwwMP73ZK6V54jiRyJArdseAkvXDnt3BbdFtMPvEswXcg5utsTjbzHmhXbnD7KiiQPLYzMdSXW4Ts5CCbVhqiK5Sd2DQbhTi3yvpdbQk1XZp9gienjRVkYT6kGnnnzGQXBVN1ffv1jVBTZ6b1TFqMkC39R4cChPHQiYh7gXyBjFHo2vTdTAWbUpHjjqu6HafRsawpaAtqrv1n73N2MhvmDgsgq9HP1KeHoc9qMbVTRznf3tHSLp2s4NaP3WhukTcECzPZ75BEStM1xzTy4BamkV2DCS44Fx3tMiW7CQkfPDw3o62jMRUBof6rQMHgsexwrHVfKzAbhwTCY5hNaxgXEVGjogz6Pin8P29dmnRNm9qosShogi6To6hMUXG1aFLFjBTwhprJ3L2JRfaYWEC41un66ZjPvExQaW65htdyACjKBsL74xFm6LmRs5XXAzctP23y3dMKZokCQttH87kBwMh8MCnAsv6Vba3cu8TiYiBJTdJG4K4dz4F7Yy3AC3VisGHcZ91UNPcfAQxb2wvp65CYXMiiapV5tq3FXrpNqpDuRwnkxAeVPcYW2Qm1qHQQcPpC2ZdiXEtFJAXcUCKnFHuYkoXCPfh4tg1P9zNFeSu6ntjkvfru3V6mmukBmupinCzr2Eo48gHj19E49ShwLszqqhrCQXcWRK7HTgmjS5xCfC5AcxaZW3fQCMELLSAmw6othTs7iusf84SjqvwfMZshtpaeiDBMTU6WvJ9iNhPbdtKKjA8vhE6bfNLVGtFgx6xepxq36mYYZpB3dVxoQpYN5WcsLXtmfLFJB5Nx7FG9eMbgLSPJLLcKo4UidBkmQfo7VxJZGGqyZQa29eGZf3YRd19J4GgxtRyXKDJ61x6mTxFdMuEWsiehPD7B2V5RVDtTUUz7MvZUbCpyk2vLxnPf5euKvQ7hkxohvvkLMwAhYn3pFudWsubNG42BHezbNpwPPtm1o8aAhbNktdrZgXPXV6WNMkHkmzG4H7LRguwBs1n132Tz7WZd5CnkREw3WDWwfSiSYkQAxm2SxX3ahnGx2aSk2V2NuNPShbGfdCHzHDUCLwn4wQ1cRd5VUTVwdrQwzYj6vZwuE3LiPd4nfRMzhMus5Y2Q4HPLHabzY1MDi2PU4uaHsPWZF9SHt6zDMoj88U4zddQLHJMBe47hjwT1nxRymibX4eZCJ1JxrF7cvtcPh7z2LGP6kVZmNySF2tRHcHdddPdPNuXTmwnQMyX8iAU515XU9z8n9NmQPXhfEKUT14AZfiyM2mws5SA8cXYEzQyTqy6fYbk8s8Cwe5FoKpF3cNuEeq4",
+      "name": "Lithos payout",
+      "kind": "contract",
+      "note": "Lithos protocol",
+      "source": "registry",
+      "registry": {
+        "by": "project",
         "fileUrl": "https://github.com/kayolo-ergoscan/ergo-names/blob/main/projects/lithos-protocol.json"
       }
     },
@@ -230,7 +241,7 @@
       "note": "Lithos protocol",
       "source": "registry",
       "registry": {
-        "by": "ergoscan",
+        "by": "project",
         "fileUrl": "https://github.com/kayolo-ergoscan/ergo-names/blob/main/projects/lithos-protocol.json"
       }
     },
@@ -243,6 +254,28 @@
       "registry": {
         "by": "ergoscan",
         "fileUrl": "https://github.com/kayolo-ergoscan/ergo-names/blob/main/projects/dexy.json"
+      }
+    },
+    {
+      "address": "4CXJ3oDs6zN1V62Z2JoJjQbgb9f7KR3JtvRXVacGSMoVzfH6nw5mKTaAN8kgaYRRZGSiGU7nZtjv9qUYap8SWQyxQm4MB7CgTaEuSBuMCbvDt6iSpN7p2gPXw7KyysxdajAqsbnr1yy2jzq6Go7tNsnJu4V7vNuQfPdPq6FgbLzX6thqeZ3WL9929sWcHxX7ZfdmYZw1cB6vuzeaHGn2J4bbqZ1W2CunzfrvLG3i1dbko8S6cqtYkPMMB9i71NCRJDtUQcrushyYurCeUbxWaFhKjiJQj9yopJE8fFuU1XZWc2o2q5cn4KQReb3F3fE3mXVc2UUGpshZ4A8os429SMv6xxHvvzz33wDAgXvE93m8jHq7CBUtndoWP7mR43edsX31vRFmYNUVqf9y7Hxmd9SLHyFdQYxGskCjiM9x9ZrzCS1a48aaRMMoGLqLjA3cKzwL3GaN5hwd6BWrr8tHZRgUXsHwhesnp6HmsqtSF7Jec4eD2ELT1bpZ1appMe6GihNWs2uXCEWNYGA61HoxzcWRK58x3Am13w4zG9oqJLS8f4SsEejSFy8uUCuuejtZERZEiVaj9iUoLd7KjSyNydvas7bRrh69YEmq8nJTqv9HYbD67nZKR8CUqi4U48xWWp3ai5VZxnCK8vXzDiSiA6XGwGzvKcrtvkvYPzHMjBdmas4LZgkrwnt4VVoyEp6Mva1BDuY3nwULBRiYVoNg9iM7K7D4Npa1QYatzj6gzDGVxbWPjLaoMtcepo3sdQaGhFnoS2UwL6hormpLBvtiWcDsxCJdo1idAZ4v",
+      "name": "Lithos evaluation",
+      "kind": "contract",
+      "note": "Lithos protocol",
+      "source": "registry",
+      "registry": {
+        "by": "project",
+        "fileUrl": "https://github.com/kayolo-ergoscan/ergo-names/blob/main/projects/lithos-protocol.json"
+      }
+    },
+    {
+      "address": "4CXJ3p1U7RhyHpuYWB3KRqrWyB5XLvt8rqWdh2dPNG7tgjeP6RjERv1t1dj1ufYhsUwcjjKfhfb8t7boCzd72fcqeJywFn5u8NUjwof8Q7wiM2C1DLC48Tm3LS1piUQXGmS6DqwQMypBYP8hdZ7uHn9hcHERj2QToxhpq3xgcm4VtLtEhZ2HYYYbPDGdDCmDicHSSAeafLAsj5McYh4thXi4csJfjdGQPeAe2w5ePNxQb5kGyD75KX447NU4koQ1sN5Ld3EAPX7qFXwbjVEU2EJTJQ9qn7uDbjbh7hKQk6qNBQd1NWV9yUc93aBKwh8Nabnq6RvFPC5JTbzRKkkH1exZv27j4cm8zY6oTafDqu35eWPfQnhMdSz5EwMKPTUrGNKhtkWhAmfb7nrLD6362pDqLFjhcoefqACUz2UvmEW2YoZHdm53Rp5eQUifphSvdscm3NGTGDBSCJy1WNLQad63ij17sHhppAgTwyTXghBAtvzFHycER9UCxYT7kwDe9MQuwvthpySS5QbyuWDTNtjAPsFPGBAtYJMNAEVoWrw6uFt8oJLArQFSwNyYKPHa57qVE5fHx3WGXYhuNRLtDNm8UJherQGKKqF6TtNF2FM6zrstdrgDFJqXapNY3hVnYmHssmtJiMNgywu1zzeSngBB2g6xu8j3uMSz2CsoUYTuDCjfFWMwwWVEMTysBXgvC8M8J2m2AfAkckf91hMtb2kA8TRFk1kPoYmAJLBtdPcoGidmLsvf1m6fa4EgNsVEMB7wdHj5RUuAuEde8V9GDrmx5uQH9RBcRu3Z",
+      "name": "Lithos difficulty position",
+      "kind": "contract",
+      "note": "Lithos protocol",
+      "source": "registry",
+      "registry": {
+        "by": "project",
+        "fileUrl": "https://github.com/kayolo-ergoscan/ergo-names/blob/main/projects/lithos-protocol.json"
       }
     },
     {
@@ -285,7 +318,7 @@
       "note": "Lithos protocol",
       "source": "registry",
       "registry": {
-        "by": "ergoscan",
+        "by": "project",
         "fileUrl": "https://github.com/kayolo-ergoscan/ergo-names/blob/main/projects/lithos-protocol.json"
       }
     },
@@ -351,7 +384,7 @@
       "note": "Lithos protocol",
       "source": "registry",
       "registry": {
-        "by": "ergoscan",
+        "by": "project",
         "fileUrl": "https://github.com/kayolo-ergoscan/ergo-names/blob/main/projects/lithos-protocol.json"
       }
     },
@@ -477,6 +510,17 @@
       }
     },
     {
+      "address": "EsQq8yFtHsqzGGhkPz6EahgkpEKX5uj6jf6RxwbxR5yHywoiRR63tcn1c5f8L9Mouk1FTrXwR6Qjv5Cwa9LokSeFf9bo5uy3m6vM59wzvZgERBM51d4vBD6dXUscojT8WjwFGjL3qCiNx67D3591WGMKPT2hx33JnYD1TM6rJQbmfjZ6nrTUeTZr4nsfYyFhjCsDabXQmFF4XCUamUkkt5SK6yb7uVBTqEoyEvijYZYgUN28QCd97dRGHpxBV1VU64vJdGKW4CqugMkuxPEqNsutyD5sqG2iwZ4kzQg2BkMZr6kpMeRhtCdsqhfryTxeZb9t8XU2Q62PrBWcHknLofYFY6MSHxzuubvpSERrhaAkvtSPBj53PRhbrqfTqy6Mc8JCPyAmUXujRinDmwYuaLP3vVEnDpw9eUkqrP3QwVgkqQJJxSrcCZ5YLTqo8Fdwkw8vVCqvZnVKTV4cGwRC1NgbgupiZ5Bsnd8ziCbkqNaskHY",
+      "name": "Lithos difficulty accumulator",
+      "kind": "contract",
+      "note": "Lithos protocol",
+      "source": "registry",
+      "registry": {
+        "by": "project",
+        "fileUrl": "https://github.com/kayolo-ergoscan/ergo-names/blob/main/projects/lithos-protocol.json"
+      }
+    },
+    {
       "address": "F7g4orQoAz4XPrvJVmqXx5RYkCQpkc4LPGucWXDDTcxnFGpVR3S8Hdx5nYFQprpwDV4sDXxUyM51fP2JukJjTeC3Wk2wi1JYeidfkb9zYUCPS7rLeFs4ru6Xo1qzy6ARZgLksyhx9fPXsEaSf24399ve4WxcHphzH4B2Enfesot1iT57N4LaCN2XNHR7WxCKhAtSUK3AqJpocRhrDwdkdaYwZCN61fWmsCiULoEeokmfp8wHfvEBfjd34bhsAYakvycjF88cuf1B4hzDWtW9iLJnrvGY6jFviTX1GiQWTPt9joFjk1rMH85zDN3hhxZLNGXz2DzjhyeP3RPrtiPnRwQoe2NTjdpr8g2jscNP5jaqSXhfKAbrePZGJHjUhjVsTrDRehoqfjLZKCFbVJKMacJyQMdAcUERjqQLoeRETkKFyacZdTXcFHB",
       "name": "USE Payout",
       "kind": "contract",
@@ -494,7 +538,7 @@
       "note": "Lithos protocol",
       "source": "registry",
       "registry": {
-        "by": "ergoscan",
+        "by": "project",
         "fileUrl": "https://github.com/kayolo-ergoscan/ergo-names/blob/main/projects/lithos-protocol.json"
       }
     },
@@ -516,7 +560,7 @@
       "note": "Lithos protocol",
       "source": "registry",
       "registry": {
-        "by": "ergoscan",
+        "by": "project",
         "fileUrl": "https://github.com/kayolo-ergoscan/ergo-names/blob/main/projects/lithos-protocol.json"
       }
     },
@@ -582,7 +626,7 @@
       "note": "Lithos protocol",
       "source": "registry",
       "registry": {
-        "by": "ergoscan",
+        "by": "project",
         "fileUrl": "https://github.com/kayolo-ergoscan/ergo-names/blob/main/projects/lithos-protocol.json"
       }
     },
@@ -824,7 +868,7 @@
       "note": "Lithos protocol",
       "source": "registry",
       "registry": {
-        "by": "ergoscan",
+        "by": "project",
         "fileUrl": "https://github.com/kayolo-ergoscan/ergo-names/blob/main/projects/lithos-protocol.json"
       }
     },
