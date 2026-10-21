@@ -1,7 +1,7 @@
 {
   "version": 1,
   "note": "Generated from github.com/kayolo-ergoscan/ergo-names by npm run names:snapshot. Edit the registry, not this file.",
-  "commit": "58b81f5",
+  "commit": "53da33b",
   "entries": [
     {
       "address": "2BggBDgr9n9geTKjCJBCEWMReb2i7wcocw7fjVd3QyM7qFMtmVHyoFr78kChAxGekJxUTZru2aMjyZKcVoPfHX5d12RqNrnEAgzGqUCoJ2v9xCqmT75V5xdhT1JBqQbeRKJZT4XGMg7hZAqVvbMsQF26nkWRPqiCqPoKfy7GZw9zuvr15qaqbB2ZcZXaGTrvqDN2o15SRTJwvVADDx2inzrk3U25cdjFWYBc6ECKSjmYpPWL8fn4msxsBZKNiGbP8vDrYWqQuPtMwJ5Ag",
@@ -269,7 +269,7 @@
     },
     {
       "address": "4CXJ3p1U7RhyHpuYWB3KRqrWyB5XLvt8rqWdh2dPNG7tgjeP6RjERv1t1dj1ufYhsUwcjjKfhfb8t7boCzd72fcqeJywFn5u8NUjwof8Q7wiM2C1DLC48Tm3LS1piUQXGmS6DqwQMypBYP8hdZ7uHn9hcHERj2QToxhpq3xgcm4VtLtEhZ2HYYYbPDGdDCmDicHSSAeafLAsj5McYh4thXi4csJfjdGQPeAe2w5ePNxQb5kGyD75KX447NU4koQ1sN5Ld3EAPX7qFXwbjVEU2EJTJQ9qn7uDbjbh7hKQk6qNBQd1NWV9yUc93aBKwh8Nabnq6RvFPC5JTbzRKkkH1exZv27j4cm8zY6oTafDqu35eWPfQnhMdSz5EwMKPTUrGNKhtkWhAmfb7nrLD6362pDqLFjhcoefqACUz2UvmEW2YoZHdm53Rp5eQUifphSvdscm3NGTGDBSCJy1WNLQad63ij17sHhppAgTwyTXghBAtvzFHycER9UCxYT7kwDe9MQuwvthpySS5QbyuWDTNtjAPsFPGBAtYJMNAEVoWrw6uFt8oJLArQFSwNyYKPHa57qVE5fHx3WGXYhuNRLtDNm8UJherQGKKqF6TtNF2FM6zrstdrgDFJqXapNY3hVnYmHssmtJiMNgywu1zzeSngBB2g6xu8j3uMSz2CsoUYTuDCjfFWMwwWVEMTysBXgvC8M8J2m2AfAkckf91hMtb2kA8TRFk1kPoYmAJLBtdPcoGidmLsvf1m6fa4EgNsVEMB7wdHj5RUuAuEde8V9GDrmx5uQH9RBcRu3Z",
-      "name": "Lithos difficulty position",
+      "name": "Lithos difficulty forwards contract",
       "kind": "contract",
       "note": "Lithos protocol",
       "source": "registry",
