@@ -1,10 +1,10 @@
-"""Serve /{cid}.webp from /var/nft-preview/{cid[:2]}/{cid}.webp on the private net."""
+"""Serve /{cid}.webp from /var/nft-preview/{cid[:2]}/{cid}.webp on localhost."""
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import os
 
 ROOT = "/var/nft-preview"
-HOST = "10.0.0.3"
-PORT = 8790
+HOST = os.environ.get("NFT_PREVIEW_BIND", "127.0.0.1")
+PORT = int(os.environ.get("NFT_PREVIEW_PORT", "8790"))
 
 
 class Handler(BaseHTTPRequestHandler):
