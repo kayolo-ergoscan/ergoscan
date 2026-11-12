@@ -19,6 +19,13 @@ type Queryable = { query: pg.Pool["query"] };
 
 const failedHeights = new Set<number>();
 let granted = false;
+/**
+ * The pass ran on every indexer tick (~5 s) with or without a block. It now runs when the tip
+ * (height + block id) moved, and at least once a minute (audit 12 Nov: Lithos only on a new tip).
+ */
+const SAME_TIP_RERUN_MS = 60_000;
+let lastTipKey: string | null = null;
+let lastRunAt = 0;
 
 async function grantLithosFindRead(db: Queryable): Promise<void> {
   if (granted) return;
@@ -227,6 +234,11 @@ function mapSnapRow(row: SnapRow) {
 export async function maybeWriteLithosFinds(pool: pg.Pool): Promise<void> {
   const client = await pool.connect();
   try {
+    const head = await client.query<{ k: string }>(
+      `SELECT height::text || ':' || encode(id, 'hex') AS k FROM packed.blocks ORDER BY height DESC LIMIT 1`
+    );
+    const tipKey = head.rows[0]?.k ?? "";
+    if (tipKey && tipKey === lastTipKey && Date.now() - lastRunAt < SAME_TIP_RERUN_MS) return;
     await grantLithosFindRead(client);
     await client.query("BEGIN");
     await client.query(`SET LOCAL statement_timeout = '8s'`);
@@ -243,9 +255,9 @@ export async function maybeWriteLithosFinds(pool: pg.Pool): Promise<void> {
         WHERE ba.token_id = packed.hex32($1)
           AND ba.amount = 1
           AND a.address = $2
-          AND NOT EXISTS (
-            SELECT 1 FROM packed.lithos_find f WHERE f.height = i.spent_height
-          )
+          -- NOT IN over the key is one hashed subplan. NOT EXISTS became a nested anti join that
+          -- seq-scanned lithos_find once per collateral spend (813 × 814 rows, ~23 k scans a minute).
+          AND i.spent_height NOT IN (SELECT f.height FROM packed.lithos_find f)
         ORDER BY i.spent_height
         LIMIT $3`,
       [LITHOS_COLLAT_TOKEN_ID, LITHOS_COLLAT_ADDRESS, PER_TICK]
@@ -268,6 +280,8 @@ export async function maybeWriteLithosFinds(pool: pg.Pool): Promise<void> {
     }
     await writeLithosSnapshot(client);
     await client.query("COMMIT");
+    lastTipKey = tipKey;
+    lastRunAt = Date.now();
   } catch (e) {
     try {
       await client.query("ROLLBACK");
