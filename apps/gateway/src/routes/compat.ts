@@ -24,6 +24,7 @@ import {
   getTxById,
   getTxHeads,
   parseKeysetCursor,
+  addressBoxCountCapped,
   tokenMetaMany,
   tokensBySymbol,
   tokensSearchLite,
@@ -283,7 +284,10 @@ export function registerCompatRoutes(app: Express, deps: CompatDeps): void {
     const cursor = parseKeysetCursor(req.query.cursor);
     const offset = cursor ? 0 : pageOffset(req.query.offset, ADDRESS_OFFSET_MAX);
     if (offset == null) return offsetTooLarge(res, ADDRESS_OFFSET_MAX);
-    const idx = await addressBoxesCursor(address, cursor, limit, offset);
+    const [idx, count] = await Promise.all([
+      addressBoxesCursor(address, cursor, limit, offset),
+      addressBoxCountCapped(address),
+    ]);
     if (!idx) {
       res.status(503).json({ error: "stale", stale: true });
       return;
@@ -291,14 +295,15 @@ export function registerCompatRoutes(app: Express, deps: CompatDeps): void {
     res.json({
       ...itemsPage(
         idx.items.map((b) => boxJson(b)),
-        idx.items.length,
+        // All boxes of the address. Above ADDRESS_BOX_COUNT_CAP: totalExact false, total = the cap.
+        count?.total ?? null,
         offset,
         limit
       ),
+      totalExact: count?.exact ?? false,
       hasMore: idx.hasMore,
       nextCursor: idx.hasMore ? idx.nextCursor : null,
       source: "indexer",
-      note: "total is this page size — no COUNT(boxes). Use nextCursor.",
     });
   });
 

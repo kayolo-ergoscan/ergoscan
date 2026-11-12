@@ -5183,6 +5183,30 @@ export async function tokensSearchLite(
 export type IdxBoxAll = IdxBoxCursor & { spentTxId: string | null };
 
 /** Official `/boxes/byAddress` — spent included. Address index only. */
+/** Exact up to this many; above it the API says "at least". 100 000 index entries ≈ 0.3 s. */
+export const ADDRESS_BOX_COUNT_CAP = 100_000;
+
+/** All boxes (spent and unspent) of an address, counted up to `cap`. null: index unavailable. */
+export async function addressBoxCountCapped(
+  address: string,
+  cap = ADDRESS_BOX_COUNT_CAP
+): Promise<{ total: number; exact: boolean } | null> {
+  if (!packedReadEnabled()) return null;
+  const rows = await qSlow<{ n: string }>(
+    `SELECT count(*)::text AS n FROM (
+       SELECT 1 FROM packed.boxes b
+        WHERE b.addr_id = (SELECT id FROM packed.addr WHERE addr_md5 = md5($1) AND address = $1 LIMIT 1)
+          AND b.creation_height IS NOT NULL
+        LIMIT $2
+     ) x`,
+    [address, cap + 1],
+    2500
+  );
+  if (!rows?.length) return null;
+  const n = Number(rows[0].n);
+  return n > cap ? { total: cap, exact: false } : { total: n, exact: true };
+}
+
 export async function addressBoxesCursor(
   address: string,
   cursor: KeysetCursor | null,
@@ -5190,7 +5214,8 @@ export async function addressBoxesCursor(
   offset = 0
 ): Promise<{ items: IdxBoxAll[]; hasMore: boolean; nextCursor: string | null } | null> {
   const take = Math.max(1, Math.min(100, limit));
-  const skip = cursor ? 0 : Math.max(0, Math.min(500, Math.floor(offset) || 0));
+  // The route caps offset (ADDRESS_OFFSET_MAX). A clamp to 500 here served page 500 for every deeper offset.
+  const skip = cursor ? 0 : Math.max(0, Math.floor(offset) || 0);
   if (packedReadEnabled()) {
     return addressBoxesCursorPacked(address, cursor, take, skip);
   }

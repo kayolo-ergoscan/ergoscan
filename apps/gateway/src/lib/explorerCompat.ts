@@ -307,7 +307,7 @@ export function mapExplorerTx(row: {
   };
 }
 
-export function itemsPage<T>(items: T[], total: number, offset: number, limit: number) {
+export function itemsPage<T>(items: T[], total: number | null, offset: number, limit: number) {
   return { items, total, offset, limit };
 }
 
