@@ -259,7 +259,8 @@ export async function maybeBackfillTokenIssuance(pool: pg.Pool): Promise<void> {
       if (next > fromH) await setState(client, FROM_H_KEY, String(next));
     }
 
-    if (written > 0 || scanned > 0) {
+    // Quiet laps (nothing written) stay out of the journal: the windowed rescan runs every tick.
+    if (written > 0 || (!done && scanned > 0)) {
       console.log(
         `[indexer] token issuance wrote+=${written} scanned=${scanned} batches=${batches} ${Date.now() - t0}ms`
       );
