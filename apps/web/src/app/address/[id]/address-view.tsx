@@ -108,6 +108,8 @@ interface TxRow {
   size?: number | null;
   fee?: number | string | null;
   mempool?: boolean;
+  /** List-form tx meaning (gateway); the activity row reads it from the owner's seat. */
+  meaning?: unknown;
 }
 
 type AddrActivityJson = {

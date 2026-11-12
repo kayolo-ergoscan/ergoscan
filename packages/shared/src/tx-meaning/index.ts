@@ -109,7 +109,7 @@ export function compactMeaning(m: TxMeaning): CompactMeaning {
 
 export { readFacts, multisigOf, shortAddr } from "./facts.js";
 export { assetLabel, assetText, extraNote, formatAmount, sayLines, sayMeaning } from "./summary.js";
-export { meaningView, type MeaningView, type MeaningViewRole } from "./perspective.js";
+export { meaningOwnerRow, meaningView, type MeaningOwnerRow, type MeaningView, type MeaningViewRole } from "./perspective.js";
 export {
   PROTOCOL_NAMES,
   protocolName,

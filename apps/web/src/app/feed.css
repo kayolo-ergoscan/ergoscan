@@ -1655,3 +1655,11 @@ html[data-look="c"] main .txm-card.is-got a.txm-unit {
     max-width: none;
   }
 }
+
+/* Address rows from the owner's seat: «→ KuCoin», «← Gate.io»; an order and its fill link each other. */
+.mx-route > .mx-dir {
+  padding: 0 4px 0 0;
+}
+.feed-facts > a.mx-order:hover {
+  text-decoration: underline;
+}
