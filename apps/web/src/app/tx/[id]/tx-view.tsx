@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
-import { CATEGORY_COLORS } from "@ergoscan/shared";
+import { CATEGORY_COLORS, type TxMeaning } from "@ergoscan/shared";
 import { Shell } from "@/components/Shell";
 import { FavoriteHeart } from "@/components/FavoriteHeart";
 import { AddrFactCard } from "@/components/AddrFactCard";
@@ -51,7 +51,10 @@ import { readHashTab, setHashTab } from "@/lib/hash-tab";
 import { useKeepFresh, usePageSync } from "@/lib/page-sync";
 import { ENTER_MS, SNAPSHOT_FETCH, enteringIds, useEnterIds } from "@/lib/keyed-enter";
 import { paintTxSnapshot } from "@/lib/tx-shape-paint";
+import { parseFullMeaning } from "@/lib/tx-meaning-row";
+import { CopyChip } from "./CopyChip";
 import { TxExplanationPanel } from "./TxExplanationPanel";
+import { TxMeaningHeader } from "./TxMeaningHeader";
 
 const TX_TABS = ["summary", "boxes", "tokens"] as const;
 type TxTab = (typeof TX_TABS)[number];
@@ -242,6 +245,25 @@ export function TxView({
   const loadRef = useRef(load);
   loadRef.current = load;
 
+  // A mempool tx: the mempool's own record names the parties better and says when the node saw it.
+  const [pool, setPool] = useState<{ meaning?: TxMeaning; firstSeen?: number } | null>(null);
+  const unconfirmed = data != null && !data.confirmed;
+  useEffect(() => {
+    if (!unconfirmed || !id) return;
+    const ctl = new AbortController();
+    void fetch(`${getGateway()}/v1/mempool/${encodeURIComponent(id)}`, { ...SNAPSHOT_FETCH, signal: ctl.signal })
+      .then((r) => (r.ok ? (r.json() as Promise<{ meaning?: unknown; firstSeen?: unknown }>) : null))
+      .then((j) => {
+        if (!j) return;
+        setPool({
+          meaning: parseFullMeaning(j.meaning),
+          firstSeen: typeof j.firstSeen === "number" ? j.firstSeen : undefined,
+        });
+      })
+      .catch(() => {});
+    return () => ctl.abort();
+  }, [id, unconfirmed]);
+
   useKeepFresh((silent) => {
     void loadRef.current(silent);
   });
@@ -383,6 +405,33 @@ export function TxView({
       ? `/block/${height}`
       : null;
   const dash = "—";
+  const meaning = useMemo(
+    () => (data && !data.confirmed && pool?.meaning) || parseFullMeaning(data?.meaning),
+    [data, pool]
+  );
+
+  const tabBar = (
+    <SegBar cols={3} className="shrink-0">
+      {TX_TABS.map((idTab) => (
+        <a
+          key={idTab}
+          href={`#${idTab}`}
+          onClick={(e) => {
+            setHashTab(idTab, e);
+            setTab((prev) => {
+              if (prev !== idTab && sheetReadyRef.current) {
+                enter.mark(idsForTabRef.current(idTab));
+              }
+              return idTab;
+            });
+          }}
+          className={segItem(tab === idTab)}
+        >
+          {t(`tx.tab.${idTab}`)}
+        </a>
+      ))}
+    </SegBar>
+  );
 
   return (
     <Shell>
@@ -392,7 +441,31 @@ export function TxView({
         </p>
       )}
 
-      {data && (
+      {data && meaning && (
+        <>
+          <TxMeaningHeader
+            id={id}
+            meaning={meaning}
+            feeNano={data.fee != null ? String(data.fee) : null}
+            fav={txFav}
+            facts={{
+              confirmed: data.confirmed,
+              height,
+              index,
+              blockHref,
+              timestamp: data.timestamp ?? (data.confirmed ? null : pool?.firstSeen ?? null),
+              confirmations: data.numConfirmations ?? null,
+              size: data.size,
+              inputs: declaredIn ?? inputs.length,
+              outputs: declaredOut ?? outputs.length,
+              dataInputs: data.dataInputs?.length ?? 0,
+            }}
+          />
+          <div className="txm-tabs mt-3">{tabBar}</div>
+        </>
+      )}
+
+      {data && !meaning && (
         <>
           <div className="addr-lane">
             <div className="col-span-2 flex min-h-0 flex-col gap-2 lg:col-span-1 lg:row-span-2">
@@ -425,26 +498,7 @@ export function TxView({
                   <span>{chip}</span>
                 </p>
               </AddrFactCard>
-              <SegBar cols={3} className="shrink-0">
-                {TX_TABS.map((idTab) => (
-                  <a
-                    key={idTab}
-                    href={`#${idTab}`}
-                    onClick={(e) => {
-                      setHashTab(idTab, e);
-                      setTab((prev) => {
-                        if (prev !== idTab && sheetReadyRef.current) {
-                          enter.mark(idsForTabRef.current(idTab));
-                        }
-                        return idTab;
-                      });
-                    }}
-                    className={segItem(tab === idTab)}
-                  >
-                    {t(`tx.tab.${idTab}`)}
-                  </a>
-                ))}
-              </SegBar>
+              {tabBar}
             </div>
 
             <AddrFactCard
@@ -576,7 +630,11 @@ export function TxView({
               tokens={tokens}
             />
           </div>
+        </>
+      )}
 
+      {data && (
+        <>
           {sheetReady && tab === "summary" && (
             <div className="feed-sheet mt-3">
               <Feed className="is-rank">
@@ -865,57 +923,5 @@ function ErgFigure({
         ERG
       </span>
     </span>
-  );
-}
-
-function CopyChip({
-  text,
-  copyLabel,
-  copiedLabel,
-  inherit,
-}: {
-  text: string;
-  copyLabel: string;
-  copiedLabel: string;
-  inherit?: boolean;
-}) {
-  const [ok, setOk] = useState(false);
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        void navigator.clipboard?.writeText(text).then(() => {
-          setOk(true);
-          window.setTimeout(() => setOk(false), 1200);
-        });
-      }}
-      className={clsx(
-        "chip-press inline-flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-[6px] transition-colors duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[var(--wash)]",
-        inherit ? "text-inherit hover:text-inherit" : "text-[var(--muted)] hover:text-[var(--text)]"
-      )}
-      aria-label={ok ? copiedLabel : copyLabel}
-    >
-      {ok ? (
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
-          <path
-            d="M2.4 6.2 4.8 8.6 9.6 3.4"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      ) : (
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
-          <rect x="4" y="4" width="6" height="6" rx="1.2" stroke="currentColor" strokeWidth="1.4" />
-          <path
-            d="M3 8.2V3.4A1.2 1.2 0 0 1 4.2 2.2H8"
-            stroke="currentColor"
-            strokeWidth="1.4"
-            strokeLinecap="round"
-          />
-        </svg>
-      )}
-    </button>
   );
 }

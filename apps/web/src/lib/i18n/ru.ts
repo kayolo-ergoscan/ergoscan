@@ -1239,6 +1239,11 @@ export const ru: Record<string, string> = {
   "tx.dataInputs": "{n} вход данных|{n} входа данных|{n} входов данных",
   "tx.noIo": "Нет",
   "tx.confs": "{n} подтв.",
+  "tx.meaning.how": "Как определили",
+  "tx.meaning.rule": "правило",
+  "tx.meaning.boxes": "Боксы",
+  "tx.meaning.seen": "Замечена",
+  "tx.meaning.inMempool": "в мемпуле",
   "tx.explain.eyebrow": "Объяснение транзакции",
   "tx.explain.title": "Что произошло",
   "tx.explain.lead":

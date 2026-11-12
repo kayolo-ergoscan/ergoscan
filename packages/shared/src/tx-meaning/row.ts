@@ -47,7 +47,7 @@ export type MeaningRow = {
 };
 
 /** Russian noun after a number: 1 бокс, 2 бокса, 5 боксов. */
-function ruCount(n: number, one: string, few: string, many: string): string {
+export function ruCount(n: number, one: string, few: string, many: string): string {
   const a = Math.abs(n) % 100;
   const b = a % 10;
   const w = a > 10 && a < 20 ? many : b === 1 ? one : b >= 2 && b <= 4 ? few : many;
@@ -55,17 +55,17 @@ function ruCount(n: number, one: string, few: string, many: string): string {
 }
 
 /** Russian dative after a number: 1 майнеру, 2 майнерам, 21 майнеру. */
-function ruTo(n: number, one: string, more: string): string {
+export function ruTo(n: number, one: string, more: string): string {
   return `${n} ${n % 10 === 1 && n % 100 !== 11 ? one : more}`;
 }
 
-function enCount(n: number, one: string, more: string): string {
+export function enCount(n: number, one: string, more: string): string {
   return `${n} ${n === 1 ? one : more}`;
 }
 
-const POOL_ACTIONS: ReadonlySet<MeaningActionId> = new Set(["swap", "lp-add", "lp-remove", "pool-create"]);
+export const POOL_ACTIONS: ReadonlySet<MeaningActionId> = new Set(["swap", "lp-add", "lp-remove", "pool-create"]);
 /** Actions whose counterparty is the other side of the line: «кто → с кем». */
-const WITH_TO: ReadonlySet<MeaningActionId> = new Set(["send", "loan", "contract-call", "to-contract"]);
+export const WITH_TO: ReadonlySet<MeaningActionId> = new Set(["send", "loan", "contract-call", "to-contract"]);
 
 function whereOf(m: MeaningRowInput, lang: Lang): string | null {
   const p = m.protocol;
@@ -75,7 +75,7 @@ function whereOf(m: MeaningRowInput, lang: Lang): string | null {
   return p === "oracle" && m.pair ? `${name} ${m.pair}` : name;
 }
 
-function chainTo(chain: string | null | undefined, lang: Lang): string {
+export function chainTo(chain: string | null | undefined, lang: Lang): string {
   if (lang === "ru") return chain ? `в ${chain}` : "в другую сеть";
   return chain ? `to ${chain}` : "to another chain";
 }
@@ -195,7 +195,7 @@ function moreText(more: MeaningAssetLike[]): string {
 }
 
 /** One shape for both forms: no token = ERG; token name and decimals only when known. */
-function asset(a: MeaningAssetLike): MeaningAssetLike {
+export function asset(a: MeaningAssetLike): MeaningAssetLike {
   if (!a.token) return { amount: a.amount };
   const out: MeaningAssetLike = { token: a.token, amount: a.amount };
   if (a.name) out.name = a.name;

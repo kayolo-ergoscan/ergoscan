@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { meaningRow, sayMeaning, type CompactMeaning, type TxMeaning } from "@ergoscan/shared";
-import { foldServiceRows, isTxFold, meaningTile, parseMeaning, type TxFold } from "./tx-meaning-row";
+import { meaningPage, meaningRow, sayMeaning, type CompactMeaning, type TxMeaning } from "@ergoscan/shared";
+import { foldServiceRows, isTxFold, meaningTile, parseFullMeaning, parseMeaning, phraseParts, type TxFold } from "./tx-meaning-row";
 
 const ACTOR = "9fYVe8FpdUEZRwmVgDtFGbhB3JBSoNYVx8f7U3cYofrcUBYreou";
 const RSN = "8b08cdd5449a9592a9e79711d7d79249d7a03c535d17efaee83e216e80a44c4b";
@@ -51,6 +51,33 @@ describe("tx meaning rows: parseMeaning", () => {
     }
     // A prototype key is not an action.
     assert.equal(parseMeaning({ v: 1, action: "toString" }), undefined);
+  });
+});
+
+describe("tx meaning rows: the tx page", () => {
+  it("parseFullMeaning keeps only the full form", () => {
+    assert.equal(parseFullMeaning(SWAP_FULL), SWAP_FULL);
+    const c: CompactMeaning = { v: 1, action: "send", conf: "flow", actor: ACTOR, gave: [{ amount: "5" }] };
+    assert.equal(parseFullMeaning(c), undefined, "the list form has no fee or why");
+    assert.equal(parseFullMeaning({ ...SWAP_FULL, fee: { payer: null, nano: 5 } }), undefined);
+    assert.equal(parseFullMeaning({ ...SWAP_FULL, why: null }), undefined);
+    assert.equal(parseFullMeaning({ ...SWAP_FULL, action: "teleport" }), undefined);
+    assert.equal(parseFullMeaning(null), undefined);
+  });
+
+  it("phraseParts: addresses become links, figures stand out, names keep their digits", () => {
+    const pg = meaningPage(SWAP_FULL, "ru");
+    const parts = phraseParts(pg.phrase, pg.parties);
+    assert.equal(parts.map((p) => p.text).join(""), pg.phrase, "nothing lost");
+    assert.deepEqual(parts.filter((p) => p.addr).map((p) => p.addr), [ACTOR]);
+    assert.deepEqual(parts.filter((p) => p.num).map((p) => p.text), ["6.73", "132.36"]);
+    const named = phraseParts("Hero Miners выплатил 1 234.50 ERG майнерам (20); SigUSD2 и ERG2USD", [
+      { label: "Hero", addr: "x" },
+      { label: "Hero Miners", addr: "88dh" },
+    ]);
+    assert.deepEqual(named[0], { text: "Hero Miners", addr: "88dh" }, "the longer label wins");
+    assert.deepEqual(named.filter((p) => p.num).map((p) => p.text), ["1 234.50", "20"]);
+    assert.equal(named.map((p) => p.text).join(""), "Hero Miners выплатил 1 234.50 ERG майнерам (20); SigUSD2 и ERG2USD");
   });
 });
 

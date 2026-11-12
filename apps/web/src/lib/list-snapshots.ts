@@ -1130,6 +1130,8 @@ export type TxPageSnapshot = {
   /** False when box_assets could not be read for this response. */
   assetsComplete?: boolean;
   tokenMeta?: TxTokenMeta[];
+  /** What the tx did (shared tx-meaning, full form); the page header reads it. */
+  meaning?: unknown;
   ball?: {
     feeRate: number;
     inputCount: number;
