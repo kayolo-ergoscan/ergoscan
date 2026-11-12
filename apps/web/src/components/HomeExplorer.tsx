@@ -36,6 +36,7 @@ import { SNAPSHOT_FETCH, snapshotPath } from "@/lib/keyed-enter";
 import { majorityColorInk, majorityTxInk } from "@/lib/block-ink";
 import {
   parseRentTape,
+  parseRentEpochBoxes,
   parseRentEpochNano,
   type RentTapeRow,
 } from "@ergoscan/shared";
@@ -165,6 +166,7 @@ export function HomeExplorer({
   initialChartError = false,
   initialRentTape = [],
   initialRentEpochNano = null,
+  initialRentEpochBoxes = null,
   initialRentDanger = null,
   previewShare = false,
 }: {
@@ -181,6 +183,8 @@ export function HomeExplorer({
   initialChartError?: boolean;
   initialRentTape?: RentTapeRow[];
   initialRentEpochNano?: string | null;
+  /** Boxes that turn four years old before this header epoch ends. */
+  initialRentEpochBoxes?: number | null;
   /** Tokens short on ERG, from the rent snapshot. Null until that field arrives. */
   initialRentDanger?: RentDangerRow[] | null;
   /** Local `/?preview=share` — keep fixture rows, don't overwrite from stage. */
@@ -216,6 +220,7 @@ export function HomeExplorer({
   const [poolHover, setPoolHover] = useState<{ label: string; pct: number } | null>(null);
   const [rentTape, setRentTape] = useState<RentTapeRow[]>(initialRentTape);
   const [rentEpochNano, setRentEpochNano] = useState<string | null>(initialRentEpochNano);
+  const [rentEpochBoxes, setRentEpochBoxes] = useState<number | null>(initialRentEpochBoxes);
   const [rentDanger, setRentDanger] = useState<RentDangerRow[]>(initialRentDanger ?? []);
   const [rentDangerReady, setRentDangerReady] = useState(initialRentDanger != null);
   const snapRetry = useRef(0);
@@ -281,6 +286,7 @@ export function HomeExplorer({
           change24h?: number | null;
           rentTape?: unknown;
           rentEpochNano?: unknown;
+          rentEpochBoxes?: unknown;
           rentDanger?: unknown;
         }>;
       })
@@ -430,6 +436,8 @@ export function HomeExplorer({
           if (tape) setRentTape(tape);
           const epochNano = parseRentEpochNano(j.rentEpochNano);
           if (epochNano != null) setRentEpochNano(epochNano);
+          const epochBoxes = parseRentEpochBoxes(j.rentEpochBoxes);
+          if (epochBoxes != null) setRentEpochBoxes(epochBoxes);
           const danger = parseRentDanger(j.rentDanger);
           setRentDanger(danger ?? []);
           setRentDangerReady(true);
@@ -843,6 +851,9 @@ export function HomeExplorer({
         <HomeRentTape
           rows={rentTape}
           epochRentNano={rentEpochNano}
+          epochBoxes={rentEpochBoxes}
+          height={tipHeight}
+          avgBlockMs={avgBlockMs}
           danger={rentDanger}
           dangerReady={rentDangerReady}
           previewShare={previewShare}

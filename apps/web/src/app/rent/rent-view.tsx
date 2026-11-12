@@ -986,7 +986,8 @@ function RentDanger({
 }) {
   return (
     <section
-      className="home-tile-enter mod mt-2 min-w-0 max-w-full overflow-hidden rounded-[20px] border border-[var(--border)] bg-[var(--module)] px-4 py-3.5 sm:px-5"
+      id="danger"
+      className="home-tile-enter mod mt-2 min-w-0 max-w-full scroll-mt-24 overflow-hidden rounded-[20px] border border-[var(--border)] bg-[var(--module)] px-4 py-3.5 sm:px-5"
       style={{ "--enter": 5 } as CSSProperties}
     >
       <div className="flex items-start gap-3">
