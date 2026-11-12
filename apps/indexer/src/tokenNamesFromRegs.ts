@@ -1,6 +1,9 @@
 /**
- * Fill tokens.name from EIP-4 on the issuer box (box_id = token_id).
- * Artwork from the mint *output* (spend of that box) — R7–R9 live there, not
+ * Fill tokens.name from EIP-4 R4 of the first mint *output* that holds the token
+ * (lowest output_index, as the node's token index). Not the spent issuer box
+ * (box_id = token_id): in chain mints that box is the previous mint output and
+ * carries the previous NFT's R4 (12 Nov 2026: 13 550 names were one off).
+ * Artwork from the mint output too — R7–R9 live there, not
  * on the spent input. Known ids win over leftover R4. Do not read watcher-box
  * R4 from the spend tx. No node, no ENRICH_TOKENS. Batched PK joins only.
  * Empty artwork_url '' is a "checked, none" sentinel and may be overwritten
@@ -18,7 +21,8 @@ import { capStatements, releaseCapped } from "./db.js";
 import { slidePassFrom } from "./tokenPassWindow.js";
 
 const BATCH = 40;
-const NAME_MAX = 64;
+/** Node keeps any length; 128 covers 212 of 225 longer real names (12 Nov 2026). */
+const NAME_MAX = 128;
 const CURSOR_KEY = "token_meta_r4_cursor";
 const DONE_KEY = "token_meta_r4_v2";
 const FROM_H_KEY = "token_meta_r4_from_height";
@@ -123,8 +127,32 @@ async function mintRegsForIds(
   return r.rows;
 }
 
-/** EIP-4 name/art: the issuance box itself, not a later watcher output. */
+/**
+ * EIP-4 name: registers of the first output of the mint tx that holds the token
+ * (same pick as tokenIssuance.ts and the node). Not a later watcher output.
+ */
 async function issuanceRegsForIds(
+  client: Queryable,
+  ids: string[]
+): Promise<{ token_id: string; additional_registers: unknown }[]> {
+  if (!ids.length) return [];
+  const r = await client.query<{
+    token_id: string;
+    additional_registers: unknown;
+  }>(
+    `SELECT DISTINCT ON (t.token_id) t.token_id, o.additional_registers
+       FROM unnest($1::text[]) AS t(token_id)
+       JOIN packed.boxes spent ON spent.box_id = packed.hex32(t.token_id)
+       JOIN packed.boxes o ON o.creation_tx_id = spent.spent_tx_id
+       JOIN packed.box_assets a ON a.box_id = o.box_id AND a.token_id = spent.box_id
+      ORDER BY t.token_id, o.output_index NULLS LAST, a.amount DESC`,
+    [ids]
+  );
+  return r.rows;
+}
+
+/** The spent issuer box (box_id = token_id). Artwork fallback only, never the name. */
+async function issuerBoxRegsForIds(
   client: Queryable,
   ids: string[]
 ): Promise<{ token_id: string; additional_registers: unknown }[]> {
@@ -202,13 +230,15 @@ export async function maybeBackfillTokenNamesFromRegs(
 
     const rows = await issuanceRegsForIds(client, ids);
     const mintRows = await mintRegsForIds(client, ids, "R9");
+    const issuerRows = await issuerBoxRegsForIds(client, ids);
     const mintById = new Map(mintRows.map((r) => [r.token_id, r.additional_registers]));
+    const issuerById = new Map(issuerRows.map((r) => [r.token_id, r.additional_registers]));
     let named = 0;
     let arted = 0;
     for (const row of rows) {
       const known = Boolean(knownErgoTokenName(row.token_id));
       const name = pickTokenName(row.token_id, row.additional_registers);
-      const art = pickArtUrl(mintById.get(row.token_id), row.additional_registers);
+      const art = pickArtUrl(mintById.get(row.token_id), issuerById.get(row.token_id));
       const u = await client.query(
         // Write only a real change (12 Nov 2026 audit: ~1.2 M no-op UPDATEs a day, one per rescan).
         `UPDATE tokens t
@@ -417,7 +447,7 @@ export async function maybeBackfillMintArtwork(pool: pg.Pool): Promise<void> {
     }
 
     const mintRows = await mintRegsForIds(client, ids, "R9");
-    const issuerRows = await issuanceRegsForIds(client, ids);
+    const issuerRows = await issuerBoxRegsForIds(client, ids);
     const issuerById = new Map(issuerRows.map((r) => [r.token_id, r.additional_registers]));
     let arted = 0;
     for (const row of mintRows) {

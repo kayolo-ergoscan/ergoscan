@@ -570,7 +570,7 @@ function eip4TextNameFromRegs(issuanceRegs: unknown): string | null {
   if (!r4 || r4.kind !== "text") return null;
   const text = (r4.text || "").trim();
   const n = [...text].length;
-  if (n < 1 || n > 64) return null;
+  if (n < 1 || n > 128) return null;
   if (/^https?:\/\//i.test(text) || text.startsWith("ipfs://")) return null;
   if (/[\x00-\x08\x0e-\x1f]/.test(text)) return null;
   return text;
