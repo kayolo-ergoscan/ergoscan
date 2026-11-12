@@ -1,0 +1,56 @@
+/*
+ * Variant C «Туман» (mist). No lines at all. The header keeps its black
+ * collar and gutter; the pinned plate lifts one tone (tonal elevation, not a
+ * shadow) and rows dissolve into the card colour just under it.
+ */
+html[data-seam="c"] .feed {
+  --feed-pin: var(--seam-pin);
+}
+@media (min-width: 1024px) {
+  html[data-seam="c"] .stage-col > header.sticky {
+    box-shadow: 0 0 0 var(--float-pad) var(--bg) !important;
+  }
+}
+@media (max-width: 1023px) {
+  html[data-seam="c"] .stage-col > header.sticky::before {
+    background: var(--bg) !important;
+  }
+}
+html[data-seam="c"] .feed-plate {
+  transition: background-color 220ms var(--ease);
+}
+html[data-seam="c"] .feed-plate::after {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 36px;
+  background: linear-gradient(var(--module), color-mix(in srgb, var(--module) 0%, transparent));
+  opacity: 0;
+  transition: opacity 220ms var(--ease);
+}
+html[data-seam="c"] .feed-plate[data-stuck] {
+  background: var(--bg-elevated);
+  box-shadow: 0 -6px 0 6px var(--bg);
+}
+html[data-seam="c"] .feed-plate[data-stuck]::after {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-seam="c"] .feed-plate,
+  html[data-seam="c"] .feed-plate::after {
+    transition: none;
+  }
+}
+
+@media (max-width: 1023px) {
+  /* Over a solid band the phone pill needs no glass: flat tile, like the desktop header. */
+  html[data-seam="c"] .phone-toolbar {
+    background: var(--module) !important;
+    border-color: transparent !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+}
