@@ -1755,8 +1755,12 @@ function BlockCadence({
     yard[yard.length - 1] ??
     null;
   const activeRow = active ? slots.find((b) => b.id === active.id) ?? null : null;
+  // The pour counter belongs to the new block only while it is in the yard (holding).
+  // Before its first ball lands, `last` is still the previous block and keeps its own count.
   const activeTxs =
-    active && grow && last && active.id === last.id && grow.total > 0 ? grow.n : (activeRow?.txCount ?? 0);
+    holding && active && grow && last && active.id === last.id && grow.total > 0
+      ? grow.n
+      : (activeRow?.txCount ?? 0);
 
   return (
     <section
