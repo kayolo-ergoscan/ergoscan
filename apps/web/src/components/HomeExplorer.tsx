@@ -611,7 +611,7 @@ export function HomeExplorer({
             </div>
             <KpiValue flush full muted={mcap == null}>
               {mcap != null ? (
-                <ReelText text={`${formatGroupedNumber(Math.round(mcap), 0, 0)} $`} />
+                <ReelText text={`$${formatGroupedNumber(Math.round(mcap), 0, 0)}`} />
               ) : (
                 mcapMiss
               )}
@@ -620,7 +620,7 @@ export function HomeExplorer({
               <TileName>{t("home.volume24h")}</TileName>
               <KpiValue flush full muted={vol24 == null}>
                 {vol24 != null ? (
-                  <ReelText text={`${formatGroupedNumber(Math.round(vol24), 0, 0)} $`} />
+                  <ReelText text={`$${formatGroupedNumber(Math.round(vol24), 0, 0)}`} />
                 ) : (
                   "—"
                 )}
@@ -1179,15 +1179,16 @@ function EpochBar({
           {t("home.epoch")} <ReelText text={n.toLocaleString(loc)} />
         </p>
         <div className="flex min-w-0 items-center gap-3 text-[12px] leading-none tabular-nums">
-          <span className="epoch-slot inline-flex min-w-0 items-baseline gap-1 font-semibold">
+          <span className="epoch-slot inline-flex shrink-0 items-baseline gap-1 whitespace-nowrap font-semibold">
             <ReelText text={slot.toLocaleString(loc)} />
-            <span className="font-medium opacity-70">/ {ERGO_EPOCH_LEN.toLocaleString(loc)}</span>
+            {/* A phone keeps the slot and the %; the epoch length is the same every time. */}
+            <span className="font-medium opacity-70 max-sm:hidden">/ {ERGO_EPOCH_LEN.toLocaleString(loc)}</span>
           </span>
           <span className="epoch-slot inline-flex shrink-0 items-center gap-1 font-semibold">
             <EpochClock />
             <ReelText text={`${pct.toFixed(0)}%`} />
           </span>
-          <span className="epoch-left inline-flex shrink-0 items-center gap-1 font-medium">
+          <span className="epoch-left inline-flex shrink-0 items-center gap-1 whitespace-nowrap font-medium">
             <EpochFlag />
             <ReelText text={formatRemain(leftMs)} />
             <span className="font-normal opacity-80">{t("home.epochLeft")}</span>
