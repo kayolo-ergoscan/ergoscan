@@ -1447,7 +1447,10 @@ function FeedTokenTxRow({
   const to = partyList(tx.to);
   const many = t("address.multiple");
   const manyHint = t("address.multipleHint");
-  const isPool = (a: string) => describeParty(a).kind === "pool";
+  const isPool = (a: string) => {
+    const party = describeParty(a);
+    return party.kind === "pool" || /\bpool\b/i.test(party.known ?? "");
+  };
   const poolFrom = tx.kind === "swap" ? from.find(isPool) : undefined;
   const poolTo = tx.kind === "swap" ? to.find(isPool) : undefined;
   const pool = poolFrom && !poolTo ? poolFrom : poolTo && !poolFrom ? poolTo : undefined;

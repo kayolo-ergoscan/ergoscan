@@ -36,7 +36,7 @@ import { Feed, FeedBoard, FeedCount, FeedEmpty, FeedPlate, FeedSkeleton, FeedSor
 import { FeedLpRow, LP_SORT_LABEL, type FeedLpHolder, type FeedLpSort } from "@/components/feed/FeedPoolRow";
 import { FeedSwapTape, swapEventId } from "@/components/feed/FeedSwapRow";
 import { getGateway } from "@/lib/config";
-import { isErgBase, type PoolBoardRow } from "@/lib/defi-pools";
+import { defiVenueCaption, isErgBase, type PoolBoardRow } from "@/lib/defi-pools";
 
 const PACK = 25;
 const LP_SORTS: LpSort[] = ["share", "tvl", "txs", "last", "first"];
@@ -227,7 +227,7 @@ export function PoolCardView({
                 {name}
               </span>
               <span className="min-w-0 truncate text-[12px] font-normal text-[var(--muted-2)]">
-                {pool?.venue || "\u00a0"}
+                {(pool ? defiVenueCaption(pool.venue, t) : null) || "\u00a0"}
               </span>
             </h1>
             <p className="mt-0.5 flex min-w-0 items-center gap-1">
