@@ -27,6 +27,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
+import { Tip, TipFigure, TipHead } from "@/components/Tip";
 import { TokenLogo } from "@/components/TokenBadge";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { formatDottedDate, formatH24, formatScaledAmount, formatScaledFixed, formatScaledGlance, shortId } from "@/lib/format";
@@ -347,14 +348,17 @@ export function FeedTile({
   title?: string;
 }) {
   return (
-    <span
-      className={clsx("feed-tile", hollow && "is-hollow", children != null && "has-art")}
-      data-k={k}
-      title={title}
-      aria-hidden={title ? undefined : true}
-    >
-      {children ?? <FeedGlyph g={g ?? "none"} />}
-    </span>
+    <Tip content={title}>
+      <span
+        className={clsx("feed-tile", hollow && "is-hollow", children != null && "has-art")}
+        data-k={k}
+        role={title ? "img" : undefined}
+        aria-label={title || undefined}
+        aria-hidden={title ? undefined : true}
+      >
+        {children ?? <FeedGlyph g={g ?? "none"} />}
+      </span>
+    </Tip>
   );
 }
 
@@ -402,6 +406,8 @@ function FeedOpen({ href }: { href: string }) {
 function isInteractive(e: MouseEvent): boolean {
   const el = e.target as HTMLElement;
   if (el.closest("a,button,input,select,label,[role='button']")) return true;
+  // A finger on a tip trigger (a meter, a kind tile) reads the tip; the row stays as it is.
+  if ((e.nativeEvent as PointerEvent).pointerType === "touch" && el.closest("[data-tip]")) return true;
   const sel = typeof window !== "undefined" ? window.getSelection() : null;
   return !!sel && sel.toString().length > 0;
 }
@@ -625,19 +631,35 @@ export function FeedAmount({
       ? formatScaledGlance(abs, decimals, tag).text
       : formatScaledAmount(abs, decimals, tag);
   const sign = signed ? signOf(raw) : "";
+  const tone = signed ? (raw > 0n ? "var(--up)" : raw < 0n ? "var(--down)" : undefined) : undefined;
+  // The row shows a glance; the tip gives every digit. Nothing to add when they match.
   return (
-    <span
-      className={clsx(
-        "feed-amt tabular-nums",
-        signed && (raw > 0n ? "is-up" : raw < 0n ? "is-down" : "is-zero"),
-        className
-      )}
-      title={`${sign}${exact}${typeof unit === "string" ? ` ${unit}` : ""}`}
+    <Tip
+      tap={false}
+      content={
+        exact === text
+          ? null
+          : () => (
+              <TipFigure ink={tone}>
+                {sign}
+                {exact}
+                {typeof unit === "string" ? ` ${unit}` : ""}
+              </TipFigure>
+            )
+      }
     >
-      {sign}
-      {text}
-      {unit ? <span className="feed-unit">{unit}</span> : null}
-    </span>
+      <span
+        className={clsx(
+          "feed-amt tabular-nums",
+          signed && (raw > 0n ? "is-up" : raw < 0n ? "is-down" : "is-zero"),
+          className
+        )}
+      >
+        {sign}
+        {text}
+        {unit ? <span className="feed-unit">{unit}</span> : null}
+      </span>
+    </Tip>
   );
 }
 
@@ -662,12 +684,26 @@ export function FeedTokenChip({
   const glance = formatScaledGlance(abs, dec, feedLoc(locale));
   const sym = tokenSymbol(tid, meta?.name) || shortId(tid, 4);
   const sign = signed ? signOf(amt) : "";
+  const tone = signed ? (amt > 0n ? "var(--up)" : amt < 0n ? "var(--down)" : undefined) : undefined;
   return (
+    <Tip
+      tap={false}
+      content={() => (
+        <>
+          <TipHead chip={sym} ink="var(--c-token, #5b8dff)">
+            {meta?.name && meta.name !== sym ? meta.name : null}
+          </TipHead>
+          <TipFigure ink={tone}>
+            {sign}
+            {glance.exact}
+          </TipFigure>
+        </>
+      )}
+    >
     <Link
       prefetch={false}
       href={`/token/${tid}`}
       className={clsx("feed-chip", className)}
-      title={`${sign}${glance.exact} ${sym}`}
     >
       <TokenLogo tokenId={tid} artworkUrl={meta?.artworkUrl ?? null} size={16} />
       <span className={clsx("tabular-nums", signed && (amt > 0n ? "is-up" : amt < 0n ? "is-down" : undefined))}>
@@ -676,6 +712,7 @@ export function FeedTokenChip({
       </span>
       <span className="feed-chip-sym">{sym}</span>
     </Link>
+    </Tip>
   );
 }
 
@@ -709,24 +746,28 @@ export function FeedTokenChips({
         />
       ))}
       {rest > 0 ? (
-        <button
-          type="button"
-          className="feed-chip is-plain feed-more-wide tabular-nums"
-          title={tn("feed.moreTokens", rest)}
-          onClick={() => setOpen(true)}
-        >
-          +{rest}
-        </button>
+        <Tip content={tn("feed.moreTokens", rest)} tap={false}>
+          <button
+            type="button"
+            className="feed-chip is-plain feed-more-wide tabular-nums"
+            aria-label={tn("feed.moreTokens", rest)}
+            onClick={() => setOpen(true)}
+          >
+            +{rest}
+          </button>
+        </Tip>
       ) : null}
       {!open && tokens.length > 1 ? (
-        <button
-          type="button"
-          className="feed-chip is-plain feed-more-narrow tabular-nums"
-          title={tn("feed.moreTokens", tokens.length - 1)}
-          onClick={() => setOpen(true)}
-        >
-          +{tokens.length - 1}
-        </button>
+        <Tip content={tn("feed.moreTokens", tokens.length - 1)} tap={false}>
+          <button
+            type="button"
+            className="feed-chip is-plain feed-more-narrow tabular-nums"
+            aria-label={tn("feed.moreTokens", tokens.length - 1)}
+            onClick={() => setOpen(true)}
+          >
+            +{tokens.length - 1}
+          </button>
+        </Tip>
       ) : null}
     </span>
   );
@@ -735,9 +776,9 @@ export function FeedTokenChips({
 /** A plain chip: a count or a word, same shape as a token chip. */
 export function FeedChip({ children, title, className }: { children: ReactNode; title?: string; className?: string }) {
   return (
-    <span className={clsx("feed-chip is-plain", className)} title={title}>
-      {children}
-    </span>
+    <Tip content={title}>
+      <span className={clsx("feed-chip is-plain", className)}>{children}</span>
+    </Tip>
   );
 }
 
@@ -745,7 +786,8 @@ export function FeedChip({ children, title, className }: { children: ReactNode; 
 export function FeedMeter({ pct, label, title }: { pct: number; label: string; title?: string }) {
   const lit = !(pct > 0) ? 0 : Math.max(1, Math.min(10, Math.ceil(pct / 10)));
   return (
-    <span className="feed-meter" role="img" aria-label={title ?? label} title={title ?? label}>
+    <Tip content={title ?? label}>
+    <span className="feed-meter" role="img" aria-label={title ?? label}>
       <span className="feed-meter-steps" aria-hidden>
         {Array.from({ length: 10 }, (_, i) => (
           <span key={i} className={i < lit ? "is-lit" : undefined} />
@@ -755,6 +797,7 @@ export function FeedMeter({ pct, label, title }: { pct: number; label: string; t
         {label}
       </span>
     </span>
+    </Tip>
   );
 }
 

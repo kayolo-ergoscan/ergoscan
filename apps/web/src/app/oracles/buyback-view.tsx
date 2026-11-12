@@ -1,5 +1,6 @@
 "use client";
 
+import { Tip, TipInfo } from "@/components/Tip";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -351,11 +352,11 @@ export function BuybackView({ kind, initial }: { kind: BuybackKind; initial?: Bu
               >
                 <div className="mb-2 min-w-0">
                   <div className="flex h-[22px] min-w-0 items-center gap-3">
-                    <h2
-                      className="m-0 truncate text-[17px] font-semibold leading-[1.15] tracking-tight"
-                      title={t("buyback.chartHint")}
-                    >
-                      {t("buyback.chartTitle")}
+                    <h2 className="m-0 flex min-w-0 items-center gap-1.5 text-[17px] font-semibold leading-[1.15] tracking-tight">
+                      <Tip content={t("buyback.chartHint")} tap={false}>
+                        <span className="truncate">{t("buyback.chartTitle")}</span>
+                      </Tip>
+                      <TipInfo content={t("buyback.chartHint")} label={t("buyback.chartHint")} />
                     </h2>
                   </div>
                   <div className="mt-2 flex items-center gap-3 text-[12px] text-[var(--muted)]">
@@ -448,10 +449,12 @@ export function BuybackView({ kind, initial }: { kind: BuybackKind; initial?: Bu
                   {notes.length > 0 ? (
                     <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[12px] leading-snug">
                       {notes.map((note) => (
-                        <li key={note.key} className="min-w-0" title={note.hint}>
-                          <span className="text-[var(--muted-2)]">{note.label} </span>
-                          <span className="text-[var(--text)]">{note.value}</span>
-                        </li>
+                        <Tip key={note.key} content={note.hint}>
+                          <li className="min-w-0">
+                            <span className="text-[var(--muted-2)]">{note.label} </span>
+                            <span className="text-[var(--text)]">{note.value}</span>
+                          </li>
+                        </Tip>
                       ))}
                     </ul>
                   ) : null}

@@ -1,5 +1,6 @@
 "use client";
 
+import { Tip, TipRow, TipRows } from "@/components/Tip";
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
 import clsx from "clsx";
@@ -222,7 +223,17 @@ function FeedFindRow({ row, lead, enterClass }: { row: LithosFindItem; lead: Fee
             <span className="tabular-nums">{lit(row.holdingLit, locale)} LIT</span>
           </FeedField>
           <FeedField label={`${t("lithosP.shares")} · ${t("lithosP.sharesHint")}`}>
-            <span className="tabular-nums">{shares}</span>
+            <Tip
+              content={() => (
+                <TipRows>
+                  <TipRow label={t("lithosP.team")}>{lit(row.teamLit, locale)} LIT</TipRow>
+                  <TipRow label={t("lithosP.investors")}>{lit(row.investorLit, locale)} LIT</TipRow>
+                  <TipRow label={t("lithosP.auditor")}>{lit(row.auditorLit, locale)} LIT</TipRow>
+                </TipRows>
+              )}
+            >
+              <span className="tabular-nums">{shares}</span>
+            </Tip>
           </FeedField>
           <FeedField label={t("lithosP.time")}>
             <span className="tabular-nums" suppressHydrationWarning>

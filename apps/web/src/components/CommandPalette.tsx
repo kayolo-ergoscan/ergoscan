@@ -27,8 +27,12 @@ import {
   IconTxs,
 } from "@/components/nav-icons";
 import { lookupAddress, searchAddressBook } from "@/lib/address-book";
-import { orderTokenHitsByHolders } from "@/lib/token-hit-rank";
+import { rankTokenHits } from "@/lib/token-hit-rank";
 import { usePaperPress } from "@/lib/use-paper-press";
+import { tokenKnown } from "@/lib/token-meta";
+import { canReadClipboard, pasteTarget } from "@/lib/search-paste";
+import { sheetOnTop, useSheetHistory } from "./BottomSheet";
+import { KnownTokenMark } from "./KnownTokenMark";
 
 interface Hit {
   type: string;
@@ -36,6 +40,8 @@ interface Hit {
   label?: string;
   path?: string;
   layer?: "index" | "wide";
+  /** Token hits that share a name: holder count from the catalog. */
+  holders?: number;
 }
 
 type RecentHit = Hit & { ts?: number };
@@ -49,6 +55,8 @@ type Row = {
 
 const RECENTS_KEY = "lumen-stage-search-recents";
 const HISTORY_SHOW = 6;
+/** Phone search shows more of the history: there is no keyboard list to scroll. */
+const HISTORY_SHOW_PHONE = 8;
 const HISTORY_STORE = 12;
 const GROUP_CAP = 6;
 const TYPE_ORDER = ["block", "tx", "address", "token", "box"];
@@ -266,7 +274,7 @@ function ListHead({
 export function CommandPalette() {
   const router = useRouter();
   const t = useT();
-  const { locale } = useI18n();
+  const { locale, tn } = useI18n();
   const { api } = useSiteHost();
   const reduce = useReducedMotion();
   const enter = useEnterIds();
@@ -280,6 +288,10 @@ export function CommandPalette() {
   const [active, setActive] = useState(0);
   const [recents, setRecents] = useState<RecentHit[]>([]);
   const [searched, setSearched] = useState(false);
+  /** Below lg the search is a full-screen sheet with Cancel, clear and Paste. */
+  const [phone, setPhone] = useState(false);
+  const [canPaste, setCanPaste] = useState(false);
+  const [pasteMiss, setPasteMiss] = useState(false);
   const uid = useId();
   const listId = `${uid}-list`;
 
@@ -297,6 +309,54 @@ export function CommandPalette() {
     setPending(false);
     setSearched(false);
   }, []);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 1023px)");
+    const sync = () => setPhone(mq.matches);
+    sync();
+    setCanPaste(canReadClipboard());
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+
+  // Phone: Back closes the search like any other sheet.
+  const { leave } = useSheetHistory(open && phone, close);
+
+  useEffect(() => {
+    setPasteMiss(false);
+  }, [q, open]);
+
+  const onPaste = useCallback(async () => {
+    setPasteMiss(false);
+    try {
+      const hit = pasteTarget(await navigator.clipboard.readText());
+      if (!hit) {
+        setPasteMiss(true);
+        return;
+      }
+      setQ(hit);
+      inputRef.current?.focus();
+    } catch {
+      setPasteMiss(true);
+    }
+  }, []);
+
+  /** Leave the search for a page. From the phone sheet the page replaces the sheet's history entry. */
+  const navigate = useCallback(
+    (dest: string) => {
+      const fromSheet = sheetOnTop();
+      if (fromSheet) leave();
+      close();
+      if (dest.startsWith("http")) {
+        window.location.assign(dest);
+        return;
+      }
+      noteRouteNavigation(dest);
+      if (fromSheet) router.replace(dest);
+      else router.push(dest);
+    },
+    [close, leave, router]
+  );
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -381,7 +441,14 @@ export function CommandPalette() {
               })
             : [];
           if (indexHits.length) {
-            apply(await orderTokenHitsByHolders(q.trim(), indexHits, gw, ac.signal));
+            const ranked = await rankTokenHits(q.trim(), indexHits, gw, ac.signal);
+            apply(
+              ranked.hits.map((h) =>
+                h.type === "token" && ranked.holders[h.id] != null
+                  ? { ...h, holders: ranked.holders[h.id] }
+                  : h
+              )
+            );
             return;
           }
           const s = await fetch(`${gw}/v1/search?q=${qEnc}`, {
@@ -423,8 +490,8 @@ export function CommandPalette() {
     [hits]
   );
   const historyShown = useMemo(
-    () => recents.slice(0, HISTORY_SHOW).map(decorateAddressHit),
-    [recents]
+    () => recents.slice(0, phone ? HISTORY_SHOW_PHONE : HISTORY_SHOW).map(decorateAddressHit),
+    [recents, phone]
   );
   const showHistory =
     historyShown.length > 0 && (!q.trim() || hits.length === 0);
@@ -483,17 +550,10 @@ export function CommandPalette() {
     (h: Hit) => {
       pushRecent(h);
       setRecents(readRecents());
-      close();
       const path = safePath(h.path);
-      const dest = explorerHref(path ?? `/search?q=${encodeURIComponent(h.id)}`, api);
-      if (dest.startsWith("http")) {
-        window.location.assign(dest);
-        return;
-      }
-      noteRouteNavigation(dest);
-      router.push(dest);
+      navigate(explorerHref(path ?? `/search?q=${encodeURIComponent(h.id)}`, api));
     },
-    [router, close, api]
+    [navigate, api]
   );
 
   const onInputKey = (e: InputKeyEvent<HTMLInputElement>) => {
@@ -562,9 +622,12 @@ export function CommandPalette() {
     transition: { duration: 0.14, ease: EASE },
   };
 
+  const loc = locale === "ru" ? "ru-RU" : "en-US";
   const renderOption = (row: Row, i: number) => {
     const selected = i === active;
     const keyId = `${row.hit.type}:${row.hit.id}`;
+    const token = row.hit.type === "token" && !row.recent;
+    const holders = token ? row.hit.holders : undefined;
     return (
       <div
         key={row.key}
@@ -574,24 +637,33 @@ export function CommandPalette() {
         onMouseEnter={() => setActive(i)}
         onClick={() => go(row.hit)}
         className={clsx(
-          "chip-press group mb-0.5 flex w-full cursor-pointer items-center gap-2.5 overflow-hidden rounded-[10px] px-3.5 py-2 text-left text-[13px]",
-          selected ? "is-pressed bg-[var(--wash-mid)]" : "hover:bg-[var(--wash-faint)]",
+          "chip-press group mb-0.5 flex w-full cursor-pointer items-center gap-2.5 overflow-hidden rounded-[10px] text-left",
+          phone ? "min-h-[48px] px-3 py-2 text-[15px]" : "px-3.5 py-2 text-[13px]",
+          selected && !phone ? "is-pressed bg-[var(--wash-mid)]" : "hover:bg-[var(--wash-faint)]",
           !row.recent && enter.enterClass(keyId)
         )}
       >
         <TypeGlyph type={row.hit.type} />
-        <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--text)]">
-          {row.recent ? (
-            <>
-              <span className="text-[var(--muted)]">
-                {typeLabel(row.hit.type, t)}{" "}
-              </span>
-              {hitCaption(row.hit)}
-            </>
-          ) : (
-            hitCaption(row.hit)
-          )}
+        <span className="flex min-w-0 flex-1 items-center gap-1.5">
+          <span className={clsx("min-w-0 truncate text-[var(--text)]", phone ? "text-[15px]" : "text-[13px]")}>
+            {row.recent ? (
+              <>
+                <span className="text-[var(--muted)]">
+                  {typeLabel(row.hit.type, t)}{" "}
+                </span>
+                {hitCaption(row.hit)}
+              </>
+            ) : (
+              hitCaption(row.hit)
+            )}
+          </span>
+          {token && tokenKnown(row.hit.id) ? <KnownTokenMark /> : null}
         </span>
+        {holders != null ? (
+          <span className="shrink-0 text-[11px] tabular-nums text-[var(--muted-2)]">
+            {tn("feed.holders", holders, holders.toLocaleString(loc))}
+          </span>
+        ) : null}
         {!row.recent &&
           row.hit.type !== "query" &&
           row.hit.label &&
@@ -614,8 +686,9 @@ export function CommandPalette() {
               tabIndex={-1}
               aria-label={t("search.removeRecent")}
               className={clsx(
-                "chip-press flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-[6px] text-[var(--muted-2)] hover:bg-[var(--wash-mid)] hover:text-[var(--text)]",
-                selected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                "chip-press flex shrink-0 items-center justify-center overflow-hidden text-[var(--muted-2)] hover:bg-[var(--wash-mid)] hover:text-[var(--text)]",
+                phone ? "-my-1 -mr-2 h-11 w-11 rounded-full text-[18px]" : "h-6 w-6 rounded-[6px]",
+                phone || selected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
               )}
               onMouseDown={(e) => e.preventDefault()}
               onClick={(e) => {
@@ -719,9 +792,77 @@ export function CommandPalette() {
     return out;
   };
 
+  const inputEl = (className: string) => (
+    <input
+      ref={inputRef}
+      value={q}
+      onChange={(e) => setQ(e.target.value)}
+      onKeyDown={onInputKey}
+      placeholder={t("search.placeholder")}
+      enterKeyHint="search"
+      autoComplete="off"
+      autoCorrect="off"
+      spellCheck={false}
+      role="combobox"
+      aria-expanded={open}
+      aria-controls={listId}
+      aria-autocomplete="list"
+      aria-activedescendant={rows[active] ? `${listId}-opt-${active}` : undefined}
+      className={className}
+    />
+  );
+
+  const listboxEl = (
+    <div
+      id={listId}
+      role="listbox"
+      className={clsx(
+        "transition-opacity duration-[400ms] ease-[var(--ease)]",
+        pending && hits.length > 0 && "opacity-60"
+      )}
+    >
+      {paintListbox()}
+    </div>
+  );
+
+  const clearRecentEl = (
+    <PressChip
+      tabIndex={-1}
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={() => {
+        writeRecents([]);
+        setRecents([]);
+        inputRef.current?.focus();
+      }}
+      className={
+        phone
+          ? "chip-press flex h-11 items-center overflow-hidden rounded-[10px] px-3 text-[13px] text-[var(--muted-2)]"
+          : "chip-press overflow-hidden rounded-[10px] px-2 py-1 text-[11px] text-[var(--muted-2)] hover:text-[var(--muted)]"
+      }
+    >
+      {t("search.clearRecent")}
+    </PressChip>
+  );
+
+  const jumpChips = quick.map((x) => (
+    <PressChip
+      key={x.href}
+      tabIndex={-1}
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={() => navigate(x.key === "nav.api" ? x.href : explorerHref(x.href, api))}
+      className={
+        phone
+          ? "search-chip-hit chip-press inline-flex h-9 items-center rounded-full bg-[var(--wash)] px-3.5 text-[13px] font-medium text-[var(--muted)]"
+          : "chip-press overflow-hidden rounded-full bg-[var(--wash)] px-3.5 py-1.5 text-[12px] font-medium text-[var(--muted)] transition-opacity hover:text-[var(--text)]"
+      }
+    >
+      {t(x.key)}
+    </PressChip>
+  ));
+
   return (
     <AnimatePresence onExitComplete={() => triggerRef.current?.focus()}>
-      {open && (
+      {open && !phone && (
         <motion.button
           key="search-backdrop"
           type="button"
@@ -734,7 +875,92 @@ export function CommandPalette() {
           onClick={close}
         />
       )}
-      {open && (
+      {open && phone && (
+        <motion.div
+          key="search-sheet"
+          role="dialog"
+          aria-modal="true"
+          aria-label={t("search.title")}
+          className="search-sheet fixed inset-0 z-[70] flex flex-col bg-[var(--bg)]"
+          initial={reduce ? { opacity: 0 } : { opacity: 0, y: 14 }}
+          animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0 }}
+          exit={{ opacity: 0, transition: { duration: 0.14, ease: EASE } }}
+          transition={{ duration: reduce ? 0.12 : 0.22, ease: EASE }}
+        >
+          <div className="flex shrink-0 items-center gap-1 pb-2 pl-3 pr-1.5 pt-[calc(env(safe-area-inset-top,0px)+0.5rem)]">
+            <div className="search-sheet-field flex h-12 min-w-0 flex-1 items-center gap-2 rounded-[14px] pl-3">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden className="shrink-0 text-[var(--muted)]">
+                <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
+                <path d="m16.2 16.2 4.3 4.3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+              {inputEl(
+                "h-12 min-w-0 flex-1 bg-transparent text-[16px] text-[var(--text)] outline-none placeholder:text-[var(--muted-2)]"
+              )}
+              {pending ? <span className="shrink-0 text-[12px] text-[var(--muted)]">…</span> : null}
+              {q ? (
+                <button
+                  type="button"
+                  aria-label={t("search.clear")}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    setQ("");
+                    inputRef.current?.focus();
+                  }}
+                  className="chip-press flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[var(--muted)]"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+                    <circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.28" />
+                    <path d="m9 9 6 6M15 9l-6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                  </svg>
+                </button>
+              ) : (
+                <span className="w-2 shrink-0" aria-hidden />
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={close}
+              className="chip-press flex h-11 shrink-0 items-center rounded-[10px] px-2.5 text-[15px] font-medium text-[var(--accent)]"
+            >
+              {t("search.cancel")}
+            </button>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)]">
+            {!q.trim() && canPaste ? (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-2 pb-2 pt-1">
+                <PressChip
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => void onPaste()}
+                  className="search-chip-hit chip-press inline-flex h-9 items-center gap-2 rounded-full bg-[var(--wash)] px-3.5 text-[13px] font-medium text-[var(--text)]"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+                    <rect x="6" y="5" width="12" height="16" stroke="currentColor" strokeWidth="2" />
+                    <path d="M9 3h6v4H9z" fill="currentColor" />
+                  </svg>
+                  {t("search.paste")}
+                </PressChip>
+                {pasteMiss ? (
+                  <span role="status" className="text-[12px] text-[var(--muted)]">
+                    {t("search.pasteNone")}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+            {listboxEl}
+            {showHistory ? <div className="px-1 pt-1">{clearRecentEl}</div> : null}
+            {!q.trim() ? (
+              <div className="px-2 pb-2 pt-3">
+                <p className="mb-3 px-1 text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--muted-2)]">
+                  {t("search.jump")}
+                </p>
+                <div className="flex flex-wrap gap-x-1.5 gap-y-2">{jumpChips}</div>
+              </div>
+            ) : null}
+          </div>
+        </motion.div>
+      )}
+      {open && !phone && (
         <motion.div
           key="search-panel"
           role="dialog"
@@ -751,55 +977,19 @@ export function CommandPalette() {
                 <span className="hidden text-[12px] font-medium text-[var(--muted)] sm:inline">
                   ⌘K
                 </span>
-                <input
-                  ref={inputRef}
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  onKeyDown={onInputKey}
-                  placeholder={t("search.placeholder")}
-                  enterKeyHint="search"
-                  autoComplete="off"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  role="combobox"
-                  aria-expanded={open}
-                  aria-controls={listId}
-                  aria-autocomplete="list"
-                  aria-activedescendant={
-                    rows[active] ? `${listId}-opt-${active}` : undefined
-                  }
-                  className="w-full bg-transparent text-[16px] text-[var(--text)] outline-none placeholder:text-[var(--muted-2)]"
-                />
+                {inputEl(
+                  "w-full bg-transparent text-[16px] text-[var(--text)] outline-none placeholder:text-[var(--muted-2)]"
+                )}
                 {pending && (
                   <span className="text-[11px] text-[var(--muted)]">…</span>
                 )}
               </div>
 
               <div className="max-h-[50vh] overflow-y-auto p-2">
-                <div
-                  id={listId}
-                  role="listbox"
-                  className={clsx(
-                    "transition-opacity duration-[400ms] ease-[var(--ease)]",
-                    pending && hits.length > 0 && "opacity-60"
-                  )}
-                >
-                  {paintListbox()}
-                </div>
+                {listboxEl}
                 {showHistory && (
                   <div className="mt-1.5 border-t border-[var(--border)] px-2.5 pt-2">
-                    <PressChip
-                      tabIndex={-1}
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => {
-                        writeRecents([]);
-                        setRecents([]);
-                        inputRef.current?.focus();
-                      }}
-                      className="chip-press overflow-hidden rounded-[10px] px-2 py-1 text-[11px] text-[var(--muted-2)] hover:text-[var(--muted)]"
-                    >
-                      {t("search.clearRecent")}
-                    </PressChip>
+                    {clearRecentEl}
                   </div>
                 )}
 
@@ -808,33 +998,12 @@ export function CommandPalette() {
                     <p className="mb-2.5 px-1 text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--muted-2)]">
                       {t("search.jump")}
                     </p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {quick.map((x) => (
-                        <PressChip
-                          key={x.href}
-                          tabIndex={-1}
-                          onMouseDown={(e) => e.preventDefault()}
-                          onClick={() => {
-                            close();
-                            const href = x.key === "nav.api" ? x.href : explorerHref(x.href, api);
-                            if (href.startsWith("http")) {
-                              window.location.assign(href);
-                              return;
-                            }
-                            noteRouteNavigation(href);
-                            router.push(href);
-                          }}
-                          className="chip-press overflow-hidden rounded-full bg-[var(--wash)] px-3.5 py-1.5 text-[12px] font-medium text-[var(--muted)] transition-opacity hover:text-[var(--text)]"
-                        >
-                          {t(x.key)}
-                        </PressChip>
-                      ))}
-                    </div>
+                    <div className="flex flex-wrap gap-1.5">{jumpChips}</div>
                   </div>
                 )}
               </div>
 
-              <div className="border-t border-[var(--border)] px-5 py-2.5 text-[10px] tracking-wide text-[var(--muted-2)]">
+              <div className="search-keys kbd-hints border-t border-[var(--border)] px-5 py-2.5 text-[10px] tracking-wide text-[var(--muted-2)]">
                 ↑↓ {t("search.hintNav")} · ↵ {t("search.hintOpen")} · esc{" "}
                 {t("search.hintClose")}
               </div>

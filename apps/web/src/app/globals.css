@@ -763,10 +763,6 @@ html[data-face="t2"] .font-mono {
   font-weight: 400;
   letter-spacing: normal;
 }
-.addr-lane-x .addr-act-chip .font-mono {
-  font-size: 11px;
-  font-weight: 400;
-}
 
 /* KPI stamp: rail (default: 36 + ink) · old (36, no ink) · corner (20) */
 .kpi-tile {
@@ -1596,26 +1592,6 @@ html[data-ink="day"] .token-tx-tape a[data-addr].is-twin {
 .addr-act-pair {
   overflow: visible;
 }
-.addr-act-chip::before {
-  content: "";
-  position: absolute;
-  inset-inline: 0;
-  top: 100%;
-  height: 10px;
-}
-.addr-act-chip::after {
-  content: "";
-  position: absolute;
-  top: 100%;
-  border: 6px solid transparent;
-  border-top-color: var(--module);
-}
-.addr-act-chip[data-align="left"]::after {
-  left: 14px;
-}
-.addr-act-chip[data-align="right"]::after {
-  right: 14px;
-}
 @media (min-width: 1024px) {
   .addr-lane.block-tx-pairs,
   .addr-head.block-tx-pairs {
@@ -1741,13 +1717,12 @@ html[data-ink="day"] .token-tx-tape a[data-addr].is-twin {
     right: 0;
     bottom: 0;
     z-index: 39;
-    height: calc(var(--tabbar) + 4.5rem);
+    /* Behind the tab bar as before; above it only a 24 px fade, so the lowest content stays readable. */
+    height: calc(var(--tabbar) + 1.5rem);
     background: linear-gradient(
       0deg,
       var(--bg) 0%,
-      color-mix(in srgb, var(--bg) 78%, transparent) 28%,
-      color-mix(in srgb, var(--bg) 42%, transparent) 54%,
-      color-mix(in srgb, var(--bg) 16%, transparent) 78%,
+      color-mix(in srgb, var(--bg) 50%, transparent) calc(100% - 1.5rem),
       transparent 100%
     );
   }
@@ -4164,42 +4139,7 @@ html[data-ink="day"] .epoch-left {
   animation: cadence-ripple-flash 0.5s var(--ease) both;
 }
 
-.addr-stat-tip {
-  pointer-events: none;
-  position: fixed;
-  z-index: 60;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--module);
-  padding: 0.5rem 0.75rem;
-  visibility: hidden;
-  opacity: 0;
-  transform: translateY(-6px);
-  transition:
-    opacity 0.4s var(--ease),
-    transform 0.4s var(--ease),
-    visibility 0s linear 0.4s;
-}
-
-.addr-stat-tip.is-open {
-  visibility: visible;
-  opacity: 1;
-  transform: translateY(0);
-  transition:
-    opacity 0.4s var(--ease),
-    transform 0.4s var(--ease),
-    visibility 0s;
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .addr-stat-tip {
-    transform: none;
-    transition: opacity 0.2s var(--ease), visibility 0s linear 0.2s;
-  }
-  .addr-stat-tip.is-open {
-    transform: none;
-    transition: opacity 0.2s var(--ease), visibility 0s;
-  }
   .addr-token-fold,
   .addr-token-menu,
   .supply-tile-copy {

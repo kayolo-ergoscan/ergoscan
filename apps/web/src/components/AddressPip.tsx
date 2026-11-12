@@ -1,4 +1,5 @@
 import clsx from "clsx";
+import { Tip } from "@/components/Tip";
 import { EntityMark } from "@/components/EntityMark";
 import { HolderMark } from "@/components/HolderMark";
 import {
@@ -47,10 +48,12 @@ export function AddressPip({
     pip.id === "holder" ? BAND_INK[pip.band ?? "dust"] : LIST_ENTITY_INK[pip.id];
 
   return (
+    <Tip content={hint}>
     <span
       className={clsx("inline-flex shrink-0", className)}
       style={{ color }}
-      title={hint}
+      role="img"
+      aria-label={hint}
     >
       {pip.id === "holder" && pip.band ? (
         <HolderMark id={pip.band} className="h-full w-full" />
@@ -62,5 +65,6 @@ export function AddressPip({
         )
       ) : null}
     </span>
+    </Tip>
   );
 }

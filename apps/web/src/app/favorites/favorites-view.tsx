@@ -26,6 +26,7 @@ import {
   type FavoriteKind,
 } from "@/lib/favorites";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
+import { useCoarsePointer } from "@/lib/use-coarse";
 import { SNAPSHOT_FETCH, snapshotPath, useEnterIds } from "@/lib/keyed-enter";
 import type { PoolBoardRow } from "@/lib/defi-pools";
 import {
@@ -248,6 +249,7 @@ function KindTile({
 export function FavoritesView() {
   const t = useT();
   const { locale } = useI18n();
+  const coarse = useCoarsePointer();
   const loc = locale === "ru" ? "ru-RU" : "en-US";
   const { markSynced } = usePageSync();
   const store = useFavorites();
@@ -442,7 +444,7 @@ export function FavoritesView() {
             ))}
           </div>
           {!ids?.length ? (
-            <FavKayolo line={t(EMPTY_KEY[kind])} />
+            <FavKayolo line={t(coarse ? `${EMPTY_KEY[kind]}Tap` : EMPTY_KEY[kind])} />
           ) : !tapeReady ? (
             <Feed busy>
               <FeedSkeleton rows={Math.min(ids.length, 6)} />

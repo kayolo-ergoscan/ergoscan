@@ -21,9 +21,11 @@ import {
 } from "@ergoscan/shared";
 import { chartChrome } from "@/lib/chart-chrome";
 import { formatDottedDate, formatDottedDay } from "@/lib/format";
-import { pickRentChartTip, rentTipAxisMs } from "@/lib/rent-chart-tip";
+import { pickRentChartTip } from "@/lib/rent-chart-tip";
 import { TX_ACTIVITY_TZ } from "@/lib/tx-activity-bin";
 import { useInk } from "@/lib/use-ink";
+import { TipHead, TipRow, TipRows, useFloatTip } from "@/components/Tip";
+import { pointRect } from "@/lib/tip-place";
 
 echarts.use([
   LineChart,
@@ -134,6 +136,8 @@ export function RentHistoryChart({
 }) {
   const el = useRef<HTMLDivElement>(null);
   const chart = useRef<echarts.ECharts | null>(null);
+  /** The shared tip on the day under the pointer; a tap on a phone shows it too. */
+  const dayTip = useFloatTip({ within: () => el.current });
   const fmtBoxes = useRef(formatBoxes);
   const fmtErg = useRef(formatErg);
   const labels = useRef({ nameErg, nameAhead, nameBoxes });
@@ -239,8 +243,50 @@ export function RentHistoryChart({
       loop = requestAnimationFrame(step);
     };
 
+    /** The day under the pointer: past or due, on its dot. */
+    const showDay = (e: PointerEvent) => {
+      const rect = node.getBoundingClientRect();
+      const raw = c.convertFromPixel({ gridIndex: 0 }, [e.clientX - rect.left, e.clientY - rect.top]);
+      const t = Array.isArray(raw) ? raw[0] : null;
+      const picked =
+        typeof t === "number" && Number.isFinite(t)
+          ? pickRentChartTip(series.current.past, series.current.ahead, t)
+          : null;
+      const px = picked ? c.convertToPixel({ gridIndex: 0 }, [picked.src.t, picked.src.rentErg]) : null;
+      if (!picked || !Array.isArray(px)) {
+        dayTip.hide();
+        return;
+      }
+      const { nameErg: nE, nameAhead: nA, nameBoxes: nB } = labels.current;
+      dayTip.show(
+        pointRect(rect.left + px[0]!, rect.top + px[1]!, 6),
+        <>
+          <TipHead chip={picked.due ? nA : undefined} ink={picked.due ? ERG : undefined} mono quiet>
+            {formatWindow(picked.src.t, loc.current)}
+          </TipHead>
+          <TipRows>
+            <TipRow label={nE} dot={ERG}>
+              {fmtErg.current(picked.src.rentErg)}
+            </TipRow>
+            <TipRow label={nB}>{fmtBoxes.current(picked.src.boxes)}</TipRow>
+          </TipRows>
+        </>,
+        { tapped: e.pointerType === "touch" }
+      );
+    };
+    let downAt: { x: number; y: number } | null = null;
+    const onHover = (e: PointerEvent) => {
+      if (dragging || e.pointerType === "touch") return;
+      showDay(e);
+    };
+    const onLeave = (e: PointerEvent) => {
+      if (e.pointerType !== "touch") dayTip.hide();
+    };
+
     const onDown = (e: PointerEvent) => {
       if (e.button !== 0) return;
+      downAt = { x: e.clientX, y: e.clientY };
+      if (e.pointerType !== "touch") dayTip.hide();
       dragging = true;
       lastX = e.clientX;
       lastTs = performance.now();
@@ -262,6 +308,10 @@ export function RentHistoryChart({
     const onUp = (e: PointerEvent) => {
       if (!dragging) return;
       dragging = false;
+      // A press that did not pan is a tap: it reads the day.
+      const at = downAt;
+      downAt = null;
+      if (at && Math.hypot(e.clientX - at.x, e.clientY - at.y) < 6 && e.type === "pointerup") showDay(e);
       try {
         node.releasePointerCapture(e.pointerId);
       } catch {
@@ -277,12 +327,16 @@ export function RentHistoryChart({
 
     node.addEventListener("pointerdown", onDown);
     node.addEventListener("pointermove", onMove);
+    node.addEventListener("pointermove", onHover);
+    node.addEventListener("pointerleave", onLeave);
     node.addEventListener("pointerup", onUp);
     node.addEventListener("pointercancel", onUp);
     return () => {
       cancelAnimationFrame(loop);
       node.removeEventListener("pointerdown", onDown);
       node.removeEventListener("pointermove", onMove);
+      node.removeEventListener("pointermove", onHover);
+      node.removeEventListener("pointerleave", onLeave);
       node.removeEventListener("pointerup", onUp);
       node.removeEventListener("pointercancel", onUp);
       ro.disconnect();
@@ -347,30 +401,11 @@ export function RentHistoryChart({
         ],
         tooltip: {
           trigger: "axis",
+          showContent: false,
           axisPointer: {
             type: "line",
             snap: false,
             lineStyle: { color: chrome.hair, width: 1, type: "dashed" },
-          },
-          backgroundColor: chrome.module,
-          borderColor: chrome.border,
-          borderWidth: 1,
-          padding: [8, 12],
-          textStyle: { color: chrome.text, fontSize: 12 },
-          formatter: (raw: unknown) => {
-            const t = rentTipAxisMs(raw);
-            if (t == null) return "";
-            const picked = pickRentChartTip(
-              series.current.past,
-              series.current.ahead,
-              t
-            );
-            if (!picked) return "";
-            const { nameErg: nE, nameAhead: nA, nameBoxes: nB } = labels.current;
-            const when = formatWindow(picked.src.t, loc.current);
-            const head = picked.due ? nA : when;
-            const whenLine = picked.due ? `${when}<br/>` : "";
-            return `${head}<br/>${whenLine}${nE}  ${fmtErg.current(picked.src.rentErg)}<br/>${nB}  ${fmtBoxes.current(picked.src.boxes)}`;
           },
         },
         xAxis: {

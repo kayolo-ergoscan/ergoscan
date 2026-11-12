@@ -11,8 +11,11 @@ import { getGateway } from "@/lib/config";
 import { loadGlobeMap, makePlaceholderMap } from "@/lib/earth-texture";
 import { enteringIds, useEnterIds } from "@/lib/keyed-enter";
 import { HOME, INK } from "@/lib/palette";
+import { canvasDpr, watchOnScreen } from "@/lib/canvas-run";
 import { ReelText } from "@/components/ReelText";
+import { TipHead, TipRow, TipRows, useFloatTip } from "@/components/Tip";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import { pointRect } from "@/lib/tip-place";
 
 const REGION_INK = [INK.cyan, INK.green, INK.gold, INK.coral, INK.sky, INK.violet, INK.teal];
 
@@ -233,11 +236,52 @@ export function NetworkOrbit({ enter = 0 }: { enter?: number }) {
   const drag = useRef<{ x: number; y: number } | null>(null);
   const hitsRef = useRef<Hit[]>([]);
   const hoverIdRef = useRef<string | null>(null);
-  const tipRef = useRef<HTMLDivElement>(null);
-  const tipNameRef = useRef<HTMLParagraphElement>(null);
-  const tipIpRef = useRef<HTMLParagraphElement>(null);
-  const nodeWord = useRef(t("home.node"));
-  nodeWord.current = t("home.node");
+  const nodeTip = useFloatTip({ within: () => overlayRef.current });
+  const tRef = useRef(t);
+  tRef.current = t;
+  /** Where the press started: a short touch press is a tap (tip), a long one a drag (spin). */
+  const pressAt = useRef<{ x: number; y: number; touch: boolean } | null>(null);
+
+  /** A bead in wrap pixels → a small box on the screen. */
+  const beadRect = (h: Hit) => {
+    const wrap = wrapRef.current;
+    if (!wrap) return null;
+    const r = wrap.getBoundingClientRect();
+    return pointRect(r.left + h.x, r.top + h.y, 5);
+  };
+
+  const showNode = (hit: Hit | null, tapped = false) => {
+    const rect = hit ? beadRect(hit) : null;
+    if (!hit || !rect) {
+      hoverIdRef.current = null;
+      nodeTip.hide();
+      return;
+    }
+    if (hoverIdRef.current === hit.id && nodeTip.isOpen()) {
+      nodeTip.move(rect);
+      return;
+    }
+    hoverIdRef.current = hit.id;
+    const tr = tRef.current;
+    nodeTip.show(
+      rect,
+      <>
+        <TipHead chip={tr("tip.node")} ink="var(--c-net, #1ec8d8)">
+          {hit.name || tr("home.node")}
+        </TipHead>
+        {hit.ip ? (
+          <TipRows>
+            <TipRow label="IP">{hit.ip}</TipRow>
+          </TipRows>
+        ) : null}
+      </>,
+      { tapped }
+    );
+  };
+  const showNodeRef = useRef(showNode);
+  showNodeRef.current = showNode;
+  const beadRectRef = useRef(beadRect);
+  beadRectRef.current = beadRect;
   const [peerN, setPeerN] = useState(0);
   const [regions, setRegions] = useState<OrbitRegion[]>([]);
   const regionNames = useMemo(() => {
@@ -381,14 +425,16 @@ export function NetworkOrbit({ enter = 0 }: { enter?: number }) {
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     let raf = 0;
     let running = true;
+    /** Off screen (<10 % visible) or a hidden tab: no frames. */
+    let on = true;
 
     const paint = (now: number) => {
       if (!running) return;
-      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      const dpr = canvasDpr();
       const w = wrap.clientWidth;
       const h = wrap.clientHeight;
       if (w < 32 || h < 32 || Math.abs(w - h) > 4) {
-        raf = requestAnimationFrame(paint);
+        raf = on ? requestAnimationFrame(paint) : 0;
         return;
       }
       const pw = Math.round(w * dpr);
@@ -487,27 +533,31 @@ export function NetworkOrbit({ enter = 0 }: { enter?: number }) {
       octx.globalAlpha = 1;
       hitsRef.current = hits;
 
-      const box = tipRef.current;
       const hid = hoverIdRef.current;
-      if (box && hid && !drag.current) {
+      if (hid && !drag.current && nodeTip.isOpen()) {
+        // The bead keeps orbiting under its tip.
         const still = hits.find((h) => h.id === hid);
-        if (still) {
-          box.style.left = `${still.x}px`;
-          box.style.top = `${still.y}px`;
-        } else {
-          hoverIdRef.current = null;
-          box.style.opacity = "0";
-          box.style.transform = "translate(-50%, calc(-100% - 4px))";
-        }
+        const rect = still ? beadRectRef.current(still) : null;
+        if (rect) nodeTip.move(rect);
+        else showNodeRef.current(null);
       }
 
-      raf = requestAnimationFrame(paint);
+      raf = on ? requestAnimationFrame(paint) : 0;
     };
 
-    raf = requestAnimationFrame(paint);
+    const stop = watchOnScreen(wrap, (visible) => {
+      on = visible;
+      if (!on) {
+        if (raf) cancelAnimationFrame(raf);
+        raf = 0;
+      } else if (!raf && running) {
+        raf = requestAnimationFrame(paint);
+      }
+    });
     return () => {
       mapped = false;
       running = false;
+      stop();
       cancelAnimationFrame(raf);
     };
   }, []);
@@ -544,12 +594,8 @@ export function NetworkOrbit({ enter = 0 }: { enter?: number }) {
                 onPointerDown={(e) => {
                   (e.target as HTMLCanvasElement).setPointerCapture(e.pointerId);
                   drag.current = { x: e.clientX, y: e.clientY };
-                  hoverIdRef.current = null;
-                  const box = tipRef.current;
-                  if (box) {
-                    box.style.opacity = "0";
-                    box.style.transform = "translate(-50%, calc(-100% - 4px))";
-                  }
+                  pressAt.current = { x: e.clientX, y: e.clientY, touch: e.pointerType === "touch" };
+                  if (e.pointerType !== "touch") showNode(null);
                 }}
                 onPointerMove={(e) => {
                   const d = drag.current;
@@ -559,58 +605,31 @@ export function NetworkOrbit({ enter = 0 }: { enter?: number }) {
                     drag.current = { x: e.clientX, y: e.clientY };
                     return;
                   }
+                  if (e.pointerType === "touch") return;
                   const wrap = wrapRef.current;
-                  const box = tipRef.current;
-                  if (!wrap || !box) return;
+                  if (!wrap) return;
                   const r = wrap.getBoundingClientRect();
-                  const hit = pickHit(hitsRef.current, e.clientX - r.left, e.clientY - r.top);
-                  if (!hit) {
-                    hoverIdRef.current = null;
-                    box.style.opacity = "0";
-                    box.style.transform = "translate(-50%, calc(-100% - 4px))";
-                    return;
-                  }
-                  hoverIdRef.current = hit.id;
-                  if (tipNameRef.current) tipNameRef.current.textContent = hit.name || nodeWord.current;
-                  if (tipIpRef.current) {
-                    tipIpRef.current.textContent = hit.ip;
-                    tipIpRef.current.classList.toggle("hidden", !hit.ip);
-                  }
-                  box.style.left = `${hit.x}px`;
-                  box.style.top = `${hit.y}px`;
-                  box.style.opacity = "1";
-                  box.style.transform = "translate(-50%, calc(-100% - 10px))";
+                  showNode(pickHit(hitsRef.current, e.clientX - r.left, e.clientY - r.top));
                 }}
-                onPointerUp={() => {
+                onPointerUp={(e) => {
                   drag.current = null;
+                  const at = pressAt.current;
+                  pressAt.current = null;
+                  // A tap on a phone: the bead under the finger shows its tip, empty space hides it.
+                  if (!at?.touch || Math.hypot(e.clientX - at.x, e.clientY - at.y) > 8) return;
+                  const wrap = wrapRef.current;
+                  if (!wrap) return;
+                  const r = wrap.getBoundingClientRect();
+                  showNode(pickHit(hitsRef.current, e.clientX - r.left, e.clientY - r.top), true);
                 }}
                 onPointerCancel={() => {
                   drag.current = null;
                 }}
-                onPointerLeave={() => {
-                  if (drag.current) return;
-                  hoverIdRef.current = null;
-                  const box = tipRef.current;
-                  if (box) {
-                    box.style.opacity = "0";
-                    box.style.transform = "translate(-50%, calc(-100% - 4px))";
-                  }
+                onPointerLeave={(e) => {
+                  if (drag.current || e.pointerType === "touch") return;
+                  showNode(null);
                 }}
               />
-              <div
-                ref={tipRef}
-                className="pointer-events-none absolute left-0 top-0 z-[2] w-max max-w-[16rem] rounded-[10px] border border-[var(--border)] bg-[var(--module)] px-3 py-2 motion-reduce:duration-0"
-                style={{
-                  opacity: 0,
-                  transform: "translate(-50%, calc(-100% - 4px))",
-                  transitionProperty: "opacity, transform",
-                  transitionDuration: "350ms",
-                  transitionTimingFunction: "cubic-bezier(0.4, 0, 0.2, 1)",
-                }}
-              >
-                <p ref={tipNameRef} className="truncate text-[13px] font-medium tracking-tight" />
-                <p ref={tipIpRef} className="mt-0.5 text-[12px] tabular-nums text-[var(--muted)]" />
-              </div>
             </div>
           </div>
         </div>

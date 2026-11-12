@@ -27,16 +27,36 @@ export function orderByHolderRank<T extends { type: string; id: string }>(
   return hits.map((h) => (h.type === "token" ? sorted[i++]! : h));
 }
 
-/** Token hits keep the holder count the ranking request already returned. */
-function withHolders<T extends { type: string; id: string }>(
+/** Same-name hits plus their holder counts (for telling the names apart). */
+export async function rankTokenHits<T extends { type: string; id: string }>(
+  q: string,
   hits: T[],
-  held: ReadonlyMap<string, number>
-): Array<T & { holders?: number }> {
-  if (!held.size) return hits;
-  return hits.map((h) => {
-    const n = h.type === "token" ? held.get(h.id) : undefined;
-    return n != null ? { ...h, holders: n } : h;
-  });
+  gateway: string,
+  signal?: AbortSignal
+): Promise<{ hits: T[]; holders: Record<string, number> }> {
+  const holders: Record<string, number> = {};
+  if (hits.filter((h) => h.type === "token").length < 2) return { hits, holders };
+  const query = q.trim();
+  if (query.length < 2) return { hits, holders };
+  try {
+    const r = await fetch(
+      `${gateway}/v1/tokens?q=${encodeURIComponent(query)}&sort=holders&dir=desc&limit=50`,
+      { signal, cache: "no-store", headers: { Accept: "application/json" } }
+    );
+    if (!r.ok) return { hits, holders };
+    const j = (await r.json()) as { items?: { tokenId?: unknown; holders?: unknown }[] };
+    const ids: string[] = [];
+    for (const it of Array.isArray(j.items) ? j.items : []) {
+      if (typeof it.tokenId !== "string") continue;
+      ids.push(it.tokenId);
+      if (typeof it.holders === "number" && Number.isFinite(it.holders) && it.holders >= 0) {
+        holders[it.tokenId] = it.holders;
+      }
+    }
+    return { hits: orderByHolderRank(hits, ids), holders };
+  } catch {
+    return { hits, holders };
+  }
 }
 
 export async function orderTokenHitsByHolders<T extends { type: string; id: string }>(
@@ -44,27 +64,6 @@ export async function orderTokenHitsByHolders<T extends { type: string; id: stri
   hits: T[],
   gateway: string,
   signal?: AbortSignal
-): Promise<Array<T & { holders?: number }>> {
-  if (hits.filter((h) => h.type === "token").length < 2) return hits;
-  const query = q.trim();
-  if (query.length < 2) return hits;
-  try {
-    const r = await fetch(
-      `${gateway}/v1/tokens?q=${encodeURIComponent(query)}&sort=holders&dir=desc&limit=50`,
-      { signal, cache: "no-store", headers: { Accept: "application/json" } }
-    );
-    if (!r.ok) return hits;
-    const j = (await r.json()) as { items?: { tokenId?: unknown; holders?: unknown }[] };
-    const items = Array.isArray(j.items) ? j.items : [];
-    const ids = items.flatMap((it) => (typeof it.tokenId === "string" ? [it.tokenId] : []));
-    const held = new Map<string, number>();
-    for (const it of items) {
-      if (typeof it.tokenId === "string" && typeof it.holders === "number" && Number.isFinite(it.holders)) {
-        held.set(it.tokenId, it.holders);
-      }
-    }
-    return withHolders(orderByHolderRank(hits, ids), held);
-  } catch {
-    return hits;
-  }
+): Promise<T[]> {
+  return (await rankTokenHits(q, hits, gateway, signal)).hits;
 }

@@ -423,10 +423,7 @@ export function TxView({
                     onToggle={txFav.toggle}
                   />
                 </h1>
-                <p
-                  className="mt-1 flex min-w-0 items-start gap-1.5 text-[12px] leading-snug text-[var(--muted)]"
-                  title={chip}
-                >
+                <p className="mt-1 flex min-w-0 items-start gap-1.5 text-[12px] leading-snug text-[var(--muted)]">
                   <span
                     className="mt-[4px] inline-block h-1.5 w-1.5 shrink-0 rounded-full"
                     style={{ background: catColor }}

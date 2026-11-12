@@ -1,5 +1,6 @@
 "use client";
 
+import { Tip } from "@/components/Tip";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Shell } from "@/components/Shell";
@@ -430,9 +431,11 @@ export function FeedBlockRow({
             {row.height.toLocaleString(tag)}
           </Link>
           {row.lithos ? (
-            <Link prefetch={false} href="/lithos" title={t("block.chip.lithosHint")} className="chip-press inline-flex shrink-0">
-              <img src="/lithos-mark.png" alt="" width={16} height={16} className="h-4 w-4 object-contain" />
-            </Link>
+            <Tip content={t("block.chip.lithosHint")} peek>
+              <Link prefetch={false} href="/lithos" aria-label={t("block.chip.lithosHint")} className="chip-press inline-flex shrink-0">
+                <img src="/lithos-mark.png" alt="" width={16} height={16} className="h-4 w-4 object-contain" />
+              </Link>
+            </Tip>
           ) : null}
           <FavoriteHeart size="sm" on={fav.on} ready={fav.ready} title={fav.title} onToggle={fav.toggle} />
         </>
@@ -452,9 +455,9 @@ export function FeedBlockRow({
             </Link>
           ) : null}
           {intervalMs != null ? (
-            <span className="feed-mid tabular-nums" title={t("blocks.interval")}>
-              +{formatBlockTime(intervalMs)}
-            </span>
+            <Tip content={t("blocks.interval")}>
+              <span className="feed-mid tabular-nums">+{formatBlockTime(intervalMs)}</span>
+            </Tip>
           ) : null}
           <span className="feed-wide font-mono tabular-nums">{shortId(row.id, 6)}</span>
         </>

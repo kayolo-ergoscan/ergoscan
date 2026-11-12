@@ -1,5 +1,6 @@
 "use client";
 
+import { Tip } from "@/components/Tip";
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { Shell } from "@/components/Shell";
@@ -187,9 +188,9 @@ function BasisRow({
       }
       facts={
         <>
-          <span className="feed-kind" title={state.hint}>
-            {state.label}
-          </span>
+          <Tip content={state.hint}>
+            <span className="feed-kind">{state.label}</span>
+          </Tip>
           {created ? (
             <span suppressHydrationWarning>
               <FeedPhrase text={t("feed.created")} value={created} />

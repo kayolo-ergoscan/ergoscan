@@ -1,0 +1,268 @@
+/*
+ * The hover tip (components/Tip.tsx). One surface for every tip on the site:
+ * a raised dark tile over the modules, a hairline ring, a deep soft shadow,
+ * the tile-label chip in the entity colour, figures in tabular mono on the right.
+ * Placed by the host on <body> (position, flip, shift); this file only paints it.
+ */
+
+.tip {
+  --tip-bg: var(--chip-bg, var(--bg-elevated));
+  --tip-ring: var(--wash-mid);
+  --tip-shadow: 0 14px 34px -12px rgb(0 0 0 / 0.78), 0 3px 10px -2px rgb(0 0 0 / 0.42);
+  --tip-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 90;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: min(18rem, calc(100vw - 16px));
+  padding: 8px 10px;
+  border-radius: min(var(--radius, 8px), 10px);
+  background: var(--tip-bg);
+  box-shadow: 0 0 0 1px var(--tip-ring), var(--tip-shadow);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 16px;
+  letter-spacing: normal;
+  text-align: left;
+  text-transform: none;
+  white-space: normal;
+  pointer-events: none;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+.tip.is-interactive {
+  pointer-events: auto;
+  user-select: text;
+}
+
+/* Enter: a short fade and a 4px rise away from the anchor. Hide is instant. */
+.tip[data-side="top"] { --tip-dx: 0px; --tip-dy: 4px; }
+.tip[data-side="bottom"] { --tip-dx: 0px; --tip-dy: -4px; }
+.tip[data-side="left"] { --tip-dx: 4px; --tip-dy: 0px; }
+.tip[data-side="right"] { --tip-dx: -4px; --tip-dy: 0px; }
+.tip[data-enter] {
+  animation: tip-in 120ms var(--tip-ease) both;
+}
+@keyframes tip-in {
+  from {
+    opacity: 0;
+    transform: translate(var(--tip-dx, 0px), var(--tip-dy, 4px));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tip[data-enter] {
+    animation: none;
+  }
+}
+
+/* A one-line label (an icon's name). */
+.tip-text {
+  margin: 0;
+  color: var(--text);
+}
+.tip:has(> .tip-text:only-child) {
+  padding: 6px 9px;
+}
+
+/* Header: entity chip + title. */
+.tip-head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+.tip-chip {
+  flex: none;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--wash-strong);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 14px;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+.tip-chip.is-ink {
+  background: var(--tip-ink);
+  color: var(--k-ink, #0e0e0e);
+}
+.tip-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  color: var(--text);
+}
+.tip-title.is-quiet {
+  font-weight: 500;
+  color: var(--muted);
+}
+
+/* Label / figure lines. */
+.tip-rows {
+  display: grid;
+  grid-template-columns: minmax(0, auto) auto;
+  column-gap: 16px;
+  row-gap: 3px;
+  margin: 0;
+}
+.tip-rows dt {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted-2, var(--muted));
+  white-space: nowrap;
+}
+.tip-rows dd {
+  margin: 0;
+  justify-self: end;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+.tip-rows dd.is-text {
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: normal;
+}
+.tip-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+}
+
+.tip-figure {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tip-note {
+  margin: 0;
+  color: var(--muted);
+}
+.tip-hash {
+  margin: 0;
+  color: var(--text);
+  font-size: 11.5px;
+  line-height: 15px;
+  word-break: break-all;
+}
+
+/* Blocks stack with one rhythm. */
+.tip > * + * {
+  margin-top: 6px;
+}
+.tip > .tip-head + .tip-rows,
+.tip > .tip-head + .tip-hash {
+  margin-top: 7px;
+}
+
+/* A tapped tip on a phone reads one size up. */
+@media (pointer: coarse) {
+  .tip {
+    max-width: min(20rem, calc(100vw - 16px));
+    padding: 9px 12px;
+    font-size: 13px;
+    line-height: 18px;
+  }
+  .tip:has(> .tip-text:only-child) {
+    padding: 7px 11px;
+  }
+  .tip-chip {
+    font-size: 12px;
+    line-height: 15px;
+  }
+}
+
+html[data-ink="day"] .tip {
+  --tip-shadow: 0 12px 30px -12px rgb(28 27 34 / 0.3), 0 2px 8px -2px rgb(28 27 34 / 0.14);
+}
+
+/* A full id with a copy button (interactive tip). */
+.tip-idline {
+  display: flex;
+  max-width: 15rem;
+  align-items: flex-start;
+  gap: 6px;
+}
+.tip-idline .tip-hash {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.tip-idline a.tip-hash:hover {
+  text-decoration: underline;
+}
+.tip-icon-btn {
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: var(--muted);
+  transition: background-color 120ms var(--tip-ease), color 120ms var(--tip-ease);
+}
+.tip-icon-btn:hover {
+  background: var(--wash-mid);
+  color: var(--text);
+}
+
+/* ───────────── touch: hit areas and copy (pointer: coarse) ───────────── */
+
+/* (i) beside a figure whose explanation sits on a link: hover shows the tip on the
+   figure itself, a finger needs its own target. Phones and tablets only. */
+.tip-info {
+  position: relative;
+  display: none;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  color: var(--muted-2, var(--muted));
+  vertical-align: middle;
+  -webkit-tap-highlight-color: transparent;
+}
+.tip-info svg {
+  width: 14px;
+  height: 14px;
+}
+
+@media (pointer: coarse) {
+  .tip-info {
+    display: inline-flex;
+  }
+  /* A small control keeps its 16–18px look but takes a 44px finger. */
+  .fav-heart::after,
+  .tip-info::after {
+    content: "";
+    position: absolute;
+    inset: min(0px, calc((100% - 44px) / 2));
+  }
+  /* Keyboard hints mean nothing to a finger. */
+  .kbd-hints {
+    display: none;
+  }
+}

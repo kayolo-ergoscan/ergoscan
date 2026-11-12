@@ -228,7 +228,7 @@ export function FeedLpRow({ row, rank, enterClass }: { row: FeedLpHolder; rank: 
         </>
       }
       value={
-        <span className="feed-amt tabular-nums" title={erg ? `${erg} ERG` : undefined}>
+        <span className="feed-amt tabular-nums">
           {erg ?? "—"}
           {erg ? <span className="feed-unit">ERG</span> : null}
         </span>

@@ -1,5 +1,6 @@
 "use client";
 
+import { Tip } from "@/components/Tip";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
@@ -719,9 +720,11 @@ function HistoryKpis({
             {show && collected ? formatErgFixed(collected.rentNano, locale) : "—"}
           </KpiNum>
         </div>
-        <p className="mt-0.5 text-[12px] leading-[1.15] text-[var(--muted-2)]" title={t("rent.cap.collectedHint")}>
-          {collectedCaption(collected, t, locale)}
-        </p>
+        <Tip content={t("rent.cap.collectedHint")}>
+          <p className="mt-0.5 text-[12px] leading-[1.15] text-[var(--muted-2)]">
+            {collectedCaption(collected, t, locale)}
+          </p>
+        </Tip>
       </AddrFactCard>
       <AddrFactCard
         enter={2}

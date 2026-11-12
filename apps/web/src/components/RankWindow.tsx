@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useId } from "react";
+import { Tip } from "./Tip";
 import clsx from "clsx";
 import { useT } from "@/lib/i18n/I18nProvider";
 import { usePaperPress } from "@/lib/use-paper-press";
@@ -111,7 +112,7 @@ export function RankWindow({
     total != null && total > 0 ? ofLabel.replace("{n}", total.toLocaleString(loc)) : null;
 
   return (
-    <section className="list-more" title={hint}>
+    <section className="list-more">
       <div className="list-more-grid">
       {canNext ? (
         <button
@@ -132,11 +133,13 @@ export function RankWindow({
         <button type="button" className={stepBtn} aria-label={prevLabel} disabled={!canPrev} onClick={() => commit(offset - pageSize)}>
           <Chevron dir="left" />
         </button>
-        <p id={labelId} className="m-0 text-[12px] font-medium tabular-nums text-[var(--text)]">
-          <span className="sr-only">{tapeLabel} </span>
-          {range}
-          {ofText ? <span className="font-normal text-[var(--muted)]"> {ofText}</span> : null}
-        </p>
+        <Tip content={hint}>
+          <p id={labelId} className="m-0 text-[12px] font-medium tabular-nums text-[var(--text)]">
+            <span className="sr-only">{tapeLabel} </span>
+            {range}
+            {ofText ? <span className="font-normal text-[var(--muted)]"> {ofText}</span> : null}
+          </p>
+        </Tip>
         <button type="button" className={stepBtn} aria-label={nextLabel} disabled={!canNext} onClick={() => commit(offset + pageSize)}>
           <Chevron dir="right" />
         </button>

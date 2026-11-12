@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { MissShell } from "@/components/MissPanel";
+import { KnownTokenMark } from "@/components/KnownTokenMark";
 import { TokenLogo } from "@/components/TokenBadge";
 import { shortId } from "@/lib/format";
+import { tokenKnown, tokenTickerInk } from "@/lib/token-meta";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { Feed, FeedBoard, FeedCount, FeedField, FeedFields, FeedIdLine, FeedPlate, FeedRow, feedLoc } from "@/components/feed/Feed";
 
@@ -12,11 +14,18 @@ export type ResolveHit = {
   id: string;
   path: string;
   label?: string;
-  /** Set on token hits when the holder ranking answered. */
-  holders?: number;
 };
 
-export function SearchHits({ q, hits }: { q: string; hits: ResolveHit[] }) {
+export function SearchHits({
+  q,
+  hits,
+  holders = {},
+}: {
+  q: string;
+  hits: ResolveHit[];
+  /** Holder count by token id, when the catalog had it. */
+  holders?: Record<string, number>;
+}) {
   const { t } = useI18n();
   if (hits.length > 1 && hits.every((h) => h.type === "token")) {
     return (
@@ -26,7 +35,7 @@ export function SearchHits({ q, hits }: { q: string; hits: ResolveHit[] }) {
             plate={<FeedPlate tag={q || t("search.hit.token")} count={<FeedCount k="feed.tokens" n={hits.length} />} />}
           >
             {hits.map((h, i) => (
-              <TokenHitRow key={h.id} hit={h} rank={i + 1} />
+              <TokenHitRow key={h.id} hit={h} rank={i + 1} holders={holders[h.id]} />
             ))}
           </FeedBoard>
         </Feed>
@@ -39,7 +48,7 @@ export function SearchHits({ q, hits }: { q: string; hits: ResolveHit[] }) {
 }
 
 /** One token that shares the searched name: holders decide the order and are the figure. */
-function TokenHitRow({ hit, rank }: { hit: ResolveHit; rank: number }) {
+function TokenHitRow({ hit, rank, holders }: { hit: ResolveHit; rank: number; holders?: number }) {
   const { t, locale } = useI18n();
   const tag = feedLoc(locale);
   const name = hit.label?.trim() || null;
@@ -50,14 +59,18 @@ function TokenHitRow({ hit, rank }: { hit: ResolveHit; rank: number }) {
       tileTitle={name ?? undefined}
       lead={{ rank: rank.toLocaleString(tag) }}
       title={
-        <Link
-          prefetch={false}
-          href={hit.path}
-          title={hit.id}
-          className={name ? "feed-name font-semibold hover:underline" : "feed-name font-mono tabular-nums hover:underline"}
-        >
-          {name ?? shortId(hit.id, 8)}
-        </Link>
+        <>
+          <Link
+            prefetch={false}
+            href={hit.path}
+            title={hit.id}
+            className={name ? "feed-name font-semibold hover:underline" : "feed-name font-mono tabular-nums hover:underline"}
+            style={name ? { color: tokenTickerInk(hit.id) } : undefined}
+          >
+            {name ?? shortId(hit.id, 8)}
+          </Link>
+          {tokenKnown(hit.id) ? <KnownTokenMark /> : null}
+        </>
       }
       facts={
         <>
@@ -68,7 +81,7 @@ function TokenHitRow({ hit, rank }: { hit: ResolveHit; rank: number }) {
         </>
       }
       value={
-        <span className="feed-amt tabular-nums">{hit.holders != null ? hit.holders.toLocaleString(tag) : "—"}</span>
+        <span className="feed-amt tabular-nums">{holders != null ? holders.toLocaleString(tag) : "—"}</span>
       }
       sub={t("feed.sort.holders")}
       subMinor

@@ -1,5 +1,6 @@
 "use client";
 
+import { Tip, TipFigure } from "@/components/Tip";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import clsx from "clsx";
@@ -807,12 +808,17 @@ export function TokenView({
                     </span>
                   ) : null}
                 </p>
-                <p
-                  className="mt-0.5 text-[12px] leading-snug text-[var(--muted-2)]"
-                  title={supplyGlance?.exact}
-                >
+                <p className="mt-0.5 text-[12px] leading-snug text-[var(--muted-2)]">
                   {t("token.emission")}{" "}
-                  <span className="tabular-nums">{supplyGlance?.text ?? dash}</span>
+                  <Tip
+                    content={
+                      supplyGlance && supplyGlance.exact !== supplyGlance.text
+                        ? () => <TipFigure>{supplyGlance.exact}</TipFigure>
+                        : null
+                    }
+                  >
+                    <span className="tabular-nums">{supplyGlance?.text ?? dash}</span>
+                  </Tip>
                 </p>
               </AddrFactCard>
               <SegBar cols={4} className="tab-fit shrink-0">
@@ -1398,9 +1404,9 @@ function FeedParty({
   if (!list.length) return <span className="text-[var(--muted)]">—</span>;
   if (list.length > 1) {
     return (
-      <span className="feed-party-many" title={manyHint}>
-        {many}
-      </span>
+      <Tip content={manyHint}>
+        <span className="feed-party-many">{many}</span>
+      </Tip>
     );
   }
   const head = list[0] ?? "";

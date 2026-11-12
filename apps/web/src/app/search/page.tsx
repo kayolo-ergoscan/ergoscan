@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getGateway } from "@/lib/config";
 import { listPageMeta } from "@/lib/page-meta";
-import { orderTokenHitsByHolders } from "@/lib/token-hit-rank";
+import { rankTokenHits } from "@/lib/token-hit-rank";
 import { SearchHits, type ResolveHit } from "./search-hits";
 
 export const dynamic = "force-dynamic";
@@ -60,8 +60,11 @@ export default async function SearchPage({
   const raw = sp.q;
   const q = (Array.isArray(raw) ? raw[0] : raw)?.trim() ?? "";
   const gw = getGateway();
-  let hits = q ? await orderTokenHitsByHolders(q, await resolveQuery(q), gw) : [];
+  const ranked: { hits: ResolveHit[]; holders: Record<string, number> } = q
+    ? await rankTokenHits(q, await resolveQuery(q), gw)
+    : { hits: [], holders: {} };
+  let hits = ranked.hits;
   if (q && !hits.length) hits = await wideQuery(q);
   if (!isTokenNameList(hits) && hits[0]?.path) redirect(hits[0].path);
-  return <SearchHits q={q} hits={hits} />;
+  return <SearchHits q={q} hits={hits} holders={ranked.holders} />;
 }
