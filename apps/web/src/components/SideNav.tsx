@@ -4,136 +4,13 @@ import { useEffect, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import clsx from "clsx";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { useReducedMotion } from "framer-motion";
 import { useT } from "@/lib/i18n/I18nProvider";
 import { explorerHref, useSiteHost } from "@/lib/site-host";
 import { usePaperPress } from "@/lib/use-paper-press";
 import { BrandMark, BrandWord } from "./BrandMark";
-import { NavIcon, type NavIconId } from "./nav-icons";
-
-type NavLeaf = {
-  href: string;
-  key: string;
-  icon: NavIconId;
-  match?: string[];
-  exact?: boolean;
-  /** Leaves the explorer. The wallet API lives on its own host. */
-  external?: boolean;
-};
-
-type NavItem = NavLeaf & {
-  children?: NavItem[];
-  /** Name opens the page. The chevron only opens children. */
-  linkLabel?: boolean;
-};
-
-const NAV_MAIN: NavItem[] = [
-  { href: "/", key: "nav.home", icon: "home" },
-  { href: "/blocks", key: "nav.blocks", icon: "blocks", match: ["/blocks", "/block/"] },
-  { href: "/mempool", key: "nav.mempool", icon: "mempool", match: ["/mempool"] },
-  { href: "/transactions", key: "nav.txs", icon: "txs", match: ["/transactions", "/tx/"] },
-  { href: "/addresses", key: "nav.holders", icon: "holders", match: ["/addresses", "/richlist", "/address/"] },
-  { href: "/names", key: "nav.names", icon: "names", match: ["/names"] },
-  { href: "/favorites", key: "nav.favorites", icon: "favorites", match: ["/favorites"] },
-  { href: "/tokens", key: "nav.tokens", icon: "tokens", match: ["/tokens", "/token/"] },
-  { href: "/nfts", key: "nav.nfts", icon: "nfts", match: ["/nfts"] },
-  {
-    href: "/rent",
-    key: "nav.rent",
-    icon: "rent",
-    match: ["/rent"],
-    children: [
-      { href: "/rent", key: "nav.rentUpcoming", icon: "rentSoon", exact: true },
-      { href: "/rent/history", key: "nav.rentHistory", icon: "rentHist", exact: true },
-    ],
-  },
-  {
-    href: "/defi",
-    key: "nav.defi",
-    icon: "defi",
-    match: ["/defi"],
-    children: [
-      {
-        href: "/defi",
-        key: "nav.defiDex",
-        icon: "tape",
-        match: ["/defi/lithos", "/defi/spectrum", "/defi/pool"],
-        children: [
-          { href: "/defi/lithos", key: "nav.defiLithos", icon: "lithos", exact: true },
-          {
-            href: "/defi/spectrum",
-            key: "nav.defiSpectrum",
-            icon: "spectrum",
-            exact: true,
-            linkLabel: true,
-            children: [
-              { href: "/defi/pool", key: "nav.defiPool", icon: "pool", match: ["/defi/pool"] },
-            ],
-          },
-        ],
-      },
-      {
-        href: "/defi/stable",
-        key: "nav.defiStable",
-        icon: "stable",
-        match: ["/defi/stable"],
-        children: [
-          { href: "/defi/stable", key: "nav.defiAgeusd", icon: "ageusd", exact: true },
-        ],
-      },
-      {
-        href: "/defi/basis",
-        key: "nav.defiBasis",
-        icon: "basis",
-        match: ["/defi/basis"],
-      },
-    ],
-  },
-  {
-    href: "/oracles",
-    key: "nav.oracles",
-    icon: "oracles",
-    match: ["/oracles"],
-    children: [
-      { href: "/oracles/ergusd", key: "nav.oraclesOfficial", icon: "oracleUsd", exact: true },
-      {
-        href: "/oracles/erg-usd",
-        key: "nav.oraclesUsd",
-        icon: "oracleUsdV2",
-        exact: true,
-        linkLabel: true,
-        children: [{ href: "/oracles/erg-usd/dort", key: "nav.dort", icon: "dort", exact: true }],
-      },
-      {
-        href: "/oracles/xau-erg",
-        key: "nav.oraclesXau",
-        icon: "oracleXau",
-        exact: true,
-        linkLabel: true,
-        children: [{ href: "/oracles/xau-erg/gort", key: "nav.gort", icon: "gort", exact: true }],
-      },
-    ],
-  },
-  { href: "/rosen", key: "nav.rosen", icon: "rosen", match: ["/rosen"] },
-  { href: "/lithos", key: "nav.lithosProtocol", icon: "lithosProtocol", match: ["/lithos"] },
-];
-
-const NAV_FOOT: NavItem[] = [
-  {
-    href: "/learn",
-    key: "nav.guide",
-    icon: "learn",
-    match: ["/learn"],
-    children: [
-      { href: "/learn", key: "nav.learn", icon: "learn", exact: true },
-      { href: "/learn/network", key: "nav.network", icon: "globe", exact: true },
-    ],
-  },
-  { href: "/settings", key: "nav.settings", icon: "settings", match: ["/settings"] },
-  { href: "/about", key: "nav.about", icon: "about", match: ["/about"] },
-  { href: "https://api.ergoscan.me/docs", key: "nav.api", icon: "api", external: true },
-  { href: "/status", key: "nav.status", icon: "status", match: ["/status"] },
-];
+import { NavIcon } from "./nav-icons";
+import { NAV_FOOT, NAV_MAIN, type NavItem, type NavLeaf } from "@/lib/nav-tree";
 
 function pathActive(
   path: string,
@@ -579,48 +456,5 @@ export function SideNavRail({
       </div>
       {onToggle ? <RailToggle collapsed={collapsed} onToggle={onToggle} /> : null}
     </aside>
-  );
-}
-
-export function SideNavDrawer({
-  open,
-  onClose,
-}: {
-  open: boolean;
-  onClose: () => void;
-}) {
-  const reduce = useReducedMotion();
-  const t = useT();
-
-  return (
-    <AnimatePresence>
-      {open && (
-        <>
-          <motion.button
-            type="button"
-            aria-label={t("nav.close")}
-            className="fixed inset-0 z-40 bg-black/40 lg:hidden"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: reduce ? 0 : 0.2 }}
-            onClick={onClose}
-          />
-          <motion.aside
-            className="nav-drawer fixed z-50 flex w-[min(17.5rem,calc(100vw-1.5rem))] flex-col lg:hidden"
-            initial={reduce ? false : { x: "-110%" }}
-            animate={{ x: 0 }}
-            exit={reduce ? undefined : { x: "-110%" }}
-            transition={reduce ? { duration: 0 } : { duration: 0.32, ease: pillEase }}
-            aria-label={t("nav.menu")}
-          >
-            <NavBrand />
-            <nav className="scrollbar-none relative z-[1] min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-2 pb-4 pt-2">
-              <NavList onNavigate={onClose} />
-            </nav>
-          </motion.aside>
-        </>
-      )}
-    </AnimatePresence>
   );
 }

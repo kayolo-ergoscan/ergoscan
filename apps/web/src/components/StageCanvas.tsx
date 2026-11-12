@@ -14,6 +14,7 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import type { BallProps, SealEvent } from "@ergoscan/shared";
+import { canvasDpr, watchOnScreen } from "@/lib/canvas-run";
 
 const BG = "#0a1018";
 const CYAN = "#22D3EE";
@@ -94,7 +95,7 @@ export function StageCanvas({
     const canvas = canvasRef.current;
     if (!host || !canvas) return;
     const rect = host.getBoundingClientRect();
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = canvasDpr();
     const w = Math.max(320, Math.floor(rect.width));
     const h = Math.max(360, Math.floor(rect.height || 480));
     canvas.width = Math.floor(w * dpr);
@@ -119,6 +120,8 @@ export function StageCanvas({
 
   useEffect(() => {
     let raf = 0;
+    /** Off screen (<10 % visible) or a hidden tab: no frames. */
+    let on = true;
     let last = performance.now();
 
     const tick = (now: number) => {
@@ -126,12 +129,12 @@ export function StageCanvas({
       last = now;
       const canvas = canvasRef.current;
       if (!canvas) {
-        raf = requestAnimationFrame(tick);
+        raf = on ? requestAnimationFrame(tick) : 0;
         return;
       }
       const ctx = canvas.getContext("2d");
       if (!ctx) {
-        raf = requestAnimationFrame(tick);
+        raf = on ? requestAnimationFrame(tick) : 0;
         return;
       }
 
@@ -249,11 +252,26 @@ export function StageCanvas({
         h - 16
       );
 
-      raf = requestAnimationFrame(tick);
+      raf = on ? requestAnimationFrame(tick) : 0;
     };
 
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    const host = hostRef.current;
+    const stop = host
+      ? watchOnScreen(host, (visible) => {
+          on = visible;
+          if (!on) {
+            if (raf) cancelAnimationFrame(raf);
+            raf = 0;
+          } else if (!raf) {
+            last = performance.now();
+            raf = requestAnimationFrame(tick);
+          }
+        })
+      : ((raf = requestAnimationFrame(tick)), () => {});
+    return () => {
+      stop();
+      cancelAnimationFrame(raf);
+    };
   }, []);
 
   const hitTest = useCallback((clientX: number, clientY: number): BallProps | null => {

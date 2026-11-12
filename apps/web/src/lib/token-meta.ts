@@ -160,6 +160,13 @@ export function tokenAtRisk(
   return knownErgoTokenName(id) != null;
 }
 
+/** A token the explorer already names (catalog or the shared known set). */
+export function tokenKnown(tokenId: string | null | undefined): boolean {
+  const id = String(tokenId || "").trim().toLowerCase();
+  if (!id || id === ERG_ZERO) return false;
+  return Boolean(TOKEN_CATALOG[id] || KNOWN_TOKENS[id] || knownErgoTokenName(id));
+}
+
 export const SIGRSV_ID =
   "003bd19d0187117f130b62e1bcab0939929ff5c7709f843c5c4dd158949285d0";
 

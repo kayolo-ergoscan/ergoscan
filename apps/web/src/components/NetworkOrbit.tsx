@@ -11,6 +11,7 @@ import { getGateway } from "@/lib/config";
 import { loadGlobeMap, makePlaceholderMap } from "@/lib/earth-texture";
 import { enteringIds, useEnterIds } from "@/lib/keyed-enter";
 import { HOME, INK } from "@/lib/palette";
+import { canvasDpr, watchOnScreen } from "@/lib/canvas-run";
 import { ReelText } from "@/components/ReelText";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
@@ -381,14 +382,16 @@ export function NetworkOrbit({ enter = 0 }: { enter?: number }) {
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     let raf = 0;
     let running = true;
+    /** Off screen (<10 % visible) or a hidden tab: no frames. */
+    let on = true;
 
     const paint = (now: number) => {
       if (!running) return;
-      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      const dpr = canvasDpr();
       const w = wrap.clientWidth;
       const h = wrap.clientHeight;
       if (w < 32 || h < 32 || Math.abs(w - h) > 4) {
-        raf = requestAnimationFrame(paint);
+        raf = on ? requestAnimationFrame(paint) : 0;
         return;
       }
       const pw = Math.round(w * dpr);
@@ -501,13 +504,22 @@ export function NetworkOrbit({ enter = 0 }: { enter?: number }) {
         }
       }
 
-      raf = requestAnimationFrame(paint);
+      raf = on ? requestAnimationFrame(paint) : 0;
     };
 
-    raf = requestAnimationFrame(paint);
+    const stop = watchOnScreen(wrap, (visible) => {
+      on = visible;
+      if (!on) {
+        if (raf) cancelAnimationFrame(raf);
+        raf = 0;
+      } else if (!raf && running) {
+        raf = requestAnimationFrame(paint);
+      }
+    });
     return () => {
       mapped = false;
       running = false;
+      stop();
       cancelAnimationFrame(raf);
     };
   }, []);

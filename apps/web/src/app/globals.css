@@ -1741,13 +1741,12 @@ html[data-ink="day"] .token-tx-tape a[data-addr].is-twin {
     right: 0;
     bottom: 0;
     z-index: 39;
-    height: calc(var(--tabbar) + 4.5rem);
+    /* Behind the tab bar as before; above it only a 24 px fade, so the lowest content stays readable. */
+    height: calc(var(--tabbar) + 1.5rem);
     background: linear-gradient(
       0deg,
       var(--bg) 0%,
-      color-mix(in srgb, var(--bg) 78%, transparent) 28%,
-      color-mix(in srgb, var(--bg) 42%, transparent) 54%,
-      color-mix(in srgb, var(--bg) 16%, transparent) 78%,
+      color-mix(in srgb, var(--bg) 50%, transparent) calc(100% - 1.5rem),
       transparent 100%
     );
   }

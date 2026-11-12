@@ -9,7 +9,9 @@ import { RouteNavProgress } from "./RouteNavProgress";
 import { SyncChip, useKeepFresh } from "@/lib/page-sync";
 import { ChromeHeading } from "./ChromeHeading";
 import { MobileTabBar } from "./MobileTabBar";
-import { NavBrand, SideNavDrawer, SideNavRail } from "./SideNav";
+import { NavBrand, SideNavRail } from "./SideNav";
+import { MoreSheet } from "./MoreSheet";
+import { PriceSheet } from "./PriceSheet";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { fetchChainStats } from "@/lib/chain-stats";
 import { formatCompact, formatUsd } from "@/lib/format";
@@ -107,6 +109,7 @@ export function Shell({
   const nested = useContext(NestedShell);
   const path = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [priceOpen, setPriceOpen] = useState(false);
   const [railCollapsed, setRailCollapsed] = useState(false);
   const [railReady, setRailReady] = useState(false);
 
@@ -133,16 +136,27 @@ export function Shell({
 
   useEffect(() => {
     setMenuOpen(false);
+    setPriceOpen(false);
   }, [path]);
 
+  // Phone sheets only. A window grown past the phone width closes them.
   useEffect(() => {
-    if (!menuOpen) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
+    if (!menuOpen && !priceOpen) return;
+    const wide = window.matchMedia("(min-width: 1024px)");
+    const shut = () => {
+      if (!wide.matches) return;
+      setMenuOpen(false);
+      setPriceOpen(false);
     };
-  }, [menuOpen]);
+    shut();
+    wide.addEventListener("change", shut);
+    return () => wide.removeEventListener("change", shut);
+  }, [menuOpen, priceOpen]);
+
+  const openPrices = useCallback(() => {
+    setMenuOpen(false);
+    setPriceOpen(true);
+  }, []);
 
   const live = useSiteMarket(!nested, market);
 
@@ -153,7 +167,8 @@ export function Shell({
     <NestedShell.Provider value={true}>
       <CommandPalette />
       <RouteNavProgress />
-      <SideNavDrawer open={menuOpen} onClose={() => setMenuOpen(false)} />
+      <MoreSheet open={menuOpen} onClose={() => setMenuOpen(false)} />
+      <PriceSheet open={priceOpen} onClose={() => setPriceOpen(false)} rows={live.rows} usd={live.usd} />
       <div
         className={
           railReady
@@ -164,7 +179,7 @@ export function Shell({
       >
         <SideNavRail collapsed={railCollapsed} onToggle={toggleRail} />
 
-        <div className="stage-col flex min-h-dvh min-w-0 flex-col">
+        <div className={clsx("stage-col flex min-h-dvh min-w-0 flex-col", path !== "/" && "is-dockless")}>
           <SheetMark home={path === "/"} />
           <header className="sticky top-0 z-40 overflow-visible border-b border-[var(--border)] bg-[var(--bg)] pt-[env(safe-area-inset-top)] max-lg:border-transparent max-lg:bg-transparent max-lg:px-3 max-lg:pb-[0.4rem] max-lg:pt-[calc(0.45rem+env(safe-area-inset-top,0px))]">
             <div className="stage-width hidden h-[var(--toolbar)] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-3 px-4 sm:px-6 lg:grid lg:px-8">
@@ -183,7 +198,7 @@ export function Shell({
             <div className="phone-toolbar flex h-14 items-center gap-2 px-2.5 lg:hidden">
               <NavBrand compact />
               <SearchField />
-              <ErgPrice compact />
+              <ErgPrice compact onOpen={openPrices} />
             </div>
           </header>
 
@@ -204,10 +219,17 @@ export function Shell({
 
           <footer className="explorer-dock">
             <PriceTape rows={live.rows} fresh={live.fresh} />
+            <PricesHit onOpen={openPrices} />
           </footer>
         </div>
       </div>
-      <MobileTabBar moreOpen={menuOpen} onMore={() => setMenuOpen((v) => !v)} />
+      <MobileTabBar
+        moreOpen={menuOpen}
+        onMore={() => {
+          setPriceOpen(false);
+          setMenuOpen((v) => !v);
+        }}
+      />
     </NestedShell.Provider>
     </ErgUsdContext.Provider>
   );
@@ -225,7 +247,7 @@ function SearchField() {
       onClick={openSearch}
       aria-label={t("nav.searchChain")}
       data-scout="search"
-      className="flex h-8 min-w-0 flex-1 items-center gap-2 bg-transparent px-0 text-left lg:h-8"
+      className="flex h-11 min-w-0 flex-1 items-center gap-2 bg-transparent px-0 text-left lg:h-8"
     >
       <SearchSlashIcon />
       <span className="inline-flex min-w-0 items-baseline truncate text-[15px] font-medium tracking-tight text-[var(--text)]">
@@ -293,7 +315,21 @@ function SearchSlashIcon() {
   );
 }
 
-function ErgPrice({ compact = false }: { compact?: boolean }) {
+/** Phone ticker (home only): one tap target over the moving strip opens the price sheet. */
+function PricesHit({ onOpen }: { onOpen: () => void }) {
+  const t = useT();
+  return (
+    <button
+      type="button"
+      className="price-tape-hit lg:hidden"
+      aria-haspopup="dialog"
+      aria-label={t("price.open")}
+      onClick={onOpen}
+    />
+  );
+}
+
+function ErgPrice({ compact = false, onOpen }: { compact?: boolean; onOpen?: () => void }) {
   const t = useT();
   const usd = useContext(ErgUsdContext);
   const [circulating, setCirculating] = useState<number | null>(null);
@@ -314,6 +350,27 @@ function ErgPrice({ compact = false }: { compact?: boolean }) {
   const mcap = usd != null && circulating != null ? usd * circulating : null;
   const priceText = usd != null ? formatUsd(usd, 2) : "—";
   const mcapText = mcap != null ? `$${formatCompact(mcap)}` : "—";
+  if (compact && onOpen) {
+    // Phone: the price opens the price sheet (ERG, market cap, the ticker list).
+    return (
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-haspopup="dialog"
+        aria-label={`${t("price.open")} · ${priceText}`}
+        title={`${t("header.ergPrice")} ${priceText} · ${t("header.mcap")} ${mcapText}`}
+        className="flex h-11 shrink-0 items-center px-1"
+      >
+        <span
+          data-scout="price"
+          className="inline-block min-w-[3.25rem] text-[13px] font-medium tabular-nums"
+          style={{ color: INK.violet }}
+        >
+          {priceText}
+        </span>
+      </button>
+    );
+  }
   return (
     <Link
       prefetch={false}
