@@ -1187,10 +1187,19 @@ button.feed-caret:hover {
     white-space: normal;
   }
 }
-/* On a phone a fact that is a phrase may take two lines; rent danger rows drop their rank. */
+/* On a phone a fact that is a phrase may take two lines; rent danger rows drop their rank.
+   Its dot moves into its own padding, so a wrapped second line starts under the first
+   line's text and not inside the clipped dot strip. */
 @media (max-width: 639px) {
   .feed-facts > .feed-wrap {
+    position: relative;
+    padding-left: 15px;
     white-space: normal;
+  }
+  .feed-facts > .feed-wrap::before {
+    position: absolute;
+    top: 0;
+    left: 0;
   }
   .feed-row.is-danger .feed-facts > .feed-when {
     display: none;
