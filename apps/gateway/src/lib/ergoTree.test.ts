@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { describe, it } from "node:test";
+import { describe, it, test } from "node:test";
 import {
   decodeErgoTree,
+  ecPointShort,
+  officialConstantsText,
   decodeErgoTreeSync,
   ergoTreeTemplateHash,
   sha256HexBytes,
@@ -72,4 +74,24 @@ describe("ergoTree", () => {
     assert.equal(syncD.ergoTreeTemplateHash, asyncD.ergoTreeTemplateHash);
     assert.equal(syncD.treeConstants.length, asyncD.treeConstants.length);
   });
+});
+
+test("points print as the official explorer does (12 Nov 2026)", async () => {
+  assert.equal(
+    ecPointShort("021dde34603426402615658f1d970cfa7c7bd92ac81a8b16eeebff264d59ce4604"),
+    "ECPoint(1dde34,63f0c9,...)"
+  );
+  assert.equal(
+    ecPointShort("0282e3b9a641625a578d171e012ecda131d4dd63b603ff70a5d73bad126aa1f050"),
+    "ECPoint(82e3b9,edc90f,...)"
+  );
+  assert.equal(ecPointShort("04" + "00".repeat(32)), null);
+  const d = await decodeErgoTree(
+    "100204a00b08cd021dde34603426402615658f1d970cfa7c7bd92ac81a8b16eeebff264d59ce4604ea02d192a39a8cc7a70173007301"
+  );
+  assert.equal(
+    officialConstantsText(d.treeConstants),
+    "[\n  0: SInt$ = 720,\n  1: SSigmaProp = SigmaProp(ProveDlog(ECPoint(1dde34,63f0c9,...)))\n]"
+  );
+  assert.equal(officialConstantsText([]), "[]");
 });

@@ -149,7 +149,7 @@ export function StatusView({
             </button>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[12px]">
-            <Link href="/learn#evidence" className="text-[var(--accent)] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]">
+            <Link prefetch={false} href="/learn#evidence" className="text-[var(--accent)] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]">
               {t("status.method")}
             </Link>
             <span className="font-mono text-[11px] text-[var(--muted-2)]">
@@ -292,6 +292,7 @@ function ServiceCard({
             const ok = live && feed.live! > 0 && feed.hasPool;
             return (
               <Link
+                prefetch={false}
                 key={feed.slug}
                 href={`/oracles/${feed.slug}`}
                 className="flex min-w-0 items-center justify-between gap-3 rounded-[14px] bg-[var(--wash)] px-3 py-2.5 transition-colors duration-[400ms] ease-[var(--ease)] hover:bg-[var(--wash-mid)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"

@@ -22,6 +22,7 @@ export function SearchHits({ q, hits }: { q: string; hits: ResolveHit[] }) {
           {hits.map((h) => (
             <li key={h.id}>
               <Link
+                prefetch={false}
                 href={h.path}
                 className="flex items-center justify-between gap-3 rounded-[10px] px-3 py-2.5 chip-press overflow-hidden hover:bg-[var(--wash-faint)]"
               >

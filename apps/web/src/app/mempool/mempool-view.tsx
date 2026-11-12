@@ -17,7 +17,7 @@ import { useMempool } from "@/lib/useMempool";
 import { formatBytes, formatErgPrecise, formatFeeRate, toBigIntAmt } from "@/lib/format";
 import { ERGO_MAX_BLOCK_SIZE } from "@/lib/ergo-emission";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
-import { enteringIds, useEnterIds } from "@/lib/keyed-enter";
+import { ENTER_MS, enteringIds, useEnterIds } from "@/lib/keyed-enter";
 import {
   MEMPOOL_PACK,
   mempoolBallToTx,
@@ -55,9 +55,6 @@ export function MempoolView({
   const t = useT();
   const { locale } = useI18n();
   const { balls, fees } = useMempool(asBalls(initialBalls), initialP50);
-  const enter = useEnterIds();
-  const packEnter = useEnterIds();
-  const [listReady, setListReady] = useState(false);
   const [offset, setOffset] = useState(0);
   const [stuck, setStuck] = useState(false);
   const pinRef = useRef<HTMLDivElement>(null);
@@ -79,6 +76,12 @@ export function MempoolView({
   const liveOffset = Math.min(offset, cap);
   const page = rows.slice(liveOffset, liveOffset + MEMPOOL_PACK);
   const pageKey = page.map((b) => b.id).join(",");
+  // The server's first page goes into the first HTML, with the same entry animation.
+  const seedIds = useRef<string[] | null>(null);
+  if (seedIds.current == null) seedIds.current = pageKey ? pageKey.split(",") : [];
+  const enter = useEnterIds(ENTER_MS, seedIds.current);
+  const packEnter = useEnterIds(ENTER_MS, seedIds.current.length ? ["pack"] : []);
+  const [listReady, setListReady] = useState(seedIds.current.length > 0);
 
   useEffect(() => {
     if (offset !== liveOffset) setOffset(liveOffset);

@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // `next build` wipes its distDir first. A deploy builds into NEXT_DIST_DIR (e.g. .next-build)
+  // while the live server keeps .next, then swaps the folders; `next start` reads .next.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   allowedDevOrigins: ["127.0.0.1", "localhost"],
   transpilePackages: ["@ergoscan/shared", "@lumen/amm-chart", "echarts", "zrender"],
   async rewrites() {

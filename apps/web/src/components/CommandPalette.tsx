@@ -17,7 +17,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import clsx from "clsx";
 import { getGateway } from "@/lib/config";
 import { formatRelTime, shortId } from "@/lib/format";
-import { useT } from "@/lib/i18n/I18nProvider";
+import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { explorerHref, useSiteHost } from "@/lib/site-host";
 import { enteringIds, useEnterIds } from "@/lib/keyed-enter";
 import {
@@ -266,6 +266,7 @@ function ListHead({
 export function CommandPalette() {
   const router = useRouter();
   const t = useT();
+  const { locale } = useI18n();
   const { api } = useSiteHost();
   const reduce = useReducedMotion();
   const enter = useEnterIds();
@@ -607,7 +608,7 @@ export function CommandPalette() {
         {row.recent ? (
           <>
             <span className="shrink-0 font-mono text-[11px] tabular-nums text-[var(--muted-2)]">
-              {formatRelTime(row.hit.ts ?? null)}
+              {formatRelTime(row.hit.ts ?? null, locale)}
             </span>
             <PressChip
               tabIndex={-1}

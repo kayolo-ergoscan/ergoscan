@@ -11,3 +11,8 @@ coverage/
 .turbo/
 *.tsbuildinfo
 data/
+# web deploy: build next to the live .next, keep previous builds for rollback (deploy/deploy-web.sh)
+.next-build/
+.next-build.failed/
+.next.prev-*/
+.next-test/

@@ -28,6 +28,7 @@ import {
 import { rosenExplorer } from "@/lib/rosen-explorers";
 import { INK } from "@/lib/palette";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
+import { countText } from "@/lib/i18n/messages";
 import { SNAPSHOT_FETCH, enteringIds, snapshotPath, useEnterIds } from "@/lib/keyed-enter";
 import { useKeepFresh, usePageSync } from "@/lib/page-sync";
 import {
@@ -462,13 +463,14 @@ function RosenRef({
     );
   }
   return (
-    <Link href={hit.href} className={cls}>
+    <Link prefetch={false} href={hit.href} className={cls}>
       {label}
     </Link>
   );
 }
 
 function RosenWhen({ ts }: { ts: number | null | undefined }) {
+  const { locale } = useI18n();
   const clock = formatH24(ts, undefined, true);
   const date = formatDottedDate(ts);
   if (clock === "—" || date === "—") {
@@ -477,7 +479,7 @@ function RosenWhen({ ts }: { ts: number | null | undefined }) {
   return (
     <div>
       <p className={clsx("whitespace-nowrap tabular-nums", relAgeToneClass(relAgeTone(ts)))}>
-        {formatRelTime(ts)}
+        {formatRelTime(ts, locale)}
       </p>
       <p className="mt-0.5 whitespace-nowrap text-[11px] tabular-nums text-[var(--muted)]">
         {clock} · {date}
@@ -503,7 +505,9 @@ function RosenTapeRow({
   const token = tokenOf(row);
   const dec = row.tokenDecimals ?? 0;
   const watchers =
-    row.widsCount != null ? `${row.widsCount} ${t("rosen.col.watchers")}` : null;
+    row.widsCount != null
+      ? countText(t, locale, "rosen.col.watchers", row.widsCount, row.widsCount.toLocaleString(loc(locale)))
+      : null;
   return (
     <div
       className={clsx(

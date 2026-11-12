@@ -31,6 +31,8 @@ const faceT0 = Commissioner({
   subsets: ["latin", "cyrillic"],
   variable: "--font-face-t0",
   display: "swap",
+  // Only for a face picked in Settings (default is t1): load on use, not on every page.
+  preload: false,
 });
 
 const faceT2 = Fira_Sans({
@@ -38,6 +40,8 @@ const faceT2 = Fira_Sans({
   weight: ["400", "500", "600"],
   variable: "--font-face-t2",
   display: "swap",
+  // Only for a face picked in Settings (default is t1): load on use, not on every page.
+  preload: false,
 });
 
 const mono = IBM_Plex_Mono({
@@ -52,6 +56,8 @@ const faceT2Mono = Fira_Code({
   weight: ["400", "500", "600"],
   variable: "--font-t2-mono",
   display: "swap",
+  // Only for a face picked in Settings (default is t1): load on use, not on every page.
+  preload: false,
 });
 
 export const metadata: Metadata = {

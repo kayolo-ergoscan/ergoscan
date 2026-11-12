@@ -121,6 +121,7 @@ export function KpiGrid({
         };
         return k.href ? (
           <Link
+            prefetch={false}
             key={k.label}
             href={k.href}
             style={inkStyle}

@@ -70,7 +70,8 @@ test("secondary indexes are built after the heap and not on the copy path", () =
   const sql = packedSecondaryIndexSql();
   assert.match(sql, /CREATE INDEX CONCURRENTLY IF NOT EXISTS packed_tx_height_idx/);
   assert.match(sql, /packed_boxes_creation_tx_idx/);
-  assert.match(sql, /packed_token_tx_seen_height_idx/);
+  // Dropped 12 Nov 2026 (4.8 GB, 14 scans ever): the rebuild must not bring it back.
+  assert.doesNotMatch(sql, /packed_token_tx_seen_height_idx/);
   assert.match(sql, /packed_token_tx_seen_tx_idx ON packed\.token_tx_seen \(tx_id\)/);
   assert.match(sql, /packed_token_tx_move_tx_idx ON packed\.token_tx_move \(tx_id\)/);
 });

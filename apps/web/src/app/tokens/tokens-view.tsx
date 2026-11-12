@@ -26,7 +26,7 @@ import {
 import { TOKEN_CATALOG, tokenTickerInk } from "@/lib/token-meta";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { useChainTipRefresh, usePageSync } from "@/lib/page-sync";
-import { SNAPSHOT_FETCH, enteringIds, snapshotPath, useEnterIds } from "@/lib/keyed-enter";
+import { SNAPSHOT_FETCH, enteringIds, snapshotPath, useEnterIds, ENTER_MS } from "@/lib/keyed-enter";
 import { prefetchTokenHolders } from "@/lib/token-page-cache";
 import { useFavoriteList } from "@/lib/favorites";
 import {
@@ -242,10 +242,12 @@ export function TokensView({ initial }: { initial: TokensPageData }) {
   const [ready, setReady] = useState(initial.items.length > 0);
   const [err, setErr] = useState<string | null>(null);
   const [stuck, setStuck] = useState(false);
-  const enter = useEnterIds();
-  const packEnter = useEnterIds();
-  const [listReady, setListReady] = useState(false);
-  const opened = useRef(false);
+  // Rows the server already has go into the first HTML, with the same entry animation.
+  const seedIds = initial.items.map((row) => row.tokenId);
+  const enter = useEnterIds(ENTER_MS, seedIds);
+  const packEnter = useEnterIds(ENTER_MS, seedIds.length ? ["pack"] : []);
+  const [listReady, setListReady] = useState(seedIds.length > 0);
+  const opened = useRef(seedIds.length > 0);
   const pinRef = useRef<HTMLDivElement>(null);
   const offsetRef = useRef(offset);
   offsetRef.current = offset;
@@ -606,6 +608,7 @@ export function TokenTapeRow({
           <div className="flex min-w-0 items-center gap-1.5">
             {name ? (
               <Link
+                prefetch={false}
                 href={href}
                 className="min-w-0 truncate font-semibold hover:underline"
                 style={{ color: tokenTickerInk(row.tokenId) }}
@@ -629,6 +632,7 @@ export function TokenTapeRow({
       <div className="token-lane-id min-w-0 grid">
         <div className="min-w-0 px-2">
           <Link
+            prefetch={false}
             href={href}
             className="block truncate font-mono text-[12px] text-accent hover:underline"
             title={row.tokenId}
@@ -641,21 +645,23 @@ export function TokenTapeRow({
       </div>
       <div className="token-lane-pair min-w-0 grid">
         <div
+          suppressHydrationWarning
           className="min-w-0 px-2 text-left tabular-nums text-[var(--muted)]"
           title={firstTs != null ? formatTs(firstTs) : undefined}
         >
           {firstTs != null
-            ? formatRelTime(firstTs)
+            ? formatRelTime(firstTs, locale)
             : row.firstHeight != null
               ? `#${row.firstHeight.toLocaleString(loc(locale))}`
               : "—"}
         </div>
         <div
+          suppressHydrationWarning
           className="min-w-0 px-2 text-right tabular-nums"
           title={lastTs != null ? formatTs(lastTs) : undefined}
         >
           {lastTs != null
-            ? formatRelTime(lastTs)
+            ? formatRelTime(lastTs, locale)
             : row.lastHeight != null
               ? `#${row.lastHeight.toLocaleString(loc(locale))}`
               : "—"}

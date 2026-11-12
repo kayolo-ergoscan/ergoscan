@@ -4,7 +4,7 @@
  */
 import { graphql, parse, specifiedRules, validate, buildSchema, type GraphQLSchema } from "graphql";
 import { isMinerFeeBox, type RawTx } from "@ergoscan/shared";
-import { getIndexPool } from "../lib/indexDb.js";
+import { ADDRESS_TOKENS_MAX, getIndexPool } from "../lib/indexDb.js";
 import { validateSignedTx } from "../lib/submit-tx.js";
 import { depthError, documentDepth } from "./depth.js";
 import { GRAPHQL_MAX_BODY } from "./schema.js";
@@ -32,7 +32,8 @@ const TAKE_CAP = 50;
  * Past the cap the page is empty and the walk stops.
  */
 const SKIP_CAP = 100_000;
-const ASSET_CAP = 400;
+/** Same ceiling as the REST balance: every token of a real wallet, in token_id order. */
+const ASSET_CAP = ADDRESS_TOKENS_MAX;
 
 let schema: GraphQLSchema | null = null;
 
@@ -41,15 +42,18 @@ export function nautilusSchema(): GraphQLSchema {
   return schema;
 }
 
+/** A failed index read must not look like an empty wallet (12 Nov 2026 audit). */
+export const INDEX_UNAVAILABLE = "index_unavailable";
+
 async function defaultSql(text: string, params: unknown[] = []): Promise<Row[]> {
   const pool = getIndexPool();
-  if (!pool) return [];
+  if (!pool) throw new Error(INDEX_UNAVAILABLE);
   try {
     const r = await pool.query<Row>(text, params);
     return r.rows;
   } catch (e) {
     console.warn("[graphql] nautilus", String(e).slice(0, 240));
-    return [];
+    throw new Error(INDEX_UNAVAILABLE);
   }
 }
 
@@ -146,7 +150,11 @@ function registersOf(v: unknown): Record<string, unknown> {
   return {};
 }
 
-function shapeBox(row: Row, assets: { tokenId: string; amount: string }[], spent: Set<string>): Row {
+function shapeBox(
+  row: Row,
+  assets: { tokenId: string; amount: string; index?: number; boxId?: string }[],
+  spent: Set<string>
+): Row {
   const boxId = String(row.boxId ?? "");
   return {
     boxId,
@@ -154,12 +162,19 @@ function shapeBox(row: Row, assets: { tokenId: string; amount: string }[], spent
     index: Number(row.index) || 0,
     value: digits(row.value),
     creationHeight: Number(row.creationHeight) || 0,
+    // Height of the block that included the box (creationHeight is what the box says).
+    settlementHeight: Number(row.settlementHeight) || 0,
     ergoTree: String(row.ergoTree ?? ""),
     address: String(row.address ?? ""),
     assets,
     additionalRegisters: registersOf(row.registers),
     beingSpent: spent.has(boxId),
   };
+}
+
+function txSize(tx: RawTx): number {
+  const n = Number((tx as { size?: unknown }).size);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
 }
 
 function mempoolSpent(txs: Iterable<RawTx>): Set<string> {
@@ -172,11 +187,14 @@ function mempoolSpent(txs: Iterable<RawTx>): Set<string> {
   return spent;
 }
 
-function assetList(raw: { tokenId?: string; amount?: number | string }[] | undefined): { tokenId: string; amount: string }[] {
-  const out: { tokenId: string; amount: string }[] = [];
+function assetList(
+  raw: { tokenId?: string; amount?: number | string }[] | undefined,
+  boxId = ""
+): { tokenId: string; amount: string; index: number; boxId: string }[] {
+  const out: { tokenId: string; amount: string; index: number; boxId: string }[] = [];
   for (const asset of raw ?? []) {
     if (!asset.tokenId) continue;
-    out.push({ tokenId: asset.tokenId.toLowerCase(), amount: digits(asset.amount) });
+    out.push({ tokenId: asset.tokenId.toLowerCase(), amount: digits(asset.amount), index: out.length, boxId });
   }
   return out;
 }
@@ -203,9 +221,10 @@ function boxFromMempool(
     index: box.index ?? 0,
     value: digits(box.value),
     creationHeight: box.creationHeight ?? 0,
+    settlementHeight: 0,
     ergoTree: box.ergoTree ?? "",
     address: box.address ?? "",
-    assets: assetList(box.assets),
+    assets: assetList(box.assets, boxId),
     additionalRegisters: box.additionalRegisters ?? {},
     beingSpent: spent.has(boxId),
   };
@@ -241,12 +260,14 @@ SELECT encode(b.box_id, 'hex') AS "boxId",
        COALESCE(b.output_index, 0) AS "index",
        b.value_nano::text AS value,
        COALESCE(b.creation_height, 0) AS "creationHeight",
+       COALESCE(stx.height, 0) AS "settlementHeight",
        COALESCE(sc.ergo_tree, '') AS "ergoTree",
        COALESCE(ad.address, '') AS address,
        b.additional_registers AS registers
   FROM packed.boxes b
   LEFT JOIN packed.script sc ON sc.id = b.script_id
-  LEFT JOIN packed.addr ad ON ad.id = b.addr_id`;
+  LEFT JOIN packed.addr ad ON ad.id = b.addr_id
+  LEFT JOIN packed.transactions stx ON stx.id = b.creation_tx_id`;
 
 async function attachAssets(sql: Sql, rows: Row[], spent: Set<string>): Promise<Row[]> {
   if (!rows.length) return [];
@@ -256,14 +277,15 @@ async function attachAssets(sql: Sql, rows: Row[], spent: Set<string>): Promise<
             encode(token_id, 'hex') AS token_id,
             amount::text AS amount
        FROM packed.box_assets
-      WHERE box_id IN (SELECT decode(x, 'hex') FROM unnest($1::text[]) AS x)`,
+      WHERE box_id IN (SELECT decode(x, 'hex') FROM unnest($1::text[]) AS x)
+      ORDER BY box_id, asset_index NULLS LAST, token_id`,
     [ids]
   );
-  const byBox = new Map<string, { tokenId: string; amount: string }[]>();
+  const byBox = new Map<string, { tokenId: string; amount: string; index: number; boxId: string }[]>();
   for (const asset of assets) {
     const id = String(asset.box_id);
     const list = byBox.get(id) ?? [];
-    list.push({ tokenId: String(asset.token_id), amount: digits(asset.amount) });
+    list.push({ tokenId: String(asset.token_id), amount: digits(asset.amount), index: list.length, boxId: id });
     byBox.set(id, list);
   }
   return rows.map((row) => shapeBox(row, byBox.get(String(row.boxId)) ?? [], spent));
@@ -455,20 +477,27 @@ async function loadAddresses(sql: Sql, args: Row): Promise<Row[]> {
         )
       : Promise.resolve([]),
     sql(
-      `SELECT address, token_id, amount::text AS amount
-         FROM token_balances
-        WHERE address = ANY($1::text[]) AND amount > 0
+      `SELECT tb.address, tb.token_id, tb.amount::text AS amount, t.name, t.decimals
+         FROM token_balances tb
+         LEFT JOIN tokens t ON t.token_id = tb.token_id
+        WHERE tb.address = ANY($1::text[]) AND tb.amount > 0
+        ORDER BY tb.address, tb.token_id
         LIMIT ${ASSET_CAP}`,
       [addresses]
     ),
   ]);
   const summary = new Map<string, Row>();
   for (const row of [...shortRows, ...longRows]) summary.set(String(row.address), row);
-  const assets = new Map<string, { tokenId: string; amount: string }[]>();
+  const assets = new Map<string, { tokenId: string; amount: string; name: string | null; decimals: number | null }[]>();
   for (const row of assetRows) {
     const address = String(row.address);
     const list = assets.get(address) ?? [];
-    list.push({ tokenId: String(row.token_id), amount: digits(row.amount) });
+    list.push({
+      tokenId: String(row.token_id),
+      amount: digits(row.amount),
+      name: row.name == null ? null : String(row.name),
+      decimals: row.decimals == null ? null : Number(row.decimals),
+    });
     assets.set(address, list);
   }
   return addresses.map((address) => {
@@ -565,13 +594,17 @@ function txObject(
   dataInputs: { boxId: string }[] = [],
   proofs: Map<string, string> = new Map()
 ): Row {
+  const transactionId = String(row.id ?? "");
   return {
-    transactionId: String(row.id ?? ""),
+    transactionId,
     timestamp: digits(row.ts),
     inclusionHeight: Number(row.height) || 0,
     headerId: String(row.header ?? ""),
     index: Number(row.index) || 0,
+    size: Number(row.size) || 0,
     inputs: inputs.map((box, index) => ({
+      boxId: String(box.boxId ?? "").toLowerCase(),
+      transactionId,
       proofBytes: proofs.get(String(box.boxId ?? "").toLowerCase()) ?? "",
       extension: {},
       index,
@@ -650,6 +683,7 @@ async function loadTransactions(sql: Sql, args: Row, spent: Set<string>): Promis
               t.height,
               COALESCE(t.timestamp_ms, b.timestamp_ms)::text AS ts,
               COALESCE(t.index_in_block, 0) AS index,
+              COALESCE(t.size, 0) AS size,
               COALESCE(encode(b.id, 'hex'), '') AS header
          FROM packed.transactions t
          LEFT JOIN packed.blocks b ON b.height = t.height
@@ -671,7 +705,7 @@ async function loadTransactions(sql: Sql, args: Row, spent: Set<string>): Promis
   const wanted = new Set(addresses);
   return sliced.map((id) =>
     txObject(
-      byId.get(id) ?? { id, height: 0, ts: "0", index: 0, header: "" },
+      byId.get(id) ?? { id, height: 0, ts: "0", index: 0, size: 0, header: "" },
       inputs.get(id) ?? [],
       outputs.get(id) ?? [],
       wanted,
@@ -768,6 +802,8 @@ function mempoolTransactions(txs: RawTx[], args: Row, spent: Set<string>): Row[]
     const id = tx.id.toLowerCase();
     if (ids.size && !ids.has(id)) continue;
     const inputs = (tx.inputs ?? []).map((input, index) => ({
+      boxId: (input.boxId ?? "").toLowerCase(),
+      transactionId: id,
       proofBytes: proofText((input as { spendingProof?: { proofBytes?: unknown } }).spendingProof?.proofBytes),
       extension: {},
       index: input.index ?? index,
@@ -786,6 +822,7 @@ function mempoolTransactions(txs: RawTx[], args: Row, spent: Set<string>): Row[]
       inclusionHeight: 0,
       headerId: "",
       index: 0,
+      size: txSize(tx),
       inputs,
       dataInputs: (tx.dataInputs ?? []).map((input) => ({ boxId: (input.boxId ?? "").toLowerCase() })).filter((input) => input.boxId),
       outputs(filter?: { relevantOnly?: boolean }) {
@@ -836,6 +873,9 @@ export function nautilusRoot(sql: Sql = defaultSql) {
       const txs = [...ctx.getRawMempool().values()];
       const spent = mempoolSpent(txs);
       return {
+        // As the explorer GraphQL: size = bytes of all pool transactions, transactionsCount = how many.
+        size: txs.reduce((sum, tx) => sum + txSize(tx), 0),
+        transactionsCount: txs.length,
         boxes(args: Row) {
           return filterMempoolBoxes(txs, args, spent);
         },

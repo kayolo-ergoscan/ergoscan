@@ -1,10 +1,10 @@
 /**
- * Pull one IPFS image, store a 480px webp on the preview host, mark the CID.
+ * Pull one IPFS image, store a 480px webp under /var/nft-preview, mark the CID.
  * Bytes never go into Postgres. data: URLs are skipped.
  */
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ipfsCidFromPath, ipfsPathFromHref } from "@ergoscan/shared";
@@ -15,35 +15,11 @@ const GATES = [
   "https://nftstorage.link/ipfs/",
   "https://w3s.link/ipfs/",
 ];
-const HOST = process.env.NFT_PREVIEW_HOST || "10.0.0.3";
-const SSH_KEY = process.env.NFT_PREVIEW_KEY || "/root/.ssh/id_ed25519_ergoscan";
 const CURSOR = process.env.NFT_PREVIEW_CURSOR || "/var/lib/ergoscan/nft-preview.cursor";
 const MAX_BYTES = 12 * 1024 * 1024;
 const BATCH = 12;
 
 const pool = createPool();
-
-const CONTROL = "/run/ergoscan/nft-preview.sock";
-
-function sshArgs(remote: string[]): string[] {
-  return [
-    "-i",
-    SSH_KEY,
-    "-o",
-    "IdentitiesOnly=yes",
-    "-o",
-    "BatchMode=yes",
-    "-o",
-    "StrictHostKeyChecking=accept-new",
-    "-o",
-    "ControlMaster=auto",
-    "-o",
-    `ControlPath=${CONTROL}`,
-    "-o",
-    "ControlPersist=600",
-    ...remote,
-  ];
-}
 
 function run(cmd: string, args: string[], stdin?: Buffer): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -104,10 +80,12 @@ function safeCid(cid: string): boolean {
 
 async function ship(cid: string, webp: Buffer): Promise<void> {
   if (!safeCid(cid)) throw new Error("cid");
-  await mkdir("/run/ergoscan", { recursive: true });
-  const prefix = cid.slice(0, 2);
-  const remote = `mkdir -p /var/nft-preview/${prefix} && cat > /var/nft-preview/${prefix}/${cid}.webp`;
-  await run("ssh", sshArgs([`root@${HOST}`, remote]), webp);
+  const dir = join("/var/nft-preview", cid.slice(0, 2));
+  const dest = join(dir, `${cid}.webp`);
+  const tmp = join(dir, `.${cid}.${randomBytes(4).toString("hex")}.tmp`);
+  await mkdir(dir, { recursive: true });
+  await writeFile(tmp, webp);
+  await rename(tmp, dest);
 }
 
 async function mark(cid: string, status: "ready" | "fail", bytes: number | null, note: string) {

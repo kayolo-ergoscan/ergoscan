@@ -1,6 +1,7 @@
 /**
  * eUTXO-native explorer routes (graph, subblocks, tokens, platforms, openapi).
  */
+import { exactInt } from "../lib/exactJson.js";
 import type { Express } from "express";
 import {
   buildBoxGraph,
@@ -717,7 +718,7 @@ export function registerExplorerRoutes(app: Express, deps: ExplorerDeps) {
       name,
       description: idx?.description ?? null,
       decimals,
-      emissionAmount: emission,
+      emissionAmount: exactInt(idx?.emissionText, emission),
       boxId: idx?.boxId ?? null,
       platform: known?.platform ?? null,
       category: known?.category ?? (isNft ? "nft" : null),
@@ -796,6 +797,12 @@ const COMPAT_PATHS = [
   "/v1/boxes/unspent/byErgoTreeTemplateHash",
   "/v1/boxes/unspent/byGlobalIndex/stream",
   "/v1/transactions/byGlobalIndex/stream",
+  "/v1/boxes/byGlobalIndex/stream",
+  "/v1/blocks/byGlobalIndex/stream",
+  "/v1/boxes/unspent/stream",
+  "/v1/boxes/byTokenId",
+  "/v1/transactions/byInputsScriptTemplateHash",
+  "/v1/ergotree/convert",
   "/v1/addresses/{address}/balance/total",
   "/v1/tokens/bySymbol",
   "/v1/epochs/params",
@@ -996,13 +1003,52 @@ const OPENAPI_SPEC = {
     "/v1/boxes/unspent/byGlobalIndex/stream": {
       get: {
         summary:
-          "Unspent boxes in our gix window. minGix+maxGix required, max−min+1≤10000. globalIndex and additive gix are ours, not official explorer. Timeout 4s → 504.",
+          "Unspent boxes from minGix: minGix+limit (≤500, official) or minGix+maxGix (window ≤10000). globalIndex and additive gix are ours, not official explorer. Timeout 4s → 504.",
       },
     },
     "/v1/transactions/byGlobalIndex/stream": {
       get: {
         summary:
-          "Transactions in our gix window. Same minGix/maxGix rules. Official-shaped items; globalIndex and additive gix are ours. Timeout 4s → 504.",
+          "Transactions from minGix. Same minGix/limit/maxGix rules. Official-shaped items; globalIndex and additive gix are ours. Timeout 4s → 504.",
+      },
+    },
+    "/v1/boxes/byGlobalIndex/stream": {
+      get: {
+        summary: "All boxes (spent too) from minGix, limit ≤500 (or up to maxGix). Our gix. Timeout 4s → 504.",
+      },
+    },
+    "/v1/blocks/byGlobalIndex/stream": {
+      get: {
+        summary: "Official BlockInfo from minGix (block gix = height − 1), limit ≤500. minerReward from the emission rules. size = the block transactions' size (official adds the header and AD proofs).",
+      },
+    },
+    "/v1/boxes/unspent/stream": {
+      get: {
+        summary:
+          "Unspent boxes settled in minHeight..maxHeight (creating tx block), ≤1024 heights and ≤5000 boxes (400 above), gix order, JSON array.",
+      },
+    },
+    "/v1/boxes/byErgoTreeTemplateHash/{hash}/stream": {
+      get: { summary: "Boxes of the template settled in minHeight..maxHeight. Same caps as boxes/unspent/stream." },
+    },
+    "/v1/boxes/unspent/byErgoTreeTemplateHash/{hash}/stream": {
+      get: { summary: "Unspent boxes of the template settled in minHeight..maxHeight. Same caps." },
+    },
+    "/v1/boxes/byTokenId/{tokenId}": {
+      get: {
+        summary:
+          "Every box that ever held the token. limit ≤100, offset ≤1000000, exact total, no fixed order (as official). Timeout 4s → 504.",
+      },
+    },
+    "/v1/transactions/byInputsScriptTemplateHash/{hash}": {
+      get: {
+        summary:
+          "Txs spending a box of the template, by inclusion height (desc; sortDirection=asc). limit ≤100, offset ≤100000, exact total. Templates with hundreds of thousands of boxes can → 504.",
+      },
+    },
+    "/v1/ergotree/convert": {
+      post: {
+        summary: "Body {hashed: ErgoTree hex} (official name; ergoTree accepted). Returns {constants, script}.",
       },
     },
     "/v1/assets": {

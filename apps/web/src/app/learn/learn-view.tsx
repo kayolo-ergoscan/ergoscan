@@ -133,6 +133,7 @@ export function LearnView() {
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
               <Link
+                prefetch={false}
                 href="/status"
                 className="rounded-[10px] bg-[var(--wash)] px-3 py-2 text-[12px] text-[var(--accent)] transition-colors duration-[400ms] hover:bg-[var(--wash-mid)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
               >

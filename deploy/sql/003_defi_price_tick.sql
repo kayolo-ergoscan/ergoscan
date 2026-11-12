@@ -8,4 +8,4 @@ CREATE TABLE IF NOT EXISTS defi.price_tick (
   PRIMARY KEY (token_id, ts_ms)
 );
 CREATE INDEX IF NOT EXISTS defi_price_tick_ts ON defi.price_tick (ts_ms DESC);
-CREATE INDEX IF NOT EXISTS defi_price_tick_token_ts ON defi.price_tick (token_id, ts_ms DESC);
+-- (token_id, ts_ms DESC) was a copy of the primary key read backward; dropped in 007.

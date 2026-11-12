@@ -114,6 +114,7 @@ import {
   addressesForBoxIds,
   bumpTokensForBoxes,
   insertBoxAssetsMany,
+  mergeOutputAssets,
   insertBoxesMany,
   insertTransactionsMany,
   markSpentMany,
@@ -924,7 +925,9 @@ async function indexTxBatched(
       outputIndex,
       registers: registersJson(o),
     });
-    for (const a of o.assets ?? []) {
+    // Position = place in the node's list (contracts read tokens(0), tokens(1) …).
+    const outAssets: AssetInsertRow[] = [];
+    for (const [assetIndex, a] of (o.assets ?? []).entries()) {
       if (!a.tokenId) continue;
       const amt = exactIntStr(a.amount);
       tokenRows.push(
@@ -937,8 +940,9 @@ async function indexTxBatched(
           issuance: minted.has(a.tokenId),
         })
       );
-      assetRows.push({ boxId, tokenId: a.tokenId, amount: amt });
+      outAssets.push({ boxId, tokenId: a.tokenId, amount: amt, index: assetIndex });
     }
+    assetRows.push(...mergeOutputAssets(outAssets));
     if (address && address.length <= MAX_ADDRESS_TX_LEN) {
       addrRows.push({ address, txId, height });
     }
@@ -1089,7 +1093,9 @@ async function writeHeightRows(
         address,
         assets,
       });
-      for (const a of o.assets ?? []) {
+      // Position = place in the node's list (contracts read tokens(0), tokens(1) …).
+      const outAssets: AssetInsertRow[] = [];
+      for (const [assetIndex, a] of (o.assets ?? []).entries()) {
         if (!a.tokenId) continue;
         const amt = exactIntStr(a.amount);
         tokenRows.push(
@@ -1102,8 +1108,9 @@ async function writeHeightRows(
             issuance: minted.has(a.tokenId),
           })
         );
-        assetRows.push({ boxId, tokenId: a.tokenId, amount: amt });
+        outAssets.push({ boxId, tokenId: a.tokenId, amount: amt, index: assetIndex });
       }
+      assetRows.push(...mergeOutputAssets(outAssets));
       if (address && address.length <= MAX_ADDRESS_TX_LEN) {
         addrRows.push({ address, txId, height });
       }
@@ -1903,7 +1910,7 @@ async function enrichTokenMeta(pool: Pool, budget = 24) {
            name = COALESCE($2, name),
            description = COALESCE($3, description),
            decimals = COALESCE($4, decimals),
-           emission = COALESCE($5, emission),
+           emission = COALESCE($5::numeric, emission),
            box_id = COALESCE($6, box_id),
            artwork_url = CASE
              WHEN $7::text IS NOT NULL AND $7::text <> '' THEN $7
@@ -1916,7 +1923,11 @@ async function enrichTokenMeta(pool: Pool, budget = 24) {
           name,
           desc,
           meta.decimals != null ? Number(meta.decimals) : null,
-          meta.emissionAmount != null ? Number(meta.emissionAmount) : null,
+          // Exact digits: parseErgoJson keeps big ints as strings; Number() would round
+          // 9223372036854774807 to 9223372036854775000 (seen on 26 LP tokens, 12 Nov 2026).
+          meta.emissionAmount != null && /^\d+$/.test(String(meta.emissionAmount))
+            ? String(meta.emissionAmount)
+            : null,
           issuanceBoxId,
           artVal,
         ]

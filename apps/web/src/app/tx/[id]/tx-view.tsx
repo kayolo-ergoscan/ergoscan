@@ -44,10 +44,11 @@ import {
 } from "@/lib/tx-flow";
 import { INK, DONUT_SLICES } from "@/lib/palette";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
+import { countText } from "@/lib/i18n/messages";
 import { useFavoriteOf } from "@/lib/favorites";
 import { readHashTab, setHashTab } from "@/lib/hash-tab";
 import { useKeepFresh, usePageSync } from "@/lib/page-sync";
-import { SNAPSHOT_FETCH, enteringIds, useEnterIds } from "@/lib/keyed-enter";
+import { ENTER_MS, SNAPSHOT_FETCH, enteringIds, useEnterIds } from "@/lib/keyed-enter";
 import { paintTxSnapshot } from "@/lib/tx-shape-paint";
 import { TxExplanationPanel } from "./TxExplanationPanel";
 
@@ -183,16 +184,18 @@ export function TxView({
   const txFav = useFavoriteOf("transactions", id);
   const { locale } = useI18n();
   const { markSynced } = usePageSync();
-  const enter = useEnterIds();
   const ioIdsRef = useRef<string[]>([]);
   const [data, setData] = useState<TxPageSnapshot | null>(() => {
     const snap = asTxData(initial);
     if (snap) ioIdsRef.current = snapIds(snap);
     return snap;
   });
+  // A tx the server already has is drawn in the first HTML (Summary tab; a #boxes / #tokens
+  // link switches before paint), with the same entry animation.
+  const enter = useEnterIds(ENTER_MS, [], data != null);
   const [err, setErr] = useState<string | null>(null);
   const [tab, setTab] = useState<TxTab>("summary");
-  const [sheetReady, setSheetReady] = useState(false);
+  const [sheetReady, setSheetReady] = useState(() => data != null);
   const sheetReadyRef = useRef(false);
   const idsForTabRef = useRef<(t: TxTab) => string[]>(() => []);
 
@@ -495,7 +498,7 @@ export function TxView({
               </p>
               <p className="mt-0.5 truncate text-[12px] leading-none text-[var(--muted-2)]">
                 {(data.dataInputs?.length ?? 0) > 0
-                  ? t("tx.dataInputs").replace("{n}", String(data.dataInputs?.length ?? 0))
+                  ? countText(t, locale, "tx.dataInputs", data.dataInputs?.length ?? 0)
                   : "\u00a0"}
               </p>
             </AddrFactCard>
@@ -510,7 +513,7 @@ export function TxView({
                 {data.confirmed && height != null ? (
                   blockHref ? (
                     <KpiNum>
-                      <Link href={blockHref} className="text-accent hover:underline">
+                      <Link prefetch={false} href={blockHref} className="text-accent hover:underline">
                         {height.toLocaleString(loc(locale))}
                       </Link>
                     </KpiNum>
@@ -730,7 +733,7 @@ function PartyRow({
       : t("tx.unknown");
   const name =
     side === "fee" || party.isFee ? t("tx.minerFee") : shown;
-  const boxCap = t("tx.boxes").replace("{n}", String(party.boxes.length));
+  const boxCap = countText(t, locale, "tx.boxes", party.boxes.length);
   const tone = side === "in" ? "down" : side === "out" ? "up" : "gold";
   const nano = side === "in" ? -party.erg : party.erg;
   const tokenRows = tokenEntries(party.tokens);
@@ -746,6 +749,7 @@ function PartyRow({
           <p className="flex min-w-0 items-center gap-1">
             {party.address ? (
               <Link
+                prefetch={false}
                 href={`/address/${party.address}`}
                 title={party.address}
                 className={clsx(
@@ -757,6 +761,7 @@ function PartyRow({
               </Link>
             ) : boxId ? (
               <Link
+                prefetch={false}
                 href={`/box/${boxId}`}
                 title={boxId}
                 className="min-w-0 truncate font-mono text-accent hover:underline"
@@ -911,6 +916,7 @@ function BoxRow({
           <p className="flex min-w-0 items-center gap-1.5">
             {io.address ? (
               <Link
+                prefetch={false}
                 href={`/address/${io.address}`}
                 title={io.address}
                 className={clsx(
@@ -923,6 +929,7 @@ function BoxRow({
               </Link>
             ) : io.boxId ? (
               <Link
+                prefetch={false}
                 href={`/box/${io.boxId}`}
                 title={io.boxId}
                 className="min-w-0 truncate font-mono text-accent hover:underline"
@@ -951,7 +958,7 @@ function BoxRow({
             ) : null}
             {(fee && io.address) || d.known ? " · " : null}
             {io.boxId ? (
-              <Link href={`/box/${io.boxId}`} className="font-mono text-accent hover:underline">
+              <Link prefetch={false} href={`/box/${io.boxId}`} className="font-mono text-accent hover:underline">
                 {shortId(io.boxId, 6)}
               </Link>
             ) : (
@@ -1081,6 +1088,7 @@ function TokenFold({
             return (
               <li key={tid} className="flex min-w-0 items-center justify-between gap-3 text-[12px]">
                 <Link
+                  prefetch={false}
                   href={`/token/${tid}`}
                   className="flex min-w-0 items-center gap-1.5 text-accent hover:underline"
                 >
@@ -1126,6 +1134,7 @@ function TokenSheetRow({
       )}
     >
       <Link
+        prefetch={false}
         href={`/token/${row.tokenId}`}
         className="flex min-w-0 items-center gap-2 text-accent hover:underline"
       >

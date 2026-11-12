@@ -55,6 +55,8 @@ export type AssetInsertRow = {
   boxId: string;
   tokenId: string;
   amount: string;
+  /** Position in the box's token list, node order (0-based). */
+  index?: number | null;
 };
 
 export type AddressTxRow = {
@@ -408,6 +410,27 @@ export async function upsertTokensMany(
       unique.map((r) => r.decimals ?? null),
     ]
   );
+}
+
+/**
+ * One output's token list → one row per token. A box may list the same token twice (the node
+ * keeps both entries, e.g. 2 500 + 10 000); the box holds the sum, at the token's first place.
+ * Before 12 Nov 2026 the second entry was dropped and the holder's balance came out short.
+ */
+export function mergeOutputAssets(rows: AssetInsertRow[]): AssetInsertRow[] {
+  const byToken = new Map<string, AssetInsertRow>();
+  for (const r of rows) {
+    const key = r.tokenId.toLowerCase();
+    const prev = byToken.get(key);
+    if (!prev) {
+      byToken.set(key, { ...r });
+      continue;
+    }
+    if (/^\d+$/.test(prev.amount) && /^\d+$/.test(r.amount)) {
+      prev.amount = (BigInt(prev.amount) + BigInt(r.amount)).toString();
+    }
+  }
+  return [...byToken.values()];
 }
 
 /** Inserts new box_assets; returns rows that actually landed (xmax=0 equivalent). */

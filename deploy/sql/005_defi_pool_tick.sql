@@ -9,4 +9,4 @@ CREATE TABLE IF NOT EXISTS defi.pool_tick (
   PRIMARY KEY (pool_id, ts_ms)
 );
 CREATE INDEX IF NOT EXISTS defi_pool_tick_ts ON defi.pool_tick (ts_ms DESC);
-CREATE INDEX IF NOT EXISTS defi_pool_tick_pool_ts ON defi.pool_tick (pool_id, ts_ms DESC);
+-- (pool_id, ts_ms DESC) was a copy of the primary key; dropped in 008.

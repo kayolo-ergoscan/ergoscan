@@ -431,6 +431,7 @@ export function PoolTapeRow({
       <div className="block-lane-pair">
         <div className="flex min-w-0 items-center gap-1 px-3">
           <Link
+            prefetch={false}
             href={href}
             onClick={() => noteRouteNavigation(href)}
             className="flex min-w-0 items-center gap-2"

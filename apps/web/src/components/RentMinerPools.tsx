@@ -287,7 +287,7 @@ function PoolRow({
   return (
     <li className={clsx("list-none", RENT_POOL_ROW_CLASS)}>
       {row.address ? (
-        <Link href={`/address/${encodeURIComponent(row.address)}`} className={cls}>
+        <Link prefetch={false} href={`/address/${encodeURIComponent(row.address)}`} className={cls}>
           {inner}
         </Link>
       ) : (

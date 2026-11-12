@@ -174,6 +174,7 @@ export function NavBrand({
   const t = useT();
   return (
     <Link
+      prefetch={false}
       href="/"
       aria-label={t("brand.aria")}
       className={clsx(
@@ -310,6 +311,7 @@ function NavRow({
 
   return (
     <Link
+      prefetch={false}
       href={href}
       data-scout={item.href === "/addresses" ? "addresses" : undefined}
       title={collapsed ? label : undefined}
@@ -390,6 +392,7 @@ function NavBranch({
       {item.linkLabel ? (
         <div className={rowClass}>
           <Link
+            prefetch={false}
             href={href}
             {...bind}
             onClick={(e) => {
