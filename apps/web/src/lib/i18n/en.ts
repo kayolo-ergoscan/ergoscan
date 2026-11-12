@@ -537,7 +537,7 @@ export const en: Record<string, string> = {
   "defi.legendGainers": "Δ% up / down (fills after price history)",
   "defi.legendUniverse": "full AMM catalog ≤200 (not just the 6 largest)",
   "defi.legendUpstream":
-    "Full Spectrum/Crux heat — every list from the same token set.",
+    "Full ErgoDex/Crux heat — every list from the same token set.",
   "defi.ranksHint":
     "Click a row to load its trade tape.",
   "defi.tradesHint":
@@ -1256,7 +1256,9 @@ export const en: Record<string, string> = {
   "tx.cat.rent-renew": "Renewal",
   "tx.action.oracle-datapoint": "Oracle datapoint",
   "tx.action.oracle-refresh": "Oracle refresh",
-  "tx.action.spectrum-swap": "Spectrum swap",
+  "tx.action.spectrum-swap": "ErgoDex swap",
+  "tx.action.pool-deposit": "ErgoDex: add liquidity",
+  "tx.action.pool-redeem": "ErgoDex: remove liquidity",
   "tx.action.lithos-swap": "Lithos swap",
   "tx.action.sigmausd": "SigmaUSD",
   "tx.action.rosen": "Rosen",

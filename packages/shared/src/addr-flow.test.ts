@@ -110,12 +110,25 @@ test("mint to self while paying fee is intra, not received", () => {
   );
 });
 
-test("EIP-4 mint box id equals token id", () => {
-  const boxId = "ab".repeat(32);
-  const mint = eip4MintOfOutputs([
-    { boxId, assets: [{ tokenId: boxId, amount: "40" }] },
-  ]);
-  assert.equal(mint.get(boxId), 40n);
+test("EIP-4 mint: token id is the id of a spent input box, any input order", () => {
+  const firstInput = "ab".repeat(32);
+  const otherInput = "cd".repeat(32);
+  const outputId = "ef".repeat(32);
+  const mint = eip4MintOfOutputs(
+    [
+      { boxId: outputId, assets: [{ tokenId: firstInput, amount: "40" }, { tokenId: "99".repeat(32), amount: "5" }] },
+      { boxId: "12".repeat(32), assets: [{ tokenId: firstInput, amount: "2" }] },
+    ],
+    [otherInput, firstInput]
+  );
+  assert.equal(mint.get(firstInput), 42n);
+  assert.equal(mint.size, 1);
+});
+
+test("EIP-4 mint: an output's own box id is not a mint", () => {
+  const outputId = "ef".repeat(32);
+  const mint = eip4MintOfOutputs([{ boxId: outputId, assets: [{ tokenId: outputId, amount: "1" }] }], ["ab".repeat(32)]);
+  assert.equal(mint.size, 0);
 });
 
 test("unknown kind is null", () => {
