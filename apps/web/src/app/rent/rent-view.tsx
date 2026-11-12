@@ -670,7 +670,7 @@ function ClaimStatus({
 }) {
   const renewed = claimWho(row).renewed;
   return (
-    <span className={clsx("leading-tight", renewed ? "text-[#7eb6ff]" : "text-[#5ee0a0]")}>
+    <span className={clsx("leading-tight", renewed ? "text-[var(--c-token-text)]" : "text-[var(--up)]")}>
       {renewed ? t("rent.status.renewed") : t("rent.status.collected")}
     </span>
   );
@@ -989,7 +989,8 @@ function RentDanger({
 }) {
   return (
     <section
-      className="home-tile-enter mod mt-2 min-w-0 max-w-full overflow-hidden rounded-[20px] border border-[var(--border)] bg-[var(--module)] px-4 py-3.5 sm:px-5"
+      id="danger"
+      className="home-tile-enter mod mt-2 min-w-0 max-w-full scroll-mt-24 overflow-hidden rounded-[20px] border border-[var(--border)] bg-[var(--module)] px-4 py-3.5 sm:px-5"
       style={{ "--enter": 5 } as CSSProperties}
     >
       <div className="flex items-start gap-3">
@@ -1242,9 +1243,9 @@ function RentRow({
           <span
             className={clsx(
               "leading-tight",
-              tone === "due" && "text-[#ff8a65]",
-              tone === "soon" && "text-[#f0c14a]",
-              tone === "later" && "text-[#5ee0a0]"
+              tone === "due" && "text-[var(--c-tx-text)]",
+              tone === "soon" && "text-[var(--c-block-text)]",
+              tone === "later" && "text-[var(--c-box-text)]"
             )}
             title={row.rentDue ? undefined : inBlocks}
           >

@@ -18,18 +18,16 @@ export function addressIdOf(path: string): string | null {
   }
 }
 
-/** Three scratches. The clock matches the home rent tape: due, hours, or days. */
+const RU_CLOCK = { m: "мин", h: "ч", d: "д" } as const;
+
+/** Three scratches. The clock matches the home rent tape: due, minutes, hours, or days. */
 export function rentScratch(
   blocksUntilRent: number,
   labels: { danger: string; what: string; due: string },
   locale: "en" | "ru"
 ): { due: boolean; lines: [string, string, string] } {
   const clock = rentTapeClock(blocksUntilRent);
-  const when = clock.due
-    ? labels.due
-    : locale === "ru"
-      ? clock.label.replace("h", "ч").replace("d", "д")
-      : clock.label;
+  const when = clock.due ? labels.due : locale === "ru" ? `${clock.n}${RU_CLOCK[clock.unit]}` : clock.label;
   return { due: clock.due, lines: [labels.danger, labels.what, when] };
 }
 

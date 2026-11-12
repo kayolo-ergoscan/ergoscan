@@ -266,9 +266,3 @@ html[data-ink="day"] .tip {
     display: none;
   }
 }
-
-/* Home rent: the caption over the crates is the belt's label and opens the address on tap.
-   It keeps the caption's own inks, not the address-link colour. */
-html[data-look] main a.rent-caption-link[href] {
-  color: inherit !important;
-}

@@ -36,6 +36,7 @@ import { SNAPSHOT_FETCH, snapshotPath } from "@/lib/keyed-enter";
 import { majorityColorInk, majorityTxInk } from "@/lib/block-ink";
 import {
   parseRentTape,
+  parseRentEpochBoxes,
   parseRentEpochNano,
   type RentTapeRow,
 } from "@ergoscan/shared";
@@ -44,6 +45,7 @@ import { parseRentDanger, type RentDangerRow } from "@/lib/rent-danger";
 import { HomeMempoolStage } from "@/components/HomeMempoolStage";
 import { CadenceYard, type CadenceYardBlock } from "@/components/CadenceYard";
 import { Tip, TipHead, TipInfo, TipNote, TipRow, TipRows } from "@/components/Tip";
+import { HomeVersionNodes } from "@/components/HomeVersionNodes";
 import { ERGO_MAX_BLOCK_SIZE } from "@/lib/ergo-emission";
 import { isSupplyDigit, zipSupplyGlyphs } from "@/lib/supply-flip";
 
@@ -138,8 +140,8 @@ function mergeBlockRows(prev: BlockRow[], incoming: readonly BlockRow[]): BlockR
 
 type TxActivityPoint = { t: number; txs: number; feesErg: number; feesKnown?: boolean };
 
-const TX_LINE = "#8ec8ff";
-const FEE_LINE = "#f472b6";
+const TX_LINE = "#86a6f0";
+const FEE_LINE = "#e799b7";
 
 function formatFeeAxis(v: number): string {
   if (!Number.isFinite(v) || v === 0) return "0";
@@ -170,6 +172,7 @@ export function HomeExplorer({
   initialChartError = false,
   initialRentTape = [],
   initialRentEpochNano = null,
+  initialRentEpochBoxes = null,
   initialRentDanger = null,
   previewShare = false,
 }: {
@@ -186,6 +189,8 @@ export function HomeExplorer({
   initialChartError?: boolean;
   initialRentTape?: RentTapeRow[];
   initialRentEpochNano?: string | null;
+  /** Boxes that turn four years old before this header epoch ends. */
+  initialRentEpochBoxes?: number | null;
   /** Tokens short on ERG, from the rent snapshot. Null until that field arrives. */
   initialRentDanger?: RentDangerRow[] | null;
   /** Local `/?preview=share` — keep fixture rows, don't overwrite from stage. */
@@ -221,6 +226,7 @@ export function HomeExplorer({
   const [poolHover, setPoolHover] = useState<{ label: string; pct: number } | null>(null);
   const [rentTape, setRentTape] = useState<RentTapeRow[]>(initialRentTape);
   const [rentEpochNano, setRentEpochNano] = useState<string | null>(initialRentEpochNano);
+  const [rentEpochBoxes, setRentEpochBoxes] = useState<number | null>(initialRentEpochBoxes);
   const [rentDanger, setRentDanger] = useState<RentDangerRow[]>(initialRentDanger ?? []);
   const [rentDangerReady, setRentDangerReady] = useState(initialRentDanger != null);
   const snapRetry = useRef(0);
@@ -286,6 +292,7 @@ export function HomeExplorer({
           change24h?: number | null;
           rentTape?: unknown;
           rentEpochNano?: unknown;
+          rentEpochBoxes?: unknown;
           rentDanger?: unknown;
         }>;
       })
@@ -435,6 +442,8 @@ export function HomeExplorer({
           if (tape) setRentTape(tape);
           const epochNano = parseRentEpochNano(j.rentEpochNano);
           if (epochNano != null) setRentEpochNano(epochNano);
+          const epochBoxes = parseRentEpochBoxes(j.rentEpochBoxes);
+          if (epochBoxes != null) setRentEpochBoxes(epochBoxes);
           const danger = parseRentDanger(j.rentDanger);
           setRentDanger(danger ?? []);
           setRentDangerReady(true);
@@ -616,7 +625,7 @@ export function HomeExplorer({
             </div>
             <KpiValue flush full muted={mcap == null}>
               {mcap != null ? (
-                <ReelText text={`${formatGroupedNumber(Math.round(mcap), 0, 0)} $`} />
+                <ReelText text={`$${formatGroupedNumber(Math.round(mcap), 0, 0)}`} />
               ) : (
                 mcapMiss
               )}
@@ -625,7 +634,7 @@ export function HomeExplorer({
               <TileName>{t("home.volume24h")}</TileName>
               <KpiValue flush full muted={vol24 == null}>
                 {vol24 != null ? (
-                  <ReelText text={`${formatGroupedNumber(Math.round(vol24), 0, 0)} $`} />
+                  <ReelText text={`$${formatGroupedNumber(Math.round(vol24), 0, 0)}`} />
                 ) : (
                   "—"
                 )}
@@ -843,17 +852,18 @@ export function HomeExplorer({
           className="home-tile-enter max-lg:order-4 lg:col-start-1 lg:row-start-3"
           style={enterAt(9)}
         />
-        <section
-          className="home-tile-enter home-meet-right mod flex h-full min-h-0 flex-col rounded-[20px] border border-[var(--border)] bg-[var(--module)] px-3.5 py-3 max-lg:order-3 lg:col-start-2 lg:row-start-3"
+        <HomeVersionNodes
+          className="home-tile-enter home-meet-right h-full min-h-0 max-lg:order-3 lg:col-start-2 lg:row-start-3"
           style={enterAt(11)}
-        >
-          <p className="text-[13px]" style={{ color: HOME.forming }}>{t("home.versionNodes")}</p>
-        </section>
+        />
         </div>
 
         <HomeRentTape
           rows={rentTape}
           epochRentNano={rentEpochNano}
+          epochBoxes={rentEpochBoxes}
+          height={tipHeight}
+          avgBlockMs={avgBlockMs}
           danger={rentDanger}
           dangerReady={rentDangerReady}
           previewShare={previewShare}
@@ -1183,15 +1193,16 @@ function EpochBar({
           {t("home.epoch")} <ReelText text={n.toLocaleString(loc)} />
         </p>
         <div className="flex min-w-0 items-center gap-3 text-[12px] leading-none tabular-nums">
-          <span className="epoch-slot inline-flex min-w-0 items-baseline gap-1 font-semibold">
+          <span className="epoch-slot inline-flex shrink-0 items-baseline gap-1 whitespace-nowrap font-semibold">
             <ReelText text={slot.toLocaleString(loc)} />
-            <span className="font-medium opacity-70">/ {ERGO_EPOCH_LEN.toLocaleString(loc)}</span>
+            {/* A phone keeps the slot and the %; the epoch length is the same every time. */}
+            <span className="font-medium opacity-70 max-sm:hidden">/ {ERGO_EPOCH_LEN.toLocaleString(loc)}</span>
           </span>
           <span className="epoch-slot inline-flex shrink-0 items-center gap-1 font-semibold">
             <EpochClock />
             <ReelText text={`${pct.toFixed(0)}%`} />
           </span>
-          <span className="epoch-left inline-flex shrink-0 items-center gap-1 font-medium">
+          <span className="epoch-left inline-flex shrink-0 items-center gap-1 whitespace-nowrap font-medium">
             <EpochFlag />
             <ReelText text={formatRemain(leftMs)} />
             <span className="font-normal opacity-80">{t("home.epochLeft")}</span>
@@ -1758,8 +1769,12 @@ function BlockCadence({
     yard[yard.length - 1] ??
     null;
   const activeRow = active ? slots.find((b) => b.id === active.id) ?? null : null;
+  // The pour counter belongs to the new block only while it is in the yard (holding).
+  // Before its first ball lands, `last` is still the previous block and keeps its own count.
   const activeTxs =
-    active && grow && last && active.id === last.id && grow.total > 0 ? grow.n : (activeRow?.txCount ?? 0);
+    holding && active && grow && last && active.id === last.id && grow.total > 0
+      ? grow.n
+      : (activeRow?.txCount ?? 0);
 
   return (
     <section

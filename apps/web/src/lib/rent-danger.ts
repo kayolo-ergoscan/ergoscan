@@ -62,3 +62,56 @@ export function dangerHoldingUsd(row: Pick<RentDangerRow, "amount" | "decimals" 
     return 0;
   }
 }
+
+/** One token across its boxes in the danger list. */
+export type RentDangerGroup = {
+  tokenId: string;
+  name: string | null;
+  decimals: number | null;
+  /** Boxes in the list that hold this token. */
+  boxes: number;
+  /** Raw token units summed over those boxes. */
+  amount: bigint;
+  /** Sum of each box's amount × price. Zero when the token has no price. */
+  usd: number;
+  /** Blocks until the first of those boxes can be taken. */
+  soonest: number;
+};
+
+/**
+ * Rows are boxes, so a token can show up many times. Fold them per token and put the
+ * soonest box first. The snapshot caps the list, so sums are lower bounds.
+ */
+export function groupRentDanger(rows: readonly RentDangerRow[]): RentDangerGroup[] {
+  const byToken = new Map<string, RentDangerGroup>();
+  for (const row of rows) {
+    let amount = 0n;
+    try {
+      amount = BigInt(row.amount || "0");
+    } catch {
+      amount = 0n;
+    }
+    const g = byToken.get(row.tokenId);
+    if (g) {
+      g.boxes += 1;
+      g.amount += amount;
+      g.usd += dangerHoldingUsd(row);
+      g.soonest = Math.min(g.soonest, row.blocksUntilRent);
+      if (!g.name && row.name) g.name = row.name;
+      if (g.decimals == null && row.decimals != null) g.decimals = row.decimals;
+    } else {
+      byToken.set(row.tokenId, {
+        tokenId: row.tokenId,
+        name: row.name,
+        decimals: row.decimals,
+        boxes: 1,
+        amount,
+        usd: dangerHoldingUsd(row),
+        soonest: row.blocksUntilRent,
+      });
+    }
+  }
+  return [...byToken.values()].sort(
+    (a, b) => a.soonest - b.soonest || b.usd - a.usd || (a.tokenId < b.tokenId ? -1 : 1)
+  );
+}

@@ -44,7 +44,7 @@ function loc(locale: string): string {
 
 function statusTone(status: string): string {
   if (status === "completed") return "bg-[var(--up)]/15 text-[var(--up)]";
-  if (status === "fraud") return "bg-[#FF4D6D]/15 text-[#FF4D6D]";
+  if (status === "fraud") return "bg-down/15 text-[var(--down)]";
   return "bg-[var(--wash)] text-[var(--muted)]";
 }
 

@@ -1,0 +1,65 @@
+/*
+ * Variant B «Причал» (dock). When the plate reaches the header it docks into
+ * it: the header's lower corners go square, the plate widens to the header's
+ * width and becomes its second row, split by one hairline. A 2px line in the
+ * entity colour along the docked bar's foot fills as you go through the day.
+ */
+html[data-seam="b"] .feed {
+  --feed-pin: var(--seam-pin);
+}
+@media (min-width: 1024px) {
+  html[data-seam="b"] .stage-col > header.sticky {
+    /* collar above and beside the header, flush at its foot */
+    box-shadow: 0 calc(-1 * var(--float-pad)) 0 var(--float-pad) var(--bg) !important;
+    transition: border-radius 160ms var(--ease);
+  }
+  html[data-seam="b"][data-plate-stuck] .stage-col > header.sticky {
+    border-bottom-left-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+  }
+}
+@media (max-width: 1023px) {
+  html[data-seam="b"] .stage-col > header.sticky::before {
+    background: var(--bg) !important;
+    bottom: var(--seam-bar-gap, 0px) !important;
+  }
+  html[data-seam="b"] [data-seam-bar] {
+    transition: border-radius 160ms var(--ease);
+  }
+  html[data-seam="b"][data-plate-stuck] [data-seam-bar] {
+    border-bottom-left-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+  }
+}
+html[data-seam="b"] .feed-plate[data-stuck] {
+  margin-inline: calc(-1 * var(--dock-l)) calc(-1 * var(--dock-r));
+  padding-left: calc(14px + var(--dock-l));
+  padding-right: calc(10px + var(--dock-r));
+  border-radius: 0 0 var(--radius) var(--radius);
+  box-shadow: inset 0 1px 0 var(--border);
+  background-image: linear-gradient(var(--seam-ink), var(--seam-ink));
+  background-size: calc(var(--seam-p) * 100%) 2px;
+  background-position: 0 100%;
+  background-repeat: no-repeat;
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-seam="b"] .stage-col > header.sticky,
+  html[data-seam="b"] [data-seam-bar] {
+    transition: none !important;
+  }
+}
+
+@media (max-width: 1023px) {
+  /* Over a solid band the phone pill needs no glass: flat tile, like the desktop header. */
+  html[data-seam="b"] .phone-toolbar {
+    background: var(--module) !important;
+    border-color: transparent !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+}
+@media (max-width: 1023px) {
+  html[data-seam="b"] .feed-plate[data-stuck] {
+    border-radius: 0 0 16px 16px;
+  }
+}

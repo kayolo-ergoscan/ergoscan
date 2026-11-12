@@ -7,10 +7,10 @@ import type { EvidenceKind } from "@/lib/trust-board";
 
 const TONE: Record<EvidenceKind, string> = {
   chain: "var(--accent)",
-  decoded: "#9b87f5",
-  telemetry: "#59b7c7",
+  decoded: "var(--k-nft, #9b87f5)",
+  telemetry: "var(--c-net, #59b7c7)",
   live: "var(--up)",
-  heuristic: "#d99b2b",
+  heuristic: "var(--k-rent, #d99b2b)",
   external: "var(--muted)",
 };
 

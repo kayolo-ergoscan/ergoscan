@@ -77,10 +77,20 @@ test("parseRentTape: missing vs empty vs rows", () => {
 test("clock and tone", () => {
   assert.deepEqual(rentTapeClock(0), { due: true });
   assert.equal(rentTapeTone(0), "due");
-  assert.deepEqual(rentTapeClock(180), { due: false, label: "6h" });
+  assert.deepEqual(rentTapeClock(180), { due: false, n: 6, unit: "h", label: "6h" });
   assert.equal(rentTapeTone(180), "soon");
-  assert.deepEqual(rentTapeClock(1440), { due: false, label: "2d" });
+  assert.deepEqual(rentTapeClock(1440), { due: false, n: 2, unit: "d", label: "2d" });
   assert.equal(rentTapeTone(1440), "later");
+});
+
+test("clock: minutes under an hour, hours under two days", () => {
+  assert.deepEqual(rentTapeClock(1), { due: false, n: 2, unit: "m", label: "2m" });
+  assert.deepEqual(rentTapeClock(4), { due: false, n: 8, unit: "m", label: "8m" });
+  assert.deepEqual(rentTapeClock(29), { due: false, n: 58, unit: "m", label: "58m" });
+  assert.deepEqual(rentTapeClock(30), { due: false, n: 1, unit: "h", label: "1h" });
+  assert.deepEqual(rentTapeClock(1084), { due: false, n: 36, unit: "h", label: "36h" });
+  assert.deepEqual(rentTapeClock(1439), { due: false, n: 48, unit: "h", label: "48h" });
+  assert.deepEqual(rentTapeClock(5040), { due: false, n: 7, unit: "d", label: "7d" });
 });
 
 test("week clock: now is 0, 7d is 1", () => {

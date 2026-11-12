@@ -95,7 +95,9 @@ test("the pick writes danger, the rent, then the clock", () => {
     due: true,
     lines: ["danger", "storage rent", "due"],
   });
-  assert.deepEqual(rentScratch(3, labels, "en").lines[2], "1h");
+  assert.deepEqual(rentScratch(3, labels, "en").lines[2], "6m");
+  assert.deepEqual(rentScratch(3, labels, "ru").lines[2], "6мин");
+  assert.deepEqual(rentScratch(90, labels, "ru").lines[2], "3ч");
   assert.equal(rentScratch(3, labels, "en").due, false);
   assert.deepEqual(rentScratch(1440, labels, "ru").lines, ["danger", "storage rent", "2д"]);
 });

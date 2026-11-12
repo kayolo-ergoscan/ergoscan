@@ -41,7 +41,8 @@ import {
   type IdxBoxRow,
   type IdxNft,
 } from "../lib/indexDb.js";
-import { getRentPage } from "../lib/snapshots.js";
+import { getRentPage, rentTapeMarks } from "../lib/snapshots.js";
+import { meaningsByIds } from "../lib/txMeaning.js";
 import { resolveDecimals, sharePctOfEmission } from "../lib/explorerCompat.js";
 
 export type ExplorerDeps = {
@@ -534,9 +535,15 @@ export function registerExplorerRoutes(app: Express, deps: ExplorerDeps) {
           source: "indexer:missing",
         });
       }
+      const meanings = await meaningsByIds(page.items.map((t) => t.id), rentTapeMarks).catch(
+        () => new Map()
+      );
       return res.json({
         tokenId: id,
-        items: page.items,
+        items: page.items.map((t) => {
+          const meaning = meanings.get(t.id);
+          return meaning ? { ...t, meaning } : t;
+        }),
         pagination: {
           offset,
           limit,
@@ -919,10 +926,10 @@ const OPENAPI_SPEC = {
     "/v1/tokens/{id}": {
       get: {
         summary:
-          "Token card from indexer `tokens` + issuance box registers in PG. Additive nft { kind, sha256, url, royalty, collectionTokenId, mintAddress } from EIP-4/24. Never the node. Additive ?market=0 skips Spectrum.",
+          "Token card from indexer `tokens` + issuance box registers in PG. Additive nft { kind, sha256, url, royalty, collectionTokenId, mintAddress } from EIP-4/24. Never the node. Additive ?market=0 skips ErgoDex pools.",
       },
     },
-    "/v1/tokens/{id}/price": { get: { summary: "Token price (Spectrum + ERG/USD)" } },
+    "/v1/tokens/{id}/price": { get: { summary: "Token price (ErgoDex + ERG/USD)" } },
     "/v1/tokens/{id}/holders": {
       get: {
         summary:
@@ -932,20 +939,20 @@ const OPENAPI_SPEC = {
     "/v1/tokens/{id}/txs": {
       get: {
         summary:
-          "Token tx tape from token_tx_move. No box walk. flow=all is transfers, swaps excluded. flow=swap is Spectrum/Lithos buy/sell from defi.trades. flow=mintburn is issuance and real burns. Keyset ?cursor=height:txId.",
+          "Token tx tape from token_tx_move. No box walk. flow=all is transfers, swaps excluded. flow=swap is ErgoDex/Lithos buy/sell from defi.trades. flow=mintburn is issuance and real burns. Keyset ?cursor=height:txId.",
       },
     },
-    "/v1/tokens/{id}/pools": { get: { summary: "Spectrum DEX pools for token" } },
+    "/v1/tokens/{id}/pools": { get: { summary: "ErgoDex pools for token" } },
     "/v1/tokens/search": {
       get: {
         summary:
-          "Search tokens by name or id. Accepts q or official query. Index first (tokens table), then known/Spectrum. Never api.ergoplatform.com. Additive explorerItems[] as official TokenInfo (string emissionAmount).",
+          "Search tokens by name or id. Accepts q or official query. Index first (tokens table), then known/ErgoDex. Never api.ergoplatform.com. Additive explorerItems[] as official TokenInfo (string emissionAmount).",
       },
     },
     "/v1/tokens/bySymbol/{name}": {
       get: {
         summary:
-          "Official alias. All tokens with this exact name (case-insensitive). Array of TokenInfo. tokens table only. Decimals from DB or known Rosen/Spectrum map when DB is 0.",
+          "Official alias. All tokens with this exact name (case-insensitive). Array of TokenInfo. tokens table only. Decimals from DB or known Rosen/ErgoDex map when DB is 0.",
         responses: {
           "200": {
             content: {
@@ -1191,7 +1198,7 @@ const OPENAPI_SPEC = {
     "/v1/prices/erg": {
       get: {
         summary:
-          "ERG/USD from snapshot_kv.market (oracle writer CoinGecko); home is a copy. Additive rank, volume24h, change24h. Additive tape: up to 18 Spectrum reserve marks (tokenId, symbol, priceUsd, changePct vs yesterday), cached about 45s. GET does not call CoinGecko or scan swaps. Official pool price is /v1/prices/erg/oracle.",
+          "ERG/USD from snapshot_kv.market (oracle writer CoinGecko); home is a copy. Additive rank, volume24h, change24h. Additive tape: up to 18 ErgoDex reserve marks (tokenId, symbol, priceUsd, changePct vs yesterday), cached about 45s. GET does not call CoinGecko or scan swaps. Official pool price is /v1/prices/erg/oracle.",
       },
     },
     "/v1/prices/erg/oracle": {

@@ -319,14 +319,14 @@ export function OracleCouncil({
       ? walk[hop % walk.length]!
       : null;
   const spark = step ? gapEnds(pts[step.a] ?? pts[0]!, pts[step.b] ?? pts[0]!) : null;
-  const sparkInk = lens === "silent" ? "#ff4d6d" : "var(--up)";
+  const sparkInk = lens === "silent" ? "var(--down)" : "var(--up)";
 
   useEffect(() => {
     if (reduce || phase !== "idle" || walk.length < 1) return;
     const id = window.setInterval(() => setHop((n) => n + 1), HOP_MS);
     return () => window.clearInterval(id);
   }, [reduce, phase, walk.length]);
-  const flashStroke = lens === "silent" ? "#ff4d6d" : "var(--up)";
+  const flashStroke = lens === "silent" ? "var(--down)" : "var(--up)";
   const bindSilent = lens === "silent";
   const showLines =
     box.w > 0 &&
@@ -675,7 +675,7 @@ function LensChip({
         "disabled:pointer-events-none disabled:opacity-50",
         pressed
           ? tone === "silent"
-            ? "is-pressed bg-[var(--panel-hover)] text-[#FF4D6D]"
+            ? "is-pressed bg-[var(--panel-hover)] text-[var(--down)]"
             : "is-pressed bg-[var(--panel-hover)] text-[var(--text)]"
           : "text-[var(--muted)] hover:bg-[var(--wash)] hover:text-[var(--text)]"
       )}

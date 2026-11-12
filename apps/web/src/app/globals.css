@@ -2847,7 +2847,7 @@ html[data-float="ada"] .explorer-dock {
   font-weight: 700;
   transition: color 600ms linear;
 }
-.price-tape-chg.is-up { color: #5ee0a0; }
+.price-tape-chg.is-up { color: var(--up); }
 .price-tape-chg.is-down { color: var(--down); }
 @keyframes price-tape {
   from { transform: translate3d(0, 0, 0); }
@@ -3496,7 +3496,7 @@ html[data-float="ada"] .explorer-dock {
   animation: oracle-speak 0.9s var(--ease) both;
 }
 .oracle-mark-speak.is-silent::after {
-  border-color: color-mix(in srgb, #ff4d6d 72%, transparent);
+  border-color: color-mix(in srgb, var(--down) 72%, transparent);
 }
 @keyframes oracle-speak {
   0%,
@@ -3543,7 +3543,7 @@ html[data-float="ada"] .explorer-dock {
   }
 }
 .oracle-bond-silent {
-  stroke: #ff4d6d;
+  stroke: var(--down);
   stroke-width: 1.25;
   opacity: 0.9;
 }
@@ -3789,38 +3789,8 @@ html[data-ink="day"] .mcap-vol {
 
 @media (prefers-reduced-motion: reduce) {
   .holders-mark,
-  .holders-mark-back,
-  .rent-danger-run {
+  .holders-mark-back {
     animation: none;
-  }
-}
-
-.rent-danger-well.is-loop {
-  -webkit-mask-image: linear-gradient(
-    180deg,
-    transparent,
-    #000 16px,
-    #000 calc(100% - 16px),
-    transparent
-  );
-  mask-image: linear-gradient(180deg, transparent, #000 16px, #000 calc(100% - 16px), transparent);
-}
-
-.rent-danger-run {
-  animation: rent-danger-reel var(--reel, 24s) linear infinite;
-}
-
-.rent-danger-well:hover .rent-danger-run,
-.rent-danger-well:focus-within .rent-danger-run {
-  animation-play-state: paused;
-}
-
-@keyframes rent-danger-reel {
-  from {
-    transform: translate3d(0, 0, 0);
-  }
-  to {
-    transform: translate3d(0, -50%, 0);
   }
 }
 
@@ -5641,14 +5611,14 @@ html[data-ink="day"] {
   background: var(--wash-faint);
   padding: 12px 14px;
 }
-.hdr-fact.is-violet { background: color-mix(in srgb, #c4b5fd 18%, transparent); }
-.hdr-fact.is-sky { background: color-mix(in srgb, #7eb6ff 18%, transparent); }
-.hdr-fact.is-gold { background: color-mix(in srgb, #f0c14a 16%, transparent); }
-.hdr-fact.is-teal { background: color-mix(in srgb, #2dd4bf 16%, transparent); }
-.hdr-fact.is-violet dt { color: #c4b5fd; }
-.hdr-fact.is-sky dt { color: #7eb6ff; }
-.hdr-fact.is-gold dt { color: #f0c14a; }
-.hdr-fact.is-teal dt { color: #2dd4bf; }
+.hdr-fact.is-violet { background: color-mix(in srgb, var(--k-nft, #c4b5fd) 18%, transparent); }
+.hdr-fact.is-sky { background: color-mix(in srgb, var(--c-token-text, #7eb6ff) 18%, transparent); }
+.hdr-fact.is-gold { background: color-mix(in srgb, var(--c-block, #f0c14a) 16%, transparent); }
+.hdr-fact.is-teal { background: color-mix(in srgb, var(--c-net, #2dd4bf) 16%, transparent); }
+.hdr-fact.is-violet dt { color: var(--k-nft, #c4b5fd); }
+.hdr-fact.is-sky dt { color: var(--c-token-text, #7eb6ff); }
+.hdr-fact.is-gold dt { color: var(--c-block, #f0c14a); }
+.hdr-fact.is-teal dt { color: var(--c-net, #2dd4bf); }
 .hdr-fact dt {
   margin: 0;
   font-size: 12px;
@@ -5754,13 +5724,13 @@ html[data-ink="day"] {
   line-height: 1.3;
   color: var(--muted);
 }
-.hdr-row.is-violet .hdr-k { color: #c4b5fd; }
-.hdr-row.is-sky .hdr-k { color: #7eb6ff; }
-.hdr-row.is-cyan .hdr-k { color: #3ca2ff; }
-.hdr-row.is-teal .hdr-k { color: #2dd4bf; }
-.hdr-row.is-green .hdr-k { color: #5ee0a0; }
-.hdr-row.is-gold .hdr-k { color: #f0c14a; }
-.hdr-row.is-coral .hdr-k { color: #ff8a65; }
+.hdr-row.is-violet .hdr-k { color: var(--k-nft, #c4b5fd); }
+.hdr-row.is-sky .hdr-k { color: var(--c-token-text, #7eb6ff); }
+.hdr-row.is-cyan .hdr-k { color: var(--c-token, #3ca2ff); }
+.hdr-row.is-teal .hdr-k { color: var(--c-net, #2dd4bf); }
+.hdr-row.is-green .hdr-k { color: var(--c-box, #5ee0a0); }
+.hdr-row.is-gold .hdr-k { color: var(--c-block, #f0c14a); }
+.hdr-row.is-coral .hdr-k { color: var(--k-rent, #ff8a65); }
 .hdr-hex,
 .hdr-num,
 .hdr-empty {
@@ -5981,12 +5951,12 @@ html[data-ink="day"] {
   text-transform: uppercase;
 }
 .box-io.is-in {
-  color: #5ee0a0;
-  background: color-mix(in srgb, #5ee0a0 16%, transparent);
+  color: var(--up);
+  background: color-mix(in srgb, var(--up) 16%, transparent);
 }
 .box-io.is-out {
-  color: #7eb6ff;
-  background: color-mix(in srgb, #7eb6ff 16%, transparent);
+  color: var(--c-token-text, #7eb6ff);
+  background: color-mix(in srgb, var(--c-token-text, #7eb6ff) 16%, transparent);
 }
 .box-io.is-idle {
   color: var(--muted);
@@ -6171,4 +6141,23 @@ html[data-ink="day"] .box-io.is-out {
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
   color: var(--muted-2);
+}
+
+/* Address title for long contract addresses: exactly two lines at any width,
+   the head cut at its end and the tail cut at its start (rtl clips the left side). */
+.addr-title-long {
+  display: block;
+  font-size: 15px;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+.addr-title-long > span {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.addr-title-long > .addr-title-tail {
+  direction: rtl;
+  text-align: left;
 }

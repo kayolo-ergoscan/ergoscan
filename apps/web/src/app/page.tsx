@@ -195,6 +195,7 @@ export default async function HomePage({
           ? RENT_PREVIEW_EPOCH_NANO
           : (home.rentEpochNano ?? null)
       }
+      initialRentEpochBoxes={home.rentEpochBoxes ?? null}
       previewShare={process.env.NODE_ENV === "development" && preview === "share"}
     />
     </>

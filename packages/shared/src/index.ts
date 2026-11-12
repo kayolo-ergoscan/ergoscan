@@ -15,6 +15,8 @@ export {
   RENT_TAPE_SOON_BLOCKS,
   RENT_TAPE_WEEK_BLOCKS,
   RENT_TAPE_BLOCKS_PER_HOUR,
+  RENT_TAPE_MINUTES_PER_BLOCK,
+  RENT_TAPE_HOURS_UNTIL,
   pickRentTapeAddresses,
   rentTapeTone,
   rentRailX,
@@ -29,7 +31,7 @@ export {
   parseRentEpochBoxes,
   parseRentEpochNano,
 } from "./rent-tape.js";
-export type { RentTapeRow, RentTapeTone, RentRailPip } from "./rent-tape.js";
+export type { RentTapeRow, RentTapeTone, RentRailPip, RentClock, RentClockUnit } from "./rent-tape.js";
 export * from "./events.js";
 export * from "./stageGame.js";
 export * from "./registers.js";
@@ -50,3 +52,4 @@ export * from "./addr-flow.js";
 export * from "./oracle-pools.js";
 export * from "./oracle-leader.js";
 export * from "./market-cg.js";
+export * from "./tx-meaning/index.js";
