@@ -5,8 +5,20 @@ import Link from "next/link";
 import clsx from "clsx";
 import { ROSEN_CHAINS, ROSEN_CONTRACTS_VERSION } from "@ergoscan/shared";
 import { AddrFactCard } from "@/components/AddrFactCard";
-import { StuckPin } from "@/components/StuckPin";
-import { PrettyAmt } from "@/components/PrettyNum";
+import {
+  Feed,
+  FeedAmount,
+  FeedCopy,
+  FeedCount,
+  FeedDays,
+  FeedEmpty,
+  FeedField,
+  FeedFields,
+  FeedIdLine,
+  FeedRow,
+  feedLoc,
+  type FeedLead,
+} from "@/components/feed/Feed";
 import { Shell } from "@/components/Shell";
 import { KpiNum } from "@/components/KpiGrid";
 import {
@@ -17,20 +29,11 @@ import {
 } from "@/components/kpi-marks";
 import { RankWindow } from "@/components/RankWindow";
 import { getGateway } from "@/lib/config";
-import {
-  formatClockTime,
-  formatDottedDate,
-  formatH24,
-  formatRelTime,
-  relAgeTone,
-  relAgeToneClass,
-  shortId,
-} from "@/lib/format";
+import { formatScaledAmount, formatTs, shortId, toEpochMs } from "@/lib/format";
 import { rosenExplorer } from "@/lib/rosen-explorers";
 import { INK } from "@/lib/palette";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
-import { countText } from "@/lib/i18n/messages";
-import { SNAPSHOT_FETCH, enteringIds, snapshotPath, useEnterIds } from "@/lib/keyed-enter";
+import { ENTER_MS, SNAPSHOT_FETCH, enteringIds, snapshotPath, useEnterIds } from "@/lib/keyed-enter";
 import { useKeepFresh, usePageSync } from "@/lib/page-sync";
 import {
   ROSEN_PACK,
@@ -40,12 +43,6 @@ import {
 } from "@/lib/list-snapshots";
 function loc(locale: string): string {
   return locale === "ru" ? "ru-RU" : "en-US";
-}
-
-function statusTone(status: string): string {
-  if (status === "completed") return "bg-[var(--up)]/15 text-[var(--up)]";
-  if (status === "fraud") return "bg-[#FF4D6D]/15 text-[#FF4D6D]";
-  return "bg-[var(--wash)] text-[var(--muted)]";
 }
 
 function tokenOf(row: RosenEventItem): string {
@@ -79,11 +76,11 @@ export function RosenView({
   const [ready, setReady] = useState(initialItems.length > 0);
   const [hasMore, setHasMore] = useState(initialHasMore);
   const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor);
-  const [stuck, setStuck] = useState(false);
-  const enter = useEnterIds();
-  const packEnter = useEnterIds();
-  const [listReady, setListReady] = useState(false);
-  const opened = useRef(false);
+  const served = initialItems.length > 0;
+  const enter = useEnterIds(ENTER_MS, [], served);
+  const packEnter = useEnterIds(ENTER_MS, [], served);
+  const [listReady, setListReady] = useState(served);
+  const opened = useRef(served);
   const cursorRef = useRef<string | null>(null);
   const cursorStack = useRef<(string | null)[]>([]);
   const nextCursorRef = useRef(initialNextCursor);
@@ -290,54 +287,21 @@ export function RosenView({
       </div>
 
       {listReady ? (
-      <div className="addr-sheet mt-2">
-        {empty ? (
-          <p className="mb-3 text-[var(--muted)]">
-            {scanCaption ? t("rosen.emptyScan") : t("rosen.emptyTape")}
-          </p>
-        ) : null}
-        <StuckPin onStuck={setStuck} />
-        <div className={packEnter.enterClass("pack")}>
-        <div
-          className={clsx(
-            "addr-pan transition-opacity duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
-            pending && "opacity-60"
-          )}
-        >
-              <div
-                className={clsx(
-                  "addr-head addr-lane addr-lane-x block-lane rosen-tape text-[12px] font-medium",
-                  stuck && "is-stuck"
+        <div className="feed-sheet mt-2">
+          <Feed busy={pending} enterClass={packEnter.enterClass("pack")}>
+            {empty ? (
+              <FeedEmpty k="bridge" title={scanCaption ? t("rosen.emptyScan") : t("rosen.emptyTape")} />
+            ) : (
+              <FeedDays
+                items={items}
+                msOf={(row) => toEpochMs(row.time)}
+                countOf={(n) => <FeedCount k="feed.events" n={n} />}
+                render={(row, lead) => (
+                  <FeedRosenRow key={row.id} row={row} lead={lead} enterClass={enter.enterClass(row.id)} />
                 )}
-              >
-                <div className="block-lane-pair">
-                  <div className="min-w-0">{t("rosen.col.route")}</div>
-                  <div className="min-w-0 justify-end">{t("rosen.col.time")}</div>
-                </div>
-                <div className="block-lane-pair">
-                  <div className="min-w-0">{t("rosen.col.from")}</div>
-                  <div className="min-w-0 justify-end">{t("rosen.col.to")}</div>
-                </div>
-                <div className="block-lane-pair">
-                  <div className="min-w-0">{t("rosen.col.status")}</div>
-                  <div className="min-w-0 justify-end">{t("rosen.col.fees")}</div>
-                </div>
-                <div className="block-lane-pair">
-                  <div className="min-w-0">{t("rosen.col.source")}</div>
-                  <div className="min-w-0 justify-end">{t("rosen.col.trigger")}</div>
-                </div>
-              </div>
-              {items.map((row) => (
-                <RosenTapeRow
-                  key={row.id}
-                  row={row}
-                  locale={locale}
-                  t={t}
-                  enterClass={enter.enterClass(row.id)}
-                />
-              ))}
-            </div>
-        </div>
+              />
+            )}
+          </Feed>
           <RankWindow
             offset={page * ROSEN_PACK}
             pageSize={ROSEN_PACK}
@@ -456,130 +420,152 @@ function RosenRef({
   );
 }
 
-function RosenWhen({ ts }: { ts: number | null | undefined }) {
-  const { locale } = useI18n();
-  const clock = formatH24(ts, undefined, true);
-  const date = formatDottedDate(ts);
-  if (clock === "—" || date === "—") {
-    return <span className="text-[var(--muted)]">—</span>;
-  }
+/** A full id from any chain in a detail field: wraps, links out when the chain has an explorer, copies. */
+function RosenIdLine({ chain, kind, raw }: { chain?: string | null; kind: "address" | "tx"; raw: string | null | undefined }) {
+  if (!raw) return <span className="text-[var(--muted)]">—</span>;
+  const hit = rosenExplorer(chain, kind, raw);
+  const label = hit?.label || raw;
+  const cls = "feed-id font-mono tabular-nums hover:underline";
   return (
-    <div>
-      <p className={clsx("whitespace-nowrap tabular-nums", relAgeToneClass(relAgeTone(ts)))}>
-        {formatRelTime(ts, locale)}
-      </p>
-      <p className="mt-0.5 whitespace-nowrap text-[11px] tabular-nums text-[var(--muted)]">
-        {clock} · {date}
-      </p>
-    </div>
+    <span className="feed-id-line">
+      {!hit ? (
+        <span className="feed-id font-mono tabular-nums">{label}</span>
+      ) : hit.external ? (
+        <a href={hit.href} target="_blank" rel="noopener noreferrer" className={cls}>
+          {label}
+        </a>
+      ) : (
+        <Link prefetch={false} href={hit.href} className={cls}>
+          {label}
+        </Link>
+      )}
+      <FeedCopy text={raw} />
+    </span>
   );
 }
 
-function RosenTapeRow({
-  row,
-  locale,
-  t,
-  enterClass,
-}: {
-  row: RosenEventItem;
-  locale: string;
-  t: (k: string) => string;
-  enterClass?: string;
-}) {
+function bigOf(raw: string | null | undefined): bigint | null {
+  if (!raw) return null;
+  try {
+    return BigInt(raw);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * One bridge event: the route is the title, the amount the figure, the fee under it.
+ * Processing events keep a hollow tile until the payment lands.
+ */
+function FeedRosenRow({ row, lead, enterClass }: { row: RosenEventItem; lead: FeedLead; enterClass?: string }) {
+  const t = useT();
+  const { locale, tn } = useI18n();
+  const L = loc(locale);
   const st = String(row.status || "processing");
   const stKey = `rosen.status.${st}`;
   const stLabel = t(stKey) !== stKey ? t(stKey) : st;
   const token = tokenOf(row);
   const dec = row.tokenDecimals ?? 0;
-  const watchers =
-    row.widsCount != null
-      ? countText(t, locale, "rosen.col.watchers", row.widsCount, row.widsCount.toLocaleString(loc(locale)))
-      : null;
+  const amount = bigOf(row.amount);
+  const bridgeFee = bigOf(row.bridgeFee);
+  const netFee = bigOf(row.networkFee);
+  const fee = bridgeFee != null || netFee != null ? (bridgeFee ?? 0n) + (netFee ?? 0n) : null;
+  const height =
+    row.height != null ? (
+      <Link prefetch={false} href={`/block/${row.height}`} className="tabular-nums">
+        {row.height.toLocaleString(L)}
+      </Link>
+    ) : null;
+  const feeText = (n: bigint | null) =>
+    n == null ? "—" : `${formatScaledAmount(n, dec, feedLoc(locale), dec)} ${token}`;
   return (
-    <div
-      className={clsx(
-        "addr-lane addr-lane-x block-lane rosen-tape border-t border-[var(--border-soft)] py-2.5 text-[13px]",
-        enterClass
-      )}
-    >
-      <div className="block-lane-pair">
-        <div className="px-3">
-          <span className="truncate font-medium">
-            {row.fromChainLabel} → {row.toChainLabel}
-          </span>
-          <p className="mt-0.5 whitespace-nowrap text-[11px] leading-[1.15]">
-            <span className="tabular-nums text-[var(--up)]">
-              <PrettyAmt raw={row.amount} decimals={dec} locale={locale} />
-            </span>
-            <span className="text-[var(--muted)]"> {token}</span>
-          </p>
-        </div>
-        <div className="min-w-0 px-3 text-right">
-          <RosenWhen ts={row.time} />
-        </div>
-      </div>
-      <div className="block-lane-pair">
-        <div className="min-w-0 px-3">
-          <RosenRef chain={row.fromChain} kind="address" raw={row.fromAddress} block />
-          <p className="mt-0.5 truncate text-[11px] text-[var(--muted)]">{row.fromChainLabel}</p>
-        </div>
-        <div className="min-w-0 px-3 text-right">
-          <RosenRef chain={row.toChain} kind="address" raw={row.toAddress} block />
-          <p className="mt-0.5 truncate text-[11px] text-[var(--muted)]">{row.toChainLabel}</p>
-        </div>
-      </div>
-      <div className="block-lane-pair">
-        <div className="min-w-0 px-3">
-          <span
-            className={clsx(
-              "inline-flex items-center rounded-md px-1.5 text-[10px] font-semibold uppercase leading-none tracking-wide",
-              statusTone(st)
-            )}
-          >
+    <FeedRow
+      k="bridge"
+      glyph="bridge"
+      hollow={st !== "completed"}
+      tileTitle={stLabel}
+      lead={lead}
+      leadSub={!lead.same && height ? height : undefined}
+      enterClass={enterClass}
+      title={
+        <span className="feed-name font-semibold">
+          {row.fromChainLabel} → {row.toChainLabel}
+        </span>
+      }
+      facts={
+        <>
+          <span className={clsx("feed-kind", st === "fraud" && "is-alarm", st === "processing" && "is-off")}>
             {stLabel}
           </span>
-          <p className="mt-0.5 truncate text-[11px] text-[var(--muted)]">
-            {watchers ?? formatClockTime(row.time, locale)}
-          </p>
-        </div>
-        <div className="min-w-0 px-3 text-right tabular-nums">
-          <p className="whitespace-nowrap">
-            {t("rosen.feeBridge")}{" "}
-            <PrettyAmt raw={row.bridgeFee} decimals={dec} locale={locale} /> {token}
-          </p>
-          <p className="mt-0.5 truncate whitespace-nowrap text-[11px] text-[var(--muted)]">
-            {t("rosen.feeNet")}{" "}
-            <PrettyAmt raw={row.networkFee} decimals={dec} locale={locale} /> {token}
-          </p>
-        </div>
-      </div>
-      <div className="block-lane-pair">
-        <div className="px-3">
-          <RosenRef chain={row.fromChain} kind="tx" raw={row.sourceTxId} block />
-          <p className="mt-0.5 whitespace-nowrap text-[11px] text-[var(--muted)]">
-            {row.paymentTxId ? (
-              <>
-                {t("rosen.col.payment")}{" "}
-                <RosenRef
-                  chain={row.toChain}
-                  kind="tx"
-                  raw={row.paymentTxId}
-                  chars={5}
-                  nowrap
-                />
-              </>
-            ) : (
-              "—"
-            )}
-          </p>
-        </div>
-        <div className="min-w-0 px-3 text-right">
-          <RosenRef chain="ergo" kind="tx" raw={row.triggerTxId} block />
-          <p className="mt-0.5 tabular-nums text-[11px] text-[var(--muted)]">
-            {row.height != null ? row.height.toLocaleString(loc(locale)) : "—"}
-          </p>
-        </div>
-      </div>
-    </div>
+          {height ? <span className="feed-phone-only">{height}</span> : null}
+          <span className="feed-mid">
+            <RosenRef chain={row.fromChain} kind="address" raw={row.fromAddress} chars={5} nowrap />
+            {" → "}
+            <RosenRef chain={row.toChain} kind="address" raw={row.toAddress} chars={5} nowrap />
+          </span>
+          {row.widsCount != null ? (
+            <span className="feed-wide">
+              {tn("rosen.col.watchers", row.widsCount, row.widsCount.toLocaleString(L))}
+            </span>
+          ) : null}
+        </>
+      }
+      value={<FeedAmount raw={amount} decimals={dec} unit={token} glance />}
+      sub={
+        fee != null ? (
+          <>
+            {t("feed.fee")}{" "}
+            <FeedAmount raw={fee} decimals={dec} unit={null} glance />
+          </>
+        ) : null
+      }
+      subMinor
+      detail={() => (
+        <FeedFields>
+          <FeedField label={`${t("rosen.col.from")} · ${row.fromChainLabel}`} wide>
+            <RosenIdLine chain={row.fromChain} kind="address" raw={row.fromAddress} />
+          </FeedField>
+          <FeedField label={`${t("rosen.col.to")} · ${row.toChainLabel}`} wide>
+            <RosenIdLine chain={row.toChain} kind="address" raw={row.toAddress} />
+          </FeedField>
+          <FeedField label={t("rosen.col.source")} wide>
+            <RosenIdLine chain={row.fromChain} kind="tx" raw={row.sourceTxId} />
+          </FeedField>
+          {row.paymentTxId ? (
+            <FeedField label={t("rosen.col.payment")} wide>
+              <RosenIdLine chain={row.toChain} kind="tx" raw={row.paymentTxId} />
+            </FeedField>
+          ) : null}
+          {row.triggerTxId ? (
+            <FeedField label={t("rosen.col.trigger")} wide>
+              <FeedIdLine href={`/tx/${row.triggerTxId}`} id={row.triggerTxId} />
+            </FeedField>
+          ) : null}
+          <FeedField label={t("rosen.col.amount")}>
+            <span className="tabular-nums">{feeText(amount)}</span>
+          </FeedField>
+          <FeedField label={t("rosen.col.fees")}>
+            <span className="tabular-nums">
+              {t("rosen.feeBridge")} {feeText(bridgeFee)}
+              <span className="text-[var(--muted-2)]">
+                {" · "}
+                {t("rosen.feeNet")} {feeText(netFee)}
+              </span>
+            </span>
+          </FeedField>
+          <FeedField label={t("rosen.col.time")}>
+            <span className="tabular-nums" suppressHydrationWarning>
+              {row.time != null ? formatTs(row.time) : "—"}
+              {height ? (
+                <span className="text-[var(--muted-2)]">
+                  {" · "}
+                  {height}
+                </span>
+              ) : null}
+            </span>
+          </FeedField>
+        </FeedFields>
+      )}
+    />
   );
 }

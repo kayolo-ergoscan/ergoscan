@@ -1087,6 +1087,28 @@ button.feed-caret:hover {
   gap: 4px 14px;
 }
 
+/* Oracle, buyback, Rosen, Lithos rows. */
+/* A live dot inside a kind word ("posting"). */
+.feed-pip {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  vertical-align: 0.08em;
+}
+/* A kind word for something idle (silent oracle, bridge event still processing). */
+.feed-facts > .feed-kind.is-off {
+  color: var(--muted);
+}
+.feed-facts > .feed-kind.is-alarm {
+  color: var(--down);
+}
+.feed-facts > .feed-gold {
+  color: var(--k-reward);
+}
+
 /* NFT card caption: the feed's name and facts line under the picture. */
 .nft-cap {
   display: flex;
