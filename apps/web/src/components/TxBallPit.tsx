@@ -4,11 +4,10 @@
  * Mix pit (block / tx aside): quiet cluster, same sphere stack as the home well.
  * Seal well (`well`): balls wait, then arc to the left edge and dissolve. Own canvas 2D.
  */
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useRef, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { formatErgPrecise, shortId } from "@/lib/format";
+import { TipHead, TipRow, TipRows, useFloatTip, type TipRect } from "@/components/Tip";
+import { formatBytes, formatErgPrecise, shortId } from "@/lib/format";
 import { lookEdge, lookInk } from "@/lib/look";
 import { txChipCaption } from "@/lib/tx-lock";
 import { usePageSync, useStreamMempool } from "@/lib/page-sync";
@@ -419,12 +418,15 @@ function seedFromBody(b: WellBody): WellSeed {
  */
 const SEAL_HOLD_MS = 8_000;
 
-type WellTip = {
+type BallInfo = {
   id: string;
-  hash: string;
-  cat: string;
   color: string;
-  amount: string;
+  category?: string;
+  action?: string | null;
+  platform?: string | null;
+  value?: number | null;
+  fee?: number;
+  size?: number;
   more?: boolean;
   title?: string;
 };
@@ -443,7 +445,32 @@ function catLabelOf(
   return txChipCaption(category, platform, action, t);
 }
 
-const TIP_EASE: [number, number, number, number] = [0.4, 0, 0.2, 1];
+/** One ball's tip: its kind as a chip in the ball's colour, the short hash, value, fee, size. */
+function ballTip(b: BallInfo, t: (k: string) => string, locale: string): ReactNode {
+  if (b.more) return b.title || "";
+  const value = Number(b.value) || 0;
+  const fee = Number(b.fee) || 0;
+  const size = Number(b.size) || 0;
+  const cat = b.category ? catLabelOf(t, b.category, b.action, b.platform) : null;
+  return (
+    <>
+      <TipHead chip={cat ?? undefined} ink={lookInk(b.color)} mono>
+        {tipHash(b.id)}
+      </TipHead>
+      {value > 0 || fee > 0 || size > 0 ? (
+        <TipRows>
+          {value > 0 ? (
+            <TipRow label={t("tip.value")} ink="var(--up)">
+              {formatErgPrecise(value, locale)}
+            </TipRow>
+          ) : null}
+          {fee > 0 ? <TipRow label={t("tip.fee")}>{formatErgPrecise(fee, locale)}</TipRow> : null}
+          {size > 0 ? <TipRow label={t("tip.size")}>{formatBytes(size)}</TipRow> : null}
+        </TipRows>
+      ) : null}
+    </>
+  );
+}
 
 export function TxBallPit({
   txs,
@@ -472,16 +499,13 @@ export function TxBallPit({
   const router = useRouter();
   const t = useT();
   const { locale } = useI18n();
-  const reduceTip = useReducedMotion();
   const { tip } = usePageSync();
   const { seal } = useStreamMempool();
-  const [wellTip, setWellTip] = useState<WellTip | null>(null);
-  const [tipReady, setTipReady] = useState(false);
   const hostRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const tipElRef = useRef<HTMLDivElement>(null);
-  const wellTipRef = useRef<WellTip | null>(null);
-  wellTipRef.current = wellTip;
+  const ballTipBox = useFloatTip({ within: () => canvasRef.current });
+  /** `id:kind` of the ball whose tip is up. */
+  const tipKey = useRef<string | null>(null);
   const mixRef = useRef<MixBody[]>([]);
   const wellRef = useRef<WellBody[]>([]);
   const sizeRef = useRef({ w: 0, h: 0 });
@@ -529,35 +553,18 @@ export function TxBallPit({
   tRef.current = t;
   const localeRef = useRef(locale);
   localeRef.current = locale;
-  const setWellTipRef = useRef(setWellTip);
-  setWellTipRef.current = setWellTip;
-
-  const placeTip = (b: { x: number; y: number; r: number }) => {
-    const el = tipElRef.current;
+  /** A body in canvas pixels → its box on the screen. */
+  const bodyRect = (b: { x: number; y: number; r: number }): TipRect | null => {
     const canvas = canvasRef.current;
-    if (!el || !canvas) return;
+    if (!canvas) return null;
     const rect = canvas.getBoundingClientRect();
     const w = canvas.clientWidth || rect.width || 1;
     const h = canvas.clientHeight || rect.height || 1;
     const sx = (rect.width || w) / w;
     const sy = (rect.height || h) / h;
-    const x = rect.left + b.x * sx;
-    const y = rect.top + b.y * sy;
     const rr = b.r * sy;
-    const top = y - rr - 10;
-    const flip = top < 56;
-    el.style.left = `${x}px`;
-    el.style.top = `${flip ? y + rr + 10 : top}px`;
-    const anchor = el.firstElementChild as HTMLElement | null;
-    if (anchor) {
-      anchor.style.transform = flip ? "translate(-50%, 0)" : "translate(-50%, -100%)";
-    }
-    el.style.visibility = "visible";
+    return { left: rect.left + b.x * sx - rr, top: rect.top + b.y * sy - rr, width: rr * 2, height: rr * 2 };
   };
-
-  useEffect(() => {
-    setTipReady(true);
-  }, []);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -887,11 +894,7 @@ export function TxBallPit({
         reportPour();
       }
       draw(now);
-      const hid = hoverRef.current;
-      if (hid && wellOn.current) {
-        const hb = wellRef.current.find((b) => b.id === hid);
-        if (hb) placeTip(hb);
-      }
+      followTip();
       raf = visible && !reduce ? requestAnimationFrame(tick) : 0;
     };
 
@@ -936,59 +939,97 @@ export function TxBallPit({
     ro.observe(host);
     layout();
 
-    const showWellTip = (b: WellBody | null) => {
-      if (!b) {
-        if (wellTipRef.current) setWellTipRef.current(null);
+    /** Tip content for a body: well bodies carry their seed, mix bodies look theirs up. */
+    const infoOf = (id: string): BallInfo | null => {
+      if (wellOn.current) return wellRef.current.find((x) => x.id === id) ?? null;
+      const b = mixRef.current.find((x) => x.id === id);
+      if (!b) return null;
+      const seed = txsRef.current.find((x) => x.id === id);
+      return { ...seed, id, color: b.color, title: b.title };
+    };
+
+    const liveBody = (id: string) =>
+      wellOn.current
+        ? wellRef.current.find((x) => x.id === id && x.dying !== "seal" && x.dying !== "fade")
+        : mixRef.current.find((x) => x.id === id);
+
+    const showTip = (id: string | null, tapped = false) => {
+      const body = id ? liveBody(id) : null;
+      const info = id ? infoOf(id) : null;
+      const rect = body ? bodyRect(body) : null;
+      if (!id || !info || !rect) {
+        tipKey.current = null;
+        ballTipBox.hide();
         return;
       }
-      const nextCat = b.more ? "" : catLabelOf(tRef.current, b.category, b.action, b.platform);
-      if (wellTipRef.current?.id === b.id && wellTipRef.current.cat === nextCat) {
-        placeTip(b);
+      const key = `${id}:${info.category ?? ""}:${info.more ? 1 : 0}`;
+      if (tipKey.current === key && ballTipBox.isOpen()) {
+        ballTipBox.move(rect);
         return;
       }
-      if (b.more) {
-        setWellTipRef.current({
-          id: b.id,
-          hash: "",
-          cat: "",
-          color: b.color,
-          amount: "",
-          more: true,
-          title: b.title,
-        });
-        placeTip(b);
+      tipKey.current = key;
+      ballTipBox.show(rect, ballTip(info, tRef.current, localeRef.current), { tapped });
+    };
+
+    /** The ball keeps moving under its tip; the tip follows it each frame. */
+    const followTip = () => {
+      const key = tipKey.current;
+      if (!key) return;
+      if (!ballTipBox.isOpen()) {
+        tipKey.current = null;
         return;
       }
-      const tr = tRef.current;
-      setWellTipRef.current({
-        id: b.id,
-        hash: tipHash(b.id),
-        cat: catLabelOf(tr, b.category, b.action, b.platform),
-        color: b.color,
-        amount: formatErgPrecise(b.value, localeRef.current),
-      });
-      placeTip(b);
+      const body = liveBody(key.split(":")[0]);
+      const rect = body ? bodyRect(body) : null;
+      if (!rect) {
+        tipKey.current = null;
+        hoverRef.current = null;
+        ballTipBox.hide();
+        return;
+      }
+      ballTipBox.move(rect);
     };
 
     const onMove = (e: PointerEvent) => {
+      if (e.pointerType === "touch") return;
       if (wellOn.current) {
         const b = hitWell(e.clientX, e.clientY);
         hoverRef.current = b?.id ?? null;
         canvas.style.cursor = b ? "pointer" : emptyHrefRef.current ? "pointer" : "default";
-        showWellTip(b);
+        showTip(b?.id ?? null);
         return;
       }
       const b = hitMix(e.clientX, e.clientY);
       hoverRef.current = b?.id ?? null;
       canvas.style.cursor = b && b.href ? "pointer" : "default";
+      showTip(b?.id ?? null);
     };
-    const onLeave = () => {
+    const onLeave = (e: PointerEvent) => {
+      if (e.pointerType === "touch") return;
       hoverRef.current = null;
       canvas.style.cursor = "default";
-      if (wellOn.current) setWellTipRef.current(null);
+      showTip(null);
     };
     let poked: { href: string; at: number } | null = null;
+    /** Touch: the first tap on a ball shows its tip, a second tap on it opens the tx. */
+    let touchDown = false;
+    let openTap = false;
+    /** A tap that only closed an open tip does not also open the mempool page. */
+    let dismissTap = false;
     const onPointerDown = (e: PointerEvent) => {
+      touchDown = e.pointerType === "touch";
+      openTap = false;
+      dismissTap = false;
+      if (touchDown) {
+        const hit = wellOn.current ? hitWell(e.clientX, e.clientY) : hitMix(e.clientX, e.clientY);
+        const shown = tipKey.current?.split(":")[0] ?? null;
+        if (hit && shown === hit.id && ballTipBox.isOpen()) openTap = true;
+        else if (hit) showTip(hit.id, true);
+        else {
+          dismissTap = ballTipBox.isOpen();
+          showTip(null);
+        }
+      }
       if (!wellOn.current || reduce || e.button !== 0) return;
       const b = hitWell(e.clientX, e.clientY);
       if (!b || b.more) return;
@@ -1007,13 +1048,14 @@ export function TxBallPit({
           return;
         }
         if (b) {
-          if (reduce && b.href) {
+          if ((touchDown ? openTap : reduce) && b.href) {
             e.preventDefault();
             routerRef.current.push(b.href);
           }
           return;
         }
         if (poked && performance.now() - poked.at < 500) return;
+        if (dismissTap) return;
         const href = emptyHrefRef.current;
         if (!href) return;
         e.preventDefault();
@@ -1022,6 +1064,7 @@ export function TxBallPit({
       }
       const b = hitMix(e.clientX, e.clientY);
       if (!b?.href) return;
+      if (touchDown && !openTap) return;
       e.preventDefault();
       routerRef.current.push(b.href);
     };
@@ -1099,12 +1142,6 @@ export function TxBallPit({
     });
   }, [txs, well]);
 
-  useLayoutEffect(() => {
-    if (!wellTip) return;
-    const b = wellRef.current.find((x) => x.id === wellTip.id);
-    if (b) placeTip(b);
-  }, [wellTip]);
-
   return (
     <div ref={hostRef} className="absolute inset-0 min-h-0 min-w-0">
       <canvas
@@ -1113,53 +1150,6 @@ export function TxBallPit({
         aria-label={ariaLabel}
         role="img"
       />
-      {tipReady
-        ? createPortal(
-            <AnimatePresence>
-              {wellTip ? (
-                <div
-                  ref={tipElRef}
-                  className="pointer-events-none fixed z-[100]"
-                  style={{ visibility: "hidden" }}
-                  role="tooltip"
-                >
-                  <div style={{ transform: "translate(-50%, -100%)" }}>
-                    <motion.div
-                      key={wellTip.id}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: 8 }}
-                      transition={{ duration: reduceTip ? 0 : 0.42, ease: TIP_EASE }}
-                    >
-                      <div className="rounded-[16px] border border-[var(--border)] bg-[var(--module)] px-3 py-2 shadow-[var(--float-shadow)]">
-                        {wellTip.more ? (
-                          <p className="text-[12px] font-medium leading-none text-[var(--text)]">{wellTip.title}</p>
-                        ) : (
-                          <>
-                            <p className="font-mono text-[12px] leading-none tracking-tight text-[var(--text)]">
-                              {wellTip.hash}
-                            </p>
-                            <p className="mt-1.5 flex items-center gap-1.5 text-[12px] leading-none text-[var(--muted)]">
-                              <span
-                                className="inline-block h-1.5 w-1.5 shrink-0 rounded-full"
-                                style={{ background: lookInk(wellTip.color) }}
-                              />
-                              {wellTip.cat}
-                            </p>
-                            <p className="mt-1.5 text-[12px] font-medium tabular-nums leading-none text-[var(--up)]">
-                              {wellTip.amount}
-                            </p>
-                          </>
-                        )}
-                      </div>
-                    </motion.div>
-                  </div>
-                </div>
-              ) : null}
-            </AnimatePresence>,
-            document.body
-          )
-        : null}
     </div>
   );
 }

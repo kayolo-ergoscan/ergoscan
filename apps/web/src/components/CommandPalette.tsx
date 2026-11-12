@@ -834,7 +834,7 @@ export function CommandPalette() {
                 )}
               </div>
 
-              <div className="border-t border-[var(--border)] px-5 py-2.5 text-[10px] tracking-wide text-[var(--muted-2)]">
+              <div className="kbd-hints border-t border-[var(--border)] px-5 py-2.5 text-[10px] tracking-wide text-[var(--muted-2)]">
                 ↑↓ {t("search.hintNav")} · ↵ {t("search.hintOpen")} · esc{" "}
                 {t("search.hintClose")}
               </div>

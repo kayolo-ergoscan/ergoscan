@@ -4,6 +4,7 @@
  * Home rent: crates ride a three-row snake. The miner stays on the last row and taps each box.
  */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { Tip, TipFigure, TipHead } from "./Tip";
 import Link from "next/link";
 import clsx from "clsx";
 import { useReducedMotion } from "framer-motion";
@@ -122,13 +123,16 @@ export function HomeRentTape({
                 <p
                   className="mb-2 flex h-[18px] min-w-0 items-center justify-center text-center text-[13px] leading-[18px] text-[var(--muted-2)]"
                   aria-live="polite"
+                  data-rent-caption
                 >
                   {pack.length === 0 ? (
                     t("home.rentEmpty")
                   ) : focusRow && focus ? (
-                    <KpiNum key={focus} className="min-w-0 max-w-full">
-                      <CaptionLine address={focus} row={focusRow} reduce={!!reduce} t={t} />
-                    </KpiNum>
+                    <Link prefetch={false} href={`/address/${encodeURIComponent(focus)}`} className="rent-caption-link min-w-0 max-w-full">
+                      <KpiNum key={focus} className="min-w-0 max-w-full">
+                        <CaptionLine address={focus} row={focusRow} reduce={!!reduce} t={t} />
+                      </KpiNum>
+                    </Link>
                   ) : null}
                 </p>
                 <div className="relative min-h-0 flex-1" aria-label={t("home.rentAisle")}>
@@ -238,10 +242,20 @@ function DangerLine({ row, locale }: { row: RentDangerRow; locale: string }) {
   const glance = formatScaledGlance(toBigIntAmt(row.amount), row.decimals ?? 0, locale);
   const usd = dangerHoldingUsd(row);
   return (
+    <Tip
+      tap={false}
+      content={() => (
+        <>
+          <TipHead chip={meta.symbol} ink="var(--c-token, #5b8dff)">
+            {meta.name && meta.name !== meta.symbol ? meta.name : null}
+          </TipHead>
+          <TipFigure>{glance.exact}</TipFigure>
+        </>
+      )}
+    >
     <Link
       prefetch={false}
       href={`/token/${row.tokenId}`}
-      title={`${meta.symbol} · ${glance.exact}`}
       className="grid h-8 grid-cols-[18px_minmax(0,1fr)_auto] items-center gap-2 rounded-[8px] px-1 hover:bg-[var(--wash)]"
     >
       <TokenLogo tokenId={row.tokenId} size={18} />
@@ -258,6 +272,7 @@ function DangerLine({ row, locale }: { row: RentDangerRow; locale: string }) {
         </span>
       </span>
     </Link>
+    </Tip>
   );
 }
 

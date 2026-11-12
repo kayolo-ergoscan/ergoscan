@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useRef, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { useRouter } from "next/navigation";
 import { rentToneInk } from "@/lib/rent-miner-patrol";
 import { drawPixel, pixelColor, type PixelMood } from "./pixel";
@@ -113,6 +113,21 @@ export function RentBelt({
   formatRef.current = formatAmount;
   const router = useRouter();
   const hits = useRef<Hit[]>([]);
+  // A finger has no hover: the first tap pins a crate's caption, the second opens it.
+  const finger = useRef(false);
+  const pinned = useRef<string | null>(null);
+
+  useEffect(() => {
+    const drop = (ev: PointerEvent) => {
+      if (!pinned.current) return;
+      const el = ev.target as Element | null;
+      if (el === host.current || el?.closest?.("[data-rent-caption]")) return;
+      pinned.current = null;
+      onHoverRef.current(null);
+    };
+    document.addEventListener("pointerdown", drop, true);
+    return () => document.removeEventListener("pointerdown", drop, true);
+  }, []);
 
   useEffect(() => {
     const canvas = host.current;
@@ -292,10 +307,27 @@ export function RentBelt({
     <canvas
       ref={host}
       className="h-full w-full"
-      onPointerMove={(ev) => onHover(pick(ev)?.address ?? null)}
-      onPointerLeave={() => onHover(null)}
+      onPointerDown={(ev: ReactPointerEvent<HTMLCanvasElement>) => {
+        finger.current = ev.pointerType === "touch";
+      }}
+      onPointerMove={(ev) => {
+        if (ev.pointerType === "touch") return;
+        onHover(pick(ev)?.address ?? null);
+      }}
+      onPointerLeave={(ev) => {
+        if (ev.pointerType === "touch") return;
+        onHover(null);
+      }}
       onClick={(ev: ReactMouseEvent<HTMLCanvasElement>) => {
         const hit = pick(ev);
+        if (finger.current) {
+          const again = hit != null && pinned.current === hit.address;
+          pinned.current = again ? null : (hit?.address ?? null);
+          if (!again) {
+            onHover(pinned.current);
+            return;
+          }
+        }
         if (hit) router.push(`/address/${encodeURIComponent(hit.address)}`);
       }}
     />

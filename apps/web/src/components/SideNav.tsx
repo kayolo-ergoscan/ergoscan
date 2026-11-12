@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type CSSProperties } from "react";
+import { Tip } from "./Tip";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import clsx from "clsx";
@@ -250,39 +251,43 @@ function NavRow({
 
   if (href.startsWith("http")) {
     return (
-      <a
+      <Tip content={collapsed ? label : null} side="right" tap={false}>
+        <a
+          href={href}
+          target="_blank"
+          rel="noreferrer"
+          aria-label={collapsed ? label : undefined}
+          {...bind}
+          onClick={() => {
+            onNavigate?.();
+            disarm();
+          }}
+          className={className}
+        >
+          {body}
+        </a>
+      </Tip>
+    );
+  }
+
+  return (
+    <Tip content={collapsed ? label : null} side="right" tap={false}>
+      <Link
+        prefetch={false}
         href={href}
-        target="_blank"
-        rel="noreferrer"
-        title={collapsed ? label : undefined}
+        data-scout={item.href === "/addresses" ? "addresses" : undefined}
+        aria-label={collapsed ? label : undefined}
         {...bind}
         onClick={() => {
           onNavigate?.();
           disarm();
         }}
+        aria-current={active ? "page" : undefined}
         className={className}
       >
         {body}
-      </a>
-    );
-  }
-
-  return (
-    <Link
-      prefetch={false}
-      href={href}
-      data-scout={item.href === "/addresses" ? "addresses" : undefined}
-      title={collapsed ? label : undefined}
-      {...bind}
-      onClick={() => {
-        onNavigate?.();
-        disarm();
-      }}
-      aria-current={active ? "page" : undefined}
-      className={className}
-    >
-      {body}
-    </Link>
+      </Link>
+    </Tip>
   );
 }
 
@@ -397,9 +402,10 @@ function NavBranch({
           </button>
         </div>
       ) : (
+      <Tip content={collapsed ? label : null} side="right" tap={false}>
       <button
         type="button"
-        title={collapsed ? label : undefined}
+        aria-label={collapsed ? label : undefined}
         aria-expanded={open}
         {...bind}
         onClick={() => {
@@ -429,6 +435,7 @@ function NavBranch({
           </span>
         </span>
       </button>
+      </Tip>
       )}
       <div className={clsx("nav-kids", open && !collapsed && "is-open", transition.duration === 0 && "is-instant")}>
         <div className="nav-kids-clip">

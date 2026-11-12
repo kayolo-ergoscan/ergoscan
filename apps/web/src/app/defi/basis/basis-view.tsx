@@ -1,5 +1,6 @@
 "use client";
 
+import { Tip } from "@/components/Tip";
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import clsx from "clsx";
@@ -515,16 +516,17 @@ export function BasisView({ initial }: { initial: BasisSnap | null }) {
                     </p>
                   </div>
                   <span className="is-end">
-                    <span
-                      className="whitespace-nowrap rounded-full px-2.5 py-1 text-[12px]"
-                      style={{
-                        color: tone.color,
-                        background: `color-mix(in srgb, ${tone.wash} 16%, transparent)`,
-                      }}
-                      title={state.hint}
-                    >
-                      {state.label}
-                    </span>
+                    <Tip content={state.hint}>
+                      <span
+                        className="whitespace-nowrap rounded-full px-2.5 py-1 text-[12px]"
+                        style={{
+                          color: tone.color,
+                          background: `color-mix(in srgb, ${tone.wash} 16%, transparent)`,
+                        }}
+                      >
+                        {state.label}
+                      </span>
+                    </Tip>
                   </span>
                 </div>
               );

@@ -18,6 +18,7 @@ import { INK_BOOT } from "@/lib/skin-ink";
 import "./globals.css";
 import "./looks.css";
 import "./feed.css";
+import "./tip.css";
 
 /** T1 default — Plex Sans has Cyrillic and `tnum`. */
 const sans = IBM_Plex_Sans({

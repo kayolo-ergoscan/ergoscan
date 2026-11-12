@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useRef, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { useFloatTip, type TipRect } from "@/components/Tip";
 import { drawPixel, pixelColor, type PixelMood } from "./pixel";
 import { lookEdge, lookInk } from "@/lib/look";
 
@@ -78,14 +79,25 @@ export function CadenceYard({
   colorsReady,
   label,
   onHover,
+  tip,
 }: {
   blocks: CadenceYardBlock[];
   reduce: boolean;
   colorsReady: boolean;
   label: string;
   onHover: (id: string | null) => void;
+  /** The shared hover tip for a crate. A phone's first tap shows it, the second opens the block. */
+  tip?: (id: string) => ReactNode;
 }) {
   const host = useRef<HTMLCanvasElement>(null);
+  const crateTip = useFloatTip({ within: () => host.current });
+  const tipRef = useRef(tip);
+  tipRef.current = tip;
+  /** Crate whose tip is up. */
+  const tipId = useRef<string | null>(null);
+  const followRef = useRef<() => void>(() => {});
+  /** Touch: was the last press a finger, and did it land on the crate whose tip is up. */
+  const touch = useRef({ down: false, open: false });
   const blocksRef = useRef(blocks);
   const onHoverRef = useRef(onHover);
   const colorsReadyRef = useRef(colorsReady);
@@ -270,6 +282,7 @@ export function CadenceYard({
         });
       }
       hits.current = drawn;
+      followRef.current();
 
       const newest = list[list.length - 1];
       if (newest && newest.id !== lastNewestId) {
@@ -343,6 +356,43 @@ export function CadenceYard({
     return best?.id ?? null;
   };
 
+  /** A crate's box on the screen, from the last painted frame. */
+  const crateRect = (id: string): TipRect | null => {
+    const canvas = host.current;
+    const hit = hits.current.find((h) => h.id === id);
+    if (!canvas || !hit) return null;
+    const r = canvas.getBoundingClientRect();
+    return { left: r.left + hit.x - 33, top: r.top + hit.top, width: 66, height: Math.max(8, hit.bot - hit.top) };
+  };
+
+  const showTip = (id: string | null, tapped = false) => {
+    const make = tipRef.current;
+    const rect = id ? crateRect(id) : null;
+    if (!id || !make || !rect) {
+      tipId.current = null;
+      crateTip.hide();
+      return;
+    }
+    if (tipId.current === id && crateTip.isOpen()) {
+      crateTip.move(rect);
+      return;
+    }
+    tipId.current = id;
+    crateTip.show(rect, make(id), { tapped });
+  };
+
+  followRef.current = () => {
+    const id = tipId.current;
+    if (!id) return;
+    if (!crateTip.isOpen()) {
+      tipId.current = null;
+      return;
+    }
+    const rect = crateRect(id);
+    if (rect) crateTip.move(rect);
+    else showTip(null);
+  };
+
   return (
     <canvas
       ref={host}
@@ -350,17 +400,31 @@ export function CadenceYard({
       role="img"
       aria-label={label}
       onPointerMove={(ev) => {
+        if (ev.pointerType === "touch") return;
         const id = pick(ev);
         ev.currentTarget.style.cursor = id ? "pointer" : "default";
         onHoverRef.current(id);
+        showTip(id);
       }}
       onPointerLeave={(ev) => {
+        if (ev.pointerType === "touch") return;
         ev.currentTarget.style.cursor = "default";
         onHoverRef.current(null);
+        showTip(null);
+      }}
+      onPointerDown={(ev) => {
+        const down = ev.pointerType === "touch";
+        const id = down ? pick(ev) : null;
+        touch.current = { down, open: Boolean(down && id && tipId.current === id && crateTip.isOpen()) };
+        if (!down || touch.current.open) return;
+        onHoverRef.current(id);
+        showTip(id, true);
       }}
       onClick={(ev: ReactMouseEvent<HTMLCanvasElement>) => {
         const id = pick(ev);
-        if (id) router.push(`/block/${encodeURIComponent(id)}`);
+        if (!id) return;
+        if (tipRef.current && touch.current.down && !touch.current.open) return;
+        router.push(`/block/${encodeURIComponent(id)}`);
       }}
     />
   );

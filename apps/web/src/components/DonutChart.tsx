@@ -9,6 +9,8 @@ import { chartChrome } from "@/lib/chart-chrome";
 import { DONUT_SLICES } from "@/lib/palette";
 import { lookInk } from "@/lib/look";
 import { useInk } from "@/lib/use-ink";
+import { TipHead, useFloatTip } from "@/components/Tip";
+import { pointRect } from "@/lib/tip-place";
 
 echarts.use([PieChart, TooltipComponent, CanvasRenderer]);
 
@@ -48,6 +50,26 @@ export function DonutChart({
   const [hover, setHover] = useState<HoverSlice | null>(null);
   const [reduce, setReduce] = useState(false);
   const ink = useInk();
+  /** Compact rings have no caption: the shared tip names the slice at the cursor. */
+  const sliceTip = useFloatTip({ within: () => el.current });
+  const pointer = useRef<{ x: number; y: number; touch: boolean } | null>(null);
+  const shown = useRef<{ label: string; color: string; text: string } | null>(null);
+
+  useEffect(() => {
+    const node = el.current;
+    if (!node || !compact) return;
+    const track = (e: PointerEvent) => {
+      pointer.current = { x: e.clientX, y: e.clientY, touch: e.pointerType === "touch" };
+      const now = shown.current;
+      if (now && sliceTip.isOpen()) sliceTip.move(pointRect(e.clientX, e.clientY, 6));
+    };
+    node.addEventListener("pointermove", track);
+    node.addEventListener("pointerdown", track);
+    return () => {
+      node.removeEventListener("pointermove", track);
+      node.removeEventListener("pointerdown", track);
+    };
+  }, [compact, sliceTip]);
 
   useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -82,6 +104,11 @@ export function DonutChart({
     }
     const ms = reduce ? 0 : MOTION_MS;
     const chrome = chartChrome();
+    const sliceColor = (d: DonutSlice, i: number) => {
+      const fallback = DONUT_SLICES[i % DONUT_SLICES.length];
+      const raw = d.color ?? fallback;
+      return raw.startsWith("rgba(255") ? chrome.hair : lookInk(raw);
+    };
     c.setOption(
       {
         animationDuration: ms,
@@ -89,29 +116,7 @@ export function DonutChart({
         animationEasing: EASE,
         animationEasingUpdate: EASE,
         stateAnimation: { duration: ms, easing: EASE },
-        tooltip: compact
-          ? {
-              show: true,
-              trigger: "item",
-              appendToBody: true,
-              confine: false,
-              backgroundColor: chrome.module,
-              borderColor: chrome.border,
-              borderWidth: 1,
-              padding: [8, 12],
-              extraCssText: "z-index:60;border-radius:10px;pointer-events:none",
-              textStyle: { color: chrome.text, fontSize: 12 },
-              formatter: (raw: unknown) => {
-                const p = raw as { name?: string; value?: number; percent?: number };
-                const name = typeof p.name === "string" ? p.name : "";
-                const v = Number(p.value);
-                const pct = Number(p.percent);
-                if (!name || !Number.isFinite(v) || v <= 0) return "";
-                const share = Number.isFinite(pct) ? pct / 100 : 0;
-                return `${name}<br/>${fmt.current(v, share)}`;
-              },
-            }
-          : { show: false },
+        tooltip: { show: false },
         series: [
           {
             type: "pie",
@@ -140,13 +145,7 @@ export function DonutChart({
             data: data.map((d, i) => ({
               name: d.label,
               value: d.value,
-              itemStyle: {
-                color: (() => {
-                  const fallback = DONUT_SLICES[i % DONUT_SLICES.length];
-                  const raw = d.color ?? fallback;
-                  return raw.startsWith("rgba(255") ? chrome.hair : lookInk(raw);
-                })(),
-              },
+              itemStyle: { color: sliceColor(d, i) },
             })),
           },
         ],
@@ -163,10 +162,26 @@ export function DonutChart({
       const slice = { label: name, value: v, pct: v / total };
       setHover(slice);
       hoverOut.current?.(slice);
+      const at = pointer.current;
+      if (compact && at) {
+        const i = data.findIndex((d) => d.label === name);
+        const color = i >= 0 ? sliceColor(data[i]!, i) : chrome.hair;
+        const text = fmt.current(v, v / total);
+        shown.current = { label: name, color, text };
+        sliceTip.show(
+          pointRect(at.x, at.y, 6),
+          <TipHead chip={name} ink={color === chrome.hair ? undefined : color} mono>
+            {text}
+          </TipHead>,
+          { tapped: at.touch }
+        );
+      }
     };
     const onOut = () => {
       setHover(null);
       hoverOut.current?.(null);
+      shown.current = null;
+      sliceTip.hide();
     };
     c.on("mouseover", onOver);
     c.on("globalout", onOut);

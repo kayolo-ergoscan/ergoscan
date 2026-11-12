@@ -43,6 +43,7 @@ import { HomeRentTape } from "@/components/HomeRentTape";
 import { parseRentDanger, type RentDangerRow } from "@/lib/rent-danger";
 import { HomeMempoolStage } from "@/components/HomeMempoolStage";
 import { CadenceYard, type CadenceYardBlock } from "@/components/CadenceYard";
+import { Tip, TipHead, TipInfo, TipNote, TipRow, TipRows } from "@/components/Tip";
 import { ERGO_MAX_BLOCK_SIZE } from "@/lib/ergo-emission";
 import { isSupplyDigit, zipSupplyGlyphs } from "@/lib/supply-flip";
 
@@ -93,6 +94,9 @@ type BlockRow = {
   color?: string | null;
   /** True when this block was mined with Lithos. Omitted until the snapshot says so. */
   lithos?: boolean;
+  /** Snapshot extras, read by the crate tip. A live seal has none. */
+  minerName?: string | null;
+  feeNano?: string | number | null;
 };
 
 function mergeBlockRow(prev: BlockRow[], row: BlockRow): BlockRow[] {
@@ -118,6 +122,8 @@ function mergeBlockRow(prev: BlockRow[], row: BlockRow): BlockRow[] {
       size: row.size > 0 ? row.size : old.size,
       color: row.color || old.color,
       lithos: row.lithos === true || (row.lithos == null && old.lithos === true),
+      minerName: row.minerName || old.minerName,
+      feeNano: row.feeNano || old.feeNano,
     };
     return next.sort((a, b) => b.height - a.height).slice(0, CADENCE + 1);
   }
@@ -630,13 +636,17 @@ export function HomeExplorer({
           <Link prefetch={false} href="/addresses" className={clsx(TILE, "kpi-tile--press relative")} style={enterAt(4)}>
             <HoldersMark />
             <TileFact hint={t("home.holdersHint")}>
-              <TileName className="pr-14">{t("home.holdersCount")}</TileName>
+              <TileName className="pr-14">
+                {t("home.holdersCount")} <TipInfo content={t("home.holdersHint")} label={t("home.holdersHint")} side="bottom" />
+              </TileName>
               <KpiValue flush muted={holderCount == null}>
                 <ReelText text={holderCount != null ? holderCount.toLocaleString(loc) : miss} />
               </KpiValue>
             </TileFact>
             <TileFact className="mt-auto" place="above" hint={t("home.scriptHint")}>
-              <TileName className="pr-14">{t("home.script")}</TileName>
+              <TileName className="pr-14">
+                {t("home.script")} <TipInfo content={t("home.scriptHint")} label={t("home.scriptHint")} />
+              </TileName>
               <KpiValue flush full muted={scriptCount == null}>
                 <ReelText
                   text={scriptCount != null ? scriptCount.toLocaleString(loc) : miss}
@@ -878,18 +888,11 @@ function TileFact({
   place?: "above" | "below";
   children: ReactNode;
 }) {
+  // Inside a link tile: a tap opens the page, so the tip is for hover and keyboard.
   return (
-    <div className={clsx("group/hint relative", className)}>
-      {children}
-      <p
-        className={clsx(
-          "pointer-events-none absolute left-0 z-20 max-w-[15rem] rounded-[10px] border border-[var(--border)] bg-[var(--module)] px-2.5 py-1.5 text-[12px] leading-snug text-[var(--text)] opacity-0 shadow-[0_8px_24px_rgba(0,0,0,0.28)] transition-opacity duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] group-hover/hint:opacity-100",
-          place === "above" ? "bottom-full mb-1.5" : "top-full mt-1.5"
-        )}
-      >
-        {hint}
-      </p>
-    </div>
+    <Tip content={hint} side={place === "above" ? "top" : "bottom"} tap={false}>
+      <div className={clsx("relative", className)}>{children}</div>
+    </Tip>
   );
 }
 
@@ -1710,7 +1713,7 @@ function BlockCadence({
   grow: { n: number; total: number; ink: string } | null;
   onAssembleDone: () => void;
 }) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const reduce = useReducedMotion();
   const [hoverId, setHoverId] = useState<string | null>(null);
 
@@ -1798,6 +1801,33 @@ function BlockCadence({
           colorsReady={inkReady}
           label={title}
           onHover={(id) => setHoverId((cur) => (cur === id ? cur : id))}
+          tip={(id) => {
+            const row = slots.find((b) => b.id === id);
+            if (!row) return null;
+            const txs =
+              grow && last && id === last.id && grow.total > 0 ? grow.n : row.txCount;
+            const feeRaw = row.feeNano != null ? String(row.feeNano) : "";
+            const fee = /^\d+$/.test(feeRaw) && feeRaw !== "0" ? feeRaw : null;
+            return (
+              <>
+                <TipHead chip={t("tip.block")} ink="var(--c-block, #ffd23c)" mono>
+                  {row.height.toLocaleString(loc)}
+                </TipHead>
+                <TipRows>
+                  <TipRow label={t("tip.txs")}>{txs != null ? txs.toLocaleString(loc) : "—"}</TipRow>
+                  {row.size > 0 ? <TipRow label={t("tip.size")}>{formatBytes(row.size)}</TipRow> : null}
+                  {fee ? <TipRow label={t("tip.fees")}>{formatErgPrecise(fee, locale)}</TipRow> : null}
+                  {row.minerName ? (
+                    <TipRow label={t("tip.miner")} text>
+                      {row.minerName}
+                    </TipRow>
+                  ) : null}
+                  <TipRow label={t("tip.time")}>{fmtCreated(row.timestamp, locale)}</TipRow>
+                </TipRows>
+                {row.lithos ? <TipNote>{t("block.chip.lithosHint")}</TipNote> : null}
+              </>
+            );
+          }}
         />
       </div>
       <div className="sr-only">

@@ -1,5 +1,6 @@
 "use client";
 
+import { Tip, TipRow, TipRows } from "@/components/Tip";
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
 import clsx from "clsx";
@@ -383,15 +384,22 @@ export function LithosProtocolView({ initial }: { initial: LithosProtocolSnap | 
                         {lit(row.holdingLit, locale)} LIT
                       </p>
                     </div>
-                    <div
-                      className="min-w-0 px-3 text-right"
-                      title={`${t("lithosP.team")} ${lit(row.teamLit, locale)} · ${t("lithosP.investors")} ${lit(row.investorLit, locale)} · ${t("lithosP.auditor")} ${lit(row.auditorLit, locale)}`}
+                    <Tip
+                      content={() => (
+                        <TipRows>
+                          <TipRow label={t("lithosP.team")}>{lit(row.teamLit, locale)} LIT</TipRow>
+                          <TipRow label={t("lithosP.investors")}>{lit(row.investorLit, locale)} LIT</TipRow>
+                          <TipRow label={t("lithosP.auditor")}>{lit(row.auditorLit, locale)} LIT</TipRow>
+                        </TipRows>
+                      )}
                     >
+                    <div className="min-w-0 px-3 text-right">
                       <p className="truncate tabular-nums">
                         {lit(row.teamLit, locale)} · {lit(row.investorLit, locale)} · {lit(row.auditorLit, locale)}
                       </p>
                       <p className="mt-0.5 truncate text-[11px] text-[var(--muted)]">{t("lithosP.sharesHint")}</p>
                     </div>
+                    </Tip>
                   </div>
                 </div>
               ))}

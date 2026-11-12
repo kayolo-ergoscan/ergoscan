@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Tip, TipRow, TipRows } from "./Tip";
 import Link from "next/link";
 import { getGateway } from "@/lib/config";
 import { useT } from "@/lib/i18n/I18nProvider";
@@ -53,16 +54,27 @@ export function IndexerStatus() {
   const mode = st.mode || "—";
   const span = st.span != null ? st.span.toLocaleString() : "—";
 
+  const windowText =
+    st.minHeight != null && st.lastHeight != null ? `h${st.minHeight}–${st.lastHeight}` : null;
+
   return (
+    <Tip
+      side="top"
+      peek
+      content={
+        windowText
+          ? () => (
+              <TipRows>
+                <TipRow label={t("status.indexer.window")}>{windowText}</TipRow>
+              </TipRows>
+            )
+          : null
+      }
+    >
     <Link
       prefetch={false}
       href="/status"
       className="inline-flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[10px] text-[var(--muted-2)] transition-colors duration-[400ms] hover:text-[var(--text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
-      title={
-        st.minHeight != null && st.lastHeight != null
-          ? `h${st.minHeight}–${st.lastHeight}`
-          : undefined
-      }
     >
       <span
         className={
@@ -84,5 +96,6 @@ export function IndexerStatus() {
         </span>
       )}
     </Link>
+    </Tip>
   );
 }
