@@ -58,7 +58,8 @@ SELECT encode(box_id, 'hex') AS box_id,
        encode(token_id, 'hex') AS token_id,
        amount::text AS amount
   FROM packed.box_assets
- WHERE box_id IN (SELECT decode(lower(x), 'hex') FROM unnest($1::text[]) AS x)`;
+ WHERE box_id IN (SELECT decode(lower(x), 'hex') FROM unnest($1::text[]) AS x)
+ ORDER BY box_id, asset_index NULLS LAST, token_id`;
 
 export const PACKED_TX_HEADS_SQL = `
 SELECT encode(t.id, 'hex') AS id,

@@ -123,6 +123,17 @@ test("formatRelTime matches the address tx tape", () => {
   assert.equal(formatRelTime(null, now), "—");
 });
 
+test("formatRelTime in Russian keeps the compact shape", () => {
+  const now = Date.UTC(2026, 8, 14, 12, 0, 0);
+  assert.equal(formatRelTime(now - 45_000, now, "ru"), "45 с назад");
+  assert.equal(formatRelTime(now - 12 * 60_000, now, "ru-RU"), "12 мин назад");
+  assert.equal(formatRelTime(now - 5 * 3600_000, now, "ru"), "5 ч назад");
+  assert.equal(formatRelTime(now - 3 * 86400_000, now, "ru"), "3 дн. назад");
+  assert.equal(formatRelTime(now - 60 * 86400_000, now, "ru"), "2 мес. назад");
+  assert.equal(formatRelTime(now - 6 * 365 * 86400_000, now, "ru"), "6 г. назад");
+  assert.equal(formatRelTime(now - 45_000, now, "en"), "45s ago");
+});
+
 test("formatFactWhen is day-first with a 24h clock", () => {
   const ts = Date.UTC(2020, 7, 18, 15, 36, 42);
   const d = new Date(ts);

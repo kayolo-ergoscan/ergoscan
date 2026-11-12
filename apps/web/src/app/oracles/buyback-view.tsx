@@ -415,10 +415,10 @@ export function BuybackView({ kind, initial }: { kind: BuybackKind; initial?: Bu
                     </h2>
                   </div>
                   <p className="m-0 flex shrink-0 items-center gap-x-3 text-[13px]">
-                    <Link href={`/token/${pack.tokenId}`} className="text-accent hover:underline">
+                    <Link prefetch={false} href={`/token/${pack.tokenId}`} className="text-accent hover:underline">
                       {fill(t("buyback.linkToken"), { sym })}
                     </Link>
-                    <Link href={`/oracles/${pack.slug}`} className="text-accent hover:underline">
+                    <Link prefetch={false} href={`/oracles/${pack.slug}`} className="text-accent hover:underline">
                       {t("buyback.linkPool")}
                     </Link>
                   </p>
@@ -538,7 +538,7 @@ function BuybackRow({
     <div className="addr-lane addr-lane-x buyback-lane border-t border-[var(--border-soft)] text-[13px]">
       <div className="tabular-nums">
         {row.blockId ? (
-          <Link href={`/block/${row.blockId}`} className="text-accent hover:underline">
+          <Link prefetch={false} href={`/block/${row.blockId}`} className="text-accent hover:underline">
             #{row.height.toLocaleString(loc(locale))}
           </Link>
         ) : (
@@ -574,13 +574,14 @@ function BuybackRow({
       <div className="buyback-num truncate">{formatErgPrecise(row.erg, locale, false)}</div>
       <div className="buyback-num truncate">{formatTokenAmount(row.token, 0, locale)}</div>
       <div className="truncate">
-        <Link href={`/tx/${row.tx}`} className="font-mono text-[12px] text-accent hover:underline">
+        <Link prefetch={false} href={`/tx/${row.tx}`} className="font-mono text-[12px] text-accent hover:underline">
           {shortId(row.tx, 10)}
         </Link>
       </div>
       <div className="min-w-0 truncate">
         {row.who ? (
           <Link
+            prefetch={false}
             href={`/address/${row.who}`}
             className={clsx(
               "text-accent hover:underline",

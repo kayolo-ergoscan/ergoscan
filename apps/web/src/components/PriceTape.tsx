@@ -112,6 +112,7 @@ export function PriceTape({ rows, fresh }: { rows: SpectrumTapeRow[]; fresh: boo
                 const down = (row.changePct ?? 0) < 0;
                 return (
                   <Link
+                    prefetch={false}
                     key={copy ? `${row.tokenId}:b` : row.tokenId}
                     href={`/token/${row.tokenId}`}
                     className="price-tape-chip"

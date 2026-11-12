@@ -1309,7 +1309,10 @@ function protocolTokenIds(): string[] {
  */
 const DANGER_EVERY_MS = 120_000;
 const PRICE_EVERY_MS = 600_000;
-/** A thinner pool cannot price a rent box. Elehmental Book sat at $32M off an 11 ERG pool. Flux is ~64. */
+/**
+ * A thinner pool cannot price a rent box. Elehmental Book sat at $32M off an 11 ERG pool. Flux is ~64.
+ * The partial index defi_price_tick_priced_token_ts (deploy/sql/006) has this 50 in its predicate.
+ */
 const DANGER_MIN_POOL_TVL_ERG = 50;
 let dangerCache: { at: number; rows: Record<string, unknown>[] } | null = null;
 let priceCache: { at: number; usd: Map<string, number> } | null = null;
@@ -1886,11 +1889,19 @@ async function writeRentSnapshot(pool: Pool, tip: number): Promise<void> {
 }
 
 /**
- * Same tip and same block: heavy lists at most this often. The status snapshot still goes
- * out every call, because /status marks the indexer stale after 60 s.
+ * Same tip and same block: one follow-up rebuild SAME_TIP_LIST_MS after the block (late
+ * projections: market, defi, rent claims), then at most every SAME_TIP_IDLE_MS. Before 12 Nov
+ * 2026 it rebuilt every 30 s, about four times per block for one real change (audit: snapshots).
+ * The status snapshot still goes out every call, because /status marks the indexer stale after 60 s.
  */
 const SAME_TIP_LIST_MS = Math.max(0, Number(process.env.SAME_TIP_LIST_MS ?? 30_000) || 0);
-let lastListSnap: { key: string; at: number } | null = null;
+const SAME_TIP_IDLE_MS = Math.max(SAME_TIP_LIST_MS, Number(process.env.SAME_TIP_IDLE_MS ?? 300_000) || 0);
+let lastListSnap: { key: string; at: number; n: number } | null = null;
+
+/** Rebuild lists on the same tip? `n` = rebuilds already done for this tip (1 = the block's own). */
+export function sameTipListDue(n: number, ageMs: number, followMs = SAME_TIP_LIST_MS, idleMs = SAME_TIP_IDLE_MS): boolean {
+  return n < 2 ? ageMs >= followMs : ageMs >= idleMs;
+}
 const BLOCK_VALUE_FILL_REST_MS = 24 * 3600 * 1000;
 let blockValueFillIdleAt = 0;
 
@@ -1907,7 +1918,7 @@ export async function writeListSnapshots(
   if (
     !opts.force &&
     lastListSnap?.key === key &&
-    Date.now() - lastListSnap.at < SAME_TIP_LIST_MS
+    !sameTipListDue(lastListSnap.n, Date.now() - lastListSnap.at)
   ) {
     await writeIndexerStatusSnapshot(pool, tip);
     return;
@@ -2180,7 +2191,7 @@ export async function writeListSnapshots(
       console.warn("[indexer] rent snapshot", String(e));
     }
   }
-  lastListSnap = { key, at: startedAt };
+  lastListSnap = { key, at: startedAt, n: lastListSnap?.key === key ? lastListSnap.n + 1 : 1 };
 }
 
 /** SyncChip / `/v1/indexer/status` only. No COUNT(*), rent, or home lists. */

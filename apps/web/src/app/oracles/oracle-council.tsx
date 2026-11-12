@@ -480,6 +480,7 @@ export function OracleCouncil({
               const ok = op.live === true;
               return (
                 <Link
+                  prefetch={false}
                   key={op.id}
                   href={href}
                   title={`${name} · ${op.address || op.boxId}`}

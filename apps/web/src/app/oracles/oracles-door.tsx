@@ -41,6 +41,7 @@ export function OraclesDoor() {
       <div className="grid gap-3 sm:grid-cols-3">
         {DOORS.map((door) => (
           <Link
+            prefetch={false}
             key={door.href}
             href={door.href}
             className="home-tile-enter mod kpi-tile--press flex items-center gap-3 rounded-[20px] border border-[var(--border)] bg-[var(--module)] px-4 py-4"

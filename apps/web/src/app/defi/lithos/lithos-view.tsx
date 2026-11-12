@@ -413,6 +413,7 @@ export function LithosView({
             ) : (
               pools.map((p) => (
                 <Link
+                  prefetch={false}
                   key={p.poolId || p.tokenId}
                   href={`/token/${p.tokenId}`}
                   className="chip-press flex w-full items-center gap-2 overflow-hidden rounded-[10px] px-1.5 py-1.5 text-[13px] hover:bg-[var(--wash)]"
@@ -615,7 +616,7 @@ function TapeRow({
       <div className="block-lane-pair">
         <div className="flex min-w-0 items-center px-3">
           {row.tokenId ? (
-            <Link href={`/token/${row.tokenId}`} className="flex min-w-0 items-center gap-2">
+            <Link prefetch={false} href={`/token/${row.tokenId}`} className="flex min-w-0 items-center gap-2">
               <TokenAvatar tokenId={row.tokenId} symbol={meta?.symbol} size={22} />
               <span className="truncate font-semibold" style={{ color: tokenTickerInk(row.tokenId) }}>
                 {label}
@@ -661,6 +662,7 @@ function TapeRow({
         <div className="min-w-0 px-3">
           {row.trader ? (
             <Link
+              prefetch={false}
               href={`/address/${encodeURIComponent(row.trader)}`}
               className="block truncate whitespace-nowrap font-mono text-[12px] text-accent hover:underline"
             >
@@ -673,6 +675,7 @@ function TapeRow({
         <div className="min-w-0 px-3 text-right">
           {row.txId ? (
             <Link
+              prefetch={false}
               href={`/tx/${row.txId}`}
               className="inline-block whitespace-nowrap font-mono text-accent hover:underline"
             >
@@ -697,6 +700,7 @@ function TopTraderRow({ row, enterClass }: { row: AgeUsdTrader; enterClass?: str
     >
       <div className="min-w-0 flex-1 px-3">
         <Link
+          prefetch={false}
           href={`/address/${encodeURIComponent(row.trader)}`}
           className="block truncate whitespace-nowrap font-mono text-[12px] text-accent hover:underline"
         >

@@ -27,16 +27,16 @@ export const API_COMPARE = [
     ours: "The same field names. value and asset amounts are strings.",
   },
   {
-    topic: "Register search and a full unspent dump",
+    topic: "Register search and height streams",
     official: "Served",
-    ours: "HTTP 501. A wallet does not need them.",
+    ours: "Register search: HTTP 501. Height streams: at most 1024 heights and 5000 boxes per call.",
   },
 ] as const;
 
 /** Official paths we answer with 501. Feature string is the gateway path. */
 export const API_NOT_SERVED = [
-  { method: "GET", path: "/boxes/unspent/stream" },
-  { method: "GET", path: "/blocks/byGlobalIndex/stream" },
+  // The official host answers 500 on it as well (12 Nov 2026).
+  { method: "GET", path: "/blocks/stream/summary" },
 ] as const;
 
 export const API_WALLET_PATHS = [
@@ -88,13 +88,15 @@ export function apiContractMarkdown(): string {
     "",
     "## Index",
     "",
-    "`globalIndex` on a box or a transaction is ErgoScan's own sequence. The same box carries the same `globalIndex` in a list and in `GET /boxes/{id}`. It is not the official explorer's global index. Box and transaction `byGlobalIndex` streams use this sequence: both bounds are required, and the window is at most 10000.",
+    "`globalIndex` on a box or a transaction is ErgoScan's own sequence. The same box carries the same `globalIndex` in a list and in `GET /boxes/{id}`. It is not the official explorer's global index. Box, unspent-box, and transaction `byGlobalIndex` streams use this sequence. Give `minGix` with `limit` (at most 500), as the official API does, or `minGix` and `maxGix` (a window of at most 10000). `blocks/byGlobalIndex/stream` follows the official numbering: block `globalIndex` = height − 1. Its `size` is the block transactions' size; the official one also counts the header and AD proofs.",
     "",
-    "`dataInputs` on a transaction is an empty list. `inputs` and `outputs` are filled.",
+    "`GET /transactions/{id}` returns `inputs` in transaction order and fills `dataInputs`. In lists and streams `dataInputs` is an empty list.",
     "",
     "## Bounded lookups",
     "",
-    "Exact `byErgoTree` and template-hash lookups are live: `limit` at most 100, `offset` at most 500. `POST /boxes/search`, `POST /boxes/unspent/search`, and `POST /boxes/unspent/search/union` accept a body with only `ergoTreeTemplateHash` and use that same index. `union` is unspent. A register, constant, or token list in the body stays HTTP 501. `unspent/byLastEpochs/stream` accepts 1–4 epochs and `limit` at most 100. These pages return `items` and `hasMore`. They do not count the whole match.",
+    "Exact `byErgoTree` and template-hash lookups are live: `limit` at most 100, `offset` at most 500. `POST /boxes/search`, `POST /boxes/unspent/search`, and `POST /boxes/unspent/search/union` accept a body with only `ergoTreeTemplateHash` and use that same index. `union` is unspent. A register, constant, or token list in the body stays HTTP 501. `unspent/byLastEpochs/stream` accepts 1–4 epochs (`lastEpochs`) and `limit` at most 100. These pages return `items` and `hasMore`. They do not count the whole match.",
+    "",
+    "Height streams (`boxes/unspent/stream`, `boxes/byErgoTreeTemplateHash/{hash}/stream`, and its `unspent` form) take `minHeight` and `maxHeight`. Height is the settlement height (the block of the creating transaction), as official. At most 1024 heights and 5000 boxes per call, in `globalIndex` order, as a JSON array. `boxes/byTokenId/{tokenId}` lists every box that ever held the token: `limit` at most 100, `offset` at most 1000000, exact `total`, and no fixed order, as official. `transactions/byInputsScriptTemplateHash/{hash}` lists the transactions that spend a box of the template, newest first (`sortDirection=asc` for oldest first): `limit` at most 100, `offset` at most 100000, exact `total`. A template with hundreds of thousands of boxes (Spectrum N2T pools have 305000) can answer 504. `POST /ergotree/convert` takes `{\"hashed\": \"<ErgoTree hex>\"}`, as official, and returns `constants` and `script`.",
     "",
     "## Wallet paths",
     "",
@@ -171,10 +173,11 @@ export function apiContractHtml(): string {
   <h2>Amounts</h2>
   <p>nanoERG and token raw amounts are decimal strings, including inside boxes, balances, and assets. Official JSON numbers already lose precision past 2^53. Heights, indexes, sizes, and timestamps stay JSON numbers.</p>
   <h2>Index</h2>
-  <p><code>globalIndex</code> on a box or a transaction is ErgoScan's own sequence. The same box carries the same <code>globalIndex</code> in a list and in <code>GET /boxes/{id}</code>. It is not the official explorer's global index. Box and transaction <code>byGlobalIndex</code> streams use this sequence: both bounds are required, and the window is at most 10000.</p>
-  <p><code>dataInputs</code> on a transaction is an empty list. <code>inputs</code> and <code>outputs</code> are filled.</p>
+  <p><code>globalIndex</code> on a box or a transaction is ErgoScan's own sequence. The same box carries the same <code>globalIndex</code> in a list and in <code>GET /boxes/{id}</code>. It is not the official explorer's global index. Box, unspent-box, and transaction <code>byGlobalIndex</code> streams use this sequence. Give <code>minGix</code> with <code>limit</code> (at most 500), as the official API does, or <code>minGix</code> and <code>maxGix</code> (a window of at most 10000). <code>blocks/byGlobalIndex/stream</code> follows the official numbering: block <code>globalIndex</code> = height − 1. Its <code>size</code> is the block transactions' size; the official one also counts the header and AD proofs.</p>
+  <p><code>GET /transactions/{id}</code> returns <code>inputs</code> in transaction order and fills <code>dataInputs</code>. In lists and streams <code>dataInputs</code> is an empty list.</p>
   <h2>Bounded lookups</h2>
-  <p>Exact <code>byErgoTree</code> and template-hash lookups are live: <code>limit</code> at most 100, <code>offset</code> at most 500. <code>POST /boxes/search</code>, <code>POST /boxes/unspent/search</code>, and <code>POST /boxes/unspent/search/union</code> accept a body with only <code>ergoTreeTemplateHash</code> and use that same index. <code>union</code> is unspent. A register, constant, or token list in the body stays HTTP 501. <code>unspent/byLastEpochs/stream</code> accepts 1–4 epochs and <code>limit</code> at most 100. These pages return <code>items</code> and <code>hasMore</code>. They do not count the whole match.</p>
+  <p>Exact <code>byErgoTree</code> and template-hash lookups are live: <code>limit</code> at most 100, <code>offset</code> at most 500. <code>POST /boxes/search</code>, <code>POST /boxes/unspent/search</code>, and <code>POST /boxes/unspent/search/union</code> accept a body with only <code>ergoTreeTemplateHash</code> and use that same index. <code>union</code> is unspent. A register, constant, or token list in the body stays HTTP 501. <code>unspent/byLastEpochs/stream</code> accepts 1–4 epochs (<code>lastEpochs</code>) and <code>limit</code> at most 100. These pages return <code>items</code> and <code>hasMore</code>. They do not count the whole match.</p>
+  <p>Height streams (<code>boxes/unspent/stream</code>, <code>boxes/byErgoTreeTemplateHash/{hash}/stream</code>, and its <code>unspent</code> form) take <code>minHeight</code> and <code>maxHeight</code>. Height is the settlement height (the block of the creating transaction), as official. At most 1024 heights and 5000 boxes per call, in <code>globalIndex</code> order, as a JSON array. <code>boxes/byTokenId/{tokenId}</code> lists every box that ever held the token: <code>limit</code> at most 100, <code>offset</code> at most 1000000, exact <code>total</code>, and no fixed order, as official. <code>transactions/byInputsScriptTemplateHash/{hash}</code> lists the transactions that spend a box of the template, newest first (<code>sortDirection=asc</code> for oldest first): <code>limit</code> at most 100, <code>offset</code> at most 100000, exact <code>total</code>. A template with hundreds of thousands of boxes (Spectrum N2T pools have 305000) can answer 504. <code>POST /ergotree/convert</code> takes <code>{"hashed": "&lt;ErgoTree hex&gt;"}</code>, as official, and returns <code>constants</code> and <code>script</code>.</p>
   <h2>Wallet paths</h2>
   <p>Paths are relative to <code>/api/v1</code>. List responses use <code>items</code> and <code>total</code>. <code>total</code> comes from the address summary, not a live count of boxes. Prefer <code>cursor</code> when <code>hasMore</code> is true. <code>offset</code> is a small skip (at most 500) on an address-filtered index.</p>
   <ul>${wallet}</ul>

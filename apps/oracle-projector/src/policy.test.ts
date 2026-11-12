@@ -71,3 +71,14 @@ test("indexer lag yields public.*", () => {
   assert.equal(p.mode, "tip_hold");
   assert.equal(p.run, false);
 });
+
+test("same tip skips a tip pass for a minute; a new block or a fork id runs it", async () => {
+  const { sameTipSkip, SAME_TIP_RERUN_MS } = await import("./policy.js");
+  const base = { mode: "tip" as const, tipKey: "100:aa", lastRunKey: "100:aa", lastRunAt: 1_000, now: 5_000 };
+  assert.equal(sameTipSkip(base), true);
+  assert.equal(sameTipSkip({ ...base, tipKey: "101:bb" }), false);
+  assert.equal(sameTipSkip({ ...base, tipKey: "100:cc" }), false);
+  assert.equal(sameTipSkip({ ...base, now: 1_000 + SAME_TIP_RERUN_MS }), false);
+  assert.equal(sameTipSkip({ ...base, lastRunKey: null }), false);
+  assert.equal(sameTipSkip({ ...base, mode: "history" }), false);
+});

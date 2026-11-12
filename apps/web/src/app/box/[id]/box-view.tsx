@@ -34,6 +34,7 @@ import { describeParty } from "@/lib/address-labels";
 import { lockCaption } from "@/lib/tx-lock";
 import { INK } from "@/lib/palette";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
+import { countText } from "@/lib/i18n/messages";
 import { readHashTab, setHashTab } from "@/lib/hash-tab";
 import { useKeepFresh, usePageSync } from "@/lib/page-sync";
 import { SNAPSHOT_FETCH, useEnterIds } from "@/lib/keyed-enter";
@@ -84,7 +85,7 @@ function formatHorizon(blocks: number | null, locale: string, t: (k: string) => 
   if (blocks == null) return "—";
   if (blocks <= 0) return t("rent.cap.now");
   if (blocks < 2000) {
-    return t("rent.status.inBlocks").replace("{n}", blocks.toLocaleString(loc(locale)));
+    return countText(t, locale, "rent.status.inBlocks", blocks, blocks.toLocaleString(loc(locale)));
   }
   const years = blocks / BLOCKS_PER_YEAR;
   if (years >= 1) return `~${years.toFixed(1)}y`;
@@ -336,6 +337,7 @@ export function BoxView({
                 {creation != null ? (
                   <KpiNum>
                     <Link
+                      prefetch={false}
                       href={`/block/${creation}`}
                       className="hover:underline"
                       style={{ color: heightSplit ? INK.gold : aligned ? INK.teal : INK.sky }}
@@ -387,13 +389,14 @@ export function BoxView({
               <p className="mt-0.5 truncate text-[17px] font-semibold leading-none tabular-nums tracking-tight">
                 {spent && spentHeight != null ? (
                   <KpiNum>
-                    <Link href={`/block/${spentHeight}`} className="text-accent hover:underline">
+                    <Link prefetch={false} href={`/block/${spentHeight}`} className="text-accent hover:underline">
                       {spentHeight.toLocaleString(loc(locale))}
                     </Link>
                   </KpiNum>
                 ) : spent && data.spentTransactionId ? (
                   <KpiNum>
                     <Link
+                      prefetch={false}
                       href={`/tx/${data.spentTransactionId}`}
                       className="font-mono text-[15px] text-accent hover:underline"
                     >
@@ -789,7 +792,7 @@ function BoxLife({
         <p className="box-k">{t("box.in")}</p>
         <p className="mt-2 flex min-w-0 items-center gap-1">
           {createdHref && createdId ? (
-            <Link href={createdHref} className="min-w-0 truncate font-mono text-[13px] text-accent hover:underline">
+            <Link prefetch={false} href={createdHref} className="min-w-0 truncate font-mono text-[13px] text-accent hover:underline">
               {shortId(createdId, 8)}
             </Link>
           ) : (
@@ -804,7 +807,7 @@ function BoxLife({
         ) : null}
         {createdHeight != null ? (
           <p className="mt-1 text-[12px]">
-            <Link href={`/block/${createdHeight}`} className="tabular-nums text-accent hover:underline">
+            <Link prefetch={false} href={`/block/${createdHeight}`} className="tabular-nums text-accent hover:underline">
               {createdHeight.toLocaleString(loc(locale))}
             </Link>
           </p>
@@ -815,7 +818,7 @@ function BoxLife({
         <p className="box-k">{t("box.owner")}</p>
         {address && ownerLabel ? (
           <p className="mt-2 min-w-0 truncate font-mono text-[13px]">
-            <Link href={`/address/${encodeURIComponent(address)}`} className="text-accent hover:underline">
+            <Link prefetch={false} href={`/address/${encodeURIComponent(address)}`} className="text-accent hover:underline">
               {ownerLabel}
             </Link>
           </p>
@@ -829,7 +832,7 @@ function BoxLife({
         <p className="box-k">{spent ? t("box.out") : t("box.unspent")}</p>
         <p className="mt-2 flex min-w-0 items-center gap-1">
           {spent && spentHref && spentId ? (
-            <Link href={spentHref} className="min-w-0 truncate font-mono text-[13px] text-accent hover:underline">
+            <Link prefetch={false} href={spentHref} className="min-w-0 truncate font-mono text-[13px] text-accent hover:underline">
               {shortId(spentId, 8)}
             </Link>
           ) : (
@@ -843,7 +846,7 @@ function BoxLife({
         ) : null}
         {spentHeight != null ? (
           <p className="mt-1 text-[12px]">
-            <Link href={`/block/${spentHeight}`} className="tabular-nums text-accent hover:underline">
+            <Link prefetch={false} href={`/block/${spentHeight}`} className="tabular-nums text-accent hover:underline">
               {spentHeight.toLocaleString(loc(locale))}
             </Link>
           </p>

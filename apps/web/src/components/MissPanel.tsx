@@ -43,6 +43,7 @@ export function MissPanel({
 function Exit({ href, label }: { href: string; label: string }) {
   return (
     <Link
+      prefetch={false}
       href={href}
       className="chip-press overflow-hidden rounded-[10px] bg-[var(--wash)] px-3.5 py-1.5 text-[13px] font-medium text-[var(--muted)] hover:text-[var(--text)]"
     >

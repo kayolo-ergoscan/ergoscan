@@ -82,13 +82,57 @@ function scalaTypeName(tpe: string): string {
   if (n === "Long") return "SLong$";
   if (n === "BigInt") return "SBigInt$";
   if (n === "GroupElement") return "SGroupElement$";
-  if (n === "SigmaProp") return "SSigmaProp$";
+  if (n === "SigmaProp") return "SSigmaProp";
   if (n === "Coll[Byte]") return "Coll[SByte$]";
   if (n.startsWith("Coll[Coll[Byte]")) return "Coll[Coll[SByte$]]";
   return n;
 }
 
-function scalaValue(tpe: string, data: unknown): string {
+const SECP_P = 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2fn;
+
+function modPow(base: bigint, exp: bigint, mod: bigint): bigint {
+  let r = 1n;
+  let b = base % mod;
+  let e = exp;
+  while (e > 0n) {
+    if (e & 1n) r = (r * b) % mod;
+    b = (b * b) % mod;
+    e >>= 1n;
+  }
+  return r;
+}
+
+/**
+ * Official explorer text of a compressed secp256k1 point: ECPoint(x6,y6,...), the first six hex
+ * digits of x and of y as numbers. y is recovered from x (y^2 = x^3 + 7). Null when it is not a point.
+ */
+export function ecPointShort(pk: string): string | null {
+  const h = pk.toLowerCase();
+  if (!/^0[23][0-9a-f]{64}$/.test(h)) return null;
+  const x = BigInt(`0x${h.slice(2)}`);
+  const y2 = (x * x * x + 7n) % SECP_P;
+  let y = modPow(y2, (SECP_P + 1n) / 4n, SECP_P);
+  if ((y * y) % SECP_P !== y2) return null;
+  if ((y & 1n) !== (h[1] === "3" ? 1n : 0n)) y = SECP_P - y;
+  // Hex of the number, no leading zeros (official prints 0x0edc90… as edc90f).
+  return `ECPoint(${x.toString(16).slice(0, 6)},${y.toString(16).slice(0, 6)},...)`;
+}
+
+/** SigmaProp / GroupElement constants from their serialized hex (the JS objects print [object Object]). */
+function pointConstant(tpe: string, hex: string): string | null {
+  const h = hex.toLowerCase();
+  if (tpe === "GroupElement" && h.startsWith("07")) return ecPointShort(h.slice(2));
+  if (tpe === "SigmaProp" && h.startsWith("08cd")) {
+    const p = ecPointShort(h.slice(4));
+    return p ? `SigmaProp(ProveDlog(${p}))` : null;
+  }
+  if (tpe === "SigmaProp" && h.length > 2) return `SigmaProp(${h.slice(2)})`;
+  return null;
+}
+
+function scalaValue(tpe: string, data: unknown, hex = ""): string {
+  const point = tpe === "GroupElement" || tpe === "SigmaProp" ? pointConstant(tpe, hex) : null;
+  if (point) return point;
   if (tpe === "Boolean") return data === true ? "true" : "false";
   if (typeof data === "bigint") return data.toString();
   if (typeof data === "number" || typeof data === "boolean") return String(data);
@@ -123,6 +167,12 @@ function scriptFromTree(tree: SigmaTree): string {
 function formatConstants(rows: ErgoTreeConstantRow[]): string {
   if (!rows.length) return "";
   return rows.map((r) => `${r.index}: ${r.sigmaType} = ${r.renderedValue}`).join("\n");
+}
+
+/** The official explorer's constants text: "[]" or "[\n  0: SInt$ = 720,\n  1: …\n]". */
+export function officialConstantsText(rows: ErgoTreeConstantRow[]): string {
+  if (!rows.length) return "[]";
+  return `[\n${rows.map((r) => `  ${r.index}: ${r.sigmaType} = ${r.renderedValue}`).join(",\n")}\n]`;
 }
 
 async function loadLib(): Promise<SigmaLib | null> {
@@ -163,7 +213,7 @@ export function decodeErgoTreeSync(hex: string, lib: SigmaLib): ErgoTreeDecode {
       return {
         index,
         sigmaType: scalaTypeName(tpe),
-        renderedValue: scalaValue(tpe, c.data),
+        renderedValue: scalaValue(tpe, c.data, hexVal),
         hex: hexVal,
       };
     });

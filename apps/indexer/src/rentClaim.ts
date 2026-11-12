@@ -193,7 +193,20 @@ export function claimsFromTx(tx: NodeTx, spentHeight: number): RentClaim[] {
   return claims;
 }
 
+/**
+ * Once per process (12 Nov 2026 audit): ALTER TABLE … IF NOT EXISTS still takes an ACCESS EXCLUSIVE
+ * lock on rent_collected, and CREATE INDEX IF NOT EXISTS a SHARE lock, before they find the column
+ * and indexes already there. Every write paid for both and queued behind the rent page's reads.
+ */
+let collectorColumnReady = false;
+
 async function ensureCollectorColumn(db: Queryable): Promise<void> {
+  if (collectorColumnReady) return;
+  await ensureCollectorColumnOnce(db);
+  collectorColumnReady = true;
+}
+
+async function ensureCollectorColumnOnce(db: Queryable): Promise<void> {
   await db.query(`ALTER TABLE rent_collected ADD COLUMN IF NOT EXISTS collector TEXT`);
   await db.query(`
     CREATE INDEX IF NOT EXISTS rent_collected_protocol_height_idx

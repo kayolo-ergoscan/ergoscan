@@ -108,6 +108,9 @@ export const NAUTILUS_SDL = /* GraphQL */ `
   type Asset {
     tokenId: String!
     amount: String!
+    "Position of the token in the box, node order (contracts read tokens(index))."
+    index: Int!
+    boxId: String!
   }
 
   type Box {
@@ -116,6 +119,8 @@ export const NAUTILUS_SDL = /* GraphQL */ `
     index: Int!
     value: String!
     creationHeight: Int!
+    "Height of the block that included the box."
+    settlementHeight: Int!
     ergoTree: String!
     address: String
     assets: [Asset!]!
@@ -151,6 +156,8 @@ export const NAUTILUS_SDL = /* GraphQL */ `
   }
 
   type Input {
+    boxId: String!
+    transactionId: String!
     proofBytes: String
     extension: JSONObject!
     index: Int!
@@ -167,12 +174,16 @@ export const NAUTILUS_SDL = /* GraphQL */ `
     inclusionHeight: Int!
     headerId: String!
     index: Int!
+    size: Int!
     inputs: [Input!]!
     dataInputs: [DataInput!]!
     outputs(relevantOnly: Boolean): [Box!]!
   }
 
   type Mempool {
+    "Bytes of all pool transactions."
+    size: Int!
+    transactionsCount: Int!
     boxes(
       skip: Int = 0
       take: Int = 50

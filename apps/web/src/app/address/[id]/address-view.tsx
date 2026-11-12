@@ -1314,11 +1314,11 @@ export function AddressView({
               mark={<KpiMarkFootprints className="h-9 w-9" />}
             >
               <p className="mt-0.5 text-[22px] font-semibold leading-[1.15] tabular-nums tracking-tight">
-                <KpiNum>{lastTs != null ? formatRelTime(lastTs) : "—"}</KpiNum>
+                <KpiNum>{lastTs != null ? formatRelTime(lastTs, locale) : "—"}</KpiNum>
               </p>
               <p className="mt-0.5 truncate text-[12px] leading-[1.15] text-[var(--muted-2)]">
                 {firstTs != null
-                  ? `${t("address.firstActivity")} · ${formatRelTime(firstTs)}`
+                  ? `${t("address.firstActivity")} · ${formatRelTime(firstTs, locale)}`
                   : t("address.cap.activity")}
               </p>
             </AddrFactCard>
@@ -1651,7 +1651,7 @@ function TokenAmtText({
       <span className="shrink-0">{glance.text}</span>
       {label ? (
         href ? (
-          <Link href={href} className="min-w-0 hover:underline" style={nameInk}>
+          <Link prefetch={false} href={href} className="min-w-0 hover:underline" style={nameInk}>
             <NameMarquee text={label} />
           </Link>
         ) : (
@@ -1889,6 +1889,7 @@ function AddrParty({
     const label = name || party.short || shortId(head, 6);
     return (
       <Link
+        prefetch={false}
         href={`/address/${encodeURIComponent(head)}`}
         data-addr={head}
         title={head}
@@ -1997,6 +1998,7 @@ function HistoryRow({
       <div className="addr-tail">
         <div className="flex min-w-0 items-center px-3">
           <Link
+            prefetch={false}
             href={`/tx/${tx.id}`}
             className="addr-tx-mark"
             title={String(tx.id)}
@@ -2020,6 +2022,7 @@ function HistoryRow({
               </span>
             ) : tx.inclusionHeight != null ? (
               <Link
+                prefetch={false}
                 href={`/block/${tx.inclusionHeight}`}
                 className="tabular-nums text-accent hover:underline"
               >
@@ -2031,7 +2034,7 @@ function HistoryRow({
           </div>
           <div className="px-3 text-right">
             <p className={clsx("whitespace-nowrap tabular-nums", relAgeToneClass(relAgeTone(tx.timestamp)))}>
-              {formatRelTime(tx.timestamp)}
+              {formatRelTime(tx.timestamp, locale)}
             </p>
             {ms != null && (
               <p className="mt-0.5 whitespace-nowrap text-[12px] tabular-nums text-[var(--muted-2)]">
@@ -2073,6 +2076,7 @@ function BoxHistoryRow({
       )}
     >
       <Link
+        prefetch={false}
         href={`/box/${box.boxId}`}
         title={title}
         className="min-w-0 truncate px-3 font-mono text-[12px] text-accent hover:underline"
@@ -2094,6 +2098,7 @@ function BoxHistoryRow({
       <div className="flex min-w-0 items-center justify-end px-3">
         {box.transactionId ? (
           <Link
+            prefetch={false}
             href={`/tx/${box.transactionId}`}
             title={box.transactionId}
             className="font-mono text-[12px] text-accent hover:underline"
@@ -2107,6 +2112,7 @@ function BoxHistoryRow({
       <div className="flex min-w-0 items-center justify-end px-3">
         {height != null ? (
           <Link
+            prefetch={false}
             href={`/block/${height}`}
             className="tabular-nums text-accent hover:underline"
           >
@@ -2131,7 +2137,7 @@ function TokenWhen({
   locale: string;
   align: "left" | "right";
 }) {
-  const rel = ts != null ? formatRelTime(ts) : null;
+  const rel = ts != null ? formatRelTime(ts, locale) : null;
   const title = ts != null ? formatTs(ts) : undefined;
   const label =
     rel && rel !== "—"
@@ -2142,6 +2148,7 @@ function TokenWhen({
   const body =
     height != null ? (
       <Link
+        prefetch={false}
         href={`/block/${height}`}
         className="truncate hover:underline"
         title={title}
@@ -2187,6 +2194,7 @@ function TokenHistoryRow({
       <div className="flex min-w-0 items-center gap-2 px-3">
         <TokenLogo tokenId={row.tokenId} artworkUrl={row.artworkUrl} size={20} />
         <Link
+          prefetch={false}
           href={href}
           title={title}
           className="min-w-0 font-medium hover:underline"
@@ -2213,6 +2221,7 @@ function TokenHistoryRow({
       <div className="block-lane-pair">
         <TokenWhen ts={row.firstTs} height={row.firstHeight} locale={locale} align="left" />
         <Link
+          prefetch={false}
           href={href}
           title={row.tokenId}
           className="flex shrink-0 items-center justify-end whitespace-nowrap px-3 font-mono text-[12px] text-accent hover:underline"

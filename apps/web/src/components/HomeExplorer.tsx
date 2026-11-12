@@ -627,7 +627,7 @@ export function HomeExplorer({
             </div>
           </article>
 
-          <Link href="/addresses" className={clsx(TILE, "kpi-tile--press relative")} style={enterAt(4)}>
+          <Link prefetch={false} href="/addresses" className={clsx(TILE, "kpi-tile--press relative")} style={enterAt(4)}>
             <HoldersMark />
             <TileFact hint={t("home.holdersHint")}>
               <TileName className="pr-14">{t("home.holdersCount")}</TileName>
@@ -925,7 +925,7 @@ function HomeActivityTile({
         <div className="relative mb-1 flex h-[22px] shrink-0 items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
             <h2 className="m-0 text-[13px] leading-none" style={{ color: HOME.forming }}>{title}</h2>
-            <Link href={href} className="text-[13px] leading-none text-[var(--muted)] hover:text-[var(--text)]">
+            <Link prefetch={false} href={href} className="text-[13px] leading-none text-[var(--muted)] hover:text-[var(--text)]">
               {viewAll}
             </Link>
           </div>
@@ -1674,7 +1674,7 @@ function HomeMempoolTile({
             <FormingAge ts={formingSince} />
           </span>
         </div>
-        <Link href="/mempool" className="text-[13px] leading-none text-[var(--muted)] hover:text-[var(--text)]">
+        <Link prefetch={false} href="/mempool" className="text-[13px] leading-none text-[var(--muted)] hover:text-[var(--text)]">
           {all}
         </Link>
       </div>
@@ -1786,7 +1786,7 @@ function BlockCadence({
             </>
           ) : null}
         </div>
-        <Link href="/blocks" className="shrink-0 text-[13px] leading-none text-[var(--muted)] hover:text-[var(--text)]">
+        <Link prefetch={false} href="/blocks" className="shrink-0 text-[13px] leading-none text-[var(--muted)] hover:text-[var(--text)]">
           {all}
         </Link>
       </div>
@@ -1802,7 +1802,7 @@ function BlockCadence({
       </div>
       <div className="sr-only">
         {yard.map((b) => (
-          <Link key={b.id} href={`/block/${encodeURIComponent(b.id)}`}>
+          <Link prefetch={false} key={b.id} href={`/block/${encodeURIComponent(b.id)}`}>
             {b.height.toLocaleString(loc)}
           </Link>
         ))}

@@ -31,10 +31,11 @@ import { lookupAddress } from "@/lib/address-book";
 import { minerEmissionAtHeight, ERGO_MAX_BLOCK_SIZE } from "@/lib/ergo-emission";
 import { INK } from "@/lib/palette";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
+import { countText } from "@/lib/i18n/messages";
 import { splitExtension } from "@/lib/extension-section";
 import { readHashTab, setHashTab } from "@/lib/hash-tab";
 import { useChainTipRefresh, useKeepFresh, usePageSync } from "@/lib/page-sync";
-import { SNAPSHOT_FETCH, enteringIds, snapshotPath, useEnterIds } from "@/lib/keyed-enter";
+import { ENTER_MS, SNAPSHOT_FETCH, enteringIds, snapshotPath, useEnterIds } from "@/lib/keyed-enter";
 import {
   BLOCK_TX_PACK,
   parseBlockCard,
@@ -192,6 +193,7 @@ export function BlockView({
   newerRow,
   initialHeader = null,
   initialLithos = false,
+  initialTxs = [],
 }: {
   id: string;
   initialRow: BlockListItem | null;
@@ -201,6 +203,8 @@ export function BlockView({
   initialHeader?: BlockHeaderFields | null;
   /** Known on the first paint, so the Lithos chip does not pop in after the card. */
   initialLithos?: boolean;
+  /** First tx page from the server: drawn in the first HTML, with the same entry animation. */
+  initialTxs?: TxListItem[];
 }) {
   const hopQuiet = useRef(blockHopQuiet);
   const [arrive, setArrive] = useState(false);
@@ -221,20 +225,21 @@ export function BlockView({
   const [tab, setTab] = useState<BlockTab>("txs");
   const [header, setHeader] = useState<BlockHeaderFields | null>(initialHeader);
   const hashApplied = useRef(false);
-  const [txs, setTxs] = useState<TxListItem[]>([]);
+  const seeded = initialTxs.length > 0;
+  const [txs, setTxs] = useState<TxListItem[]>(initialTxs);
   const [txTotal, setTxTotal] = useState(initialRow?.txCount ?? 0);
-  const [txReady, setTxReady] = useState(false);
+  const [txReady, setTxReady] = useState(seeded);
   const [offset, setOffset] = useState(0);
   const [pending, setPending] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [stuck, setStuck] = useState(false);
-  const enter = useEnterIds();
-  const packEnter = useEnterIds();
+  const enter = useEnterIds(ENTER_MS, [], seeded);
+  const packEnter = useEnterIds(ENTER_MS, seeded ? ["pack"] : []);
   const pinRef = useRef<HTMLDivElement>(null);
   const offsetRef = useRef(0);
   const txsRef = useRef(txs);
   const headRef = useRef(head);
-  const txReadyRef = useRef(false);
+  const txReadyRef = useRef(seeded);
   const dumpRef = useRef<TxListItem[] | null>(null);
   offsetRef.current = offset;
   txsRef.current = txs;
@@ -429,7 +434,7 @@ export function BlockView({
         ? t("block.cap.interval")
             .replace("{n}", confirmations.toLocaleString(loc(locale)))
             .replace("{t}", formatBlockTime(intervalMs))
-        : t("block.cap.time").replace("{n}", confirmations.toLocaleString(loc(locale)))
+        : countText(t, locale, "block.cap.time", confirmations, confirmations.toLocaleString(loc(locale)))
       : intervalMs != null
         ? formatBlockTime(intervalMs)
         : t("blocks.confirmations");
@@ -475,6 +480,7 @@ export function BlockView({
                 <KpiNum>{head.height.toLocaleString(loc(locale))}</KpiNum>
                 {head.lithos ? (
                   <Link
+                    prefetch={false}
                     href="/lithos"
                     title={t("block.chip.lithosHint")}
                     className="chip-press shrink-0 rounded-full bg-[var(--wash-strong)] px-1.5 py-0.5 text-[10px] font-semibold leading-none tracking-tight text-[var(--text)]"
@@ -563,7 +569,7 @@ export function BlockView({
               )}
             </div>
             <p className="mt-2 truncate text-[13px] text-[var(--muted)]">
-              {t("block.cap.output").replace("{n}", head.txCount.toLocaleString(loc(locale)))}
+              {countText(t, locale, "block.cap.output", head.txCount, head.txCount.toLocaleString(loc(locale)))}
             </p>
             {emissionNano > 0n ? (
               <p className="mt-1 truncate text-[12px] text-[var(--muted)]">
@@ -619,6 +625,7 @@ export function BlockView({
             <p className="mt-0.5 truncate text-[17px] font-semibold leading-none tracking-tight">
               {minerAddr ? (
                 <Link
+                  prefetch={false}
                   href={`/address/${minerAddr}`}
                   className="block min-w-0 truncate text-accent hover:underline"
                 >
@@ -674,7 +681,7 @@ export function BlockView({
             mark={<AddrFactMark id="clock" className="h-9 w-9" />}
           >
             <p className="mt-0.5 truncate text-[17px] font-semibold leading-none tabular-nums tracking-tight">
-              <KpiNum>{head.timestamp ? formatRelTime(head.timestamp) : dash}</KpiNum>
+              <KpiNum>{head.timestamp ? formatRelTime(head.timestamp, locale) : dash}</KpiNum>
             </p>
             <p className="mt-0.5 truncate text-[12px] leading-none text-[var(--muted-2)]">
               {timeCaption}
@@ -807,7 +814,7 @@ function BlockSectionSheet({
       <div className="hdr-sheet">
         <p className="hdr-band">
           {title}
-          {hex ? ` · ${t("block.section.bytes").replace("{n}", bytes.toLocaleString(locale === "ru" ? "ru-RU" : "en-US"))}` : ""}
+          {hex ? ` · ${countText(t, locale, "block.section.bytes", bytes, bytes.toLocaleString(locale === "ru" ? "ru-RU" : "en-US"))}` : ""}
         </p>
         {hex && part === "adproof" ? (
           <ProofPane hex={hex} copyLabel={t("tx.copy")} copiedLabel={t("tx.copied")} />

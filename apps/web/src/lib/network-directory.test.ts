@@ -8,9 +8,9 @@ import {
 } from "./network-directory.js";
 
 test("directory lists explorers, APIs, and GraphQL without duplicate hrefs", () => {
-  assert.equal(NETWORK_DIRECTORY.explorers.length, 7);
-  assert.equal(NETWORK_DIRECTORY.apis.length, 5);
-  assert.equal(NETWORK_DIRECTORY.graphql.length, 5);
+  assert.equal(NETWORK_DIRECTORY.explorers.length, 5);
+  assert.equal(NETWORK_DIRECTORY.apis.length, 3);
+  assert.equal(NETWORK_DIRECTORY.graphql.length, 3);
   const hrefs = NETWORK_KINDS.flatMap((k) => NETWORK_DIRECTORY[k].map((row) => row.href));
   assert.equal(new Set(hrefs).size, hrefs.length);
   for (const href of hrefs) {

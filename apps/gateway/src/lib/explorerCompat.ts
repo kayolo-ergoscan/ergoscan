@@ -3,6 +3,7 @@
  * Pure mappers — no I/O.
  */
 import { decodeSigmaConstantMap, ergoTokenDecimals, type SigmaConstantInfo } from "@ergoscan/shared";
+import { exactInt } from "./exactJson.js";
 export const ERGO_EPOCH_LEN = 1024;
 
 export type ExplorerTokenAmount = {
@@ -74,6 +75,69 @@ export type ExplorerBox = {
 export function ergoEpoch(height: number): number {
   if (!Number.isFinite(height) || height < 0) return 0;
   return Math.floor(height / ERGO_EPOCH_LEN);
+}
+
+const NANO = 1_000_000_000;
+
+/** Ergo emission per block (EmissionRules): 75 ERG, then −3 ERG every 64 800 blocks. */
+export function emissionAt(height: number): number {
+  if (height < 525_600) return 75 * NANO;
+  const epoch = 1 + Math.floor((height - 525_600) / 64_800);
+  return Math.max(75 * NANO - 3 * NANO * epoch, 0);
+}
+
+/**
+ * Miner's part of the emission (EmissionRules.minersRewardAtHeight): the founders took 7.5 ERG
+ * of each block below 655 200, and from 777 217 the EIP-27 re-emission charge comes off.
+ * Checked against the official BlockInfo.minerReward at 16 heights (12 Nov 2026).
+ */
+export function minerRewardAt(height: number): number {
+  const e = height < 655_200 ? 67.5 * NANO : emissionAt(height);
+  if (height < 777_217) return e;
+  if (e >= 15 * NANO) return e - 12 * NANO;
+  if (e > 3 * NANO) return 3 * NANO;
+  return e;
+}
+
+export type ExplorerBlockInfo = {
+  id: string;
+  height: number;
+  epoch: number;
+  version: number | null;
+  timestamp: number | null;
+  transactionsCount: number;
+  miner: { address: string | null; name: string | null };
+  size: number | null;
+  difficulty: unknown;
+  minerReward: number;
+};
+
+/** Official BlockInfo (blocks/byGlobalIndex/stream). Miner name = last 8 chars of the address. */
+export function mapBlockInfo(row: {
+  id: string;
+  height: number;
+  timestamp: number | null;
+  size: number | null;
+  txCount: number | null;
+  difficulty: string | null;
+  minerAddress: string | null;
+  version: number | null;
+}): ExplorerBlockInfo {
+  return {
+    id: row.id,
+    height: row.height,
+    epoch: ergoEpoch(row.height),
+    version: row.version,
+    timestamp: row.timestamp,
+    transactionsCount: row.txCount ?? 0,
+    miner: {
+      address: row.minerAddress,
+      name: row.minerAddress ? row.minerAddress.slice(-8) : null,
+    },
+    size: row.size,
+    difficulty: row.difficulty != null && /^\d+$/.test(row.difficulty) ? exactInt(row.difficulty, null) : null,
+    minerReward: minerRewardAt(row.height),
+  };
 }
 
 export function asDecString(v: unknown): string {
@@ -260,6 +324,8 @@ export type ExplorerTx = {
   id: string;
   blockId: string | null;
   inclusionHeight: number | null;
+  /** Official: tip − inclusionHeight + 1. Only for a mined tx when the tip is known. */
+  numConfirmations?: number;
   timestamp: number | null;
   index: number | null;
   globalIndex: number | null;
@@ -268,6 +334,11 @@ export type ExplorerTx = {
   outputs: ExplorerBox[];
   size: number | null;
 };
+
+export function confirmationsAt(inclusionHeight: number | null | undefined, tip: number | null | undefined): number | null {
+  if (inclusionHeight == null || tip == null || !Number.isFinite(inclusionHeight) || !Number.isFinite(tip)) return null;
+  return Math.max(0, Math.trunc(tip) - Math.trunc(inclusionHeight) + 1);
+}
 
 export function mapExplorerTx(row: {
   id: string;
@@ -278,12 +349,16 @@ export function mapExplorerTx(row: {
   gix?: number | null;
   inputs?: ExplorerBoxInput[];
   outputs?: ExplorerBoxInput[];
+  dataInputs?: ExplorerBoxInput[];
   size?: number | null;
+  tip?: number | null;
 }): ExplorerTx {
+  const confs = confirmationsAt(row.inclusionHeight, row.tip);
   return {
     id: row.id,
     blockId: row.blockId ?? null,
     inclusionHeight: row.inclusionHeight ?? null,
+    ...(confs != null ? { numConfirmations: confs } : {}),
     timestamp: row.timestamp ?? null,
     index: row.index ?? null,
     globalIndex:
@@ -291,13 +366,13 @@ export function mapExplorerTx(row: {
         ? Math.trunc(row.gix)
         : null,
     inputs: (row.inputs ?? []).map(mapExplorerBox),
-    dataInputs: [],
+    dataInputs: (row.dataInputs ?? []).map(mapExplorerBox),
     outputs: (row.outputs ?? []).map(mapExplorerBox),
     size: row.size ?? null,
   };
 }
 
-export function itemsPage<T>(items: T[], total: number, offset: number, limit: number) {
+export function itemsPage<T>(items: T[], total: number | null, offset: number, limit: number) {
   return { items, total, offset, limit };
 }
 
@@ -306,7 +381,7 @@ export function notImplemented(feature: string) {
     error: "not_implemented",
     feature,
     status: 501,
-    note: "No full-table scan on boxes. Exact byErgoTree uses the script index. Template-only POST search uses packed.box_template (limit ≤ 100, offset ≤ 500, 4s). Register, constant, and token predicates stay 501. Unspent/stream without a bound and blocks/byGlobalIndex stay 501. Box and tx byGlobalIndex streams are live.",
+    note: "No full-table scan on boxes. Exact byErgoTree uses the script index. Template-only POST search uses packed.box_template (limit ≤ 100, offset ≤ 500, 4s). Register, constant, and token predicates stay 501, and so does blocks/stream/summary (the official host answers 500 there). Height streams take ≤ 1024 heights; byGlobalIndex streams take minGix + limit ≤ 500.",
   };
 }
 

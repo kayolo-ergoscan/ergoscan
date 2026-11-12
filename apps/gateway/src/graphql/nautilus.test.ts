@@ -149,3 +149,29 @@ test("submit mutations share the submit limiter name", () => {
   assert.equal(isSubmitTxQuery("mutation { checkTransaction(signedTransaction: $s) }"), true);
   assert.equal(isSubmitTxQuery("query { info { version } }"), false);
 });
+
+test("explorer GraphQL fields clients send exist (12 Nov 2026 audit)", async () => {
+  const schema = nautilusSchema();
+  const doc = `query {
+    boxes(boxId: "00") { settlementHeight assets { tokenId amount index boxId } }
+    transactions(transactionId: "00") { size inputs { boxId transactionId index } }
+    mempool { size transactionsCount }
+  }`;
+  assert.deepEqual(validate(schema, parse(doc)).map((e) => e.message), []);
+  const pool = new Map([
+    ["aa", { id: "aa", size: 300, inputs: [{ boxId: "B1" }], outputs: [], dataInputs: [] }],
+    ["bb", { id: "bb", size: 200, inputs: [], outputs: [], dataInputs: [] }],
+  ]) as unknown as Map<string, import("@ergoscan/shared").RawTx>;
+  const res = await runNautilus(
+    "query { mempool { size transactionsCount transactions { transactionId size inputs { boxId transactionId } } } }",
+    undefined,
+    undefined,
+    { ...ctx, getRawMempool: () => pool },
+    async () => []
+  );
+  assert.equal(res.errors, undefined);
+  const m = res.data?.mempool as { size: number; transactionsCount: number; transactions: { size: number; inputs: { boxId: string; transactionId: string }[] }[] };
+  assert.equal(m.size, 500);
+  assert.equal(m.transactionsCount, 2);
+  assert.deepEqual(m.transactions[0].inputs.map((i) => ({ ...i })), [{ boxId: "b1", transactionId: "aa" }]);
+});

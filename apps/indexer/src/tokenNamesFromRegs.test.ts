@@ -71,3 +71,22 @@ test("pickArtUrl: mint R9 wins, empty issuer is ignored, null stays null", () =>
   assert.equal(pickArtUrl(issuer, issuer), null);
   assert.equal(pickArtUrl(null, { R9: "0e046e756c6c" }), null);
 });
+
+test("nameFromIssuanceRegs: long EIP-4 names up to 128 chars (node keeps them)", () => {
+  const hex = (s: string) => {
+    const b = Buffer.from(s, "utf8");
+    let n = b.length;
+    const len: number[] = [];
+    do {
+      let c = n & 0x7f;
+      n >>= 7;
+      if (n) c |= 0x80;
+      len.push(c);
+    } while (n);
+    return "0e" + Buffer.from(len).toString("hex") + b.toString("hex");
+  };
+  const long = "Mew Bridge Cardano NFT Registry - 446973636f536f6c6172697331353835";
+  assert.equal(nameFromIssuanceRegs({ R4: hex(long) }), long);
+  assert.equal(nameFromIssuanceRegs({ R4: hex("x".repeat(128)) }), "x".repeat(128));
+  assert.equal(nameFromIssuanceRegs({ R4: hex("x".repeat(129)) }), null);
+});

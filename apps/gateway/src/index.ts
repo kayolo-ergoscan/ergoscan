@@ -24,6 +24,9 @@ import {
   type WsServerEvent,
 } from "@ergoscan/shared";
 import { createNodeClient } from "./lib/node.js";
+import { catchAsyncRoutes, jsonErrorHandler, logUnhandledRejections } from "./lib/asyncRoutes.js";
+import { isPartnerIp, parsePartnerList } from "./lib/rateAllow.js";
+import { installExactJson } from "./lib/exactJson.js";
 import { stampTemplateHashes } from "./lib/txTemplateHash.js";
 import { SubblockEngine } from "./lib/subblocks.js";
 import { SealWatcher } from "./lib/seal.js";
@@ -98,6 +101,9 @@ const seals = new SealWatcher(node);
 const orbitPeers = startOrbitPeerCache((path, timeoutMs) => node.get(path, timeoutMs));
 
 const app = express();
+catchAsyncRoutes(app);
+installExactJson(app);
+logUnhandledRejections("ergoscan-gateway");
 if (isApiContour()) {
   app.use(cors());
 } else {
@@ -136,6 +142,9 @@ const RL_WINDOW_MS = 60_000;
 const RL_MAX = Number(process.env.RATE_LIMIT_PER_MIN ?? 180);
 /** Caddy always sets X-Forwarded-For, so a loopback request without it is internal (page SSR, ops scripts). */
 const RL_INTERNAL_MAX = Number(process.env.RATE_LIMIT_INTERNAL_PER_MIN ?? 3000);
+/** Our DEX and other partners (RATE_LIMIT_PARTNERS): own, larger budget, still capped. */
+const RL_PARTNERS = parsePartnerList(process.env.RATE_LIMIT_PARTNERS);
+const RL_PARTNER_MAX = Number(process.env.RATE_LIMIT_PARTNER_PER_MIN ?? 1200);
 const rlHits = new Map<string, { n: number; reset: number }>();
 setInterval(() => {
   const now = Date.now();
@@ -169,7 +178,7 @@ app.use((req, res, next) => {
   const forwarded = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim();
   const internal = !forwarded && isLoopback(req.socket.remoteAddress);
   const ip = internal ? "internal" : forwarded || req.socket.remoteAddress || "unknown";
-  const max = internal ? RL_INTERNAL_MAX : RL_MAX;
+  const max = internal ? RL_INTERNAL_MAX : isPartnerIp(RL_PARTNERS, ip) ? RL_PARTNER_MAX : RL_MAX;
   const now = Date.now();
   let row = rlHits.get(ip);
   if (!row || now > row.reset) {
@@ -459,6 +468,35 @@ function tickSubblocks() {
   }
 }
 
+/**
+ * The whole mempool, not the node's default first 50 (12 Nov 2026 audit). Pages of 100 until a
+ * short page, at most MEMPOOL_MAX_TX; a tx seen on two pages (the pool moved) is kept once.
+ */
+const MEMPOOL_PAGE = 100;
+const MEMPOOL_MAX_TX = Math.max(MEMPOOL_PAGE, Number(process.env.MEMPOOL_MAX_TX ?? 1000) || 1000);
+
+async function nodeUnconfirmedAll(): Promise<RawTx[]> {
+  const out: RawTx[] = [];
+  const seen = new Set<string>();
+  for (let offset = 0; offset < MEMPOOL_MAX_TX; offset += MEMPOOL_PAGE) {
+    const page = await nodeGet<RawTx[]>(
+      `/transactions/unconfirmed?limit=${MEMPOOL_PAGE}&offset=${offset}`,
+      MEMPOOL_TIMEOUT_MS
+    );
+    if (!Array.isArray(page)) return offset === 0 ? page : out;
+    for (const tx of page) {
+      const id = (tx as { id?: unknown })?.id;
+      if (typeof id === "string") {
+        if (seen.has(id)) continue;
+        seen.add(id);
+      }
+      out.push(tx);
+    }
+    if (page.length < MEMPOOL_PAGE) break;
+  }
+  return out;
+}
+
 async function pollMempool(): Promise<void> {
   // Never stack polls: overlapping unconfirmed dumps + address enrich flood :9053
   if (pollInFlight) return;
@@ -469,10 +507,7 @@ async function pollMempool(): Promise<void> {
   }
   pollInFlight = true;
   try {
-    const txs = await nodeGet<RawTx[]>(
-      "/transactions/unconfirmed",
-      MEMPOOL_TIMEOUT_MS
-    );
+    const txs = await nodeUnconfirmedAll();
     lastPollOk = true;
     lastError = null;
     pollFailStreak = 0;
@@ -870,6 +905,8 @@ app.get("/v1/search", async (req, res) => {
 
 // ─── WS ─────────────────────────────────────────────────────────────
 
+app.use(jsonErrorHandler("ergoscan-gateway"));
+
 const server = createServer(app);
 /**
  * Live browser handshakes send Origin (seen: https://ergoscan.me).
@@ -930,7 +967,9 @@ server.listen(PORT, BIND, () => {
   );
   void refreshSpectrumPoolNfts();
   warmErgoTreeParser();
-  startTemplateHashFill();
+  // The site gateway (ergoscan_gateway, UPDATE on script.template_hash) fills template hashes.
+  // The public API process has no write grant and only repeated the work every 5 s (audit 12 Nov).
+  if (process.env.API_CONTOUR !== "1") startTemplateHashFill();
   void pollMempool();
   void fetchNodeInfo();
   void refreshBlockEta();

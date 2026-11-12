@@ -18,6 +18,7 @@ import { INK } from "@/lib/palette";
 import { describeRentErg, formatFactWhen, formatRelTime, relAgeTone, relAgeToneClass, shortId } from "@/lib/format";
 import { ERG_ZERO, resolveTokenMeta, tokenTickerInk } from "@/lib/token-meta";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
+import { countText } from "@/lib/i18n/messages";
 import { useKeepFresh, usePageSync } from "@/lib/page-sync";
 import { SNAPSHOT_FETCH } from "@/lib/keyed-enter";
 import { basisPackReady, completeBasisPack, ergPerToken } from "@/lib/basis-pack";
@@ -44,7 +45,8 @@ function fmtUnits(amount: string, decimals: number, locale: string): string {
 
 function statusCopy(
   row: BasisReserve,
-  t: (k: string) => string
+  t: (k: string) => string,
+  locale: string
 ): { label: string; hint: string } {
   if (row.status === "refundReady") {
     return { label: t("basis.statusRefundReady"), hint: t("basis.statusRefundReadyHint") };
@@ -53,7 +55,7 @@ function statusCopy(
     const blocks = Number(row.blocksLeft);
     const days = Number.isFinite(blocks) ? String(Math.max(1, Math.ceil(blocks / 720))) : "—";
     return {
-      label: t("basis.statusRefund").replace("{n}", days),
+      label: countText(t, locale, "basis.statusRefund", Number(days), days),
       hint: t("basis.statusRefundHint").replace("{n}", days),
     };
   }
@@ -440,7 +442,7 @@ export function BasisView({ initial }: { initial: BasisSnap | null }) {
                       ? { color: INK.gold, wash: "#e0b15a" }
                       : { color: INK.violet, wash: "#c4b5fd" };
               const whenTs = row.createdAt ?? (row.height != null ? blockTs[row.height] : null);
-              const state = statusCopy(row, t);
+              const state = statusCopy(row, t, locale);
               const trackerId = row.trackerNft;
               return (
                 <div
@@ -448,6 +450,7 @@ export function BasisView({ initial }: { initial: BasisSnap | null }) {
                   className="addr-lane addr-lane-x basis-tape border-t border-[var(--border-soft)] text-[13px]"
                 >
                   <Link
+                    prefetch={false}
                     href={`/box/${row.boxId}`}
                     className="flex min-w-0 items-center gap-2.5 font-medium text-[var(--text)] hover:underline"
                   >
@@ -470,6 +473,7 @@ export function BasisView({ initial }: { initial: BasisSnap | null }) {
                   </span>
                   {row.creator ? (
                     <Link
+                      prefetch={false}
                       href={`/address/${row.creator}`}
                       className="truncate font-mono text-[12px] text-soft hover:underline"
                       title={row.creator}
@@ -481,6 +485,7 @@ export function BasisView({ initial }: { initial: BasisSnap | null }) {
                   )}
                   {trackerId ? (
                     <Link
+                      prefetch={false}
                       href={row.trackerBoxId ? `/box/${row.trackerBoxId}` : `/token/${trackerId}`}
                       className="truncate font-mono text-[12px] text-soft hover:underline"
                       title={trackerId}
@@ -492,6 +497,7 @@ export function BasisView({ initial }: { initial: BasisSnap | null }) {
                   )}
                   {row.height != null ? (
                     <Link
+                      prefetch={false}
                       href={`/block/${row.height}`}
                       className="is-end font-mono text-[12px] tabular-nums text-soft hover:underline"
                     >
@@ -502,7 +508,7 @@ export function BasisView({ initial }: { initial: BasisSnap | null }) {
                   )}
                   <div className="basis-when">
                     <p className={clsx("whitespace-nowrap tabular-nums", relAgeToneClass(relAgeTone(whenTs)))}>
-                      {formatRelTime(whenTs)}
+                      {formatRelTime(whenTs, locale)}
                     </p>
                     <p className="mt-0.5 whitespace-nowrap text-[12px] tabular-nums text-[var(--muted-2)]">
                       {formatFactWhen(whenTs, loc)}

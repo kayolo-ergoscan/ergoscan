@@ -16,6 +16,7 @@ import { tokenDecimals, tokenSymbol } from "@/lib/token-meta";
 import { explainTransaction } from "@/lib/tx-explain";
 import type { TxIo } from "@/lib/tx-flow";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
+import { countText } from "@/lib/i18n/messages";
 
 function fill(template: string, values: Record<string, string | number>): string {
   return Object.entries(values).reduce(
@@ -185,14 +186,9 @@ export function TxExplanationPanel({
         <ExplainFact label={t("tx.explain.fact.boxes")} body={ioText}>
           {explanation.selfFlows.length ? (
             <p className="mt-1 text-[12px] leading-snug text-[var(--muted-2)]">
-              {fill(
-                t(
-                  explanation.selfFlows.length === 1
-                    ? "tx.explain.self.one"
-                    : "tx.explain.self.many"
-                ),
-                { n: explanation.selfFlows.length }
-              )}
+              {explanation.selfFlows.length === 1
+                ? fill(t("tx.explain.self.one"), { n: 1 })
+                : countText(t, locale, "tx.explain.self.many", explanation.selfFlows.length)}
             </p>
           ) : null}
         </ExplainFact>
@@ -254,6 +250,7 @@ export function TxExplanationPanel({
               const amount = formatTokenAmount(raw, decimals, locale);
               return (
                 <Link
+                  prefetch={false}
                   key={change.tokenId}
                   href={`/token/${change.tokenId}`}
                   className="rounded-full bg-[var(--wash)] px-2.5 py-1 text-[11px] text-[var(--text)] transition-colors duration-[400ms] hover:bg-[var(--wash-mid)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
@@ -276,7 +273,7 @@ export function TxExplanationPanel({
 
       <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-[var(--border-soft)] pt-3 text-[11px] text-[var(--muted-2)]">
         <span>{t("tx.explain.noIntent")}</span>
-        <Link href="/learn#evidence" className="text-[var(--accent)] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]">
+        <Link prefetch={false} href="/learn#evidence" className="text-[var(--accent)] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]">
           {t("tx.explain.how")}
         </Link>
         <a

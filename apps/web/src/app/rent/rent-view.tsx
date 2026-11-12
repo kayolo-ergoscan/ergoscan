@@ -46,6 +46,7 @@ import {
 } from "@/lib/format";
 import { INK } from "@/lib/palette";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
+import { countText } from "@/lib/i18n/messages";
 import { useKeepFresh, usePageSync } from "@/lib/page-sync";
 import { SNAPSHOT_FETCH, enteringIds, useEnterIds } from "@/lib/keyed-enter";
 import {
@@ -109,7 +110,7 @@ function formatHorizon(blocks: number | null, locale: string, t: (k: string) => 
   if (blocks == null) return "—";
   if (blocks <= 0) return t("rent.cap.now");
   if (blocks < 2000) {
-    return t("rent.status.inBlocks").replace("{n}", blocks.toLocaleString(loc(locale)));
+    return countText(t, locale, "rent.status.inBlocks", blocks, blocks.toLocaleString(loc(locale)));
   }
   const years = blocks / BLOCKS_PER_YEAR;
   if (years >= 1) return `~${years.toFixed(1)}y`;
@@ -140,7 +141,7 @@ function windowCaption(
   }
   const n = w.boxCount.toLocaleString(loc(locale));
   const held = formatErgFixed(w.valueNano, locale);
-  return t("rent.cap.withRent").replace("{n}", n).replace("{held}", held);
+  return countText(t, locale, "rent.cap.withRent", w.boxCount, n).replace("{held}", held);
 }
 
 export function RentView({
@@ -420,7 +421,7 @@ export function RentView({
           <p className="mt-3 hidden flex-wrap items-baseline gap-x-3 gap-y-1 px-1 text-[12px] leading-relaxed text-[var(--muted)] lg:flex">
             <EvidenceBadge kind="chain" />
             <span className="min-w-0 flex-1">{t("rent.evidence.body")}</span>
-            <Link href="/learn#evidence" className="shrink-0 text-[var(--accent)] hover:underline">
+            <Link prefetch={false} href="/learn#evidence" className="shrink-0 text-[var(--accent)] hover:underline">
               {t("rent.evidence.method")}
             </Link>
           </p>
@@ -490,6 +491,7 @@ export function RentView({
                   <div className="block-lane-pair">
                     <div className="min-w-0 px-3">
                       <Link
+                        prefetch={false}
                         href={`/box/${row.boxId}`}
                         title={row.boxId}
                         className="whitespace-nowrap font-mono text-accent hover:underline"
@@ -512,7 +514,7 @@ export function RentView({
                   <div className="block-lane-pair rent-when-pair">
                     <div className="min-w-0 px-3">
                       <p className={clsx("whitespace-nowrap tabular-nums", relAgeToneClass(relAgeTone(row.spentTs)))}>
-                        {formatRelTime(row.spentTs)}
+                        {formatRelTime(row.spentTs, locale)}
                       </p>
                       <p className="mt-0.5 whitespace-nowrap text-[12px] tabular-nums text-[var(--muted-2)]">
                         {formatActivityStamp(row.spentTs)}
@@ -520,6 +522,7 @@ export function RentView({
                     </div>
                     <div className="flex min-w-0 items-center justify-end px-3">
                       <Link
+                        prefetch={false}
                         href={`/block/${row.spentHeight}`}
                         className="whitespace-nowrap tabular-nums text-accent hover:underline"
                       >
@@ -660,6 +663,7 @@ function ClaimWho({
   }
   return (
     <Link
+      prefetch={false}
       href={`/address/${encodeURIComponent(who.id)}`}
       title={who.id}
       className="whitespace-nowrap font-mono text-accent hover:underline"
@@ -710,6 +714,7 @@ function ClaimTickers({
         const meta = resolveTokenMeta(tok.tokenId, null, tok.name);
         return (
           <Link
+            prefetch={false}
             key={tok.tokenId}
             href={`/token/${encodeURIComponent(tok.tokenId)}`}
             title={meta.name}
@@ -1030,8 +1035,11 @@ function RentDanger({
             const when =
               row.blocksUntilRent <= 0
                 ? t("rent.status.waiting")
-                : t("rent.status.inBlocks").replace(
-                    "{n}",
+                : countText(
+                    t,
+                    locale,
+                    "rent.status.inBlocks",
+                    row.blocksUntilRent,
                     row.blocksUntilRent.toLocaleString(loc(locale))
                   );
             return (
@@ -1040,11 +1048,12 @@ function RentDanger({
                 className="grid h-[3.25rem] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3"
               >
                 <div className="flex min-w-0 items-center gap-2.5">
-                  <Link href={`/token/${row.tokenId}`} className="shrink-0" aria-label={meta.symbol}>
+                  <Link prefetch={false} href={`/token/${row.tokenId}`} className="shrink-0" aria-label={meta.symbol}>
                     <TokenLogo tokenId={row.tokenId} size={28} />
                   </Link>
                   <span className="min-w-0">
                     <Link
+                      prefetch={false}
                       href={`/token/${row.tokenId}`}
                       className="block truncate text-[14px] font-semibold tracking-[-0.02em] hover:underline"
                       style={{ color: tokenTickerInk(row.tokenId) }}
@@ -1054,7 +1063,7 @@ function RentDanger({
                     <span className="mt-0.5 block truncate text-[12px] text-[var(--muted)]">
                       {meta.name}
                       {" · "}
-                      <Link href={`/box/${row.boxId}`} className="text-accent hover:underline">
+                      <Link prefetch={false} href={`/box/${row.boxId}`} className="text-accent hover:underline">
                         {when}
                       </Link>
                     </span>
@@ -1157,6 +1166,7 @@ function SeizedTokens({
         const meta = resolveTokenMeta(tok.tokenId, null, tok.name);
         return (
           <Link
+            prefetch={false}
             key={tok.tokenId}
             href={`/token/${encodeURIComponent(tok.tokenId)}`}
             title={meta.name}
@@ -1191,8 +1201,11 @@ function RentRow({
     ? `/address/${encodeURIComponent(row.address)}`
     : `/box/${row.boxId}`;
   const name = row.address ? lookupAddress(row.address)?.name?.trim() || null : null;
-  const inBlocks = t("rent.status.inBlocks").replace(
-    "{n}",
+  const inBlocks = countText(
+    t,
+    locale,
+    "rent.status.inBlocks",
+    row.blocksUntilRent,
     row.blocksUntilRent.toLocaleString(loc(locale))
   );
   const tone = rentRowTone(row);
@@ -1206,6 +1219,7 @@ function RentRow({
       <div className="block-lane-pair rent-addr-pair">
         <div className="min-w-0 overflow-hidden px-3">
           <Link
+            prefetch={false}
             href={href}
             title={row.address || row.boxId}
             className="block min-w-0 overflow-hidden text-accent hover:underline"
@@ -1254,7 +1268,7 @@ function RentRow({
       <div className="block-lane-pair rent-when-pair">
         <div className="min-w-0 px-3">
           <p className={clsx("whitespace-nowrap tabular-nums", relAgeToneClass(relAgeTone(row.creationTs)))}>
-            {formatRelTime(row.creationTs)}
+            {formatRelTime(row.creationTs, locale)}
           </p>
           <p className="mt-0.5 whitespace-nowrap text-[12px] tabular-nums text-[var(--muted-2)]">
             {formatActivityStamp(row.creationTs)}
@@ -1262,6 +1276,7 @@ function RentRow({
         </div>
         <div className="flex min-w-0 items-center justify-end px-3">
           <Link
+            prefetch={false}
             href={`/block/${row.creationHeight}`}
             className="whitespace-nowrap tabular-nums text-accent hover:underline"
           >

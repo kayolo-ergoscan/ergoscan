@@ -7,6 +7,7 @@ import type pg from "pg";
 import { eip4DecimalsFromRegs, ergoTokenDecimals } from "@ergoscan/shared";
 import type { TokenUpsertRow } from "./batchSql.js";
 import { capStatements, releaseCapped } from "./db.js";
+import { slidePassFrom } from "./tokenPassWindow.js";
 
 const BATCH = 80;
 /** Several PK batches per tick; stop before the tip loop waits. */
@@ -29,7 +30,12 @@ export function pickTokenDecimals(
   return eip4DecimalsFromRegs(regs ?? null);
 }
 
-/** Catch-up patch. Known map may overwrite; R6 only fills NULL. */
+/**
+ * Catch-up patch. Known map may overwrite; R6 only fills NULL.
+ * `emissionRaw` is non-null only when a mint output holding the token was found, so the
+ * registers are that output's: no R6 (or an unreadable one) then means 0 decimals, as in
+ * EIP-4 and the node's own token index.
+ */
 export function issuancePatch(
   tokenId: string,
   regs: unknown,
@@ -40,14 +46,18 @@ export function issuancePatch(
   forceDecimals: boolean;
 } {
   const known = ergoTokenDecimals(tokenId);
+  const mintFound = Boolean(emissionRaw && emissionRaw !== "0");
   return {
-    emission: emissionRaw && emissionRaw !== "0" ? emissionRaw : null,
-    decimals: known ?? eip4DecimalsFromRegs(regs),
+    emission: mintFound ? emissionRaw : null,
+    decimals: known ?? eip4DecimalsFromRegs(regs) ?? (mintFound ? 0 : null),
     forceDecimals: known != null,
   };
 }
 
-/** Tip / deepen row: emission + R6 only in the tx that spends the issuer box. */
+/**
+ * Tip / deepen row: emission + R6 only in the tx that spends the issuer box. A mint output
+ * without R6 gets 0 decimals (EIP-4, as the node does); a transfer leaves decimals unknown.
+ */
 export function tokenRowFromOutputAsset(input: {
   tokenId: string;
   boxId: string;
@@ -65,10 +75,9 @@ export function tokenRowFromOutputAsset(input: {
     firstHeight: input.height,
     lastHeight: input.height,
     emission: issuance && amt !== "0" ? amt : null,
-    decimals: pickTokenDecimals(
-      input.tokenId,
-      issuance ? input.registers : undefined
-    ),
+    decimals: issuance
+      ? (pickTokenDecimals(input.tokenId, input.registers) ?? 0)
+      : pickTokenDecimals(input.tokenId, undefined),
   };
 }
 
@@ -116,10 +125,10 @@ async function issuanceTruthForIds(
     }>(
       `SELECT t.token_id,
               SUM(a.amount)::text AS emission,
-              (ARRAY_AGG(o.additional_registers ORDER BY
-                 CASE WHEN o.additional_registers ? 'R6' THEN 0 ELSE 1 END,
-                 a.amount DESC
-               ) FILTER (WHERE o.box_id IS NOT NULL))[1] AS additional_registers
+              -- EIP-4 registers of the first mint output that holds the token (as the node's
+              -- token index). Another output of the mint tx may carry an unrelated R6.
+              (ARRAY_AGG(o.additional_registers ORDER BY o.output_index NULLS LAST, a.amount DESC)
+                 FILTER (WHERE a.box_id IS NOT NULL))[1] AS additional_registers
          FROM unnest($1::text[]) AS t(token_id)
          LEFT JOIN packed.boxes spent ON spent.box_id = packed.hex32(t.token_id)
          LEFT JOIN packed.boxes o ON o.creation_tx_id = spent.spent_tx_id
@@ -241,11 +250,17 @@ export async function maybeBackfillTokenIssuance(pool: pg.Pool): Promise<void> {
       await setState(client, FROM_H_KEY, tip.rows[0]?.h || "0");
       await setState(client, CURSOR_KEY, "");
       console.log("[indexer] token issuance pass done");
-    } else if (empty && done && cursor) {
-      await setState(client, CURSOR_KEY, "");
+    } else if (empty && done) {
+      if (cursor) await setState(client, CURSOR_KEY, "");
+      const tip = await client.query<{ h: string }>(
+        `SELECT value AS h FROM indexer_state WHERE key = 'last_height'`
+      );
+      const next = slidePassFrom(fromH, Number(tip.rows[0]?.h));
+      if (next > fromH) await setState(client, FROM_H_KEY, String(next));
     }
 
-    if (written > 0 || scanned > 0) {
+    // Quiet laps (nothing written) stay out of the journal: the windowed rescan runs every tick.
+    if (written > 0 || (!done && scanned > 0)) {
       console.log(
         `[indexer] token issuance wrote+=${written} scanned=${scanned} batches=${batches} ${Date.now() - t0}ms`
       );

@@ -2,6 +2,8 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   ergoEpoch,
+  mapBlockInfo,
+  minerRewardAt,
   mapEpochParams,
   mapTokenInfo,
   mapBlockHeader,
@@ -254,7 +256,47 @@ describe("explorerCompat", () => {
     const n = notImplemented("boxes.search");
     assert.equal(n.error, "not_implemented");
     assert.equal(n.status, 501);
-    assert.match(n.note, /byGlobalIndex streams are live/);
+    assert.match(n.note, /byGlobalIndex streams take minGix \+ limit/);
     assert.equal(/DEX history/i.test(n.note), false);
+  });
+});
+
+it("numConfirmations as official: tip − inclusionHeight + 1, only for mined tx", async () => {
+  const { confirmationsAt, mapExplorerTx } = await import("./explorerCompat.js");
+  assert.equal(confirmationsAt(1915128, 1915133), 6);
+  assert.equal(confirmationsAt(1915133, 1915133), 1);
+  assert.equal(confirmationsAt(null, 1915133), null);
+  assert.equal(mapExplorerTx({ id: "aa", inclusionHeight: 100, tip: 109 }).numConfirmations, 10);
+  assert.equal("numConfirmations" in mapExplorerTx({ id: "aa" }), false);
+});
+
+describe("minerRewardAt (official BlockInfo.minerReward, 12 Nov 2026)", () => {
+  it("matches the official explorer at 16 heights", () => {
+    const official: [number, number][] = [
+      [1, 67.5e9], [1024, 67.5e9], [1025, 67.5e9], [100001, 67.5e9], [525599, 67.5e9],
+      [525600, 67.5e9], [525601, 67.5e9], [590400, 67.5e9], [590401, 67.5e9],
+      [777216, 63e9], [777217, 51e9], [777218, 51e9], [1500001, 15e9], [1800001, 3e9], [1915001, 3e9],
+    ];
+    for (const [h, reward] of official) assert.equal(minerRewardAt(h), reward, `height ${h}`);
+  });
+});
+
+describe("mapBlockInfo", () => {
+  it("names the miner by the last 8 chars and keeps the official epoch", () => {
+    const b = mapBlockInfo({
+      id: "ab",
+      height: 1000001,
+      timestamp: 1683634664810,
+      size: 1225248,
+      txCount: 46,
+      difficulty: "3283828915306496",
+      minerAddress: "88dhgzEuTXaRQTX5KNdnaWTTX7fEZVEQRn6qP4MJotPuRnS3QpoJxYpSaXoU1y7SHp8ZXMp92TH22DBY",
+      version: 3,
+    });
+    assert.equal(b.epoch, 976);
+    assert.equal(b.miner.name, "2TH22DBY");
+    assert.equal(b.minerReward, 39e9);
+    assert.equal(b.difficulty, 3283828915306496);
+    assert.equal(b.transactionsCount, 46);
   });
 });

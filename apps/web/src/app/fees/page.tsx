@@ -30,6 +30,7 @@ export default function FeesPage() {
     <Shell>
       <div className="mb-5 flex justify-end">
         <Link
+          prefetch={false}
           href="/mempool"
           className="rounded-full border border-[var(--border)] px-3.5 py-1.5 text-[12px] text-[var(--muted)] hover:bg-[var(--wash)]"
         >

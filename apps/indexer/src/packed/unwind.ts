@@ -31,6 +31,12 @@ export async function unwindPackedHeight(db: Queryable, height: number): Promise
     [height]
   );
   await db.query(`DELETE FROM packed.address_tx WHERE height = $1`, [height]);
+  // A Lithos find is keyed by its block height; a fork that drops the block drops the find
+  // (audit 12 Nov: it stayed). The table belongs to lithosFind.ts and may not exist yet.
+  const lithos = await db.query<{ t: string | null }>(`SELECT to_regclass('packed.lithos_find')::text AS t`);
+  if (lithos.rows[0]?.t) {
+    await db.query(`DELETE FROM packed.lithos_find WHERE height = $1`, [height]);
+  }
   await db.query(
     `UPDATE packed.boxes
         SET spent_tx_id = NULL, spent_height = NULL

@@ -157,7 +157,7 @@ export function NftBrowseView({
           </h1>
           {address ? (
             <p className="mt-1 truncate font-mono text-[12px] text-accent">
-              <Link href={`/address/${encodeURIComponent(address)}`} className="hover:underline">
+              <Link prefetch={false} href={`/address/${encodeURIComponent(address)}`} className="hover:underline">
                 {party?.known ? `${party.known} · ${shortId(address, 8)}` : shortId(address, 10)}
               </Link>
             </p>

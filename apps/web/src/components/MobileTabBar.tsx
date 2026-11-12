@@ -57,6 +57,7 @@ export function MobileTabBar({
           }
           return (
             <Link
+              prefetch={false}
               key={item.href}
               href={href}
               aria-current={active ? "page" : undefined}

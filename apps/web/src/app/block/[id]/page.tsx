@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { JsonLd } from "@/components/JsonLd";
 import { matchBlockRow } from "@/lib/block-list-cache";
-import { fetchBlocksList } from "@/lib/list-snapshots";
+import { BLOCK_TX_PACK, fetchBlocksList } from "@/lib/list-snapshots";
 import { blockPageMeta, cachedBlock, webpageJsonLd } from "@/lib/page-meta";
 import { BlockView } from "./block-view";
 
@@ -53,6 +53,7 @@ export default async function BlockPage({
         newerRow={newerRow}
         initialHeader={card?.header ?? null}
         initialLithos={card?.lithos === true}
+        initialTxs={card ? card.txs.slice(0, BLOCK_TX_PACK) : []}
       />
     </>
   );
