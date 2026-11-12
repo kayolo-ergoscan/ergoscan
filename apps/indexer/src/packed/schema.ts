@@ -218,8 +218,6 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS packed_box_assets_token_idx ON packed.bo
 CREATE INDEX CONCURRENTLY IF NOT EXISTS packed_box_assets_nft_idx
   ON packed.box_assets (token_id, box_id) WHERE amount = 1;
 CREATE INDEX CONCURRENTLY IF NOT EXISTS packed_address_tx_height_idx ON packed.address_tx (height)${ts};
-CREATE INDEX CONCURRENTLY IF NOT EXISTS packed_token_tx_seen_height_idx
-  ON packed.token_tx_seen (height, token_id, tx_id)${ts};
 CREATE INDEX CONCURRENTLY IF NOT EXISTS packed_token_tx_move_token_height_idx
   ON packed.token_tx_move (token_id, height DESC NULLS LAST, tx_id DESC)
   WHERE height IS NOT NULL${ts};
