@@ -9,8 +9,11 @@ export class SealWatcher {
 
   constructor(private node: NodeClient) {}
 
-  /** Returns seal event when height advances, else null */
-  async check(tipHeight: number | null | undefined): Promise<SealEvent | null> {
+  /**
+   * Returns seal event when height advances, else null.
+   * `headerId` (the node's bestFullHeaderId) saves the /blocks/at lookup for the newest block.
+   */
+  async check(tipHeight: number | null | undefined, headerId?: string | null): Promise<SealEvent | null> {
     if (tipHeight == null || !Number.isFinite(tipHeight)) return null;
     if (this.lastHeight == null) {
       this.lastHeight = tipHeight;
@@ -23,9 +26,11 @@ export class SealWatcher {
     this.lastHeight = tipHeight;
 
     try {
-      const at = await this.node.get<string[]>(`/blocks/at/${height}`, 5000);
-      const headerId = at?.[0];
-      if (!headerId) {
+      const id =
+        typeof headerId === "string" && headerId.length >= 16
+          ? headerId
+          : (await this.node.get<string[]>(`/blocks/at/${height}`, 5000))?.[0];
+      if (!id) {
         return {
           blockId: `height-${height}`,
           height,
@@ -39,7 +44,7 @@ export class SealWatcher {
         header: { id: string; height: number; timestamp: number };
         blockTransactions?: { transactions?: { id: string }[] };
         size?: number;
-      }>(`/blocks/${headerId}`, 12000);
+      }>(`/blocks/${id}`, 12000);
       const txs = full.blockTransactions?.transactions ?? [];
       return {
         blockId: full.header.id,

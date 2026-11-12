@@ -54,23 +54,29 @@ export function MempoolView({
 }) {
   const t = useT();
   const { locale } = useI18n();
-  const { balls, fees } = useMempool(asBalls(initialBalls), initialP50);
+  const { balls, leaving, lastSeal, fees } = useMempool(asBalls(initialBalls), initialP50);
   const [offset, setOffset] = useState(0);
   const miss = t("home.unavailable");
 
-  const rows = useMemo(
-    () =>
-      [...balls]
-        .sort((a, b) => {
-          const dt = (b.firstSeen ?? 0) - (a.firstSeen ?? 0);
-          if (dt !== 0) return dt;
-          return String(a.id).localeCompare(String(b.id));
-        })
-        .map((b) => mempoolBallToTx(b)),
-    [balls]
-  );
-  const total = rows.length;
-  const cap = total <= 0 ? 0 : Math.max(0, Math.floor((total - 1) / MEMPOOL_PACK) * MEMPOOL_PACK);
+  // Txs that just went into a block keep their place for a moment: tile fills, block number, fold.
+  const rows = useMemo(() => {
+    const into = new Map(leaving.map((l) => [l.ball.id, l.height]));
+    const have = new Set(balls.map((b) => b.id));
+    return [...balls, ...leaving.filter((l) => !have.has(l.ball.id)).map((l) => l.ball)]
+      .sort((a, b) => {
+        const dt = (b.firstSeen ?? 0) - (a.firstSeen ?? 0);
+        if (dt !== 0) return dt;
+        return String(a.id).localeCompare(String(b.id));
+      })
+      .map((b) => {
+        const tx = mempoolBallToTx(b);
+        const h = into.get(b.id);
+        return h == null ? tx : { ...tx, confirmed: true, inclusionHeight: h };
+      });
+  }, [balls, leaving]);
+  const total = balls.length;
+  const listed = rows.length;
+  const cap = listed <= 0 ? 0 : Math.max(0, Math.floor((listed - 1) / MEMPOOL_PACK) * MEMPOOL_PACK);
   const liveOffset = Math.min(offset, cap);
   const page = rows.slice(liveOffset, liveOffset + MEMPOOL_PACK);
   const pageKey = page.map((b) => b.id).join(",");
@@ -114,7 +120,11 @@ export function MempoolView({
     {
       label: t("mempool.kpiCount"),
       value: total.toLocaleString(loc(locale)),
-      sub: t("mempool.kpiWaitSub"),
+      sub: lastSeal
+        ? t("mempool.kpiSealed")
+            .replace("{h}", lastSeal.height.toLocaleString(loc(locale)))
+            .replace("{n}", lastSeal.took.toLocaleString(loc(locale)))
+        : t("mempool.kpiWaitSub"),
       mark: <KpiMarkListEnd tone={INK.cyan} />,
       ink: INK.cyan,
       enter: 0,
@@ -166,22 +176,32 @@ export function MempoolView({
               msOf={(row) => toEpochMs(row.timestamp)}
               pendingOf={() => true}
               countOf={() => <FeedCount k="feed.txCount" n={total} />}
-              render={(row, lead) => (
-                <FeedTxRow
-                  key={row.id}
-                  row={row}
-                  lead={lead}
-                  queue={liveOffset + page.indexOf(row)}
-                  enterClass={enter.enterClass(row.id)}
-                />
-              )}
+              render={(row, lead) =>
+                row.confirmed ? (
+                  <FeedTxRow
+                    key={row.id}
+                    row={row}
+                    lead={{ ...lead, same: false }}
+                    showHeight
+                    enterClass="mp-sealed"
+                  />
+                ) : (
+                  <FeedTxRow
+                    key={row.id}
+                    row={row}
+                    lead={lead}
+                    queue={liveOffset + page.indexOf(row)}
+                    enterClass={enter.enterClass(row.id)}
+                  />
+                )
+              }
             />
           </Feed>
           <RankWindow
             offset={liveOffset}
             pageSize={MEMPOOL_PACK}
             shown={page.length}
-            total={total}
+            total={listed}
             loc={loc(locale)}
             ofLabel={t("addresses.packOf")}
             prevLabel={t("addresses.packPrev")}

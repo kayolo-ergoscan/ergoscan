@@ -21,6 +21,7 @@ import {
   type NetworkId,
   type NodeInfoLite,
   type RawTx,
+  type SealEvent,
   type WsServerEvent,
 } from "@ergoscan/shared";
 import { createNodeClient } from "./lib/node.js";
@@ -30,6 +31,7 @@ import { installExactJson } from "./lib/exactJson.js";
 import { stampTemplateHashes } from "./lib/txTemplateHash.js";
 import { SubblockEngine } from "./lib/subblocks.js";
 import { SealWatcher } from "./lib/seal.js";
+import { RecentIds, VanishClock, freshIds } from "./lib/live-pool.js";
 import { registerExplorerRoutes } from "./routes/explorer.js";
 import { registerMediaRoutes } from "./routes/media.js";
 import { registerChainRoutes } from "./routes/chain.js";
@@ -44,7 +46,7 @@ import { registerNamesRoutes } from "./routes/names.js";
 import { registerCompatRoutes } from "./routes/compat.js";
 import { registerGraphqlRoutes } from "./routes/graphql.js";
 import { mapEpochParams } from "./lib/explorerCompat.js";
-import { peekChainTip, type ChainTip } from "./lib/snapshots.js";
+import { peekChainTip, peekChainTipStamp, type ChainTip } from "./lib/snapshots.js";
 import { startOrbitPeerCache } from "./lib/orbit-peers.js";
 import { cacheList, cacheNoStore } from "./lib/httpCache.js";
 import { resolveFromIndex } from "./lib/resolve.js";
@@ -85,6 +87,18 @@ const MEMPOOL_TIMEOUT_MS = Number(process.env.MEMPOOL_TIMEOUT_MS ?? 20_000);
 /** Resolve ergoTree→address via node utils (expensive). Default off on shared node. */
 const ENRICH_ADDRESSES =
   process.env.ENRICH_ADDRESSES === "1" || process.env.ENRICH_ADDRESSES === "true";
+/**
+ * Live loop: one local /info every LIVE_MS. A new bestFullHeaderId seals the block at once;
+ * a new lastMemPoolUpdateTime diffs the pool ids and fetches only new txs. The site gateway
+ * runs it; the API process keeps the slow loops (0 = off).
+ */
+const LIVE_MS = Number(process.env.LIVE_MS ?? (process.env.API_CONTOUR === "1" ? 0 : 250));
+/** A tx gone from the pool waits this long for its block before it is called dropped. */
+const VANISH_GRACE_MS = 3_000;
+/** New txs fetched one by one per live tick; a bigger burst waits for the full poll. */
+const LIVE_FETCH_MAX = 40;
+/** Chain tip (indexer snapshot) check. Reads two columns until the snapshot moves. */
+const TIP_TICK_MS = LIVE_MS > 0 ? 500 : 2_000;
 
 // ── single-flight + soft backoff (shared ergonode REST) ─────────────
 let pollInFlight = false;
@@ -245,6 +259,28 @@ let lastPollOk = false;
 let lastError: string | null = null;
 /** raw mempool txs for detail endpoints */
 const rawMempool = new Map<string, RawTx>();
+/** Ids that just went into a block: a pool dump taken before the block must not bring them back. */
+const sealedRecent = new RecentIds(120_000);
+const vanish = new VanishClock(VANISH_GRACE_MS);
+
+/**
+ * One writer at a time for `balls`: the full poll, the live diff and the seal.
+ * Without it a dump fetched before a block could re-add txs the seal just removed.
+ */
+let poolChain: Promise<void> = Promise.resolve();
+let poolBusy = false;
+function withPool(fn: () => Promise<void> | void): Promise<void> {
+  const run = poolChain.then(async () => {
+    poolBusy = true;
+    try {
+      await fn();
+    } finally {
+      poolBusy = false;
+    }
+  });
+  poolChain = run.catch(() => undefined);
+  return run;
+}
 
 const clients = new Set<WebSocket>();
 
@@ -256,9 +292,26 @@ function broadcast(ev: WsServerEvent) {
 }
 
 let lastChainTip: ChainTip | null = null;
+let lastTipStamp: string | null = null;
+let tipInFlight = false;
 
 async function tickChainTip() {
-  const tip = await peekChainTip();
+  if (tipInFlight) return;
+  tipInFlight = true;
+  try {
+    // Two columns first; the block list payload is read only when the snapshot moved.
+    const stamp = await peekChainTipStamp();
+    if (stamp && stamp === lastTipStamp && lastChainTip) return;
+    const tip = await peekChainTip();
+    if (!tip) return;
+    lastTipStamp = stamp;
+    announceTip(tip);
+  } finally {
+    tipInFlight = false;
+  }
+}
+
+function announceTip(tip: ChainTip) {
   if (!tip) return;
   const same =
     lastChainTip != null &&
@@ -288,6 +341,31 @@ function withEta(h: Omit<FeeHistogram, "ts" | "eta"> | ReturnType<typeof buildFe
   const nextEtaMs = Math.max(0, blockEta.avgIntervalMs - elapsed);
   blockEta = { ...blockEta, nextEtaMs, nextEtaSec: Math.floor(nextEtaMs / 1000) };
   return { ts: now, ...h, eta: { ...blockEta } };
+}
+
+/**
+ * Block first, then its txs leave the pool: the page sees `block.sealed` while the balls are
+ * still on screen and flies them into the block instead of fading them.
+ */
+function applySeal(seal: SealEvent) {
+  broadcast({ type: "block.sealed", data: seal });
+  sealedRecent.add(seal.txIds, Date.now());
+  vanish.forget(seal.txIds);
+  dropSealedBalls(seal.txIds);
+  // force planner window to new tip
+  subblocks.resync({
+    tipHeight: seal.height,
+    lastBlockTs: seal.timestamp,
+    avgIntervalMs: blockEta.avgIntervalMs,
+  });
+  if (seal.timestamp > blockEta.lastBlockTs) {
+    blockEta = {
+      ...blockEta,
+      lastBlockTs: seal.timestamp,
+      nextEtaMs: blockEta.avgIntervalMs,
+      nextEtaSec: Math.floor(blockEta.avgIntervalMs / 1000),
+    };
+  }
 }
 
 function dropSealedBalls(ids: readonly string[]) {
@@ -443,23 +521,101 @@ async function fetchNodeInfo(): Promise<void> {
     lastError = null;
     broadcast({ type: "node.info", data: nodeInfo });
 
-    // seal detection on tip advance
-    const seal = await seals.check(nodeInfo.fullHeight);
-    if (seal) {
-      broadcast({ type: "block.sealed", data: seal });
-      dropSealedBalls(seal.txIds);
-      // force planner window to new tip
-      subblocks.resync({
-        tipHeight: seal.height,
-        lastBlockTs: seal.timestamp,
-        avgIntervalMs: blockEta.avgIntervalMs,
-      });
-    }
+    // seal detection on tip advance (the live loop usually got there first)
+    const seal = await seals.check(
+      nodeInfo.fullHeight,
+      typeof j.bestFullHeaderId === "string" ? j.bestFullHeaderId : null
+    );
+    if (seal) await withPool(() => applySeal(seal));
   } catch (e) {
     lastError = String(e);
   } finally {
     infoInFlight = false;
   }
+}
+
+let liveInFlight = false;
+let liveBest: string | null = null;
+let livePoolStamp: string | null = null;
+
+async function liveTick(): Promise<void> {
+  if (liveInFlight || FORCE_MOCK || usingMock) return;
+  liveInFlight = true;
+  try {
+    const j = await nodeGet<Record<string, unknown>>("/info", 1500);
+    const full = Number(j.fullHeight);
+    const best = typeof j.bestFullHeaderId === "string" ? j.bestFullHeaderId : null;
+    if (best && best !== liveBest && Number.isFinite(full)) {
+      liveBest = best;
+      const seal = await seals.check(full, best);
+      if (seal) await withPool(() => applySeal(seal));
+    }
+    const stamp = String(j.lastMemPoolUpdateTime ?? "");
+    const moved = stamp !== "" && stamp !== livePoolStamp;
+    if ((moved || vanish.due(Date.now())) && !poolBusy && !pollInFlight) {
+      await withPool(async () => {
+        if (await syncPoolIds()) livePoolStamp = stamp;
+      });
+    }
+  } catch {
+    /* the full poll and the 10 s /info keep running */
+  } finally {
+    liveInFlight = false;
+  }
+}
+
+/** Ball for one node tx: same fields as the full poll (addresses, lock, action). */
+function ballOfTx(tx: RawTx, prev: BallProps | undefined, p90: number): BallProps {
+  const ball = txToBall(tx, prev?.firstSeen ?? Date.now(), p90);
+  const addresses = ball.addresses?.length ? ball.addresses : prev?.addresses;
+  const lock = pickTxLock(tx, cachedDexLockHints());
+  const action = pickTxAction({ inputs: tx.inputs, outputs: tx.outputs }, asTxShape(ball.category));
+  return {
+    ...ball,
+    addresses: addresses?.length ? addresses : undefined,
+    platform: lock?.id ?? ball.platform,
+    action: action ?? undefined,
+  };
+}
+
+/**
+ * Diff the node's pool ids against the balls. New txs are fetched by id and announced at once.
+ * Missing ones wait VANISH_GRACE_MS for their block, then leave as dropped.
+ * Returns false when the node answer was not usable (try again next tick).
+ */
+async function syncPoolIds(): Promise<boolean> {
+  const ids = await nodeGet<string[]>("/transactions/unconfirmed/transactionIds", 2000);
+  if (!Array.isArray(ids)) return false;
+  // The node can list [] for a moment while it applies a block. The full poll decides that case.
+  if (ids.length === 0 && balls.size > 0) return false;
+  const now = Date.now();
+  sealedRecent.prune(now);
+  const fresh = freshIds(ids, balls, sealedRecent, LIVE_FETCH_MAX);
+  if (fresh.length) {
+    const got = await Promise.all(
+      fresh.map((id) =>
+        nodeGet<RawTx>(`/transactions/unconfirmed/byTransactionId/${id}`, 2000).catch(() => null)
+      )
+    );
+    const txs = got
+      .filter((t): t is RawTx => Boolean(t && typeof t.id === "string"))
+      .map((t) => txWithTreeAddresses(t, NETWORK));
+    await stampTemplateHashes(txs.flatMap((t) => [...(t.inputs ?? []), ...(t.outputs ?? [])]));
+    for (const tx of txs) {
+      if (balls.has(tx.id) || sealedRecent.has(tx.id)) continue;
+      const ball = ballOfTx(tx, undefined, feeHist.p90);
+      balls.set(tx.id, ball);
+      rawMempool.set(tx.id, tx);
+      broadcast({ type: "mempool.add", data: ball });
+    }
+  }
+  const gone = vanish.settle(balls.keys(), new Set(ids), now);
+  for (const id of gone) {
+    balls.delete(id);
+    rawMempool.delete(id);
+    broadcast({ type: "mempool.remove", data: { id, reason: "dropped" } });
+  }
+  return true;
 }
 
 function tickSubblocks() {
@@ -507,7 +663,17 @@ async function pollMempool(): Promise<void> {
   }
   pollInFlight = true;
   try {
-    const txs = await nodeUnconfirmedAll();
+    await withPool(pollMempoolLocked);
+  } finally {
+    pollInFlight = false;
+  }
+}
+
+async function pollMempoolLocked(): Promise<void> {
+  try {
+    const dump = await nodeUnconfirmedAll();
+    // A dump taken just before a block may still list its txs.
+    const txs = Array.isArray(dump) ? dump.filter((t) => !sealedRecent.has(String(t?.id ?? ""))) : dump;
     lastPollOk = true;
     lastError = null;
     pollFailStreak = 0;
@@ -602,10 +768,18 @@ async function pollMempool(): Promise<void> {
       next.set(row.ball.id, row.ball);
       if (row.isNew) broadcast({ type: "mempool.add", data: row.ball });
     }
-    for (const id of balls.keys()) {
-      if (!next.has(id)) {
-        broadcast({ type: "mempool.remove", data: { id, reason: "confirmed" } });
+    const now = Date.now();
+    for (const [id, prev] of balls) {
+      if (next.has(id)) {
+        vanish.forget([id]);
+        continue;
       }
+      // Live mode: a missing tx waits a moment for its block seal, then leaves as dropped.
+      if (LIVE_MS > 0 && vanish.waiting(id, now)) {
+        next.set(id, prev);
+        continue;
+      }
+      broadcast({ type: "mempool.remove", data: { id, reason: LIVE_MS > 0 ? "dropped" : "confirmed" } });
     }
     balls = next;
     feeHist = withEta(hist);
@@ -629,8 +803,6 @@ async function pollMempool(): Promise<void> {
     pollBackoffMs = Date.now() + wait;
     if (FORCE_MOCK || (MOCK_FALLBACK && balls.size === 0)) applyMock();
     console.warn("[gateway] poll failed", String(e), `backoff=${wait}ms`);
-  } finally {
-    pollInFlight = false;
   }
 }
 
@@ -978,5 +1150,10 @@ server.listen(PORT, BIND, () => {
   setInterval(() => void fetchNodeInfo(), 10_000);
   setInterval(() => void refreshBlockEta(), 15_000);
   setInterval(() => tickSubblocks(), 2_000);
-  setInterval(() => void tickChainTip(), 2_000);
+  setInterval(() => void tickChainTip(), TIP_TICK_MS);
+  if (LIVE_MS > 0) {
+    void liveTick();
+    setInterval(() => void liveTick(), LIVE_MS);
+    console.log(`[ergoscan-gateway] live loop every ${LIVE_MS}ms`);
+  }
 });

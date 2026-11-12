@@ -810,3 +810,47 @@ button.feed-caret:hover {
     display: none;
   }
 }
+
+/* Mempool: a tx that went into a block fills its tile, shows the block, then folds away.
+   Length matches MEMPOOL_LEAVE_MS (lib/useMempool.ts). */
+.feed-row.mp-sealed {
+  overflow: hidden;
+  max-height: 8rem;
+  pointer-events: none;
+  animation: mp-sealed-row 1900ms var(--ease) both;
+}
+.feed-row.mp-sealed .feed-tile {
+  animation: mp-sealed-tile 520ms var(--ease) both;
+}
+@keyframes mp-sealed-row {
+  0% {
+    background-color: transparent;
+  }
+  14%,
+  58% {
+    background-color: color-mix(in srgb, var(--k) 12%, transparent);
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    background-color: transparent;
+    opacity: 0;
+    transform: translateX(-28px);
+    max-height: 0;
+    min-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    border-top-color: transparent;
+  }
+}
+@keyframes mp-sealed-tile {
+  45% {
+    transform: scale(1.18);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .feed-row.mp-sealed,
+  .feed-row.mp-sealed .feed-tile {
+    animation: none;
+  }
+}

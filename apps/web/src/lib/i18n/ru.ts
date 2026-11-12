@@ -830,6 +830,7 @@ export const ru: Record<string, string> = {
   "mempool.kpiLoad": "Нагрузка очереди",
   "mempool.kpiLoadSub": "К ёмкости следующего блока",
   "mempool.kpiWaitSub": "Ждут блок",
+  "mempool.kpiSealed": "Блок {h} забрал {n}",
   "mempool.kpiFees": "Комиссии в полёте",
   "mempool.kpiFeesSub": "Сумма в очереди",
   "mempool.kpiP50": "Комиссия p50",

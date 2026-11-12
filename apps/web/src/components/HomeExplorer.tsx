@@ -1221,7 +1221,7 @@ const CADENCE_TRACK = 52;
 const CADENCE_HEAD = 64;
 const MEMPOOL_HTTP_MS = 8_000;
 /** Tip can move before block.sealed brings the tx list. Don't close the slot on that gap. */
-const SEAL_LIST_WAIT_MS = 16_000;
+const SEAL_LIST_WAIT_MS = 8_000;
 /** Backup if the pour canvas never calls done. Longer than the pour itself. */
 const ASSEMBLE_FAILSAFE_MS = 20_000;
 
@@ -1581,7 +1581,7 @@ function HomeLiveStrip({
           txUnit={txUnit}
           reduce={!!reduce}
           pitLabel={t("home.mempoolPit")}
-          formingHeight={(tip?.height ?? tape[0]?.height ?? 0) + 1}
+          formingHeight={Math.max(tip?.height ?? 0, mp.seal?.height ?? 0, tape[0]?.height ?? 0) + 1}
           formingSince={formSince ?? tape[0]?.timestamp ?? null}
           onSealPour={(seeds) => {
             const ink = seeds.length
