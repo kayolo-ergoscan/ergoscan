@@ -469,6 +469,7 @@ function RosenRef({
 }
 
 function RosenWhen({ ts }: { ts: number | null | undefined }) {
+  const { locale } = useI18n();
   const clock = formatH24(ts, undefined, true);
   const date = formatDottedDate(ts);
   if (clock === "—" || date === "—") {
@@ -477,7 +478,7 @@ function RosenWhen({ ts }: { ts: number | null | undefined }) {
   return (
     <div>
       <p className={clsx("whitespace-nowrap tabular-nums", relAgeToneClass(relAgeTone(ts)))}>
-        {formatRelTime(ts)}
+        {formatRelTime(ts, locale)}
       </p>
       <p className="mt-0.5 whitespace-nowrap text-[11px] tabular-nums text-[var(--muted)]">
         {clock} · {date}

@@ -34,6 +34,7 @@ import { describeParty } from "@/lib/address-labels";
 import { lockCaption } from "@/lib/tx-lock";
 import { INK } from "@/lib/palette";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
+import { countText } from "@/lib/i18n/messages";
 import { readHashTab, setHashTab } from "@/lib/hash-tab";
 import { useKeepFresh, usePageSync } from "@/lib/page-sync";
 import { SNAPSHOT_FETCH, useEnterIds } from "@/lib/keyed-enter";
@@ -84,7 +85,7 @@ function formatHorizon(blocks: number | null, locale: string, t: (k: string) => 
   if (blocks == null) return "—";
   if (blocks <= 0) return t("rent.cap.now");
   if (blocks < 2000) {
-    return t("rent.status.inBlocks").replace("{n}", blocks.toLocaleString(loc(locale)));
+    return countText(t, locale, "rent.status.inBlocks", blocks, blocks.toLocaleString(loc(locale)));
   }
   const years = blocks / BLOCKS_PER_YEAR;
   if (years >= 1) return `~${years.toFixed(1)}y`;

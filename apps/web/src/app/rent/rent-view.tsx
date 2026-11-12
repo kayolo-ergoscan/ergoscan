@@ -46,6 +46,7 @@ import {
 } from "@/lib/format";
 import { INK } from "@/lib/palette";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
+import { countText } from "@/lib/i18n/messages";
 import { useKeepFresh, usePageSync } from "@/lib/page-sync";
 import { SNAPSHOT_FETCH, enteringIds, useEnterIds } from "@/lib/keyed-enter";
 import {
@@ -109,7 +110,7 @@ function formatHorizon(blocks: number | null, locale: string, t: (k: string) => 
   if (blocks == null) return "—";
   if (blocks <= 0) return t("rent.cap.now");
   if (blocks < 2000) {
-    return t("rent.status.inBlocks").replace("{n}", blocks.toLocaleString(loc(locale)));
+    return countText(t, locale, "rent.status.inBlocks", blocks, blocks.toLocaleString(loc(locale)));
   }
   const years = blocks / BLOCKS_PER_YEAR;
   if (years >= 1) return `~${years.toFixed(1)}y`;
@@ -140,7 +141,7 @@ function windowCaption(
   }
   const n = w.boxCount.toLocaleString(loc(locale));
   const held = formatErgFixed(w.valueNano, locale);
-  return t("rent.cap.withRent").replace("{n}", n).replace("{held}", held);
+  return countText(t, locale, "rent.cap.withRent", w.boxCount, n).replace("{held}", held);
 }
 
 export function RentView({
@@ -513,7 +514,7 @@ export function RentView({
                   <div className="block-lane-pair rent-when-pair">
                     <div className="min-w-0 px-3">
                       <p className={clsx("whitespace-nowrap tabular-nums", relAgeToneClass(relAgeTone(row.spentTs)))}>
-                        {formatRelTime(row.spentTs)}
+                        {formatRelTime(row.spentTs, locale)}
                       </p>
                       <p className="mt-0.5 whitespace-nowrap text-[12px] tabular-nums text-[var(--muted-2)]">
                         {formatActivityStamp(row.spentTs)}
@@ -1034,8 +1035,11 @@ function RentDanger({
             const when =
               row.blocksUntilRent <= 0
                 ? t("rent.status.waiting")
-                : t("rent.status.inBlocks").replace(
-                    "{n}",
+                : countText(
+                    t,
+                    locale,
+                    "rent.status.inBlocks",
+                    row.blocksUntilRent,
                     row.blocksUntilRent.toLocaleString(loc(locale))
                   );
             return (
@@ -1197,8 +1201,11 @@ function RentRow({
     ? `/address/${encodeURIComponent(row.address)}`
     : `/box/${row.boxId}`;
   const name = row.address ? lookupAddress(row.address)?.name?.trim() || null : null;
-  const inBlocks = t("rent.status.inBlocks").replace(
-    "{n}",
+  const inBlocks = countText(
+    t,
+    locale,
+    "rent.status.inBlocks",
+    row.blocksUntilRent,
     row.blocksUntilRent.toLocaleString(loc(locale))
   );
   const tone = rentRowTone(row);
@@ -1261,7 +1268,7 @@ function RentRow({
       <div className="block-lane-pair rent-when-pair">
         <div className="min-w-0 px-3">
           <p className={clsx("whitespace-nowrap tabular-nums", relAgeToneClass(relAgeTone(row.creationTs)))}>
-            {formatRelTime(row.creationTs)}
+            {formatRelTime(row.creationTs, locale)}
           </p>
           <p className="mt-0.5 whitespace-nowrap text-[12px] tabular-nums text-[var(--muted-2)]">
             {formatActivityStamp(row.creationTs)}

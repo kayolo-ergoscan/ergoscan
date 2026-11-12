@@ -16,6 +16,7 @@ import { formatErgFixed, formatErgPrecise, formatScaledGlance, formatUsd, shortI
 import { rentYardDemoPack, RENT_DEMO_MS } from "@/lib/rent-miner-patrol";
 import { INK } from "@/lib/palette";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
+import { countText } from "@/lib/i18n/messages";
 import { dangerHoldingUsd, type RentDangerRow } from "@/lib/rent-danger";
 import { resolveTokenMeta, tokenTickerInk } from "@/lib/token-meta";
 import {
@@ -27,9 +28,8 @@ import {
 /** Home yard shows eight crates. The snapshot may carry more. */
 const HOME_YARD = 8;
 
-function boxesLabel(n: number, t: (k: string) => string): string {
-  if (n === 1) return t("home.rentBox");
-  return t("home.rentBoxes").replace("{n}", String(n));
+function boxesLabel(n: number, t: (k: string) => string, locale: string): string {
+  return countText(t, locale, "home.rentBoxes", n);
 }
 
 function whenLabel(blocksUntilRent: number, t: (k: string) => string): string {
@@ -295,6 +295,7 @@ function CaptionLine({
   reduce: boolean;
   t: (k: string) => string;
 }) {
+  const { locale } = useI18n();
   const meta = listPip(address, row.valueNano);
   const named = Boolean(meta.name);
   const label = meta.name || shortId(address, 10);
@@ -314,7 +315,7 @@ function CaptionLine({
             {whenLabel(row.blocksUntilRent, t)}
           </span>
           <span className="shrink-0 text-[var(--muted-2)]">·</span>
-          <span className="shrink-0 tabular-nums">{boxesLabel(row.boxCount, t)}</span>
+          <span className="shrink-0 tabular-nums">{boxesLabel(row.boxCount, t, locale)}</span>
         </>
       ) : null}
     </span>

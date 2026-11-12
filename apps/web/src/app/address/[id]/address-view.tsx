@@ -1314,11 +1314,11 @@ export function AddressView({
               mark={<KpiMarkFootprints className="h-9 w-9" />}
             >
               <p className="mt-0.5 text-[22px] font-semibold leading-[1.15] tabular-nums tracking-tight">
-                <KpiNum>{lastTs != null ? formatRelTime(lastTs) : "—"}</KpiNum>
+                <KpiNum>{lastTs != null ? formatRelTime(lastTs, locale) : "—"}</KpiNum>
               </p>
               <p className="mt-0.5 truncate text-[12px] leading-[1.15] text-[var(--muted-2)]">
                 {firstTs != null
-                  ? `${t("address.firstActivity")} · ${formatRelTime(firstTs)}`
+                  ? `${t("address.firstActivity")} · ${formatRelTime(firstTs, locale)}`
                   : t("address.cap.activity")}
               </p>
             </AddrFactCard>
@@ -2034,7 +2034,7 @@ function HistoryRow({
           </div>
           <div className="px-3 text-right">
             <p className={clsx("whitespace-nowrap tabular-nums", relAgeToneClass(relAgeTone(tx.timestamp)))}>
-              {formatRelTime(tx.timestamp)}
+              {formatRelTime(tx.timestamp, locale)}
             </p>
             {ms != null && (
               <p className="mt-0.5 whitespace-nowrap text-[12px] tabular-nums text-[var(--muted-2)]">
@@ -2137,7 +2137,7 @@ function TokenWhen({
   locale: string;
   align: "left" | "right";
 }) {
-  const rel = ts != null ? formatRelTime(ts) : null;
+  const rel = ts != null ? formatRelTime(ts, locale) : null;
   const title = ts != null ? formatTs(ts) : undefined;
   const label =
     rel && rel !== "—"

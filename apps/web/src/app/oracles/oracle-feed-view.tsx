@@ -31,6 +31,7 @@ import {
 import { sortSilentOldest, splitOracleLens } from "@/lib/oracle-scene";
 import { INK } from "@/lib/palette";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
+import { countText } from "@/lib/i18n/messages";
 import { enteringIds, useEnterIds } from "@/lib/keyed-enter";
 import { useKeepFresh, usePageSync } from "@/lib/page-sync";
 import {
@@ -203,8 +204,8 @@ export function OracleFeedView({
     ? `${posting.toLocaleString(loc(locale))} / ${seated.toLocaleString(loc(locale))}`
     : "—";
   const oracleSub = [
-    quiet > 0 ? t("oracles.kpiQuiet").replace("{n}", quiet.toLocaleString(loc(locale))) : "",
-    idle > 0 ? t("oracles.kpiIdle").replace("{n}", idle.toLocaleString(loc(locale))) : "",
+    quiet > 0 ? countText(t, locale, "oracles.kpiQuiet", quiet, quiet.toLocaleString(loc(locale))) : "",
+    idle > 0 ? countText(t, locale, "oracles.kpiIdle", idle, idle.toLocaleString(loc(locale))) : "",
   ]
     .filter(Boolean)
     .join(" · ");
@@ -372,7 +373,7 @@ export function OracleFeedView({
               liveLabel={t("oracles.councilLive")}
               staleLabel={t("oracles.councilStale")}
               liveChip={t("oracles.councilLiveN").replace("{n}", String(liveOps.length))}
-              silentChip={t("oracles.councilSilentN").replace("{n}", String(silentOps.length))}
+              silentChip={countText(t, locale, "oracles.councilSilentN", silentOps.length)}
               onSettled={(next) => {
                 setTapeLens(next);
                 setOffset(0);

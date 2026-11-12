@@ -124,7 +124,7 @@ export function AddressActivityWhen({
   copiedLabel: string;
 }) {
   const [copied, setCopied] = useState(false);
-  const rel = formatRelTime(ts);
+  const rel = formatRelTime(ts, locale);
   const stamp = formatFactWhen(ts, locale);
   const tone = relAgeTone(ts);
   const href = txId ? `/tx/${encodeURIComponent(txId)}` : null;

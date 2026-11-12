@@ -537,6 +537,7 @@ export function BlockTapeRow({
 }
 
 function BlockWhen({ ts, now }: { ts: number | null | undefined; now: number }) {
+  const { locale } = useI18n();
   const clock = formatH24(ts, undefined, true);
   const date = formatDottedDate(ts);
   if (clock === "—" || date === "—") {
@@ -545,7 +546,7 @@ function BlockWhen({ ts, now }: { ts: number | null | undefined; now: number }) 
   return (
     <div>
       <p suppressHydrationWarning className="tabular-nums text-[var(--text)]">
-        {formatRelTime(ts, now)}
+        {formatRelTime(ts, now, locale)}
       </p>
       <p
         suppressHydrationWarning

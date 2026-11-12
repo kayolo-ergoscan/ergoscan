@@ -417,7 +417,7 @@ export function PoolCardView({
           mark={<KpiMarkCalendar className="h-9 w-9" />}
         >
           <p className={clsx("mt-0.5 text-[17px] font-semibold leading-[1.15] tabular-nums tracking-tight", relAgeToneClass(relAgeTone(pool?.firstTs)))}>
-            <KpiNum>{pool?.firstTs ? formatRelTime(pool.firstTs) : miss}</KpiNum>
+            <KpiNum>{pool?.firstTs ? formatRelTime(pool.firstTs, locale) : miss}</KpiNum>
           </p>
           <p className="mt-0.5 truncate text-[12px] leading-[1.15] text-[var(--muted-2)]">
             {t("pool.colFirst")}
@@ -431,7 +431,7 @@ export function PoolCardView({
           mark={<KpiMarkFootprints className="h-9 w-9" />}
         >
           <p className={clsx("mt-0.5 text-[17px] font-semibold leading-[1.15] tabular-nums tracking-tight", relAgeToneClass(relAgeTone(pool?.lastTs)))}>
-            <KpiNum>{pool?.lastTs ? formatRelTime(pool.lastTs) : miss}</KpiNum>
+            <KpiNum>{pool?.lastTs ? formatRelTime(pool.lastTs, locale) : miss}</KpiNum>
           </p>
           <p className="mt-0.5 truncate text-[12px] leading-[1.15] text-[var(--muted-2)]">
             {t("pool.colLast")}

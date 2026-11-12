@@ -110,7 +110,8 @@ function LithosKpi({
 }
 
 function FindWhen({ ts }: { ts: number | null }) {
-  const rel = formatRelTime(ts);
+  const { locale } = useI18n();
+  const rel = formatRelTime(ts, locale);
   const stamp = formatFactWhen(ts);
   if (rel === "—" && stamp === "—") return <span className="text-[var(--muted)]">—</span>;
   return (

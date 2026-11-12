@@ -25,6 +25,46 @@ export function translate(locale: Locale, key: string): string {
   return MESSAGES[locale]?.[key] ?? en[key as keyof typeof en] ?? key;
 }
 
+/**
+ * Plural forms live in one string, split by "|": English "one|other", Russian "one|few|many"
+ * ("{n} бокс|{n} бокса|{n} боксов"). A string without "|" is used for every count.
+ */
+export function pluralForm(locale: Locale, template: string, n: number): string {
+  const forms = template.split("|");
+  if (forms.length === 1) return template;
+  const last = forms.length - 1;
+  if (!Number.isFinite(n)) return forms[last]!;
+  const cat = new Intl.PluralRules(locale === "ru" ? "ru-RU" : "en-US").select(n);
+  const idx =
+    locale === "ru"
+      ? cat === "one"
+        ? 0
+        : cat === "few" || cat === "other"
+          ? 1
+          : 2
+      : cat === "one"
+        ? 0
+        : 1;
+  return forms[Math.min(idx, last)]!;
+}
+
+/** Translate a count string: pick the plural form for `n`, put `shown` (default n) in {n}. */
+export function translateCount(locale: Locale, key: string, n: number, shown?: string): string {
+  return pluralForm(locale, translate(locale, key), n).replace("{n}", shown ?? String(n));
+}
+
+/** translateCount for code that holds `t` and a locale ("ru", "ru-RU", "en", …). */
+export function countText(
+  t: (key: string) => string,
+  locale: string,
+  key: string,
+  n: number,
+  shown?: string
+): string {
+  const l: Locale = locale.startsWith("ru") ? "ru" : "en";
+  return pluralForm(l, t(key), n).replace("{n}", shown ?? String(n));
+}
+
 export function localeLoaded(locale: Locale): boolean {
   return MESSAGES[locale] != null;
 }

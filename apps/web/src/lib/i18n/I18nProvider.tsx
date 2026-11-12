@@ -16,6 +16,7 @@ import {
   LOCALES,
   STORAGE_KEY,
   translate,
+  translateCount,
   type Locale,
 } from "./messages";
 
@@ -23,6 +24,8 @@ type I18nCtx = {
   locale: Locale;
   setLocale: (l: Locale) => void;
   t: (key: string) => string;
+  /** Count strings with plural forms ("{n} box|{n} boxes"); `shown` is the formatted number. */
+  tn: (key: string, n: number, shown?: string) => string;
   locales: typeof LOCALES;
 };
 
@@ -65,10 +68,14 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   }, [locale, ready]);
 
   const t = useCallback((key: string) => translate(locale, key), [locale]);
+  const tn = useCallback(
+    (key: string, n: number, shown?: string) => translateCount(locale, key, n, shown),
+    [locale]
+  );
 
   const value = useMemo(
-    () => ({ locale, setLocale, t, locales: LOCALES }),
-    [locale, setLocale, t]
+    () => ({ locale, setLocale, t, tn, locales: LOCALES }),
+    [locale, setLocale, t, tn]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
@@ -82,6 +89,7 @@ export function useI18n(): I18nCtx {
       locale: "en",
       setLocale: () => {},
       t: (k) => translate("en", k),
+      tn: (k, n, shown) => translateCount("en", k, n, shown),
       locales: LOCALES,
     };
   }

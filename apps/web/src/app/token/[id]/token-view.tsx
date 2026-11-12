@@ -939,7 +939,7 @@ export function TokenView({
               <p className="mt-0.5 text-[17px] font-semibold leading-[1.15] tabular-nums tracking-tight">
                 <KpiNum>
                   {lastTs != null
-                    ? formatRelTime(lastTs)
+                    ? formatRelTime(lastTs, locale)
                     : lastHeight != null
                       ? `#${lastHeight.toLocaleString(loc(locale))}`
                       : dash}
@@ -947,7 +947,7 @@ export function TokenView({
               </p>
               <p className="mt-0.5 truncate text-[12px] leading-[1.15] text-[var(--muted-2)]">
                 {firstTs != null
-                  ? `${t("token.firstActivity")} · ${formatRelTime(firstTs)}`
+                  ? `${t("token.firstActivity")} · ${formatRelTime(firstTs, locale)}`
                   : firstHeight != null
                     ? `${t("token.firstActivity")} · #${firstHeight.toLocaleString(loc(locale))}`
                     : t("token.cap.activity")}
@@ -1620,7 +1620,7 @@ function TokenTxRowView({
       </div>
       <div className="flex min-w-0 items-center px-3">
         <div className="min-w-0">
-          <p className="tabular-nums text-[var(--text)]">{formatRelTime(tx.timestamp)}</p>
+          <p className="tabular-nums text-[var(--text)]">{formatRelTime(tx.timestamp, locale)}</p>
           {ms != null && (
             <p className="mt-0.5 text-[12px] tabular-nums text-[var(--muted-2)]">
               {formatFactWhen(ms, locale)}

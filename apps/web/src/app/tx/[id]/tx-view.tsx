@@ -44,6 +44,7 @@ import {
 } from "@/lib/tx-flow";
 import { INK, DONUT_SLICES } from "@/lib/palette";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
+import { countText } from "@/lib/i18n/messages";
 import { useFavoriteOf } from "@/lib/favorites";
 import { readHashTab, setHashTab } from "@/lib/hash-tab";
 import { useKeepFresh, usePageSync } from "@/lib/page-sync";
@@ -497,7 +498,7 @@ export function TxView({
               </p>
               <p className="mt-0.5 truncate text-[12px] leading-none text-[var(--muted-2)]">
                 {(data.dataInputs?.length ?? 0) > 0
-                  ? t("tx.dataInputs").replace("{n}", String(data.dataInputs?.length ?? 0))
+                  ? countText(t, locale, "tx.dataInputs", data.dataInputs?.length ?? 0)
                   : "\u00a0"}
               </p>
             </AddrFactCard>
@@ -732,7 +733,7 @@ function PartyRow({
       : t("tx.unknown");
   const name =
     side === "fee" || party.isFee ? t("tx.minerFee") : shown;
-  const boxCap = t("tx.boxes").replace("{n}", String(party.boxes.length));
+  const boxCap = countText(t, locale, "tx.boxes", party.boxes.length);
   const tone = side === "in" ? "down" : side === "out" ? "up" : "gold";
   const nano = side === "in" ? -party.erg : party.erg;
   const tokenRows = tokenEntries(party.tokens);

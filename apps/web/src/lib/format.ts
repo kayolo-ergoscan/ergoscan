@@ -638,21 +638,29 @@ export function formatNumericDate(ts: number | null | undefined, _locale?: strin
 }
 
 /** AdaStat-style relative age: "22s ago", "2m ago". Same as address tx tape. */
+/** Compact "5m ago" / "5 мин назад". `formatRelTime(ts, locale)` or `formatRelTime(ts, now, locale)`. */
 export function formatRelTime(
   ts: number | null | undefined,
-  now?: number
+  nowOrLocale?: number | string,
+  locale?: string
 ): string {
   const ms = toEpochMs(ts);
   if (ms == null) return "—";
+  const now = typeof nowOrLocale === "number" ? nowOrLocale : undefined;
+  const ru = isRuLocale(typeof nowOrLocale === "string" ? nowOrLocale : locale);
   const origin = now ?? Date.now();
   const sec = Math.max(0, Math.floor((origin - ms) / 1000));
-  if (sec < 60) return `${sec}s ago`;
-  if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
-  if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
+  if (sec < 60) return ru ? `${sec} с назад` : `${sec}s ago`;
+  if (sec < 3600) return ru ? `${Math.floor(sec / 60)} мин назад` : `${Math.floor(sec / 60)}m ago`;
+  if (sec < 86400) return ru ? `${Math.floor(sec / 3600)} ч назад` : `${Math.floor(sec / 3600)}h ago`;
   const days = Math.floor(sec / 86400);
-  if (days < 30) return `${days}d ago`;
-  if (days < 365) return `${Math.max(1, Math.floor(days / 30))}mo ago`;
-  return `${Math.max(1, Math.floor(days / 365))}y ago`;
+  if (days < 30) return ru ? `${days} дн. назад` : `${days}d ago`;
+  if (days < 365) {
+    const mo = Math.max(1, Math.floor(days / 30));
+    return ru ? `${mo} мес. назад` : `${mo}mo ago`;
+  }
+  const yr = Math.max(1, Math.floor(days / 365));
+  return ru ? `${yr} г. назад` : `${yr}y ago`;
 }
 
 function isRuLocale(locale?: string): boolean {

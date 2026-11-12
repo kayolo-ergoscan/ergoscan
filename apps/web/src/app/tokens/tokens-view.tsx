@@ -645,21 +645,23 @@ export function TokenTapeRow({
       </div>
       <div className="token-lane-pair min-w-0 grid">
         <div
+          suppressHydrationWarning
           className="min-w-0 px-2 text-left tabular-nums text-[var(--muted)]"
           title={firstTs != null ? formatTs(firstTs) : undefined}
         >
           {firstTs != null
-            ? formatRelTime(firstTs)
+            ? formatRelTime(firstTs, locale)
             : row.firstHeight != null
               ? `#${row.firstHeight.toLocaleString(loc(locale))}`
               : "—"}
         </div>
         <div
+          suppressHydrationWarning
           className="min-w-0 px-2 text-right tabular-nums"
           title={lastTs != null ? formatTs(lastTs) : undefined}
         >
           {lastTs != null
-            ? formatRelTime(lastTs)
+            ? formatRelTime(lastTs, locale)
             : row.lastHeight != null
               ? `#${row.lastHeight.toLocaleString(loc(locale))}`
               : "—"}
