@@ -1309,7 +1309,10 @@ function protocolTokenIds(): string[] {
  */
 const DANGER_EVERY_MS = 120_000;
 const PRICE_EVERY_MS = 600_000;
-/** A thinner pool cannot price a rent box. Elehmental Book sat at $32M off an 11 ERG pool. Flux is ~64. */
+/**
+ * A thinner pool cannot price a rent box. Elehmental Book sat at $32M off an 11 ERG pool. Flux is ~64.
+ * The partial index defi_price_tick_priced_token_ts (deploy/sql/006) has this 50 in its predicate.
+ */
 const DANGER_MIN_POOL_TVL_ERG = 50;
 let dangerCache: { at: number; rows: Record<string, unknown>[] } | null = null;
 let priceCache: { at: number; usd: Map<string, number> } | null = null;
