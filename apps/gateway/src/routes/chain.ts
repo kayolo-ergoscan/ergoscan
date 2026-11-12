@@ -230,7 +230,10 @@ function mempoolFlowForAddress(
     }
   }
 
-  const mint = eip4MintOfOutputs(mintBoxes);
+  const mint = eip4MintOfOutputs(
+    mintBoxes,
+    inputs.map((i) => rawBoxId(i) ?? hintFor(i)?.boxId)
+  );
   const netErg = outErg - inErg;
   const kind = classifyAddrFlow({
     netErg,

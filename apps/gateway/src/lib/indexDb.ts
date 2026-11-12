@@ -3161,7 +3161,10 @@ function flowForAddress(
     for (const a of o.assets) addTok(a.tokenId, parseNanoErg(a.amount));
   }
 
-  const mint = eip4MintOfOutputs(outputs.filter((o) => o.address === address));
+  const mint = eip4MintOfOutputs(
+    outputs.filter((o) => o.address === address),
+    inputs.map((i) => i.boxId)
+  );
   const netErg = outErg - inErg;
   const kind = classifyAddrFlow({
     netErg,

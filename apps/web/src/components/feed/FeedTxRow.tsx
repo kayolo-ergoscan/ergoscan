@@ -43,6 +43,8 @@ const BY_LOCK: Record<string, [FeedKind, FeedGlyphId]> = {
   "oracle-refresh": ["oracle", "oracle"],
   spectrum: ["defi", "defi"],
   "spectrum-swap": ["defi", "defi"],
+  "pool-deposit": ["defi", "defi"],
+  "pool-redeem": ["defi", "defi"],
   lithos: ["defi", "defi"],
   "lithos-swap": ["defi", "defi"],
   sigmausd: ["stable", "stable"],

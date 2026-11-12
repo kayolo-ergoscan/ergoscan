@@ -86,15 +86,20 @@ export function classifyBoxLock(
   return null;
 }
 
+/**
+ * Spent boxes first, then outputs. Data inputs are only read, so they never name the lock:
+ * a Dexy mint or a name registration that reads an oracle box is not an oracle tx.
+ */
 export function pickTxLock(
   tx: {
     inputs?: ShapeBox[] | null;
     outputs?: ShapeBox[] | null;
+    /** Accepted for callers that pass the whole tx; never used. */
     dataInputs?: ShapeBox[] | null;
   },
   hints: LockHints = {}
 ): LockHit | null {
-  for (const boxes of [tx.inputs, tx.dataInputs, tx.outputs]) {
+  for (const boxes of [tx.inputs, tx.outputs]) {
     for (const box of boxes ?? []) {
       const hit = classifyBoxLock(box, hints);
       if (hit) return hit;

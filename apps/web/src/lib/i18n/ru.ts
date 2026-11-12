@@ -538,7 +538,7 @@ export const ru: Record<string, string> = {
   "defi.legendGainers": "Δ% вверх / вниз (после истории цен)",
   "defi.legendUniverse": "полный каталог AMM ≤200 (не только 6 крупнейших)",
   "defi.legendUpstream":
-    "Полный рейтинг Spectrum/Crux — все списки из одного набора токенов.",
+    "Полный рейтинг ErgoDex/Crux — все списки из одного набора токенов.",
   "defi.ranksHint":
     "Клик по строке — лента сделок.",
   "defi.tradesHint":
@@ -1258,7 +1258,9 @@ export const ru: Record<string, string> = {
   "tx.cat.rent-renew": "Продление",
   "tx.action.oracle-datapoint": "Данные оракула",
   "tx.action.oracle-refresh": "Обновление оракула",
-  "tx.action.spectrum-swap": "Своп Spectrum",
+  "tx.action.spectrum-swap": "Своп ErgoDex",
+  "tx.action.pool-deposit": "ErgoDex: вклад в пул",
+  "tx.action.pool-redeem": "ErgoDex: вывод из пула",
   "tx.action.lithos-swap": "Своп Lithos",
   "tx.action.sigmausd": "SigmaUSD",
   "tx.action.rosen": "Rosen",
