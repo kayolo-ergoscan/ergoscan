@@ -108,3 +108,23 @@ export function tickSleepMs(pollMs: number, mode: OracleMode): number {
   if (mode === "tip_hold" || mode === "idle") return base * 2;
   return base;
 }
+
+/** A tip pass re-runs at least this often even on the same block (safety net). */
+export const SAME_TIP_RERUN_MS = 60_000;
+
+/**
+ * Skip a tip pass when the chain tip (height and block id) is the one the last pass saw
+ * (12 Nov 2026 audit: detect ran every ~4.9 s without a new block, ≈25 k scans/s).
+ * A fork at the same height changes the id, so it still runs. History always runs.
+ */
+export function sameTipSkip(input: {
+  mode: OracleMode;
+  tipKey: string;
+  lastRunKey: string | null;
+  lastRunAt: number;
+  now: number;
+}): boolean {
+  if (input.mode !== "tip") return false;
+  if (!input.lastRunKey || input.tipKey !== input.lastRunKey) return false;
+  return input.now - input.lastRunAt < SAME_TIP_RERUN_MS;
+}

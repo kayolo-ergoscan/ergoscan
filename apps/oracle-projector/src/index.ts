@@ -27,6 +27,7 @@ import {
   historyEnabled,
   liveIndexerLag,
   planOracleTick,
+  sameTipSkip,
   tickSleepMs,
 } from "./policy.js";
 import { ensureOracleSchema } from "./schema.js";
@@ -56,17 +57,20 @@ const health: HealthSnap = {
 
 async function chainSnap(db: Queryable): Promise<{
   tip: number;
+  tipId: string;
   minH: number;
   indexerLag: number | null;
 }> {
   const r = await db.query<{
     tip: number | null;
+    tip_id: string | null;
     min_h: number | null;
     last_h: number | null;
     snap_lag: number | null;
   }>(
     `SELECT
        (SELECT max(height)::int FROM packed.blocks) AS tip,
+       (SELECT encode(id, 'hex') FROM packed.blocks ORDER BY height DESC LIMIT 1) AS tip_id,
        COALESCE(
          (SELECT value::int FROM indexer_state WHERE key = 'min_height' LIMIT 1),
          (SELECT (payload->>'minHeight')::int FROM snapshot_kv WHERE key = 'indexer_status' LIMIT 1),
@@ -76,12 +80,13 @@ async function chainSnap(db: Queryable): Promise<{
        (SELECT (payload->>'lag')::int FROM snapshot_kv WHERE key = 'indexer_status' LIMIT 1) AS snap_lag`
   );
   const tip = Number(r.rows[0]?.tip) || 0;
+  const tipId = String(r.rows[0]?.tip_id ?? "");
   const minH = Number(r.rows[0]?.min_h) || 0;
   const lastRaw = r.rows[0]?.last_h;
   const lastH = lastRaw == null ? null : Number(lastRaw);
   const snapRaw = r.rows[0]?.snap_lag;
   const snapLag = snapRaw == null ? null : Number(snapRaw);
-  return { tip, minH, indexerLag: liveIndexerLag(tip, lastH, snapLag) };
+  return { tip, tipId, minH, indexerLag: liveIndexerLag(tip, lastH, snapLag) };
 }
 
 async function loop(): Promise<void> {
@@ -100,7 +105,10 @@ async function loop(): Promise<void> {
 
   await ensureOracleSchema(db);
 
-  let { tip, minH, indexerLag } = await chainSnap(db);
+  let { tip, tipId, minH, indexerLag } = await chainSnap(db);
+  let lastRunKey: string | null = null;
+  let lastRunAt = 0;
+  let lastMode: string | null = null;
   health.tipHeight = tip;
   health.minHeight = minH;
   health.indexerLag = indexerLag;
@@ -135,7 +143,7 @@ async function loop(): Promise<void> {
         continue;
       }
 
-      ({ tip, minH, indexerLag } = await chainSnap(client));
+      ({ tip, tipId, minH, indexerLag } = await chainSnap(client));
       health.tipHeight = tip;
       health.minHeight = minH;
       health.indexerLag = indexerLag;
@@ -153,9 +161,14 @@ async function loop(): Promise<void> {
       health.mode = plan.mode;
       health.scanHeight = cursor;
       health.lag = tip > 0 ? Math.max(0, tip - cursor) : null;
-      await setState(client, "mode", plan.mode);
+      if (plan.mode !== lastMode) {
+        await setState(client, "mode", plan.mode);
+        lastMode = plan.mode;
+      }
+      const tipKey = `${tip}:${tipId}`;
+      const skip = sameTipSkip({ mode: plan.mode, tipKey, lastRunKey, lastRunAt, now: Date.now() });
 
-      if (plan.run) {
+      if (plan.run && !skip) {
         await resolveAndWriteMarket(client, tip);
         const market = await readMarket(client);
         let ticks = 0;
@@ -196,6 +209,8 @@ async function loop(): Promise<void> {
           console.error(JSON.stringify({ type: "last_post_err", err: String(e).slice(0, 240) }));
         }
         cursor = plan.nextCursor;
+        lastRunKey = tipKey;
+        lastRunAt = Date.now();
         health.scanHeight = cursor;
         health.ticksSession += ticks;
         health.lastScanAt = Date.now();
