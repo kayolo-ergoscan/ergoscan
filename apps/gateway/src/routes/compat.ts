@@ -358,7 +358,8 @@ export function registerCompatRoutes(app: Express, deps: CompatDeps): void {
 
   app.get("/v1/tokens/bySymbol/:symbol", async (req, res) => {
     cacheList(res);
-    const symbol = decodeURIComponent(req.params.symbol ?? "");
+    // Express already decoded the path segment; a second decode threw on "%".
+    const symbol = req.params.symbol ?? "";
     const rows = await tokensBySymbol(symbol, qInt(req.query.limit, 50, 1, 100));
     if (!rows) {
       cacheNoStore(res);

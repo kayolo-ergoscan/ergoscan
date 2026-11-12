@@ -24,6 +24,7 @@ import {
   type WsServerEvent,
 } from "@ergoscan/shared";
 import { createNodeClient } from "./lib/node.js";
+import { catchAsyncRoutes, jsonErrorHandler, logUnhandledRejections } from "./lib/asyncRoutes.js";
 import { stampTemplateHashes } from "./lib/txTemplateHash.js";
 import { SubblockEngine } from "./lib/subblocks.js";
 import { SealWatcher } from "./lib/seal.js";
@@ -98,6 +99,8 @@ const seals = new SealWatcher(node);
 const orbitPeers = startOrbitPeerCache((path, timeoutMs) => node.get(path, timeoutMs));
 
 const app = express();
+catchAsyncRoutes(app);
+logUnhandledRejections("ergoscan-gateway");
 if (isApiContour()) {
   app.use(cors());
 } else {
@@ -869,6 +872,8 @@ app.get("/v1/search", async (req, res) => {
 });
 
 // ─── WS ─────────────────────────────────────────────────────────────
+
+app.use(jsonErrorHandler("ergoscan-gateway"));
 
 const server = createServer(app);
 /**
