@@ -25,6 +25,7 @@ import {
 } from "@ergoscan/shared";
 import { createNodeClient } from "./lib/node.js";
 import { catchAsyncRoutes, jsonErrorHandler, logUnhandledRejections } from "./lib/asyncRoutes.js";
+import { isPartnerIp, parsePartnerList } from "./lib/rateAllow.js";
 import { stampTemplateHashes } from "./lib/txTemplateHash.js";
 import { SubblockEngine } from "./lib/subblocks.js";
 import { SealWatcher } from "./lib/seal.js";
@@ -139,6 +140,9 @@ const RL_WINDOW_MS = 60_000;
 const RL_MAX = Number(process.env.RATE_LIMIT_PER_MIN ?? 180);
 /** Caddy always sets X-Forwarded-For, so a loopback request without it is internal (page SSR, ops scripts). */
 const RL_INTERNAL_MAX = Number(process.env.RATE_LIMIT_INTERNAL_PER_MIN ?? 3000);
+/** Our DEX and other partners (RATE_LIMIT_PARTNERS): own, larger budget, still capped. */
+const RL_PARTNERS = parsePartnerList(process.env.RATE_LIMIT_PARTNERS);
+const RL_PARTNER_MAX = Number(process.env.RATE_LIMIT_PARTNER_PER_MIN ?? 1200);
 const rlHits = new Map<string, { n: number; reset: number }>();
 setInterval(() => {
   const now = Date.now();
@@ -172,7 +176,7 @@ app.use((req, res, next) => {
   const forwarded = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim();
   const internal = !forwarded && isLoopback(req.socket.remoteAddress);
   const ip = internal ? "internal" : forwarded || req.socket.remoteAddress || "unknown";
-  const max = internal ? RL_INTERNAL_MAX : RL_MAX;
+  const max = internal ? RL_INTERNAL_MAX : isPartnerIp(RL_PARTNERS, ip) ? RL_PARTNER_MAX : RL_MAX;
   const now = Date.now();
   let row = rlHits.get(ip);
   if (!row || now > row.reset) {
