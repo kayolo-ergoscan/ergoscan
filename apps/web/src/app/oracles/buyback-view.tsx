@@ -6,7 +6,7 @@ import Link from "next/link";
 import clsx from "clsx";
 import { Shell } from "@/components/Shell";
 import { StuckPin } from "@/components/StuckPin";
-import { KpiGrid } from "@/components/KpiGrid";
+import { compactFigure, KpiGrid } from "@/components/KpiGrid";
 import { KpiMark } from "@/components/kpi-marks";
 import { RankWindow } from "@/components/RankWindow";
 import { lookupAddress } from "@/lib/address-book";
@@ -226,6 +226,7 @@ export function BuybackView({ kind, initial }: { kind: BuybackKind; initial?: Bu
                 {
                   label: fill(t("buyback.kpiToken"), { sym }),
                   value: pack.box ? formatTokenAmount(pack.box.token, 0, locale) : "—",
+                  compact: pack.box ? compactFigure(Number(pack.box.token)) : undefined,
                   unavailable: !pack.box,
                   sub: fill(t("buyback.kpiTokenSub"), { bought }),
                   mark: <KpiMark id="token" tone={INK.cyan} />,

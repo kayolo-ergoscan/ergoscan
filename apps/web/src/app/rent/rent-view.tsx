@@ -19,7 +19,7 @@ import { AddressPageSkeleton } from "@/components/AddressPageSkeleton";
 import { AddrFactCard } from "@/components/AddrFactCard";
 import { EvidenceBadge } from "@/components/EvidenceBadge";
 import { KpiMark } from "@/components/kpi-marks";
-import { KpiNum } from "@/components/KpiGrid";
+import { compactFigure, KpiNum } from "@/components/KpiGrid";
 import { RankWindow } from "@/components/RankWindow";
 import { TokenLogo } from "@/components/TokenBadge";
 import {
@@ -892,7 +892,10 @@ function HistoryKpis({
         mark={<KpiMark id="collected" />}
       >
         <div className="mt-0.5 leading-[1.15]">
-          <KpiNum className="tabular-nums">
+          <KpiNum
+            className="tabular-nums"
+            compact={show && collected ? compactFigure(Number(collected.rentNano) / 1e9, "ERG") : undefined}
+          >
             {show && collected ? formatErgFixed(collected.rentNano, locale) : "—"}
           </KpiNum>
         </div>
@@ -907,7 +910,7 @@ function HistoryKpis({
         mark={<KpiMark id="claim" />}
       >
         <div className="mt-0.5 leading-[1.15]">
-          <KpiNum className="tabular-nums">
+          <KpiNum className="tabular-nums" compact={show && collected ? compactFigure(collected.boxCount) : undefined}>
             {show && collected ? collected.boxCount.toLocaleString(loc(locale)) : "—"}
           </KpiNum>
         </div>
@@ -922,7 +925,9 @@ function HistoryKpis({
         mark={<KpiMark id="miner" />}
       >
         <div className="mt-0.5 leading-[1.15]">
-          <KpiNum className="tabular-nums">{claimers > 0 ? claimers.toLocaleString(loc(locale)) : "—"}</KpiNum>
+          <KpiNum className="tabular-nums" compact={compactFigure(claimers)}>
+            {claimers > 0 ? claimers.toLocaleString(loc(locale)) : "—"}
+          </KpiNum>
         </div>
         <p className="mt-0.5 truncate text-[12px] leading-[1.15] text-[var(--muted-2)]">
           {t("rent.kpi.claimersHint")}

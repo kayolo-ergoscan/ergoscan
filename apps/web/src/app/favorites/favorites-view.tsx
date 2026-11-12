@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import clsx from "clsx";
-import { KpiNum, KpiTileRail } from "@/components/KpiGrid";
+import { KpiLabelMark, KpiNum, KpiTileRail } from "@/components/KpiGrid";
 import { KpiMark } from "@/components/kpi-marks";
 import { Shell } from "@/components/Shell";
 import { FavKayolo } from "@/components/FavKayolo";
@@ -222,13 +222,16 @@ function KindTile({
     >
       <KpiTileRail />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13px] leading-[1.15]" style={{ color: INK.coral }}>
-          {label}
+        <span className="kpi-label-row">
+          <KpiLabelMark mark={mark} color={ink} />
+          <span className="block truncate text-[13px] leading-[1.15]" style={{ color: INK.coral }}>
+            {label}
+          </span>
         </span>
-        <span className="mt-0.5 block text-[17px] font-semibold leading-[1.15] tabular-nums tracking-tight">
+        <span className="kpi-value mt-0.5 block text-[17px] font-semibold leading-[1.15] tabular-nums tracking-tight">
           <KpiNum>{n.toLocaleString(loc)}</KpiNum>
         </span>
-        <span className="mt-0.5 block truncate text-[12px] leading-[1.15] text-[var(--muted-2)]">
+        <span className="kpi-sub mt-0.5 block truncate text-[12px] leading-[1.15] text-[var(--muted-2)]">
           {caption}
         </span>
       </span>
@@ -419,7 +422,7 @@ export function FavoritesView() {
     <Shell>
       {store == null || !listReady ? null : (
         <>
-          <div className="mb-2 grid grid-cols-2 items-stretch gap-2 sm:grid-cols-3 lg:grid-cols-5">
+          <div className="kpi-grid--odd mb-2 grid grid-cols-2 items-stretch gap-2 sm:grid-cols-3 lg:grid-cols-5">
             {tiles.map((tile, i) => (
               <KindTile
                 key={tile.id}

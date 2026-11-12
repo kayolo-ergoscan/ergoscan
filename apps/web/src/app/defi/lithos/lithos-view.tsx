@@ -5,7 +5,7 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import clsx from "clsx";
 import { Shell } from "@/components/Shell";
-import { KpiGrid } from "@/components/KpiGrid";
+import { compactFigure, KpiGrid } from "@/components/KpiGrid";
 import { KpiMark } from "@/components/kpi-marks";
 import { TokenAvatar } from "@/components/TokenBadge";
 import { PrettyPrice } from "@/components/PrettyNum";
@@ -250,6 +250,7 @@ export function LithosView({
     {
       label: t("lithos.tvl"),
       value: tvl != null && tvl > 0 ? fmtErgFull(tvl) : miss,
+      compact: compactFigure(tvl, "ERG"),
       unavailable: tvl == null || tvl <= 0,
       sub: t("lithos.tvlSub"),
       mark: <KpiMark id="pool" tone={INK.gold} />,
@@ -259,6 +260,7 @@ export function LithosView({
     {
       label: t("lithos.volume"),
       value: vol != null && vol > 0 ? fmtErgFull(vol) : miss,
+      compact: compactFigure(vol, "ERG"),
       unavailable: vol == null || vol <= 0,
       sub: t("lithos.volumeSub"),
       mark: <KpiMark id="volume" tone={INK.cyan} />,
@@ -269,6 +271,7 @@ export function LithosView({
       label: t("lithos.traders"),
       value:
         snap?.tradersCount != null ? snap.tradersCount.toLocaleString(loc(locale)) : miss,
+      compact: compactFigure(snap?.tradersCount),
       unavailable: snap?.tradersCount == null,
       sub: t("lithos.tradersSub"),
       mark: <KpiMark id="trader" tone={INK.violet} />,
@@ -279,6 +282,7 @@ export function LithosView({
       label: t("lithos.trades"),
       value:
         snap?.tradesCount != null ? snap.tradesCount.toLocaleString(loc(locale)) : miss,
+      compact: compactFigure(snap?.tradesCount),
       unavailable: snap?.tradesCount == null,
       sub: t("lithos.tradesSub"),
       mark: <KpiMark id="swap" tone={INK.gold} />,

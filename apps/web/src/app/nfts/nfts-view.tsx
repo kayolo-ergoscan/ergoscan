@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import clsx from "clsx";
 import { AddrFactCard } from "@/components/AddrFactCard";
 import { Shell } from "@/components/Shell";
-import { KpiNum } from "@/components/KpiGrid";
+import { compactFigure, KpiNum } from "@/components/KpiGrid";
 import { CatalogSearchTile } from "@/components/CatalogSearchTile";
 import { NftCard, NftGroupCard } from "@/components/NftCard";
 import { KpiMark } from "@/components/kpi-marks";
@@ -363,6 +363,7 @@ export function NftsView({ initial }: { initial: NftHomeSnap }) {
           enter={0}
           label={t("nfts.kpiIndexed")}
           value={kpiValue(catalogTotal)}
+          compact={previewing ? undefined : compactFigure(catalogTotal)}
           miss={previewing}
           sub={t("nfts.kpiIndexedSub")}
           ink={INK.gold}
@@ -374,6 +375,7 @@ export function NftsView({ initial }: { initial: NftHomeSnap }) {
           enter={1}
           label={t("nfts.kpiNamed")}
           value={kpiValue(named)}
+          compact={previewing ? undefined : compactFigure(named)}
           miss={previewing}
           sub={t("nfts.kpiNamedSub")}
           ink={INK.violet}
@@ -391,6 +393,7 @@ export function NftsView({ initial }: { initial: NftHomeSnap }) {
           enter={3}
           label={t("nfts.kpiArt")}
           value={kpiValue(withArt)}
+          compact={previewing ? undefined : compactFigure(withArt)}
           miss={previewing}
           sub={t("nfts.kpiArtSub")}
           ink={INK.cyan}
@@ -400,6 +403,7 @@ export function NftsView({ initial }: { initial: NftHomeSnap }) {
           enter={4}
           label={t("nfts.kpiSeries")}
           value={kpiValue(series.length)}
+          compact={previewing ? undefined : compactFigure(series.length)}
           miss={previewing}
           sub={t("nfts.kpiSeriesSub")}
           ink={INK.gold}
@@ -542,6 +546,7 @@ function NftMini({
   enter,
   label,
   value,
+  compact,
   miss,
   sub,
   ink,
@@ -552,6 +557,8 @@ function NftMini({
   enter: number;
   label: string;
   value: string;
+  /** Phone short form for big figures. */
+  compact?: string;
   miss: boolean;
   sub: string;
   ink: string;
@@ -575,7 +582,7 @@ function NftMini({
           miss && "text-[var(--muted)]"
         )}
       >
-        <KpiNum>{value}</KpiNum>
+        <KpiNum compact={compact}>{value}</KpiNum>
       </p>
       <p className="mt-0.5 truncate text-[12px] leading-[1.15] text-[var(--muted-2)]">{sub}</p>
     </AddrFactCard>

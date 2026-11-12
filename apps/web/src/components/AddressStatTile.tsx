@@ -22,6 +22,7 @@ export function AddressStatTile({
   onSelect,
   enter,
   className,
+  chipLabel,
 }: {
   label: string;
   n: number;
@@ -36,6 +37,8 @@ export function AddressStatTile({
   /** Home-style sheet enter. Omit on pages that should stay still. */
   enter?: number;
   className?: string;
+  /** Shorter label for the phone chip rail, where the long one would not fit. */
+  chipLabel?: string;
 }) {
   const tileRef = useRef<HTMLElement>(null);
   const [mounted, setMounted] = useState(false);
@@ -140,19 +143,20 @@ export function AddressStatTile({
       onKeyUp={onSelect ? disarm : undefined}
     >
       <KpiTileRail />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-[13px] leading-[1.15]" style={{ color: HOME.forming }}>
-          {label}
+      <div className="addr-stat-body min-w-0 flex-1">
+        <p className="addr-stat-label truncate text-[13px] leading-[1.15]" style={{ color: HOME.forming }}>
+          <span className="addr-stat-full">{label}</span>
+          {chipLabel ? <span className="addr-stat-short">{chipLabel}</span> : null}
         </p>
         <p
           className={clsx(
-            "mt-0.5 text-[17px] font-semibold leading-[1.15] tabular-nums tracking-tight",
+            "addr-stat-n mt-0.5 text-[17px] font-semibold leading-[1.15] tabular-nums tracking-tight",
             n <= 0 && "text-[var(--muted)]"
           )}
         >
           {n > 0 ? n.toLocaleString(loc) : "—"}
         </p>
-        <p className="mt-0.5 truncate text-[12px] leading-[1.15] text-[var(--muted-2)]">{caption}</p>
+        <p className="addr-stat-cap mt-0.5 truncate text-[12px] leading-[1.15] text-[var(--muted-2)]">{caption}</p>
       </div>
       <div className="kpi-tile-mark" style={{ color: ink }}>
         {mark}

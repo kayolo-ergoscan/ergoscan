@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Shell } from "@/components/Shell";
-import { KpiGrid } from "@/components/KpiGrid";
+import { compactFigure, KpiGrid } from "@/components/KpiGrid";
 import { KpiMark } from "@/components/kpi-marks";
 import { INK } from "@/lib/palette";
 import { RankWindow } from "@/components/RankWindow";
@@ -192,6 +192,7 @@ export function TransactionsView({
     {
       label: t("txs.kpiTxs24h"),
       value: txs24 != null ? txs24.toLocaleString(loc(locale)) : miss,
+      compact: compactFigure(txs24),
       unavailable: txs24 == null,
       sub: t("blocks.kpiLast24h"),
       mark: <KpiMark id="tx" tone={INK.cyan} />,
@@ -201,6 +202,7 @@ export function TransactionsView({
     {
       label: t("txs.kpiTotal"),
       value: txTotal != null ? txTotal.toLocaleString(loc(locale)) : miss,
+      compact: compactFigure(txTotal),
       unavailable: txTotal == null,
       sub: t("txs.kpiTotalSub"),
       mark: <KpiMark id="tx-total" tone={INK.violet} />,

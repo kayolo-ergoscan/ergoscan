@@ -12,7 +12,7 @@ import { FavKayolo } from "@/components/FavKayolo";
 import { ScanWait, useScanWait } from "@/components/ScanWait";
 import { FavoriteHeart } from "@/components/FavoriteHeart";
 import { KpiMark } from "@/components/kpi-marks";
-import { KpiNum } from "@/components/KpiGrid";
+import { compactFigure, KpiNum } from "@/components/KpiGrid";
 import { NftCard } from "@/components/NftCard";
 import {
   Feed,
@@ -1221,7 +1221,7 @@ export function AddressView({
               mark={<KpiMark id="box" />}
             >
               <p className="mt-0.5 text-[22px] font-semibold leading-[1.15] tabular-nums tracking-tight">
-                <KpiNum>
+                <KpiNum compact={compactFigure(boxCount)}>
                   {`${boxCount.toLocaleString(loc(locale))}${
                     data.pagination?.boxes?.hasMore && data.pagination?.boxes?.total == null ? "+" : ""
                   }`}
@@ -1260,7 +1260,7 @@ export function AddressView({
               mark={<KpiMark id="tx" />}
             >
               <p className="mt-0.5 text-[22px] font-semibold leading-[1.15] tabular-nums tracking-tight">
-                <KpiNum>{txCount.toLocaleString(loc(locale))}</KpiNum>
+                <KpiNum compact={compactFigure(txCount)}>{txCount.toLocaleString(loc(locale))}</KpiNum>
               </p>
               <p className="mt-0.5 truncate text-[12px] leading-[1.15] text-[var(--muted-2)]">
                 {t("address.cap.txs")}

@@ -889,6 +889,263 @@ html .holders-mark svg.kpi-ico {
   height: 24px !important;
   width: 24px !important;
 }
+
+/*
+ * KPI tiles on phones (below 640 px). The figure gets the whole tile: the
+ * 44 px icon field gives way to the same icon at 18 px before the label.
+ * Figures stay on one line; from 100 000 up they show their short form
+ * (KpiNum `compact`) and a tap shows the exact one. Units are set smaller,
+ * captions may take two lines. Wider screens keep the tile as it was:
+ * the label row is not a box there and the inline icon is not drawn.
+ */
+.kpi-label-row {
+  display: contents;
+}
+.kpi-mark-inline,
+.kpi-has-compact .kpi-compact,
+.addr-stat-short {
+  display: none;
+}
+
+@media (max-width: 639px) {
+  .kpi-tile .kpi-tile-mark:has(> svg.kpi-ico) {
+    display: none;
+  }
+  .kpi-tile-row > .kpi-tile-mark:has(> .token-logo) {
+    display: none;
+  }
+  /* Without the side field there is nothing to centre on: labels of a row line up. */
+  .kpi-tile-row {
+    align-items: flex-start;
+  }
+  .kpi-label-row {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 6px;
+  }
+  .kpi-label-row > :last-child {
+    min-width: 0;
+    flex-shrink: 1;
+    overflow: hidden;
+    text-overflow: clip;
+    white-space: normal;
+  }
+  .kpi-mark-inline {
+    display: inline-flex;
+    height: 18px;
+    width: 18px;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+  }
+  html .kpi-mark-inline svg.kpi-ico {
+    height: 18px;
+    width: 18px;
+  }
+  html[data-look="c"] .kpi-mark-inline svg {
+    color: var(--mark) !important;
+  }
+
+  .kpi-tile .kpi-value,
+  .kpi-tile-body > p.font-semibold.text-\[17px\],
+  .kpi-tile-body > p.font-semibold.text-\[22px\],
+  .kpi-tile-body > div.mt-0\.5:has(> .kpi-scale-up) {
+    overflow: hidden;
+    font-size: clamp(18px, 5vw, 22px);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .kpi-tile .kpi-unit {
+    color: var(--muted);
+    font-size: 0.68em;
+    font-weight: 500;
+    letter-spacing: 0;
+  }
+  .kpi-has-compact {
+    cursor: pointer;
+  }
+  .kpi-has-compact:not(.is-exact) .kpi-full {
+    display: none;
+  }
+  .kpi-has-compact:not(.is-exact) .kpi-compact {
+    display: inline;
+  }
+  .kpi-has-compact.is-exact {
+    white-space: normal;
+  }
+  .kpi-tile .kpi-sub,
+  .kpi-tile .kpi-tile-body > p.truncate.text-\[12px\] {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  /* Grids: no orphan half-tile. An odd last tile takes the row; three tiles
+     sit as three compact columns (label over figure); a lead cell (search)
+     takes the row above them. */
+  .kpi-grid--odd > :last-child {
+    grid-column: 1 / -1;
+  }
+  .kpi-grid-before {
+    grid-column: 1 / -1;
+  }
+  .kpi-grid--3 {
+    gap: 6px;
+  }
+  .kpi-grid--3 > .kpi-tile {
+    padding-inline: 8px;
+  }
+  html[data-look] main .kpi-grid--3 .kpi-label-row > p {
+    padding-inline: 5px;
+    font-size: 11px !important;
+    letter-spacing: 0;
+  }
+  .kpi-grid--3 .kpi-tile-mark,
+  .kpi-grid--3 .kpi-mark-inline,
+  .kpi-grid--3 .kpi-sub {
+    display: none;
+  }
+
+  /* Catalog search above the figures: one 44 px field across the row. */
+  .kpi-grid-before .token-search {
+    height: 44px;
+    padding-block: 0;
+  }
+  .kpi-grid-before .token-search > span {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .kpi-grid-before .token-search > span > span:first-child {
+    flex: none;
+  }
+  .kpi-grid-before .token-search > span > span:nth-child(2) {
+    min-width: 0;
+    flex: 1;
+    margin-top: 0;
+  }
+  .kpi-grid-before .token-search > span > span:last-child {
+    display: none;
+  }
+
+  /* Filter tiles (/addresses, /names) as one scrolling rail of chips. */
+  .kpi-chip-rail {
+    --fade-s: 0px;
+    --fade-e: 24px;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 6px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(
+      to right,
+      transparent 0,
+      #000 var(--fade-s),
+      #000 calc(100% - var(--fade-e)),
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      to right,
+      transparent 0,
+      #000 var(--fade-s),
+      #000 calc(100% - var(--fade-e)),
+      transparent 100%
+    );
+  }
+  .kpi-chip-rail::-webkit-scrollbar {
+    display: none;
+  }
+  .kpi-chip-rail[data-fade-start="1"] {
+    --fade-s: 24px;
+  }
+  .kpi-chip-rail[data-fade-end="0"] {
+    --fade-e: 0px;
+  }
+  .kpi-chip-rail > .kpi-tile {
+    order: 0;
+    height: 36px;
+    min-height: 0;
+    flex: none;
+    align-items: center;
+    gap: 0;
+    padding: 0 12px;
+    background-color: var(--chip-bg, var(--module));
+    scroll-snap-align: start;
+  }
+  .kpi-chip-rail > .kpi-chip-first {
+    order: -1;
+  }
+  .kpi-chip-rail .kpi-tile-mark,
+  .kpi-chip-rail .kpi-tile-rail,
+  .kpi-chip-rail .addr-stat-cap {
+    display: none;
+  }
+  .kpi-chip-rail .addr-stat-body {
+    display: flex;
+    flex: none;
+    align-items: baseline;
+    gap: 6px;
+  }
+  html main .kpi-chip-rail p.addr-stat-label,
+  html[data-look] main .kpi-chip-rail p.addr-stat-label {
+    display: block;
+    overflow: visible;
+    padding: 0;
+    background: none;
+    color: var(--muted) !important;
+    font-size: 13px !important;
+    font-weight: 500;
+    letter-spacing: 0;
+    line-height: 1 !important;
+    white-space: nowrap;
+  }
+  .kpi-chip-rail .addr-stat-label:has(.addr-stat-short) .addr-stat-full {
+    display: none;
+  }
+  .kpi-chip-rail .addr-stat-short {
+    display: inline;
+  }
+  .kpi-chip-rail .addr-stat-n {
+    margin-top: 0;
+    font-size: 15px;
+    line-height: 1;
+  }
+  .kpi-chip-rail > .kpi-tile.is-pressed {
+    background-color: var(--plate-now, var(--text));
+  }
+  html main .kpi-chip-rail > .kpi-tile.is-pressed p.addr-stat-label,
+  html[data-look] main .kpi-chip-rail > .kpi-tile.is-pressed p.addr-stat-label,
+  .kpi-chip-rail > .kpi-tile.is-pressed .addr-stat-n {
+    color: var(--plate-now-ink, var(--bg)) !important;
+  }
+}
+
+/* The small-screen page title size (h1 at 1.5rem, below 381 px) is not for
+   tiles: a name or figure set as h1 in a tile keeps its 17 px, as at 390. */
+@media (max-width: 380px) {
+  html .kpi-tile .kpi-tile-body > h1.text-\[17px\] {
+    font-size: 17px !important;
+  }
+}
+
+/* Box card, below the desk grid: Created and Spent side by side, the value
+   across the row under them (as on the desk), so no tile is left alone. */
+@media (max-width: 1023px) {
+  .box-sheet {
+    grid-auto-flow: row dense;
+  }
+  .box-value {
+    grid-column: 1 / -1;
+  }
+}
 html [data-stamp-demo="corner"] .kpi-tile:not(.kpi-tile--aside),
 html [data-stamp-demo="old"] .kpi-tile:not(.kpi-tile--aside) {
   border-left-width: 1px;

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from "re
 import Link from "next/link";
 import clsx from "clsx";
 import { Shell } from "@/components/Shell";
-import { KpiGrid } from "@/components/KpiGrid";
+import { compactFigure, KpiGrid } from "@/components/KpiGrid";
 import { KpiMark } from "@/components/kpi-marks";
 import { TokenAvatar } from "@/components/TokenBadge";
 import { PrettyPrice } from "@/components/PrettyNum";
@@ -168,6 +168,7 @@ export function StableView({ initial }: { initial: AgeUsdBank | null }) {
     {
       label: t("stable.reserve"),
       value: reserve != null ? fmtErgFull(reserve, locale) : miss,
+      compact: compactFigure(reserve, "ERG"),
       unavailable: reserve == null,
       sub: t("stable.reserveSub"),
       mark: <KpiMark id="vault" tone={INK.gold} />,
@@ -177,6 +178,7 @@ export function StableView({ initial }: { initial: AgeUsdBank | null }) {
     {
       label: t("stable.sigusdBank"),
       value: bank?.sigUsdInBank != null ? fmtTok(bank.sigUsdInBank, 2, locale) : miss,
+      compact: compactFigure(bank?.sigUsdInBank != null ? bank.sigUsdInBank / 100 : null),
       unavailable: bank?.sigUsdInBank == null,
       sub: t("stable.sigusdBankSub"),
       mark: <TokenAvatar tokenId={SIGUSD} symbol="SigUSD" size={36} />,
@@ -186,6 +188,7 @@ export function StableView({ initial }: { initial: AgeUsdBank | null }) {
     {
       label: t("stable.sigrsvBank"),
       value: bank?.sigRsvInBank != null ? fmtTok(bank.sigRsvInBank, 0, locale) : miss,
+      compact: compactFigure(bank?.sigRsvInBank),
       unavailable: bank?.sigRsvInBank == null,
       sub: t("stable.sigrsvBankSub"),
       mark: <TokenAvatar tokenId={SIGRSV_ID} symbol="SigRSV" size={36} />,
@@ -196,6 +199,7 @@ export function StableView({ initial }: { initial: AgeUsdBank | null }) {
       label: t("stable.events"),
       value:
         bank?.eventsCount != null ? bank.eventsCount.toLocaleString(loc(locale)) : miss,
+      compact: compactFigure(bank?.eventsCount),
       unavailable: bank?.eventsCount == null,
       sub: t("stable.eventsSub"),
       mark: <KpiMark id="mint" tone={INK.gold} />,

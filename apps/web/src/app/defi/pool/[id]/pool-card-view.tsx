@@ -6,7 +6,7 @@ import clsx from "clsx";
 import { Shell } from "@/components/Shell";
 import { FavoriteHeart } from "@/components/FavoriteHeart";
 import { AddrFactCard } from "@/components/AddrFactCard";
-import { KpiNum } from "@/components/KpiGrid";
+import { compactFigure, KpiNum } from "@/components/KpiGrid";
 import { SegBar, segItem } from "@/components/SegBar";
 import { KpiMark } from "@/components/kpi-marks";
 import { AddressActivityWhen } from "@/components/AddressTapeRow";
@@ -293,7 +293,9 @@ export function PoolCardView({
           mark={<KpiMark id="pool" />}
         >
           <p className="mt-0.5 text-[17px] font-semibold leading-[1.15] tabular-nums tracking-tight">
-            <KpiNum>{pool && pool.tvlErg > 0 ? fmtErgFull(pool.tvlErg) : miss}</KpiNum>
+            <KpiNum compact={pool && pool.tvlErg > 0 ? compactFigure(pool.tvlErg, "ERG") : undefined}>
+              {pool && pool.tvlErg > 0 ? fmtErgFull(pool.tvlErg) : miss}
+            </KpiNum>
           </p>
           <p className="mt-0.5 truncate text-[12px] leading-[1.15]">
             <span className="capitalize" style={{ color: HOME.forming }}>{t("pool.fee")}</span>{" "}
@@ -361,7 +363,7 @@ export function PoolCardView({
           mark={<KpiMark id="volume" />}
         >
           <p className="mt-0.5 text-[17px] font-semibold leading-[1.15] tabular-nums tracking-tight">
-            <KpiNum>
+            <KpiNum compact={pool?.volErg != null && pool.volErg > 0 ? compactFigure(pool.volErg, "ERG") : undefined}>
               {pool?.volErg != null && pool.volErg > 0 ? fmtErgFull(pool.volErg) : miss}
             </KpiNum>
           </p>
@@ -377,7 +379,7 @@ export function PoolCardView({
           mark={<KpiMark id="swap" />}
         >
           <p className="mt-0.5 text-[17px] font-semibold leading-[1.15] tabular-nums tracking-tight">
-            <KpiNum>
+            <KpiNum compact={compactFigure(pool?.trades)}>
               {pool?.trades != null ? pool.trades.toLocaleString(loc(locale)) : miss}
             </KpiNum>
           </p>

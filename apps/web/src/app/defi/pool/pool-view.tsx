@@ -5,7 +5,7 @@ import Link from "next/link";
 import clsx from "clsx";
 import { Shell } from "@/components/Shell";
 import { StuckPin } from "@/components/StuckPin";
-import { KpiGrid } from "@/components/KpiGrid";
+import { compactFigure, KpiGrid } from "@/components/KpiGrid";
 import { KpiMark } from "@/components/kpi-marks";
 import { AddressActivityWhen } from "@/components/AddressTapeRow";
 import { TokenAvatar } from "@/components/TokenBadge";
@@ -200,6 +200,7 @@ export function PoolView({ initial }: { initial: PoolBoardSnap | null }) {
     {
       label: t("spectrum.tvl"),
       value: tvl != null && tvl > 0 ? fmtErgFull(tvl) : miss,
+      compact: compactFigure(tvl, "ERG"),
       unavailable: tvl == null || tvl <= 0,
       sub: t("spectrum.tvlSub"),
       mark: <KpiMark id="pool" tone={INK.gold} />,
@@ -209,6 +210,7 @@ export function PoolView({ initial }: { initial: PoolBoardSnap | null }) {
     {
       label: t("spectrum.volume"),
       value: vol != null && vol > 0 ? fmtErgFull(vol) : miss,
+      compact: compactFigure(vol, "ERG"),
       unavailable: vol == null || vol <= 0,
       sub: t("spectrum.volumeSub"),
       mark: <KpiMark id="volume" tone={INK.cyan} />,
@@ -219,6 +221,7 @@ export function PoolView({ initial }: { initial: PoolBoardSnap | null }) {
       label: t("spectrum.traders"),
       value:
         snap?.tradersCount != null ? snap.tradersCount.toLocaleString(loc(locale)) : miss,
+      compact: compactFigure(snap?.tradersCount),
       unavailable: snap?.tradersCount == null,
       sub: t("spectrum.tradersSub"),
       mark: <KpiMark id="trader" tone={INK.violet} />,
@@ -229,6 +232,7 @@ export function PoolView({ initial }: { initial: PoolBoardSnap | null }) {
       label: t("spectrum.trades"),
       value:
         snap?.tradesCount != null ? snap.tradesCount.toLocaleString(loc(locale)) : miss,
+      compact: compactFigure(snap?.tradesCount),
       unavailable: snap?.tradesCount == null,
       sub: t("spectrum.tradesSub"),
       mark: <KpiMark id="swap" tone={INK.gold} />,

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
 import { Shell } from "@/components/Shell";
-import { KpiGrid } from "@/components/KpiGrid";
+import { compactFigure, KpiGrid } from "@/components/KpiGrid";
 import { KpiMark } from "@/components/kpi-marks";
 import { CatalogSearchTile } from "@/components/CatalogSearchTile";
 import { FavoriteHeart } from "@/components/FavoriteHeart";
@@ -311,6 +311,7 @@ export function TokensView({ initial }: { initial: TokensPageData }) {
     {
       label: t("tokens.kpiTotal"),
       value: kpis.tokenCount != null ? kpis.tokenCount.toLocaleString(loc(locale)) : miss,
+      compact: compactFigure(kpis.tokenCount),
       unavailable: kpis.tokenCount == null,
       sub: t("tokens.kpiTokens"),
       mark: <KpiMark id="token" tone={INK.gold} />,
@@ -320,6 +321,7 @@ export function TokensView({ initial }: { initial: TokensPageData }) {
     {
       label: t("tokens.kpiHolders"),
       value: kpis.holderCount != null ? kpis.holderCount.toLocaleString(loc(locale)) : miss,
+      compact: compactFigure(kpis.holderCount),
       unavailable: kpis.holderCount == null,
       sub: t("tokens.kpiTotal"),
       mark: <KpiMark id="holders" tone={INK.violet} />,
@@ -329,6 +331,7 @@ export function TokensView({ initial }: { initial: TokensPageData }) {
     {
       label: t("tokens.kpiTxs"),
       value: kpis.txCount != null ? kpis.txCount.toLocaleString(loc(locale)) : miss,
+      compact: compactFigure(kpis.txCount),
       unavailable: kpis.txCount == null,
       sub: t("tokens.kpiTotal"),
       mark: <KpiMark id="tx" tone={INK.cyan} />,
