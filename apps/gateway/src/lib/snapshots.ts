@@ -33,8 +33,10 @@ import {
   type RentTab,
   type RentWindow,
 } from "./rentIndex.js";
-import { classifyTxShape, pickTxAction, txTapeFields, rentTapePaint, MINERS_FEE_ADDRESS, MINERS_FEE_TREE, fillRentWeekGaps, parseRentSeries, parseRentTape, parseRentEpochBoxes, parseRentEpochNano, pickTxLock, LITHOS_COLLAT_ADDRESS, LITHOS_COLLAT_TOKEN_ID, LITHOS_MINED_HEIGHTS_SQL, type RentTapeCategory, type RentTapeRow, type ShapeBox } from "@ergoscan/shared";
+import { classifyTxShape, pickTxAction, txTapeFields, rentTapePaint, MINERS_FEE_ADDRESS, MINERS_FEE_TREE, fillRentWeekGaps, parseRentSeries, parseRentTape, parseRentEpochBoxes, parseRentEpochNano, pickTxLock, LITHOS_COLLAT_ADDRESS, LITHOS_COLLAT_TOKEN_ID, LITHOS_MINED_HEIGHTS_SQL, type RentTapeCategory, type RentTapeRow } from "@ergoscan/shared";
 import { blockHeaderFromRow, type BlockHeaderView } from "./blockHeader.js";
+import { loadTxIo, meaningsFor, type TxIo } from "./txMeaning.js";
+import type { MeaningTx, TxMeaning } from "@ergoscan/shared";
 
 export const SNAP_BLOCKS = "blocks_latest";
 export const SNAP_TXS = "txs_recent";
@@ -86,6 +88,8 @@ export type TxListItem = {
   confirmed: boolean;
   /** Distinct tokens on boxes created or spent by this tx. Additive. */
   tokenCount?: number;
+  /** What the tx did (action, protocol, amounts, phrase). Additive; computed at read time. */
+  meaning?: TxMeaning;
 };
 
 export type SnapshotMeta = {
@@ -483,78 +487,15 @@ async function attachTokenCounts(items: TxListItem[]): Promise<TxListItem[]> {
 }
 
 /** Overlay on the pack: named lock family. PG `shape` is unchanged. */
-async function attachTxLocks(items: TxListItem[]): Promise<TxListItem[]> {
+async function attachTxLocks(items: TxListItem[], ioOut?: Map<string, TxIo>): Promise<TxListItem[]> {
   if (!items.length) return items;
   try {
     await refreshSpectrumPoolNfts();
     const ids = items.map((t) => t.id);
-    const boxes = await q<{
-      box_id: string;
-      creation_tx_id: string | null;
-      spent_tx_id: string | null;
-      address: string | null;
-      ergo_tree: string | null;
-      template_hash: string | null;
-    }>(
-      packedReadEnabled()
-        ? `SELECT encode(b.box_id, 'hex') AS box_id,
-                  encode(b.creation_tx_id, 'hex') AS creation_tx_id,
-                  encode(b.spent_tx_id, 'hex') AS spent_tx_id,
-                  ad.address, sc.ergo_tree,
-                  CASE WHEN octet_length(sc.template_hash) = 32
-                       THEN encode(sc.template_hash, 'hex')
-                       ELSE NULL END AS template_hash
-             FROM (
-               SELECT * FROM packed.boxes
-                WHERE creation_tx_id IN (SELECT decode(lower(x), 'hex') FROM unnest($1::text[]) AS x)
-               UNION
-               SELECT * FROM packed.boxes
-                WHERE spent_tx_id IN (SELECT decode(lower(x), 'hex') FROM unnest($1::text[]) AS x)
-             ) b
-             LEFT JOIN packed.addr ad ON ad.id = b.addr_id
-             LEFT JOIN packed.script sc ON sc.id = b.script_id`
-        : `SELECT box_id, creation_tx_id, spent_tx_id, address, ergo_tree,
-                  NULL::text AS template_hash
-       FROM boxes
-       WHERE creation_tx_id = ANY($1::text[])
-          OR spent_tx_id = ANY($1::text[])`,
-      [ids]
-    );
-    if (!boxes) return items;
-
-    const assetRows = boxes.length
-      ? await q<{ box_id: string; token_id: string; amount: string }>(
-          packedReadEnabled()
-            ? `SELECT encode(box_id, 'hex') AS box_id,
-                      encode(token_id, 'hex') AS token_id,
-                      amount::text AS amount
-                 FROM packed.box_assets
-                WHERE box_id IN (SELECT decode(lower(x), 'hex') FROM unnest($1::text[]) AS x)`
-            : `SELECT box_id, token_id, amount::text AS amount
-           FROM box_assets WHERE box_id = ANY($1::text[])`,
-          [boxes.map((b) => b.box_id)]
-        )
-      : [];
-    const assetsByBox = new Map<string, { tokenId: string; amount: string }[]>();
-    for (const r of assetRows ?? []) {
-      const list = assetsByBox.get(r.box_id) ?? [];
-      list.push({ tokenId: r.token_id, amount: r.amount });
-      assetsByBox.set(r.box_id, list);
-    }
-
-    const byTx = new Map<string, { inputs: ShapeBox[]; outputs: ShapeBox[] }>();
-    for (const id of ids) byTx.set(id, { inputs: [], outputs: [] });
-    for (const b of boxes) {
-      const shape: ShapeBox = {
-        address: b.address,
-        ergoTree: b.ergo_tree,
-        templateHash: b.template_hash,
-        assets: assetsByBox.get(b.box_id),
-      };
-      if (b.spent_tx_id) byTx.get(b.spent_tx_id)?.inputs.push(shape);
-      if (b.creation_tx_id) byTx.get(b.creation_tx_id)?.outputs.push(shape);
-    }
-
+    // Same boxes as before, plus value and (Rosen lock / trigger only) registers for `meaning`.
+    const byTx = await loadTxIo(ids);
+    if (!byTx) return items;
+    if (ioOut) for (const [id, io] of byTx) ioOut.set(id, io);
     const hints = cachedDexLockHints();
     return items.map((t) => {
       const io = byTx.get(t.id);
@@ -668,11 +609,42 @@ async function attachRentMarks(items: TxListItem[]): Promise<TxListItem[]> {
   }
 }
 
+/** Additive `meaning` from the boxes the tape already read; rent marks first (they change the answer). */
+async function attachMeanings(items: TxListItem[], io: Map<string, TxIo>): Promise<TxListItem[]> {
+  if (!items.length || !io.size) return items;
+  try {
+    const txs: MeaningTx[] = [];
+    for (const t of items) {
+      const x = io.get(t.id);
+      if (!x || (!x.inputs.length && !x.outputs.length)) continue;
+      txs.push({
+        id: t.id,
+        coinbase: t.index === 0,
+        inputs: x.inputs,
+        outputs: x.outputs,
+        rent: t.category === "rent" || t.category === "rent-renew" ? t.category : null,
+        inputCount: t.inputs,
+        outputCount: t.outputs,
+      });
+    }
+    const got = await meaningsFor(txs);
+    if (!got.size) return items;
+    return items.map((t) => {
+      const meaning = got.get(t.id);
+      return meaning ? { ...t, meaning } : t;
+    });
+  } catch {
+    return items;
+  }
+}
+
 async function finishTxTape(items: TxListItem[]): Promise<TxListItem[]> {
+  const io = new Map<string, TxIo>();
   const taped = await attachTxLocks(
-    await attachMinerFees(await attachTokenCounts(await attachTapeShape(items)))
+    await attachMinerFees(await attachTokenCounts(await attachTapeShape(items))),
+    io
   );
-  return attachRentMarks(taped);
+  return attachMeanings(await attachRentMarks(taped), io);
 }
 
 async function blocksHaveOlder(height: number): Promise<boolean> {

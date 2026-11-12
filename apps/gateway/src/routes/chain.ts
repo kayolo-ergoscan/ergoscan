@@ -24,9 +24,11 @@ import {
   type RawTx,
   previewArtworkUrl,
   decodeSigmaConstantMap,
+  type MeaningBox,
 } from "@ergoscan/shared";
 import { laterTs } from "../lib/later-ts.js";
 import { stampTemplateHashes } from "../lib/txTemplateHash.js";
+import { meaningForPage, meaningsByIds, mempoolMeaning, type TxMeaning } from "../lib/txMeaning.js";
 import { pageLimit } from "../lib/page-limit.js";
 import { addressFromErgoTree, ergoTreeFromAddress, normErgoTree } from "../lib/ergoAddress.js";
 import { decodeErgoTree, type ErgoTreeDecode } from "../lib/ergoTree.js";
@@ -385,6 +387,26 @@ function mapIo(x: Record<string, unknown> | { boxId?: string; value?: number }) 
 }
 
 type IoMapped = ReturnType<typeof mapIo>;
+
+/** Additive: rows without a meaning keep their old shape (no `meaning: null`). */
+function withMeaning(m: TxMeaning | null | undefined): { meaning?: TxMeaning } {
+  return m ? { meaning: m } : {};
+}
+
+/** The tx page boxes as the meaning classifier reads them (templateHash is stamped in place). */
+function meaningBox(b: IoMapped): MeaningBox {
+  const regs = b.additionalRegisters;
+  return {
+    boxId: b.boxId,
+    address: b.address,
+    ergoTree: b.ergoTree,
+    templateHash: (b as { templateHash?: string | null }).templateHash ?? null,
+    value: b.value ?? "0",
+    assets: b.assets,
+    additionalRegisters:
+      regs && typeof regs === "object" && !Array.isArray(regs) ? (regs as Record<string, unknown>) : null,
+  };
+}
 
 function mapIdxIo(
   b: {
@@ -798,6 +820,10 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
       const action = pickTxAction({ inputs, outputs }, shaped.shape);
       const tokenMeta = await tokenMetaForIo(inputs, outputs);
       const lock = lockFromIo(inputs, outputs, mem.dataInputs);
+      const meaning = await meaningForPage(
+        { id, inputs: inputs.map(meaningBox), outputs: outputs.map(meaningBox) },
+        tokenMeta
+      );
       return res.json({
         id,
         confirmed: false,
@@ -828,6 +854,7 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
         assetsComplete:
           hydratedInputs.assetsComplete && hydratedOutputs.assetsComplete,
         tokenMeta,
+        ...withMeaning(meaning),
         source: "mempool",
       });
     }
@@ -859,6 +886,22 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
       height != null ? (await rentTapeMarks([id], height, height)).get(id) ?? null : null;
     const category = rent?.category ?? shaped.category;
     const action = rent ? null : pickTxAction({ inputs, outputs }, shaped.shape);
+    // Data inputs get their template hash on a copy: the page's dataInputs stay as they were.
+    const dataForMeaning = dataInputs.map((b) => ({ ...b }));
+    await stampTemplateHashes(dataForMeaning);
+    const meaning = await meaningForPage(
+      {
+        id,
+        coinbase: idx.indexInBlock === 0,
+        inputs: inputs.map(meaningBox),
+        outputs: outputs.map(meaningBox),
+        dataInputs: dataForMeaning.map(meaningBox),
+        rent: rent?.category ?? null,
+        inputCount: idx.inputCount ?? inputs.length,
+        outputCount: idx.outputCount ?? outputs.length,
+      },
+      tokenMeta
+    );
     cacheNoStore(res);
     return res.json({
       id,
@@ -894,6 +937,7 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
       outputCount: idx.outputCount ?? outputs.length,
       assetsComplete: idx.assetsComplete,
       tokenMeta,
+      ...withMeaning(meaning),
       source: "indexer",
     });
   });
@@ -1114,6 +1158,13 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
       pageTxIds.length > 0
         ? addressTxActivity(address, pageTxIds)
         : Promise.resolve({});
+    // Read alongside activity: cache hits are free, misses are indexed reads by tx id.
+    const meaningsP: Promise<Map<string, TxMeaning>> =
+      wantLists && idxTxs?.items.length
+        ? meaningsByIds(idxTxs.items.map((row) => row.id), rentTapeMarks).catch(
+            () => new Map<string, TxMeaning>()
+          )
+        : Promise.resolve(new Map<string, TxMeaning>());
     const partiesP: Promise<Record<string, { from: string[]; to: string[] }>> =
       pageTxIds.length > 0 ? addressTxParties(address, pageTxIds) : Promise.resolve({});
     const [summary, idxBoxes, tokenBals, idxSt, activity, parties] = await Promise.all([
@@ -1150,6 +1201,7 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
       )
     );
 
+    const meanings = await meaningsP;
     const recentTxs = txPage.items.map((row) => ({
       id: row.id,
       inclusionHeight: row.inclusionHeight,
@@ -1160,6 +1212,7 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
           : null,
       size: row.size,
       fee: row.fee,
+      ...withMeaning(meanings.get(row.id)),
     }));
 
     // lists=0 refreshes the header without the confirmed tape. Mempool still
@@ -1263,7 +1316,7 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
         },
         unspentBoxes: unspentList,
         recentTxs,
-        mempoolTxs: mempoolPack.txs,
+        mempoolTxs: mempoolPack.txs.map((t) => ({ ...t, ...withMeaning(mempoolMeaning(t.id)) })),
         tokenCount: summary?.tokenCount ?? tokens.length,
         firstTs: summary?.firstTs ?? null,
         lastTs: laterTs(
@@ -1617,6 +1670,9 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
       res.status(503).json({ error: "stale", stale: true });
       return;
     }
+    const meanings = await meaningsByIds(idx.items.map((row) => row.id), rentTapeMarks).catch(
+      () => new Map<string, TxMeaning>()
+    );
     const items = idx.items.map((row) => ({
       id: row.id,
       transactionId: row.id,
@@ -1628,6 +1684,7 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
           : null,
       size: row.size,
       fee: row.fee,
+      ...withMeaning(meanings.get(row.id)),
     }));
     res.setHeader("x-orbit-history-truncated", "true");
     res.json({
