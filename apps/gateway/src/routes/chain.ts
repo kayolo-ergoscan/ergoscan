@@ -50,6 +50,7 @@ import {
   getTxById,
   readGixWatermark,
   getTxHeads,
+  getTxHeadsChecked,
   indexerStatus,
   parseAddressSort,
   parseAddressSortDir,
@@ -906,7 +907,9 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
     const limit = Math.min(100, Math.max(1, Number(req.query.limit ?? 50) || 50));
 
     const idx = await unspentBoxesByTokenId(tokenId, offset, limit);
-    if (!idx) {
+    // Creating tx of each box: settlementHeight / blockId as official (were null).
+    const heads = idx ? await getTxHeadsChecked(idx.items.map((b) => b.creationTxId)) : null;
+    if (!idx || !heads) {
       // Not an empty token: the index did not answer (12 Nov 2026 audit).
       res.setHeader("Retry-After", "3");
       res.setHeader("Cache-Control", "no-store");
@@ -919,6 +922,9 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
             boxId: b.boxId,
             value: b.value,
             creationHeight: b.creationHeight,
+            settlementHeight: b.creationTxId ? heads.get(b.creationTxId)?.height ?? null : null,
+            blockId: b.creationTxId ? heads.get(b.creationTxId)?.blockId ?? null : null,
+            gix: b.gix,
             address: b.address,
             ergoTree: b.ergoTree,
             transactionId: b.creationTxId,

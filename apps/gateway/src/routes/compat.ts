@@ -23,6 +23,7 @@ import {
   getBoxById,
   getTxById,
   getTxHeads,
+  getTxHeadsChecked,
   parseKeysetCursor,
   addressBoxCountCapped,
   tokenMetaMany,
@@ -32,19 +33,32 @@ import {
   transactionsByGix,
   boxesByErgoTree,
   boxesByErgoTreeTemplate,
+  boxesBySettlementWindow,
+  boxesByTokenIdAll,
+  boxesFromGix,
+  blocksFromHeight,
+  txsByInputsTemplate,
   unspentBoxesByGix,
   unspentBoxesByLastEpochs,
+  HEIGHT_STREAM_BOX_CAP,
+  HEIGHT_STREAM_WINDOW,
+  INPUT_TEMPLATE_OFFSET_MAX,
+  TOKEN_BOXES_OFFSET_MAX,
+  type GixStreamTx,
   type GixStreamBox,
   type IdxBoxRow,
+  type TxHead,
 } from "../lib/indexDb.js";
 import { parseTemplateOnlySearch } from "../lib/boxSearch.js";
-import { parseGixWindow } from "../lib/gix.js";
+import { GIX_STREAM_WINDOW, parseGixWindow } from "../lib/gix.js";
+import { decodeErgoTree, officialConstantsText } from "../lib/ergoTree.js";
 import { ergoTreeFromAddress, normErgoTree } from "../lib/ergoAddress.js";
 import { logSubmitFail, publicSubmitFail, requestIp, takeSubmitSlot, validateSignedTx } from "../lib/submit-tx.js";
 import { getBlocksList, getHomePage } from "../lib/snapshots.js";
 import {
   itemsPage,
   mapBlockHeader,
+  mapBlockInfo,
   mapEpochParams,
   mapExplorerBox,
   mapExplorerTx,
@@ -75,7 +89,7 @@ function qStr(v: unknown): string {
   return String(Array.isArray(v) ? v[0] : v ?? "").trim();
 }
 
-function boxJson(b: {
+type BoxJsonInput = {
   boxId: string;
   value: string;
   creationHeight: number | null;
@@ -88,22 +102,42 @@ function boxJson(b: {
   additionalRegisters?: Record<string, unknown> | null;
   assets: { tokenId: string; amount: string }[];
   spentTxId?: string | null;
-}) {
+};
+
+/**
+ * heads = the creating txs (getTxHeadsChecked). settlementHeight and blockId are that tx's block,
+ * as official; without a head they fall back to the box's own creationHeight (12 Nov 2026 fix:
+ * lists printed creationHeight as settlementHeight and no blockId).
+ */
+function boxJson(b: BoxJsonInput, heads?: Map<string, TxHead>) {
+  const head = b.creationTxId ? heads?.get(b.creationTxId) : undefined;
   const mapped = mapExplorerBox({
     boxId: b.boxId,
     value: b.value,
     creationHeight: b.creationHeight,
+    settlementHeight: head?.height ?? null,
     address: b.address,
     ergoTree: b.ergoTree,
     transactionId: b.creationTxId,
     index: b.index,
     gix: b.gix ?? null,
-    blockId: b.blockId ?? null,
+    blockId: head?.blockId ?? b.blockId ?? null,
     additionalRegisters: b.additionalRegisters ?? undefined,
     assets: b.assets,
     spentTransactionId: b.spentTxId ?? null,
   });
   return b.gix != null ? { ...mapped, gix: b.gix } : mapped;
+}
+
+/** Boxes with their creating tx's block. Null (503 already sent) when the index did not answer. */
+async function settledBoxes(res: Response, items: BoxJsonInput[]): Promise<ReturnType<typeof boxJson>[] | null> {
+  const heads = await getTxHeadsChecked(items.map((b) => b.creationTxId));
+  if (!heads) {
+    cacheNoStore(res);
+    res.status(503).json({ error: "stale", stale: true });
+    return null;
+  }
+  return items.map((b) => boxJson(b, heads));
 }
 
 function templateHashParam(raw: string): string | null {
@@ -133,8 +167,10 @@ async function sendBoxesByTemplate(
     res.status(504).json({ error: "timeout", reason: "template hash query exceeded 4s" });
     return;
   }
+  const items = await settledBoxes(res, page.items);
+  if (!items) return;
   res.json({
-    items: page.items.map(boxJson),
+    items,
     offset,
     limit,
     hasMore: page.hasMore,
@@ -164,8 +200,10 @@ async function sendTemplateSearch(req: Request, res: Response, unspentOnly: bool
     res.status(504).json({ error: "timeout", reason: "template hash query exceeded 4s" });
     return;
   }
+  const items = await settledBoxes(res, page.items);
+  if (!items) return;
   res.json({
-    items: page.items.map(boxJson),
+    items,
     offset,
     limit,
     hasMore: page.hasMore,
@@ -203,8 +241,10 @@ async function sendBoxesByTree(
     res.status(504).json({ error: "timeout", reason: "ergo tree query exceeded 4s" });
     return;
   }
+  const items = await settledBoxes(res, page.items);
+  if (!items) return;
   res.json({
-    items: page.items.map(boxJson),
+    items,
     offset,
     limit,
     hasMore: page.hasMore,
@@ -225,6 +265,7 @@ function streamBoxJson(b: GixStreamBox) {
       index: b.index,
       gix: b.gix,
       blockId: b.blockId,
+      settlementHeight: b.settlementHeight,
       additionalRegisters: b.additionalRegisters ?? undefined,
       assets: b.assets,
       spentTransactionId: b.spentTxId,
@@ -233,7 +274,124 @@ function streamBoxJson(b: GixStreamBox) {
   };
 }
 
+/** Official TransactionInfo for a stream tx. Inputs keep the box shape (input order is not stored). */
+function streamTxJson(t: GixStreamTx, tip: number | null) {
+  const io = (b: GixStreamBox) => ({
+    boxId: b.boxId,
+    value: b.value,
+    creationHeight: b.creationHeight,
+    address: b.address,
+    ergoTree: b.ergoTree,
+    transactionId: b.creationTxId,
+    index: b.index,
+    gix: b.gix,
+    blockId: b.blockId,
+    settlementHeight: b.settlementHeight,
+    additionalRegisters: b.additionalRegisters ?? undefined,
+    assets: b.assets,
+    spentTransactionId: b.spentTxId,
+  });
+  return {
+    ...mapExplorerTx({
+      id: t.id,
+      blockId: t.blockId,
+      inclusionHeight: t.inclusionHeight,
+      timestamp: t.timestamp,
+      index: t.indexInBlock,
+      gix: t.gix,
+      size: t.size,
+      tip,
+      inputs: t.inputs.map(io),
+      outputs: t.outputs.map(io),
+    }),
+    gix: t.gix,
+  };
+}
+
+const GIX_STREAM_LIMIT_MAX = 500;
+
+type GixStreamArgs =
+  | { ok: true; min: number; max: number; limit: number }
+  | { ok: false; error: string; reason: string };
+
+/** Official form: minGix + limit (≤ 500). Ours since 2026: a minGix..maxGix window (≤ 10 000). */
+function gixStreamArgs(query: Request["query"]): GixStreamArgs {
+  if (qStr(query.maxGix) !== "") {
+    const w = parseGixWindow(query.minGix, query.maxGix);
+    return w.ok ? { ok: true, min: w.min, max: w.max, limit: GIX_STREAM_WINDOW } : w;
+  }
+  const minS = qStr(query.minGix);
+  if (!/^\d{1,15}$/.test(minS)) {
+    return { ok: false, error: "bad_request", reason: "minGix required, with limit (≤ 500) or maxGix" };
+  }
+  return {
+    ok: true,
+    min: Number(minS),
+    max: Number.MAX_SAFE_INTEGER,
+    limit: qInt(query.limit, 100, 1, GIX_STREAM_LIMIT_MAX),
+  };
+}
+
+type HeightWindow = { ok: true; min: number; max: number } | { ok: false; reason: string };
+
+/** minHeight..maxHeight, both required, at most HEIGHT_STREAM_WINDOW heights. */
+function heightWindow(query: Request["query"]): HeightWindow {
+  const minS = qStr(query.minHeight);
+  const maxS = qStr(query.maxHeight);
+  if (!/^\d{1,10}$/.test(minS) || !/^\d{1,10}$/.test(maxS)) {
+    return { ok: false, reason: "minHeight and maxHeight required" };
+  }
+  const min = Number(minS);
+  const max = Number(maxS);
+  if (max < 1 || max < min) return { ok: false, reason: "bad height range" };
+  if (max - min + 1 > HEIGHT_STREAM_WINDOW) {
+    return { ok: false, reason: `window too large: at most ${HEIGHT_STREAM_WINDOW} heights` };
+  }
+  return { ok: true, min, max };
+}
+
+/** Boxes settled in a height window, optionally of one template (the official height streams). */
+async function sendHeightStream(
+  req: Request,
+  res: Response,
+  opts: { unspentOnly: boolean; template: boolean }
+): Promise<void> {
+  cacheNoStore(res);
+  let templateHash: string | null = null;
+  if (opts.template) {
+    templateHash = templateHashParam(String(req.params.hash ?? ""));
+    if (!templateHash) {
+      res.status(400).json({ error: "bad_request", reason: "template hash must be 64 hex chars" });
+      return;
+    }
+  }
+  const w = heightWindow(req.query);
+  if (!w.ok) {
+    res.status(400).json({ error: "bad_request", reason: w.reason });
+    return;
+  }
+  const got = await boxesBySettlementWindow(w.min, w.max, { unspentOnly: opts.unspentOnly, templateHash });
+  if (!got) {
+    res.status(504).json({ error: "timeout", reason: "height stream query exceeded 4s" });
+    return;
+  }
+  if (got.overflow) {
+    res.status(400).json({
+      error: "too_many",
+      reason: `more than ${HEIGHT_STREAM_BOX_CAP} boxes in heights ${w.min}..${w.max}; ask for fewer heights`,
+    });
+    return;
+  }
+  res.json(got.items.map(streamBoxJson));
+}
+
 export function registerCompatRoutes(app: Express, deps: CompatDeps): void {
+  /** Node tip from the cached /info (official counts confirmations from its own tip). */
+  const tipNow = (): number | null => {
+    const h = Number(deps.getNodeInfoRaw()?.fullHeight);
+    return Number.isFinite(h) && h > 0 ? h : null;
+  };
+
   app.get("/v1/boxes/unspent/unconfirmed/byAddress/:address", async (req, res) => {
     cacheNoStore(res);
     const address = req.params.address;
@@ -264,9 +422,11 @@ export function registerCompatRoutes(app: Express, deps: CompatDeps): void {
       res.status(503).json({ error: "stale", stale: true });
       return;
     }
+    const items = await settledBoxes(res, idx.items);
+    if (!items) return;
     res.json({
       ...itemsPage(
-        idx.items.map((b) => boxJson(b)),
+        items,
         summary?.boxCount ?? idx.items.length,
         offset,
         limit
@@ -292,9 +452,11 @@ export function registerCompatRoutes(app: Express, deps: CompatDeps): void {
       res.status(503).json({ error: "stale", stale: true });
       return;
     }
+    const items = await settledBoxes(res, idx.items);
+    if (!items) return;
     res.json({
       ...itemsPage(
-        idx.items.map((b) => boxJson(b)),
+        items,
         // All boxes of the address. Above ADDRESS_BOX_COUNT_CAP: totalExact false, total = the cap.
         count?.total ?? null,
         offset,
@@ -552,24 +714,26 @@ export function registerCompatRoutes(app: Express, deps: CompatDeps): void {
 
   app.get("/v1/boxes/unspent/byLastEpochs/stream", async (req, res) => {
     cacheNoStore(res);
-    const epochs = qInt(req.query.epochs, 1, 1, 4);
+    const epochs = qInt(req.query.lastEpochs ?? req.query.epochs, 1, 1, 4);
     const limit = qInt(req.query.limit, 50, 1, 100);
     const items = await unspentBoxesByLastEpochs(epochs, limit);
     if (!items) {
       res.status(504).json({ error: "timeout", reason: "epoch stream query exceeded 4s" });
       return;
     }
-    res.json(items.map(boxJson));
+    const settled = await settledBoxes(res, items);
+    if (!settled) return;
+    res.json(settled);
   });
 
   app.get("/v1/boxes/unspent/byGlobalIndex/stream", async (req, res) => {
     cacheNoStore(res);
-    const win = parseGixWindow(req.query.minGix, req.query.maxGix);
+    const win = gixStreamArgs(req.query);
     if (!win.ok) {
       res.status(400).json({ error: win.error, reason: win.reason });
       return;
     }
-    const items = await unspentBoxesByGix(win.min, win.max);
+    const items = await unspentBoxesByGix(win.min, win.max, win.limit);
     if (!items) {
       res.status(504).json({ error: "timeout", reason: "gix stream query exceeded 4s" });
       return;
@@ -579,58 +743,118 @@ export function registerCompatRoutes(app: Express, deps: CompatDeps): void {
 
   app.get("/v1/transactions/byGlobalIndex/stream", async (req, res) => {
     cacheNoStore(res);
-    const win = parseGixWindow(req.query.minGix, req.query.maxGix);
+    const win = gixStreamArgs(req.query);
     if (!win.ok) {
       res.status(400).json({ error: win.error, reason: win.reason });
       return;
     }
-    const items = await transactionsByGix(win.min, win.max);
+    const items = await transactionsByGix(win.min, win.max, win.limit);
     if (!items) {
       res.status(504).json({ error: "timeout", reason: "gix stream query exceeded 4s" });
       return;
     }
-    res.json(
-      items.map((t) => ({
-        ...mapExplorerTx({
-          id: t.id,
-          blockId: t.blockId,
-          inclusionHeight: t.inclusionHeight,
-          timestamp: t.timestamp,
-          index: t.indexInBlock,
-          gix: t.gix,
-          size: t.size,
-          inputs: t.inputs.map((b) => ({
-            boxId: b.boxId,
-            value: b.value,
-            creationHeight: b.creationHeight,
-            address: b.address,
-            ergoTree: b.ergoTree,
-            transactionId: b.creationTxId,
-            index: b.index,
-            gix: b.gix,
-            blockId: b.blockId,
-            additionalRegisters: b.additionalRegisters ?? undefined,
-            assets: b.assets,
-            spentTransactionId: b.spentTxId,
-          })),
-          outputs: t.outputs.map((b) => ({
-            boxId: b.boxId,
-            value: b.value,
-            creationHeight: b.creationHeight,
-            address: b.address,
-            ergoTree: b.ergoTree,
-            transactionId: b.creationTxId,
-            index: b.index,
-            gix: b.gix,
-            blockId: b.blockId,
-            additionalRegisters: b.additionalRegisters ?? undefined,
-            assets: b.assets,
-            spentTransactionId: b.spentTxId,
-          })),
-        }),
-        gix: t.gix,
-      }))
-    );
+    const tip = tipNow();
+    res.json(items.map((t) => streamTxJson(t, tip)));
+  });
+
+  app.get("/v1/boxes/byGlobalIndex/stream", async (req, res) => {
+    cacheNoStore(res);
+    const win = gixStreamArgs(req.query);
+    if (!win.ok) {
+      res.status(400).json({ error: win.error, reason: win.reason });
+      return;
+    }
+    const items = await boxesFromGix(win.min, win.max, Math.min(win.limit, GIX_STREAM_LIMIT_MAX));
+    if (!items) {
+      res.status(504).json({ error: "timeout", reason: "gix stream query exceeded 4s" });
+      return;
+    }
+    res.json(items.map(streamBoxJson));
+  });
+
+  /** Official block globalIndex = height − 1 (genesis height 1 is gix 0). */
+  app.get("/v1/blocks/byGlobalIndex/stream", async (req, res) => {
+    cacheNoStore(res);
+    const minS = qStr(req.query.minGix);
+    if (!/^\d{1,10}$/.test(minS)) {
+      res.status(400).json({ error: "bad_request", reason: "minGix required, with limit (≤ 500)" });
+      return;
+    }
+    const blocks = await blocksFromHeight(Number(minS) + 1, qInt(req.query.limit, 100, 1, GIX_STREAM_LIMIT_MAX));
+    if (!blocks) {
+      res.status(504).json({ error: "timeout", reason: "block stream query exceeded 4s" });
+      return;
+    }
+    res.json(blocks.map(mapBlockInfo));
+  });
+
+  app.get("/v1/boxes/unspent/stream", (req, res) => void sendHeightStream(req, res, { unspentOnly: true, template: false }));
+  app.get("/v1/boxes/byErgoTreeTemplateHash/:hash/stream", (req, res) =>
+    void sendHeightStream(req, res, { unspentOnly: false, template: true })
+  );
+  app.get("/v1/boxes/unspent/byErgoTreeTemplateHash/:hash/stream", (req, res) =>
+    void sendHeightStream(req, res, { unspentOnly: true, template: true })
+  );
+
+  app.get("/v1/boxes/byTokenId/:tokenId", async (req, res) => {
+    cacheList(res);
+    const tokenId = String(req.params.tokenId ?? "").trim().toLowerCase();
+    if (!/^[0-9a-f]{64}$/.test(tokenId)) {
+      res.status(400).json({ error: "bad_request", reason: "token id must be 64 hex chars" });
+      return;
+    }
+    const limit = qInt(req.query.limit, 20, 1, 100);
+    const offset = pageOffset(req.query.offset, TOKEN_BOXES_OFFSET_MAX);
+    if (offset == null) return offsetTooLarge(res, TOKEN_BOXES_OFFSET_MAX);
+    const page = await boxesByTokenIdAll(tokenId, offset, limit);
+    if (!page) {
+      cacheNoStore(res);
+      res.status(504).json({ error: "timeout", reason: "token box query exceeded 4s" });
+      return;
+    }
+    res.json({ ...itemsPage(page.items.map(streamBoxJson), page.total, offset, limit), source: "index" });
+  });
+
+  app.get("/v1/transactions/byInputsScriptTemplateHash/:hash", async (req, res) => {
+    cacheList(res);
+    const hash = templateHashParam(String(req.params.hash ?? ""));
+    if (!hash) {
+      res.status(400).json({ error: "bad_request", reason: "template hash must be 64 hex chars" });
+      return;
+    }
+    const limit = qInt(req.query.limit, 20, 1, 100);
+    const offset = pageOffset(req.query.offset, INPUT_TEMPLATE_OFFSET_MAX);
+    if (offset == null) return offsetTooLarge(res, INPUT_TEMPLATE_OFFSET_MAX);
+    const ascending = qStr(req.query.sortDirection).toLowerCase() === "asc";
+    const page = await txsByInputsTemplate(hash, offset, limit, ascending);
+    if (!page) {
+      cacheNoStore(res);
+      res.status(504).json({
+        error: "timeout",
+        reason: "input template query exceeded 4s (a template with hundreds of thousands of boxes does not fit)",
+      });
+      return;
+    }
+    const tip = tipNow();
+    res.json({ ...itemsPage(page.items.map((t) => streamTxJson(t, tip)), page.total, offset, limit), source: "index" });
+  });
+
+  /** Official name of the field is `hashed`; it carries the ErgoTree hex. `ergoTree` is accepted too. */
+  app.post("/v1/ergotree/convert", async (req, res) => {
+    cacheNoStore(res);
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const tree = ergoTreeParam(String(body.hashed ?? body.ergoTree ?? ""));
+    if (!tree) {
+      res.status(400).json({ error: "bad_request", reason: "hashed: ErgoTree hex required" });
+      return;
+    }
+    const decoded = await decodeErgoTree(tree);
+    if (!decoded.ergoTreeScript) {
+      res.status(400).json({ error: "bad_request", reason: "not a valid ErgoTree" });
+      return;
+    }
+    // Constants as the official text. The script is sigmastate-js's print (no Scala "Right(…)").
+    res.json({ constants: officialConstantsText(decoded.treeConstants), script: decoded.ergoTreeScript });
   });
 
   // Template hash only. Register, constant, and token predicates stay 501.
@@ -638,15 +862,10 @@ export function registerCompatRoutes(app: Express, deps: CompatDeps): void {
   app.post("/v1/boxes/unspent/search", (req, res) => void sendTemplateSearch(req, res, true));
   app.post("/v1/boxes/unspent/search/union", (req, res) => void sendTemplateSearch(req, res, true));
 
-  // Unbounded dumps stay 501 so one client cannot scan the chain.
-  for (const path of [
-    "/v1/boxes/unspent/stream",
-    "/v1/blocks/byGlobalIndex/stream",
-  ]) {
-    app.get(path, (_req, res) => {
-      res.status(501).json(notImplemented(path));
-    });
-  }
+  // The official host answers 500 here too (12 Nov 2026); use blocks and transactions byGlobalIndex streams.
+  app.get("/v1/blocks/stream/summary", (req, res) => {
+    res.status(501).json(notImplemented(req.path));
+  });
 
   if (deps.apiContour) {
     app.get(["/", "/docs", "/docs/", "/v1/docs", "/v1/docs/"], (_req, res) => {
@@ -668,14 +887,8 @@ export function registerCompatRoutes(app: Express, deps: CompatDeps): void {
       }
       const head = idx.creationTxId ? (await getTxHeads([idx.creationTxId])).get(idx.creationTxId) : undefined;
       cacheNoStore(res);
-      res.json(mapExplorerBox(indexedBox(idx, head?.blockId ?? null)));
+      res.json(mapExplorerBox(indexedBox(idx, head?.blockId ?? null, head?.height ?? null)));
     });
-
-    /** Node tip from the cached /info (official counts confirmations from its own tip). */
-    const tipNow = (): number | null => {
-      const h = Number(deps.getNodeInfoRaw()?.fullHeight);
-      return Number.isFinite(h) && h > 0 ? h : null;
-    };
 
     app.get("/v1/transactions/:id", async (req, res, next) => {
       const id = String(req.params.id ?? "").trim().toLowerCase();
@@ -686,6 +899,16 @@ export function registerCompatRoutes(app: Express, deps: CompatDeps): void {
       const idx = await getTxById(id);
       if (idx) {
         cacheNoStore(res);
+        // Inputs were created in other txs: their block and height, not this tx's.
+        const inHeads = await getTxHeadsChecked(idx.inputs.map((b) => b.creationTxId));
+        if (!inHeads) {
+          res.status(503).json({ error: "stale", stale: true });
+          return;
+        }
+        const inputBox = (b: IdxBoxRow) => {
+          const h = b.creationTxId ? inHeads.get(b.creationTxId) : undefined;
+          return indexedBox(b, h?.blockId ?? null, h?.height ?? null);
+        };
         res.json(
           mapExplorerTx({
             id: idx.id,
@@ -696,8 +919,8 @@ export function registerCompatRoutes(app: Express, deps: CompatDeps): void {
             gix: idx.gix,
             size: idx.size,
             tip: tipNow(),
-            inputs: idx.inputs.map((b) => indexedBox(b, idx.blockId)),
-            outputs: idx.outputs.map((b) => indexedBox(b, idx.blockId)),
+            inputs: idx.inputs.map(inputBox),
+            outputs: idx.outputs.map((b) => indexedBox(b, idx.blockId, idx.inclusionHeight)),
           })
         );
         return;
@@ -721,11 +944,13 @@ export function registerCompatRoutes(app: Express, deps: CompatDeps): void {
   }
 }
 
-function indexedBox(b: IdxBoxRow, blockId: string | null) {
+/** blockId / settlementHeight = the creating tx's block (null → mapExplorerBox falls back to creationHeight). */
+function indexedBox(b: IdxBoxRow, blockId: string | null, settlementHeight: number | null) {
   return {
     boxId: b.boxId,
     value: b.value,
     creationHeight: b.creationHeight,
+    settlementHeight,
     address: b.address,
     ergoTree: b.ergoTree,
     transactionId: b.creationTxId,

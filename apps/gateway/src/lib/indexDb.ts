@@ -24,7 +24,7 @@ import {
   type AddrFlowKind,
   type NftKind,
 } from "@ergoscan/shared";
-import { GIX_STREAM_TIMEOUT_MS, gixMaxFromNext } from "./gix.js";
+import { GIX_STREAM_TIMEOUT_MS, GIX_STREAM_WINDOW, gixMaxFromNext } from "./gix.js";
 import {
   isHex64,
   PACKED_ASSETS_BY_IDS_SQL,
@@ -776,6 +776,13 @@ export type TxHead = {
 
 /** Height + time + block id for a handful of tx ids. SELECT only — not getTxById I/O. */
 export async function getTxHeads(ids: string[]): Promise<Map<string, TxHead>> {
+  return (await getTxHeadsChecked(ids)) ?? new Map();
+}
+
+/** As getTxHeads, but null when the index did not answer (a missing head is then not "no tx"). */
+export async function getTxHeadsChecked(
+  ids: (string | null | undefined)[]
+): Promise<Map<string, TxHead> | null> {
   const uniq = [
     ...new Set(ids.map((id) => id?.trim()).filter((id): id is string => Boolean(id))),
   ].filter((id) => !packedReadEnabled() || isHex64(id));
@@ -797,7 +804,8 @@ export async function getTxHeads(ids: string[]): Promise<Map<string, TxHead>> {
     [uniq],
     3000
   );
-  for (const r of rows ?? []) {
+  if (!rows) return null;
+  for (const r of rows) {
     const height = r.height != null ? Number(r.height) : NaN;
     const ts = r.timestamp_ms != null ? Number(r.timestamp_ms) : NaN;
     out.set(r.id, {
@@ -1003,15 +1011,17 @@ export async function readGixWatermark(): Promise<GixWatermark> {
   return value;
 }
 
-export type GixStreamBox = IdxBoxRow & { blockId: string | null };
+/** blockId and settlementHeight are the creating tx's block, not the box's own creationHeight. */
+export type GixStreamBox = IdxBoxRow & { blockId: string | null; settlementHeight: number | null };
 
 const BOX_GIX_SQL = `SELECT b.box_id, b.value_nano::text AS value_nano, b.ergo_tree, b.address,
             b.creation_height::text AS creation_height, b.creation_tx_id, b.spent_tx_id,
             b.spent_height::text AS spent_height, b.output_index::text AS output_index,
             b.additional_registers, b.gix::text AS gix,
-            bl.id AS block_id
+            ct.height::text AS settlement_height, bl.id AS block_id
      FROM boxes b
-     LEFT JOIN blocks bl ON bl.height = b.creation_height`;
+     LEFT JOIN transactions ct ON ct.id = b.creation_tx_id
+     LEFT JOIN blocks bl ON bl.height = ct.height`;
 
 const PACKED_BOX_GIX_SQL = `SELECT encode(b.box_id, 'hex') AS box_id,
             b.value_nano::text AS value_nano, sc.ergo_tree, ad.address,
@@ -1021,19 +1031,25 @@ const PACKED_BOX_GIX_SQL = `SELECT encode(b.box_id, 'hex') AS box_id,
             b.spent_height::text AS spent_height,
             b.output_index::text AS output_index,
             b.additional_registers, b.gix::text AS gix,
-            encode(bl.id, 'hex') AS block_id
+            ct.height::text AS settlement_height, encode(bl.id, 'hex') AS block_id
      FROM packed.boxes b
      LEFT JOIN packed.addr ad ON ad.id = b.addr_id
      LEFT JOIN packed.script sc ON sc.id = b.script_id
-     LEFT JOIN packed.blocks bl ON bl.height = b.creation_height`;
+     LEFT JOIN packed.transactions ct ON ct.id = b.creation_tx_id
+     LEFT JOIN packed.blocks bl ON bl.height = ct.height`;
 
-type BoxGixSqlRow = BoxSqlRow & { block_id: string | null };
+type BoxGixSqlRow = BoxSqlRow & { block_id: string | null; settlement_height: string | null };
 
 function boxGixToRow(
   r: BoxGixSqlRow,
   assets: Map<string, { tokenId: string; amount: string }[]>
 ): GixStreamBox {
-  return { ...boxSqlToRow(r, assets), blockId: r.block_id };
+  const settled = r.settlement_height != null ? Number(r.settlement_height) : NaN;
+  return {
+    ...boxSqlToRow(r, assets),
+    blockId: r.block_id,
+    settlementHeight: Number.isFinite(settled) ? settled : null,
+  };
 }
 
 const TREE_LIMIT_MAX = 100;
@@ -1225,15 +1241,18 @@ export async function unspentBoxesByLastEpochs(
   return rows.map((r) => boxSqlToRow(r, assetResult.assets));
 }
 
+/** maxGix = Number.MAX_SAFE_INTEGER with a limit: the official form (from minGix, `limit` rows). */
 export async function unspentBoxesByGix(
   minGix: number,
-  maxGix: number
+  maxGix: number,
+  limit = GIX_STREAM_WINDOW
 ): Promise<GixStreamBox[] | null> {
   const rows = await qSlow<BoxGixSqlRow>(
     `${packedReadEnabled() ? PACKED_BOX_GIX_SQL : BOX_GIX_SQL}
      WHERE b.gix >= $1 AND b.gix <= $2 AND b.spent_tx_id IS NULL
-     ORDER BY b.gix`,
-    [minGix, maxGix],
+     ORDER BY b.gix
+     LIMIT $3`,
+    [minGix, maxGix, limit],
     GIX_STREAM_TIMEOUT_MS
   );
   if (!rows) return null;
@@ -1257,19 +1276,23 @@ export type GixStreamTx = {
   outputs: GixStreamBox[];
 };
 
+type StreamTxHeadRow = {
+  id: string;
+  height: string | null;
+  timestamp_ms: string | null;
+  size: string | null;
+  index_in_block: string | null;
+  gix: string | null;
+  block_id: string | null;
+};
+
+/** maxGix = Number.MAX_SAFE_INTEGER with a limit: the official form (from minGix, `limit` txs). */
 export async function transactionsByGix(
   minGix: number,
-  maxGix: number
+  maxGix: number,
+  limit = GIX_STREAM_WINDOW
 ): Promise<GixStreamTx[] | null> {
-  const heads = await qSlow<{
-    id: string;
-    height: string | null;
-    timestamp_ms: string | null;
-    size: string | null;
-    index_in_block: string | null;
-    gix: string | null;
-    block_id: string | null;
-  }>(
+  const heads = await qSlow<StreamTxHeadRow>(
     packedReadEnabled()
       ? `SELECT encode(t.id, 'hex') AS id, t.height::text AS height,
                 t.timestamp_ms::text AS timestamp_ms, t.size::text AS size,
@@ -1278,18 +1301,25 @@ export async function transactionsByGix(
            FROM packed.transactions t
            LEFT JOIN packed.blocks b ON b.height = t.height
           WHERE t.gix >= $1 AND t.gix <= $2
-          ORDER BY t.gix`
+          ORDER BY t.gix
+          LIMIT $3`
       : `SELECT t.id, t.height::text AS height, t.timestamp_ms::text AS timestamp_ms,
             t.size::text AS size, t.index_in_block::text AS index_in_block,
             t.gix::text AS gix, b.id AS block_id
      FROM transactions t
      LEFT JOIN blocks b ON b.height = t.height
      WHERE t.gix >= $1 AND t.gix <= $2
-     ORDER BY t.gix`,
-    [minGix, maxGix],
+     ORDER BY t.gix
+     LIMIT $3`,
+    [minGix, maxGix, limit],
     GIX_STREAM_TIMEOUT_MS
   );
   if (!heads) return null;
+  return streamTxsWithIo(heads);
+}
+
+/** Inputs and outputs (with tokens) for tx heads, in the heads' order. Null = index did not answer. */
+async function streamTxsWithIo(heads: StreamTxHeadRow[]): Promise<GixStreamTx[] | null> {
   if (!heads.length) return [];
   const ids = heads.map((t) => t.id);
   const gixFrom = packedReadEnabled() ? PACKED_BOX_GIX_SQL : BOX_GIX_SQL;
@@ -1351,6 +1381,235 @@ export async function transactionsByGix(
   });
 }
 
+/** All boxes (spent too) in minGix..maxGix, at most `limit` rows in gix order (official boxes/byGlobalIndex/stream). */
+export async function boxesFromGix(
+  minGix: number,
+  maxGix: number,
+  limit: number
+): Promise<GixStreamBox[] | null> {
+  const rows = await qSlow<BoxGixSqlRow>(
+    `${packedReadEnabled() ? PACKED_BOX_GIX_SQL : BOX_GIX_SQL}
+     WHERE b.gix >= $1 AND b.gix <= $2
+     ORDER BY b.gix
+     LIMIT $3`,
+    [minGix, maxGix, limit],
+    GIX_STREAM_TIMEOUT_MS
+  );
+  if (!rows) return null;
+  const assetResult = await assetsForBoxesChecked(
+    rows.map((r) => r.box_id),
+    GIX_STREAM_TIMEOUT_MS
+  );
+  if (!assetResult.complete) return null;
+  return rows.map((r) => boxGixToRow(r, assetResult.assets));
+}
+
+export type StreamBlock = {
+  id: string;
+  height: number;
+  timestamp: number | null;
+  size: number | null;
+  txCount: number | null;
+  difficulty: string | null;
+  minerAddress: string | null;
+  version: number | null;
+};
+
+/** Blocks from minHeight up, `limit` rows. Packed index only (null otherwise). */
+export async function blocksFromHeight(minHeight: number, limit: number): Promise<StreamBlock[] | null> {
+  if (!packedReadEnabled()) return null;
+  const rows = await qSlow<{
+    id: string;
+    height: string;
+    timestamp_ms: string | null;
+    size: number | null;
+    tx_count: number | null;
+    difficulty: string | null;
+    miner_address: string | null;
+    version: number | null;
+  }>(
+    `SELECT encode(id, 'hex') AS id, height::text AS height, timestamp_ms::text AS timestamp_ms,
+            size, tx_count, difficulty, miner_address, version
+       FROM packed.blocks
+      WHERE height >= $1
+      ORDER BY height
+      LIMIT $2`,
+    [minHeight, limit],
+    GIX_STREAM_TIMEOUT_MS
+  );
+  if (!rows) return null;
+  return rows.map((r) => ({
+    id: r.id,
+    height: Number(r.height),
+    timestamp: r.timestamp_ms != null ? Number(r.timestamp_ms) : null,
+    size: r.size,
+    txCount: r.tx_count,
+    difficulty: r.difficulty,
+    minerAddress: r.miner_address,
+    version: r.version,
+  }));
+}
+
+const STREAM_BOX_COLS = `encode(b.box_id, 'hex') AS box_id,
+            b.value_nano::text AS value_nano, sc.ergo_tree, ad.address,
+            b.creation_height::text AS creation_height,
+            encode(b.creation_tx_id, 'hex') AS creation_tx_id,
+            encode(b.spent_tx_id, 'hex') AS spent_tx_id,
+            b.spent_height::text AS spent_height,
+            b.output_index::text AS output_index,
+            b.additional_registers, b.gix::text AS gix`;
+
+/** Height window and box cap for the minHeight..maxHeight streams. */
+export const HEIGHT_STREAM_WINDOW = 1024;
+export const HEIGHT_STREAM_BOX_CAP = 5000;
+
+/**
+ * Boxes created by txs in blocks minHeight..maxHeight (official: settlement height, not the box's
+ * own creationHeight), gix order. templateHash narrows to one ErgoTree template. overflow = more
+ * than `cap` boxes in the window (nothing returned, ask for a smaller window).
+ */
+export async function boxesBySettlementWindow(
+  minHeight: number,
+  maxHeight: number,
+  opts: { unspentOnly: boolean; templateHash?: string | null; cap?: number }
+): Promise<{ items: GixStreamBox[]; overflow: boolean } | null> {
+  if (!packedReadEnabled()) return null;
+  const cap = opts.cap ?? HEIGHT_STREAM_BOX_CAP;
+  const params: unknown[] = [minHeight, maxHeight, cap + 1];
+  let template = "";
+  if (opts.templateHash) {
+    params.push(opts.templateHash);
+    template = "JOIN packed.box_template bt ON bt.box_id = b.box_id AND bt.template_hash = decode($4, 'hex')";
+  }
+  const rows = await qSlow<BoxGixSqlRow>(
+    `SELECT ${STREAM_BOX_COLS},
+            t.height::text AS settlement_height, encode(bl.id, 'hex') AS block_id
+       FROM packed.transactions t
+       JOIN packed.boxes b ON b.creation_tx_id = t.id${opts.unspentOnly ? " AND b.spent_tx_id IS NULL" : ""}
+       ${template}
+       LEFT JOIN packed.addr ad ON ad.id = b.addr_id
+       LEFT JOIN packed.script sc ON sc.id = b.script_id
+       LEFT JOIN packed.blocks bl ON bl.height = t.height
+      WHERE t.height >= $1 AND t.height <= $2
+      ORDER BY b.gix NULLS LAST, b.box_id
+      LIMIT $3`,
+    params,
+    GIX_STREAM_TIMEOUT_MS
+  );
+  if (!rows) return null;
+  if (rows.length > cap) return { items: [], overflow: true };
+  const assetResult = await assetsForBoxesChecked(
+    rows.map((r) => r.box_id),
+    GIX_STREAM_TIMEOUT_MS
+  );
+  if (!assetResult.complete) return null;
+  return { items: rows.map((r) => boxGixToRow(r, assetResult.assets)), overflow: false };
+}
+
+export const TOKEN_BOXES_OFFSET_MAX = 1_000_000;
+
+/**
+ * Every box that ever held the token (official boxes/byTokenId). No ORDER BY, as official: the
+ * token index gives a token's rows in one fixed physical order; a serial plan keeps pages stable.
+ * total is exact (index-only count, ~0.25 s at 3.4 M boxes).
+ */
+export async function boxesByTokenIdAll(
+  tokenId: string,
+  offset: number,
+  limit: number
+): Promise<{ items: GixStreamBox[]; total: number } | null> {
+  if (!packedReadEnabled()) return null;
+  const serial = ["SET LOCAL max_parallel_workers_per_gather = 0"];
+  const tot = await qSlow<{ c: string }>(
+    `SELECT count(*)::text AS c FROM packed.box_assets WHERE token_id = decode($1, 'hex')`,
+    [tokenId],
+    GIX_STREAM_TIMEOUT_MS,
+    serial
+  );
+  if (!tot) return null;
+  const rows = await qSlow<BoxGixSqlRow>(
+    `WITH page AS (
+       SELECT p.box_id, row_number() OVER () AS rn
+         FROM (SELECT box_id FROM packed.box_assets
+                WHERE token_id = decode($1, 'hex')
+               OFFSET $2 LIMIT $3) p
+     )
+     SELECT ${STREAM_BOX_COLS},
+            ct.height::text AS settlement_height, encode(bl.id, 'hex') AS block_id
+       FROM page
+       JOIN packed.boxes b ON b.box_id = page.box_id
+       LEFT JOIN packed.addr ad ON ad.id = b.addr_id
+       LEFT JOIN packed.script sc ON sc.id = b.script_id
+       LEFT JOIN packed.transactions ct ON ct.id = b.creation_tx_id
+       LEFT JOIN packed.blocks bl ON bl.height = ct.height
+      ORDER BY page.rn`,
+    [tokenId, offset, limit],
+    GIX_STREAM_TIMEOUT_MS,
+    serial
+  );
+  if (!rows) return null;
+  const assetResult = await assetsForBoxesChecked(
+    rows.map((r) => r.box_id),
+    GIX_STREAM_TIMEOUT_MS
+  );
+  if (!assetResult.complete) return null;
+  return { items: rows.map((r) => boxGixToRow(r, assetResult.assets)), total: Number(tot[0].c) };
+}
+
+export const INPUT_TEMPLATE_OFFSET_MAX = 100_000;
+
+/**
+ * Txs that spend a box of this ErgoTree template (official transactions/byInputsScriptTemplateHash),
+ * by inclusion height (desc by default, as official), then block position ascending (as official).
+ * total = distinct txs. One random boxes read per template box: a template with hundreds of
+ * thousands of boxes (Spectrum N2T: 305 000) does not fit 4 s on a cold cache → null → 504.
+ */
+export async function txsByInputsTemplate(
+  templateHash: string,
+  offset: number,
+  limit: number,
+  ascending: boolean
+): Promise<{ items: GixStreamTx[]; total: number } | null> {
+  if (!packedReadEnabled()) return null;
+  const dir = ascending ? "ASC" : "DESC";
+  const page = await qSlow<{ total: string; ids: string[] | null }>(
+    `WITH spent AS (
+       SELECT DISTINCT b.spent_tx_id AS id, b.spent_height AS h
+         FROM packed.box_template bt
+         JOIN packed.boxes b ON b.box_id = bt.box_id
+        WHERE bt.template_hash = decode($1, 'hex') AND b.spent_tx_id IS NOT NULL
+     )
+     SELECT (SELECT count(*) FROM spent)::text AS total,
+            (SELECT array_agg(encode(p.id, 'hex') ORDER BY p.n)
+               FROM (SELECT s.id, row_number() OVER (ORDER BY s.h ${dir}, t.index_in_block, s.id) AS n
+                       FROM spent s JOIN packed.transactions t ON t.id = s.id
+                      ORDER BY s.h ${dir}, t.index_in_block, s.id
+                     OFFSET $2 LIMIT $3) p) AS ids`,
+    [templateHash, offset, limit],
+    GIX_STREAM_TIMEOUT_MS
+  );
+  if (!page?.[0]) return null;
+  const ids = page[0].ids ?? [];
+  const total = Number(page[0].total);
+  if (!ids.length) return { items: [], total };
+  const heads = await qSlow<StreamTxHeadRow>(
+    `SELECT encode(t.id, 'hex') AS id, t.height::text AS height,
+            t.timestamp_ms::text AS timestamp_ms, t.size::text AS size,
+            t.index_in_block::text AS index_in_block, t.gix::text AS gix,
+            encode(b.id, 'hex') AS block_id
+       FROM packed.transactions t
+       LEFT JOIN packed.blocks b ON b.height = t.height
+      WHERE t.id IN (SELECT decode(x, 'hex') FROM unnest($1::text[]) AS x)`,
+    [ids],
+    GIX_STREAM_TIMEOUT_MS
+  );
+  if (!heads) return null;
+  const byId = new Map(heads.map((h) => [h.id, h]));
+  const ordered = ids.map((id) => byId.get(id)).filter((h): h is StreamTxHeadRow => Boolean(h));
+  const items = await streamTxsWithIo(ordered);
+  return items ? { items, total } : null;
+}
+
 export type IdxTx = {
   id: string;
   inclusionHeight: number | null;
@@ -1367,7 +1626,7 @@ export async function unspentBoxesByTokenId(
   tokenId: string,
   offset: number,
   limit: number
-): Promise<{ items: IdxBox[]; total: number } | null> {
+): Promise<{ items: IdxBoxRow[]; total: number } | null> {
   const tot = await q<{ c: string }>(
     `SELECT count(*)::text AS c
      FROM packed.box_assets a
@@ -1376,26 +1635,15 @@ export async function unspentBoxesByTokenId(
     [tokenId]
   );
   if (!tot) return null;
-  const rows = await q<{
-    box_id: string;
-    value_nano: string;
-    creation_height: string | null;
-    address: string | null;
-    ergo_tree: string | null;
-    creation_tx_id: string | null;
-    spent_tx_id: string | null;
-    spent_height: string | null;
-    output_index: string | null;
-    additional_registers: unknown;
-  }>(
+  const rows = await q<BoxSqlRow>(
     `SELECT encode(b.box_id, 'hex') AS box_id,
-            b.value_nano, b.creation_height::text AS creation_height,
+            b.value_nano::text AS value_nano, b.creation_height::text AS creation_height,
             ad.address, sc.ergo_tree,
             encode(b.creation_tx_id, 'hex') AS creation_tx_id,
             encode(b.spent_tx_id, 'hex') AS spent_tx_id,
             b.spent_height::text AS spent_height,
             b.output_index::text AS output_index,
-            b.additional_registers
+            b.additional_registers, b.gix::text AS gix
      FROM packed.box_assets a
      JOIN packed.boxes b ON b.box_id = a.box_id AND b.spent_tx_id IS NULL
      LEFT JOIN packed.addr ad ON ad.id = b.addr_id
@@ -1406,32 +1654,10 @@ export async function unspentBoxesByTokenId(
     [tokenId, limit, offset]
   );
   if (!rows) return null;
-
-  const items: IdxBox[] = [];
-  for (const r of rows) {
-    const assets =
-      (await q<{ token_id: string; amount: string }>(
-        `SELECT encode(token_id, 'hex') AS token_id, amount::text AS amount
-           FROM packed.box_assets WHERE box_id = decode(lower($1), 'hex')
-          ORDER BY asset_index NULLS LAST, token_id`,
-        [r.box_id]
-      )) ?? [];
-    items.push({
-      boxId: r.box_id,
-      value: Number(r.value_nano),
-      creationHeight:
-        r.creation_height != null ? Number(r.creation_height) : null,
-      address: r.address,
-      ergoTree: r.ergo_tree,
-      creationTxId: r.creation_tx_id,
-      spentTxId: r.spent_tx_id,
-      spentHeight: r.spent_height != null ? Number(r.spent_height) : null,
-      index: r.output_index != null ? Number(r.output_index) : null,
-      additionalRegisters: parseRegsJson(r.additional_registers),
-      assets: assets.map((a) => ({ tokenId: a.token_id, amount: a.amount })),
-    });
-  }
-  return { items, total: Number(tot[0].c) };
+  // One query for every box's tokens (was one per box), in the node's order.
+  const assets = await assetsForBoxesChecked(rows.map((r) => r.box_id), 4000);
+  if (!assets.complete) return null;
+  return { items: rows.map((r) => boxSqlToRow(r, assets.assets)), total: Number(tot[0].c) };
 }
 
 export async function addressTransactions(
