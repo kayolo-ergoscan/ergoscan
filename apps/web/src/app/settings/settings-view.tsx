@@ -1,5 +1,6 @@
 "use client";
 
+import { Tip } from "@/components/Tip";
 import { useEffect, type CSSProperties, type ReactNode } from "react";
 import clsx from "clsx";
 import { Shell } from "@/components/Shell";
@@ -68,12 +69,11 @@ function Tumbler<T extends string>({
       {options.map((o) => {
         const on = o.id === value;
         return (
+          <Tip key={o.id} content={o.title && o.title !== o.label ? o.title : null} tap={false}>
           <button
-            key={o.id}
             type="button"
             role="radio"
             aria-checked={on}
-            title={o.title ?? o.label}
             className={clsx(
               "chip-press inline-flex h-8 w-[6.75rem] items-center justify-center gap-1.5 rounded-[9px] px-2.5 text-[13px] font-medium",
               // Phone: full-width switch, 44 px rows.
@@ -88,6 +88,7 @@ function Tumbler<T extends string>({
             {o.swatch ? <span className="set-tumbler-swatch" style={{ background: o.swatch }} aria-hidden /> : null}
             {o.label}
           </button>
+          </Tip>
         );
       })}
     </div>

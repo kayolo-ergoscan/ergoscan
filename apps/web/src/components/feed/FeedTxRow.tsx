@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Tip } from "@/components/Tip";
 import { FavoriteHeart } from "@/components/FavoriteHeart";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { formatBytes, formatFeeRate, formatScaledAmount, formatStamp, shortId, toBigIntAmt } from "@/lib/format";
@@ -130,9 +131,11 @@ export function FeedTxRow({
               caption
             )}
           </span>
-          <span className="tabular-nums" title={`${row.inputs} ${t("block.tx.in")} → ${row.outputs} ${t("block.tx.out")}`}>
-            {row.inputs} → {row.outputs}
-          </span>
+          <Tip content={`${row.inputs} ${t("block.tx.in")} → ${row.outputs} ${t("block.tx.out")}`}>
+            <span className="tabular-nums">
+              {row.inputs} → {row.outputs}
+            </span>
+          </Tip>
           {showHeight && row.inclusionHeight != null ? (
             <Link prefetch={false} href={`/block/${row.inclusionHeight}`} className="feed-phone-only tabular-nums">
               {row.inclusionHeight.toLocaleString(tag)}

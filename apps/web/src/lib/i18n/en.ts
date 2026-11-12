@@ -1783,5 +1783,20 @@ export const en: Record<string, string> = {
   "address.bad.title": "Invalid address",
   "address.bad.body":
     "The checksum does not match, so this is most likely a typo. No wallet can have this address. Check it against your wallet before you send anything.",
-
+  "tip.value": "Value",
+  "tip.fee": "Fee",
+  "tip.fees": "Fees",
+  "tip.size": "Size",
+  "tip.txs": "Transactions",
+  "tip.block": "Block",
+  "tip.miner": "Miner",
+  "tip.time": "Time",
+  "tip.node": "Node",
+  "favorites.added": "Saved to Favorites",
+  "favorites.removed": "Removed from Favorites",
+  "favorites.emptyTap": "The list is empty. Tap the heart on an address card.",
+  "favorites.emptyTokensTap": "None yet. Tap the heart on a token.",
+  "favorites.emptyBlocksTap": "None yet. Tap the heart on a block.",
+  "favorites.emptyTxsTap": "None yet. Tap the heart on a transaction.",
+  "favorites.emptyPoolsTap": "None yet. Tap the heart on a pool.",
 };

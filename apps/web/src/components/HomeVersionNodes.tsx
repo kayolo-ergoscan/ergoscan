@@ -7,6 +7,7 @@
  */
 import { useEffect, useState, type CSSProperties } from "react";
 import clsx from "clsx";
+import { Tip, TipRow, TipRows } from "@/components/Tip";
 import { getGateway } from "@/lib/config";
 import { HOME, INK } from "@/lib/palette";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -82,10 +83,27 @@ export function HomeVersionNodes({ className, style }: { className?: string; sty
         </p>
         {data && newest ? (
           <div className="flex min-w-0 items-center gap-3 text-[12px] leading-none tabular-nums">
-            <span className="inline-flex shrink-0 items-baseline gap-1 font-semibold" title={modeText || undefined}>
-              {data.total.toLocaleString(loc)}
-              <span className="font-medium opacity-70">{t("home.versionPeers")}</span>
-            </span>
+            <Tip
+              side="bottom"
+              content={
+                modeText
+                  ? () => (
+                      <TipRows>
+                        {(data.modes ?? []).map((m) => (
+                          <TipRow key={m.mode} label={t(`home.nodeMode.${m.mode}`)}>
+                            {m.n.toLocaleString(loc)}
+                          </TipRow>
+                        ))}
+                      </TipRows>
+                    )
+                  : null
+              }
+            >
+              <span className="inline-flex shrink-0 items-baseline gap-1 font-semibold">
+                {data.total.toLocaleString(loc)}
+                <span className="font-medium opacity-70">{t("home.versionPeers")}</span>
+              </span>
+            </Tip>
             <span className="inline-flex min-w-0 items-center gap-1.5 truncate font-semibold">
               <span aria-hidden className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ background: newestTone }} />
               <span className="font-medium opacity-70">{t("home.versionNewest")}</span>
@@ -105,12 +123,22 @@ export function HomeVersionNodes({ className, style }: { className?: string; sty
         }
       >
         {parts.map((p) => (
-          <span
+          <Tip
             key={p.key}
-            className="h-full first:rounded-l-full last:rounded-r-full"
-            style={{ width: `${(p.n / Math.max(1, known)) * 100}%`, background: p.color }}
-            title={`${p.label} · ${p.n.toLocaleString(loc)} · ${share(p.n)}%`}
-          />
+            side="bottom"
+            content={() => (
+              <TipRows>
+                <TipRow label={p.label} dot={p.color}>
+                  {p.n.toLocaleString(loc)} · {share(p.n)}%
+                </TipRow>
+              </TipRows>
+            )}
+          >
+            <span
+              className="h-full first:rounded-l-full last:rounded-r-full"
+              style={{ width: `${(p.n / Math.max(1, known)) * 100}%`, background: p.color }}
+            />
+          </Tip>
         ))}
       </div>
     </section>

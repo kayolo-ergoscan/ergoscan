@@ -7,6 +7,7 @@
  * boxes that hold less ERG than the rent, one row per token, soonest first.
  */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { Tip, TipFigure, TipHead, TipNote } from "./Tip";
 import Link from "next/link";
 import clsx from "clsx";
 import { useReducedMotion } from "framer-motion";
@@ -326,10 +327,21 @@ function DangerRow({ group, loc, locale, t }: { group: RentDangerGroup; loc: str
   const glance = formatScaledGlance(group.amount, group.decimals ?? 0, loc);
   const ink = toneColor(group.soonest);
   return (
+    <Tip
+      tap={false}
+      content={() => (
+        <>
+          <TipHead chip={meta.symbol} ink="var(--c-token, #5b8dff)">
+            {meta.name && meta.name !== meta.symbol ? meta.name : null}
+          </TipHead>
+          <TipFigure>{glance.exact}</TipFigure>
+          <TipNote>{countLabel(t, locale, "home.rentBoxes", group.boxes)}</TipNote>
+        </>
+      )}
+    >
     <Link
       prefetch={false}
       href={`/token/${group.tokenId}`}
-      title={`${meta.symbol} · ${glance.exact} · ${countLabel(t, locale, "home.rentBoxes", group.boxes)}`}
       className="grid h-[26px] grid-cols-[minmax(0,1fr)_3.75rem_2.75rem] lg:max-xl:grid-cols-[minmax(0,1fr)_2.75rem] items-center gap-2 rounded-[6px] px-1 text-[13px] hover:bg-[var(--wash)]"
     >
       <span className="flex min-w-0 items-center gap-1.5">
@@ -347,6 +359,7 @@ function DangerRow({ group, loc, locale, t }: { group: RentDangerGroup; loc: str
         {group.soonest <= 0 ? t("home.dangerNow") : clockText(group.soonest, t)}
       </span>
     </Link>
+    </Tip>
   );
 }
 
@@ -386,7 +399,7 @@ function QueueLine({ address, row, reduce }: { address: string; row: RentTapeRow
   const ink = toneColor(row.blocksUntilRent);
   const [feePre, feePost = ""] = t("home.rentFee").split("{n}");
   return (
-    <div className="mt-2 shrink-0 text-[12px] leading-[1.35]" aria-live="polite">
+    <div className="mt-2 shrink-0 text-[12px] leading-[1.35]" aria-live="polite" data-rent-caption>
       <p className="m-0 flex min-w-0 items-baseline gap-1.5">
         <span className="shrink-0 text-[var(--muted-2)]">{t("home.rentQueue")}</span>
         <Link

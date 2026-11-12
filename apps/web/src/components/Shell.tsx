@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Tip, TipRow, TipRows } from "./Tip";
 import { usePathname } from "next/navigation";
 import clsx from "clsx";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
@@ -372,10 +373,23 @@ function ErgPrice({ compact = false, onOpen }: { compact?: boolean; onOpen?: () 
     );
   }
   return (
+    <Tip
+      side="bottom"
+      tap={false}
+      content={
+        compact
+          ? () => (
+              <TipRows>
+                <TipRow label={t("header.ergPrice")}>{priceText}</TipRow>
+                <TipRow label={t("header.mcap")}>{mcapText}</TipRow>
+              </TipRows>
+            )
+          : null
+      }
+    >
     <Link
       prefetch={false}
       href="/"
-      title={`${t("header.ergPrice")} ${priceText} · ${t("header.mcap")} ${mcapText}`}
       className={
         compact
           ? "flex h-11 shrink-0 items-center px-1"
@@ -409,6 +423,7 @@ function ErgPrice({ compact = false, onOpen }: { compact?: boolean; onOpen?: () 
         </>
       )}
     </Link>
+    </Tip>
   );
 }
 

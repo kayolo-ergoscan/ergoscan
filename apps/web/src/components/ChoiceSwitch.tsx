@@ -1,6 +1,7 @@
 "use client";
 
 import clsx from "clsx";
+import { Tip } from "./Tip";
 import type { CSSProperties, ReactNode } from "react";
 
 /** Shared chrome for Settings switches — same cell, same press, same type size. */
@@ -36,10 +37,10 @@ export function ChoiceCell({
   children: ReactNode;
 }) {
   return (
+    <Tip content={title} tap={false}>
     <button
       type="button"
       aria-pressed={pressed}
-      title={title}
       onClick={onClick}
       className={clsx(
         "chip-press flex min-w-0 flex-col items-center gap-1 rounded-[10px] px-1 py-1.5 text-[11px] font-medium transition-colors duration-[400ms] ease-[var(--ease)]",
@@ -50,6 +51,7 @@ export function ChoiceCell({
     >
       {children}
     </button>
+    </Tip>
   );
 }
 

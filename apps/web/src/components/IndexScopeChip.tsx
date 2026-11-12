@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Tip } from "./Tip";
 import Link from "next/link";
 import { getGateway } from "@/lib/config";
 import { useT } from "@/lib/i18n/I18nProvider";
@@ -40,6 +41,7 @@ export function IndexScopeChip({ className }: { className?: string }) {
   const fullChain = st.minHeight === 0;
 
   return (
+    <Tip content={t(fullChain ? "trust.scope.fullHint" : "ux.scope.hint")} peek>
     <Link
       prefetch={false}
       href="/status"
@@ -50,7 +52,6 @@ export function IndexScopeChip({ className }: { className?: string }) {
           : "border-amber-500/30 text-[var(--warning)]",
         className
       )}
-      title={t(fullChain ? "trust.scope.fullHint" : "ux.scope.hint")}
     >
       <span className={ok ? "text-[var(--up)]" : "text-[var(--warning)]"}>●</span>
       <span>
@@ -66,5 +67,6 @@ export function IndexScopeChip({ className }: { className?: string }) {
         {st.mode ? ` · ${st.mode}` : ""}
       </span>
     </Link>
+    </Tip>
   );
 }

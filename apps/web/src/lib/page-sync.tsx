@@ -12,10 +12,11 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react";
+import { Tip, TipNote, TipRow, TipRows } from "@/components/Tip";
 import { usePathname } from "next/navigation";
 import type { SealEvent } from "@ergoscan/shared";
 import { formatStamp } from "@/lib/format";
-import { useT } from "@/lib/i18n/I18nProvider";
+import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { getWsUrl } from "./config";
 
 /** Cap stored pit seeds so home does not hold a full mempool dump in React. */
@@ -431,6 +432,7 @@ function ageParts(syncedAt: number, now: number): { n: string; unit: "s" | "m" |
 
 export function SyncChip({ compact = false }: { compact?: boolean }) {
   const t = useT();
+  const { locale } = useI18n();
   const { syncedAt, tip } = usePageSync();
   const [now, setNow] = useState(() => Date.now());
 
@@ -440,26 +442,30 @@ export function SyncChip({ compact = false }: { compact?: boolean }) {
   }, []);
 
   const age = syncedAt != null ? ageParts(syncedAt, now) : null;
-  const title = [
-    t("sync.hint"),
-    tip != null ? `tip ${tip.height}` : null,
-    syncedAt ? formatStamp(syncedAt) : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const syncTip = () => (
+    <>
+      <TipNote>{t("sync.hint")}</TipNote>
+      {tip != null || syncedAt ? (
+        <TipRows>
+          {tip != null ? <TipRow label={t("tip.block")}>{tip.height.toLocaleString(locale === "ru" ? "ru-RU" : "en-US")}</TipRow> : null}
+          {syncedAt ? <TipRow label={t("tip.time")}>{formatStamp(syncedAt)}</TipRow> : null}
+        </TipRows>
+      ) : null}
+    </>
+  );
 
   const ageText =
     age == null ? "—" : age.unit === "now" ? t("sync.justNow") : `${age.n}${age.unit}`;
   const showAgo = age != null && age.unit !== "now";
 
   return (
+    <Tip content={syncTip}>
     <span
       className={
         compact
           ? "inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] text-[var(--muted-2)]"
           : "inline-flex h-8 items-center gap-1.5 text-[12px] text-[var(--muted)]"
       }
-      title={title || undefined}
     >
       <SyncIcon />
       <span className="whitespace-nowrap">
@@ -479,6 +485,7 @@ export function SyncChip({ compact = false }: { compact?: boolean }) {
         </span>
       </span>
     </span>
+    </Tip>
   );
 }
 

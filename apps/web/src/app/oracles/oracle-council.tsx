@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Tip, TipHash, TipHead } from "@/components/Tip";
 import Link from "next/link";
 import clsx from "clsx";
 import { motion, useReducedMotion } from "framer-motion";
@@ -479,11 +480,21 @@ export function OracleCouncil({
               const href = op.address ? `/address/${op.address}` : `/box/${op.boxId}`;
               const ok = op.live === true;
               return (
+                <Tip
+                  key={op.id}
+                  tap={false}
+                  content={() => (
+                    <>
+                      <TipHead chip={ok ? liveLabel : staleLabel} ink={ok ? "var(--up)" : "var(--warning)"}>
+                        {name}
+                      </TipHead>
+                      <TipHash>{op.address || op.boxId}</TipHash>
+                    </>
+                  )}
+                >
                 <Link
                   prefetch={false}
-                  key={op.id}
                   href={href}
-                  title={`${name} · ${op.address || op.boxId}`}
                   aria-label={`${name}. ${ok ? liveLabel : staleLabel}`}
                   className="group flex min-w-0 flex-col items-center gap-1.5 rounded-lg px-0.5 py-0.5 outline-none transition-colors duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[var(--wash)] focus-visible:bg-[var(--wash)]"
                 >
@@ -513,6 +524,7 @@ export function OracleCouncil({
                     {name}
                   </span>
                 </Link>
+                </Tip>
               );
             })}
             {Array.from({ length: ghosts }, (_, i) => (

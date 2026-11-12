@@ -10,6 +10,8 @@ import { chartChrome } from "@/lib/chart-chrome";
 import { formatDottedDate, formatH24 } from "@/lib/format";
 import { neonLine } from "@/lib/chart-neon";
 import { useInk } from "@/lib/use-ink";
+import { TipFigure, TipHead, useFloatTip } from "@/components/Tip";
+import { pointRect } from "@/lib/tip-place";
 import {
   TX_ACTIVITY_TZ,
   binLinePoints,
@@ -71,7 +73,9 @@ export function AreaChart({
   const chart = useRef<echarts.ECharts | null>(null);
   const fmt = useRef(formatValue);
   const hover = useRef(onHover);
-  const quietMove = useRef<((ev: MouseEvent) => void) | null>(null);
+  const quietMove = useRef<((ev: PointerEvent) => void) | null>(null);
+  /** The shared tip at the hovered point; a tap on a phone shows it too. */
+  const pointTip = useFloatTip({ within: () => el.current });
   const loc = useRef(locale);
   fmt.current = formatValue;
   hover.current = onHover;
@@ -85,11 +89,18 @@ export function AreaChart({
     chart.current = c;
     const ro = new ResizeObserver(() => c.resize());
     ro.observe(node);
-    const leave = () => hover.current?.(null);
-    node.addEventListener("mouseleave", leave);
+    const leave = (ev: PointerEvent) => {
+      if (ev.pointerType === "touch") return;
+      hover.current?.(null);
+      pointTip.hide();
+    };
+    node.addEventListener("pointerleave", leave);
     return () => {
-      node.removeEventListener("mouseleave", leave);
-      if (quietMove.current) node.removeEventListener("mousemove", quietMove.current);
+      node.removeEventListener("pointerleave", leave);
+      if (quietMove.current) {
+        node.removeEventListener("pointermove", quietMove.current);
+        node.removeEventListener("pointerdown", quietMove.current);
+      }
       ro.disconnect();
       c.dispose();
       chart.current = null;
@@ -147,28 +158,10 @@ export function AreaChart({
           : { top: 16, right: 4, bottom: 22, left: 4 },
         tooltip: {
           trigger: "axis",
-          showContent: showTip,
+          showContent: false,
           axisPointer: {
             type: "line",
             lineStyle: { color: showTip ? chrome.hair : stroke, width: 1, opacity: showTip ? 1 : 0.45 },
-          },
-          backgroundColor: chrome.module,
-          borderColor: chrome.border,
-          borderWidth: showTip ? 1 : 0,
-          padding: showTip ? [8, 12] : 0,
-          textStyle: { color: chrome.text, fontSize: 12 },
-          formatter: (raw: unknown) => {
-            const row = Array.isArray(raw) ? raw[0] : raw;
-            const rec = row as { value?: [number, number] };
-            const pair = rec?.value;
-            if (!pair) return "";
-            hover.current?.(pair[1], pair[0]);
-            if (!showTip) return "";
-            const when =
-              windowMs > 0
-                ? formatActivityWindow(pair[0], windowMs, loc.current)
-                : fmtTime(pair[0], loc.current);
-            return `${when}<br/>${fmt.current(pair[1])}`;
           },
         },
         xAxis: {
@@ -211,11 +204,13 @@ export function AreaChart({
     );
     const node = el.current;
     if (node && quietMove.current) {
-      node.removeEventListener("mousemove", quietMove.current);
+      node.removeEventListener("pointermove", quietMove.current);
+      node.removeEventListener("pointerdown", quietMove.current);
       quietMove.current = null;
     }
-    if (node && !showTip) {
-      const onMove = (ev: MouseEvent) => {
+    if (node) {
+      const onMove = (ev: PointerEvent) => {
+        if (ev.type === "pointermove" && ev.pointerType === "touch") return;
         const rect = node.getBoundingClientRect();
         const raw = c.convertFromPixel({ gridIndex: 0 }, [ev.clientX - rect.left, ev.clientY - rect.top]);
         const t = Array.isArray(raw) ? raw[0] : null;
@@ -231,9 +226,23 @@ export function AreaChart({
         }
         if (!best) return;
         hover.current?.(best.v, best.t);
+        if (!showTip) return;
+        const px = c.convertToPixel({ gridIndex: 0 }, [best.t, best.v]);
+        if (!Array.isArray(px)) return;
+        const when =
+          windowMs > 0 ? formatActivityWindow(best.t, windowMs, loc.current) : fmtTime(best.t, loc.current);
+        pointTip.show(
+          pointRect(rect.left + px[0]!, rect.top + px[1]!, 6),
+          <>
+            <TipHead mono quiet>{when}</TipHead>
+            <TipFigure dot={stroke}>{fmt.current(best.v)}</TipFigure>
+          </>,
+          { tapped: ev.pointerType === "touch" }
+        );
       };
       quietMove.current = onMove;
-      node.addEventListener("mousemove", onMove);
+      node.addEventListener("pointermove", onMove);
+      node.addEventListener("pointerdown", onMove);
     }
   }, [points, color, compact, binMs, locale, fillOpacity, lineWidth, glow, showTip, activity, ink]);
 

@@ -81,7 +81,7 @@ export function FeedPoolRow({
         </>
       }
       value={
-        <span className="feed-amt tabular-nums" title={tvl ? `${tvl} ERG` : undefined}>
+        <span className="feed-amt tabular-nums">
           {tvl ?? "—"}
           {tvl ? <span className="feed-unit">ERG</span> : null}
         </span>

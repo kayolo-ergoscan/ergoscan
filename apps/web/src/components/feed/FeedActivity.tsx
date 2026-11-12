@@ -8,6 +8,7 @@
 
 import Link from "next/link";
 import clsx from "clsx";
+import { Tip } from "@/components/Tip";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { describeParty } from "@/lib/address-labels";
 import type { AddrFlow } from "@/lib/tx-flow";
@@ -134,9 +135,9 @@ function PartyTitle({ m }: { m: Model }) {
       <span className="feed-lead-word">{lead}</span>
       <PartyLink address={m.party} />
       {m.others.length > 0 ? (
-        <span className="feed-plus tabular-nums" title={tn("address.act.moreParties", m.others.length)}>
-          +{m.others.length}
-        </span>
+        <Tip content={tn("address.act.moreParties", m.others.length)}>
+          <span className="feed-plus tabular-nums">+{m.others.length}</span>
+        </Tip>
       ) : null}
     </>
   );

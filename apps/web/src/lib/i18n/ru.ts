@@ -1785,5 +1785,20 @@ export const ru: Record<string, string> = {
   "address.bad.title": "Адрес с ошибкой",
   "address.bad.body":
     "Контрольная сумма не сходится — скорее всего, это опечатка. У кошелька не может быть такого адреса. Сверьте его с кошельком, прежде чем что-то отправлять.",
-
+  "tip.value": "Сумма",
+  "tip.fee": "Комиссия",
+  "tip.fees": "Комиссии",
+  "tip.size": "Размер",
+  "tip.txs": "Транзакции",
+  "tip.block": "Блок",
+  "tip.miner": "Майнер",
+  "tip.time": "Время",
+  "tip.node": "Нода",
+  "favorites.added": "Добавлено в избранное",
+  "favorites.removed": "Убрано из избранного",
+  "favorites.emptyTap": "Список пуст. Коснись сердца на карточке адреса.",
+  "favorites.emptyTokensTap": "Пока пусто. Коснись сердца у токена.",
+  "favorites.emptyBlocksTap": "Пока пусто. Коснись сердца у блока.",
+  "favorites.emptyTxsTap": "Пока пусто. Коснись сердца у транзакции.",
+  "favorites.emptyPoolsTap": "Пока пусто. Коснись сердца у пула.",
 };
