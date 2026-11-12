@@ -325,6 +325,7 @@ export function RentHistoryChart({
     yPainted.current = y;
     c.setOption(
       {
+        ...(chrome.font ? { textStyle: { fontFamily: chrome.font } } : {}),
         useUTC: true,
         animationDuration: reduced ? 0 : 480,
         animationDurationUpdate: 0,

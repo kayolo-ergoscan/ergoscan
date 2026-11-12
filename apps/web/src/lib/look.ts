@@ -1,7 +1,8 @@
 /**
- * Design-direction preview (`?look=a|b|c`, `?look=off`). Concepts only: the
+ * Design-direction preview (`?look=a|b|c|cm`, `?look=off`). Concepts only: the
  * page structure stays, the visual language changes. Each look pins its ink
  * (A is paper, B and C are dark) and maps canvas inks into its own palette.
+ * `cm` is C with A's figures: `data-look="c"` plus `data-figs="mono"`.
  */
 
 import type { SkinInk } from "./skin-ink";
@@ -25,7 +26,7 @@ export function currentLook(): Look | null {
 }
 
 /** Inline head script, after the ink boot. */
-export const LOOK_BOOT = `(function(){try{var q=new URLSearchParams(location.search).get("look");if(q==="off"){localStorage.removeItem("${LOOK_STORAGE}");return;}var v=q||localStorage.getItem("${LOOK_STORAGE}");if(v!=="a"&&v!=="b"&&v!=="c")return;if(q)localStorage.setItem("${LOOK_STORAGE}",v);var r=document.documentElement;var ink=${JSON.stringify(LOOK_INK)}[v];r.setAttribute("data-look",v);r.setAttribute("data-ink",ink);r.classList.toggle("dark",ink!=="day");r.style.colorScheme=ink==="day"?"light":"dark";var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute("content",${JSON.stringify(LOOK_BG)}[v]);}catch(e){}})();`;
+export const LOOK_BOOT = `(function(){try{var q=new URLSearchParams(location.search).get("look");if(q==="off"){localStorage.removeItem("${LOOK_STORAGE}");return;}var v=q||localStorage.getItem("${LOOK_STORAGE}");if(v!=="a"&&v!=="b"&&v!=="c"&&v!=="cm")return;if(q)localStorage.setItem("${LOOK_STORAGE}",v);var r=document.documentElement;if(v==="cm"){v="c";r.setAttribute("data-figs","mono");}var ink=${JSON.stringify(LOOK_INK)}[v];r.setAttribute("data-look",v);r.setAttribute("data-ink",ink);r.classList.toggle("dark",ink!=="day");r.style.colorScheme=ink==="day"?"light":"dark";var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute("content",${JSON.stringify(LOOK_BG)}[v]);}catch(e){}})();`;
 
 type Family = "red" | "orange" | "yellow" | "green" | "teal" | "blue" | "violet" | "grey";
 

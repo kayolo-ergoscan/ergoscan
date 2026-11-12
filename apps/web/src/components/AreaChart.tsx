@@ -137,6 +137,7 @@ export function AreaChart({
           ];
     c.setOption(
       {
+        ...(chrome.font ? { textStyle: { fontFamily: chrome.font } } : {}),
         animationDuration: 280,
         animationEasing: "cubicOut",
         grid: compact

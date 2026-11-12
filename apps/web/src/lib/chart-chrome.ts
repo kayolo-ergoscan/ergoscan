@@ -16,5 +16,7 @@ export function chartChrome() {
     wash: cssToken("--wash-faint", "rgba(255,255,255,0.04)"),
     up: cssToken("--up", "#3dd68c"),
     down: cssToken("--down", "#ff5a6a"),
+    /** Figure face for axis labels. Empty unless a look sets `--chart-font`. */
+    font: cssToken("--chart-font", ""),
   };
 }

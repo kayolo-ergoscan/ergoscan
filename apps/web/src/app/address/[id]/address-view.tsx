@@ -22,6 +22,7 @@ import {
 } from "@/components/kpi-marks";
 import { KpiNum } from "@/components/KpiGrid";
 import { NftCard } from "@/components/NftCard";
+import { ActivityFeed, ActivityTable, useActVariant } from "@/components/AddressActivityAlt";
 import {
   peekAddressPageCache,
   putAddressPageCache,
@@ -313,6 +314,7 @@ export function AddressView({
   const [tokenOffset, setTokenOffset] = useState(0);
   const [listsPending, setListsPending] = useState(() => !tapeComplete(initial));
   const [stuck, setStuck] = useState(false);
+  const actView = useActVariant();
   const txEnter = useEnterIds();
   const packEnter = useEnterIds();
   const [listReady, setListReady] = useState(false);
@@ -1343,6 +1345,32 @@ export function AddressView({
                 <div className="addr-sheet">
                   <div ref={pinRef} className="h-px w-full" aria-hidden />
                   <div className={packEnter.enterClass("pack")}>
+                  {actView ? (
+                    <div
+                      className={clsx(
+                        "act-pan transition-opacity duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
+                        listsPending && "opacity-60"
+                      )}
+                    >
+                      {actView === "a" ? (
+                        <ActivityFeed
+                          rows={tapeRows}
+                          flows={flows}
+                          tokenMeta={tokenMeta}
+                          self={address}
+                          enterClass={txEnter.enterClass}
+                        />
+                      ) : (
+                        <ActivityTable
+                          rows={tapeRows}
+                          flows={flows}
+                          tokenMeta={tokenMeta}
+                          self={address}
+                          enterClass={txEnter.enterClass}
+                        />
+                      )}
+                    </div>
+                  ) : (
                   <div
                     className={clsx(
                       "addr-pan transition-opacity duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
@@ -1383,6 +1411,7 @@ export function AddressView({
                       />
                     ))}
                   </div>
+                  )}
                   </div>
                   <RankWindow
                     offset={txPage * TX_PAGE}

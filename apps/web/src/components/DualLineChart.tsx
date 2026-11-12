@@ -305,6 +305,7 @@ export function DualLineChart({
     const yFmt = showTxs ? (v: number) => fmtTxs.current(v) : (v: number) => fmtFees.current(v);
     c.setOption(
       {
+        ...(chrome.font ? { textStyle: { fontFamily: chrome.font } } : {}),
         useUTC: true,
         animationDuration: reduced || quiet ? 0 : 420,
         animationEasing: "cubicOut",

@@ -926,3 +926,101 @@ html[data-look="c"] .mcap-vol { color: var(--c-token); }
     font-size: 0.86em;
   }
 }
+
+/* ── C + mono figures (?look=cm → data-look="c" + data-figs="mono") ── */
+/* Text stays in C's sans; every figure is typed in Plex Mono, A's adding-machine digits. */
+html[data-look="c"][data-figs="mono"] {
+  --chart-font: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+html[data-look="c"][data-figs="mono"] .tabular-nums,
+html[data-look="c"][data-figs="mono"] [data-scout="price"],
+html[data-look="c"][data-figs="mono"] [data-scout="mcap"],
+html[data-look="c"][data-figs="mono"] .price-tape-px,
+html[data-look="c"][data-figs="mono"] .price-tape-chg,
+html[data-look="c"][data-figs="mono"] .block-size-pct,
+html[data-look="c"][data-figs="mono"] .mcap-rank {
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.035em;
+}
+html[data-look="c"][data-figs="mono"] .tabular-nums.font-semibold,
+html[data-look="c"][data-figs="mono"] .font-semibold .tabular-nums,
+html[data-look="c"][data-figs="mono"] .font-semibold.tabular-nums .kpi-scale-up,
+html[data-look="c"][data-figs="mono"] .kpi-tile .font-semibold.tabular-nums {
+  letter-spacing: -0.065em;
+}
+@media (max-width: 639px) {
+  html[data-look="c"][data-figs="mono"] .home-kpi .kpi-scale-up {
+    font-size: 0.86em;
+  }
+}
+
+/* Address title: a bare address is printed whole on two lines, not scrolled under a fade. */
+html[data-look="c"] .addr-page h1.font-mono .name-marquee {
+  white-space: normal;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+html[data-look="c"] .addr-page h1.font-mono .name-marquee-track {
+  display: block;
+  animation: none;
+  max-width: 100%;
+}
+html[data-look="c"] .addr-page h1.font-mono .name-marquee-inner {
+  display: block;
+  padding-right: 0;
+  font-size: 15px;
+  line-height: 1.3;
+  word-break: break-all;
+  letter-spacing: -0.01em;
+}
+html[data-look="c"] .addr-page h1.font-mono .name-marquee-inner + .name-marquee-inner {
+  display: none;
+}
+/* Address tabs size to their words, so «Активность» is not cut in Russian. */
+html[data-look="c"] .addr-seg.seg-paper {
+  grid-template-columns: auto auto auto auto;
+}
+html[data-look="c"] .addr-seg.seg-paper > :where(a, button) {
+  padding-left: 0.4rem;
+  padding-right: 0.4rem;
+}
+/* The whole address is the title now; the short copy under it would repeat it. */
+html[data-look="c"] .addr-page h1.font-mono + p > code {
+  display: none;
+}
+
+/* Activity proposals in C: direction is a solid signal tile, heads are tags. */
+html[data-look="c"] .act-dir {
+  border-radius: 4px;
+  background: #2f2f2f;
+  color: #ffffff;
+}
+html[data-look="c"] .act-dir.is-in { background: var(--up); color: #0e0e0e; }
+html[data-look="c"] .act-dir.is-out { background: var(--down); color: #0e0e0e; }
+html[data-look="c"] .act-dir.is-swap { background: var(--c-token); color: #0e0e0e; }
+html[data-look="c"] .act-chip {
+  border-radius: 4px;
+  background: #262626;
+}
+html[data-look="c"] .act-chip:hover { background: #303030; }
+html[data-look="c"] .act-day-tag {
+  padding: 3px 7px;
+  border-radius: 4px;
+  background: var(--tag);
+  color: var(--tag-ink);
+  font-size: 12px;
+  line-height: 1.1;
+}
+html[data-look="c"] .act-day:first-child .act-day-tag {
+  background: #ffffff;
+  color: #0e0e0e;
+}
+html[data-look="c"] .act-thead {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 11px;
+}
+html[data-look="c"] .act-tr:hover,
+html[data-look="c"] .act-tbody.is-open .act-tr { background: #202020; }
+html[data-look="c"] .act-detail { background: #151515; }
