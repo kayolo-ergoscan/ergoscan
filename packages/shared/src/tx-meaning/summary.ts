@@ -74,7 +74,7 @@ function who(addr: string | null | undefined, name: string | null | undefined): 
   return name || shortAddr(addr);
 }
 
-type Lang = "ru" | "en";
+export type Lang = "ru" | "en";
 
 /** English count with the right noun; Russian lines put the number in brackets instead. */
 function many(n: number, one: string, more: string): string {
@@ -89,6 +89,17 @@ function protoName(p: string | null | undefined, lang: Lang): string {
 function venues(m: MeaningPhraseInput, lang: Lang): string {
   const v = m.venues?.length ? m.venues : m.protocol ? [protoName(m.protocol, lang)] : [];
   return v.join(" + ");
+}
+
+/** «ещё 1.77 ERG → 9gvv…DDPB» / «also …»: third-party payments; "" when none. Lists use it as a note. */
+export function extraNote(xs: readonly MeaningExtraLike[] | undefined, lang: Lang): string {
+  const tail = extraTail(xs, lang);
+  return tail ? tail.slice(2) : "";
+}
+
+/** One amount with its label, as the phrases print it: «6.73 ERG», «132.36 RSN». */
+export function assetText(a: MeaningAssetLike): string {
+  return amt(a);
 }
 
 function extraTail(xs: readonly MeaningExtraLike[] | undefined, lang: Lang): string {

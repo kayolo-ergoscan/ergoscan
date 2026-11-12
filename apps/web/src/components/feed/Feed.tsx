@@ -186,6 +186,7 @@ export function FeedDays<T>({
   msOf,
   pendingOf,
   countOf,
+  sizeOf,
   totalOf,
   seconds = false,
   render,
@@ -194,6 +195,8 @@ export function FeedDays<T>({
   msOf: (item: T) => number | null;
   pendingOf?: (item: T) => boolean;
   countOf: (n: number) => ReactNode;
+  /** How many things an item stands for on the plate count (a folded summary row: its rows). Default 1. */
+  sizeOf?: (item: T) => number;
   /** Only when a day total means something. */
   totalOf?: (items: T[]) => ReactNode;
   seconds?: boolean;
@@ -233,7 +236,7 @@ export function FeedDays<T>({
                 tag={tag}
                 now={di === 0}
                 date={pending || unknown ? undefined : day.key}
-                count={countOf(day.items.length)}
+                count={countOf(sizeOf ? day.items.reduce((n, item) => n + sizeOf(item), 0) : day.items.length)}
                 end={totalOf ? totalOf(day.items) : undefined}
               />
             }

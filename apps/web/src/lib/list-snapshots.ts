@@ -7,9 +7,11 @@ import {
   parseRentEpochBoxes,
   parseRentEpochNano,
   type AddrFlowKind,
+  type CompactMeaning,
   type RentTapeRow,
 } from "@ergoscan/shared";
 import { getGateway } from "./config";
+import { parseMeaning } from "./tx-meaning-row";
 import type { DefiVolPoint } from "./defi-volume";
 import { sortDefiPools, type DefiPool, type PoolBoardRow } from "./defi-pools";
 import { paintTxSnapshot } from "./tx-shape-paint";
@@ -57,6 +59,8 @@ export type TxListItem = {
   confirmed: boolean;
   /** Distinct tokens on boxes created or spent by this tx. Additive. */
   tokenCount?: number | null;
+  /** What the tx did (list form). Additive; rows without it keep the old look. */
+  meaning?: CompactMeaning;
 };
 
 export const BLOCK_TX_PACK = 25;
@@ -971,7 +975,13 @@ function asTxListItem(row: unknown, i: number): TxListItem | null {
         : finiteNum(r.value) ?? finiteNum(r.valueNano) ?? 0,
     confirmed: r.confirmed !== false,
     tokenCount: tokenCountOf(r),
+    ...withMeaning(r.meaning),
   };
+}
+
+function withMeaning(raw: unknown): { meaning?: CompactMeaning } {
+  const meaning = parseMeaning(raw);
+  return meaning ? { meaning } : {};
 }
 
 export function parseTxListItems(rows: unknown[] | undefined): TxListItem[] {
@@ -1504,6 +1514,8 @@ export type MempoolBall = {
   outputCount: number;
   firstSeen: number;
   tokenIds?: string[];
+  /** HTTP only (the WebSocket snapshot has none); useMempool keeps it across snapshots. */
+  meaning?: unknown;
 };
 
 export function mempoolBallToTx(b: MempoolBall): TxListItem {
@@ -1525,6 +1537,7 @@ export function mempoolBallToTx(b: MempoolBall): TxListItem {
     value: b.value ?? null,
     confirmed: false,
     tokenCount: tokens,
+    ...withMeaning(b.meaning),
   };
 }
 

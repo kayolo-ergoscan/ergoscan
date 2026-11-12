@@ -25,6 +25,9 @@ import {
   type FeedLead,
 } from "@/components/feed/Feed";
 import { FeedHolderRow } from "@/components/feed/FeedHolderRow";
+import { MeaningPhraseField, MeaningTitle, meaningFacts, useMeaningRow } from "@/components/feed/FeedMeaning";
+import { meaningTile, parseMeaning } from "@/lib/tx-meaning-row";
+import type { CompactMeaning } from "@ergoscan/shared";
 import { KpiNum, KpiTileRail } from "@/components/KpiGrid";
 import {
   KpiMarkBox,
@@ -131,6 +134,8 @@ interface TokenTxRow {
   kind: TokenTxKind;
   from?: string[];
   to?: string[];
+  /** What the tx did (gateway list form); absent on old responses. */
+  meaning?: CompactMeaning;
 }
 
 function readTokenTab(): Tab {
@@ -531,7 +536,10 @@ export function TokenView({
       items?: TokenTxRow[];
       pagination?: { total?: number; hasMore?: boolean; nextCursor?: string | null };
     };
-    const next = Array.isArray(j?.items) ? j.items : [];
+    const next = (Array.isArray(j?.items) ? j.items : []).map((row) => {
+      const meaning = parseMeaning(row.meaning);
+      return meaning ? { ...row, meaning } : { ...row, meaning: undefined };
+    });
     if (gen !== txGen.current) return;
     if (packCursor && !next.length) {
       const prev = txCursorStack.current.pop() ?? null;
@@ -1450,6 +1458,7 @@ function FeedTokenTxRow({
 }) {
   const { t, locale } = useI18n();
   const tag = loc(locale);
+  const r = useMeaningRow(tx.meaning);
   const amt = tokenTapeAmount(tx);
   const raw = tx.kind === "swap" && tx.moved?.includes(".") ? scaledDecimalToRaw(tx.moved, decimals) : amt.raw;
   const kindLabel =
@@ -1480,6 +1489,61 @@ function FeedTokenTxRow({
         {tx.inclusionHeight.toLocaleString(tag)}
       </Link>
     ) : null;
+  const value = <FeedAmount raw={raw} decimals={decimals} unit={unit} signed={amt.signed} glance />;
+  const fields = (
+    <>
+      <FeedField label={t("token.colFrom")}>
+        <span className="feed-list">
+          {from.length ? from.map((a) => <FeedParty key={a} list={[a]} many={many} manyHint={manyHint} />) : "—"}
+        </span>
+      </FeedField>
+      <FeedField label={t("token.colTo")}>
+        <span className="feed-list">
+          {to.length ? to.map((a) => <FeedParty key={a} list={[a]} many={many} manyHint={manyHint} />) : "—"}
+        </span>
+      </FeedField>
+      <FeedField label={t("token.colAmount")}>
+        <span className="tabular-nums">
+          {amt.signed && raw > 0n ? "+" : amt.signed && raw < 0n ? "−" : ""}
+          {formatScaledAmount(raw < 0n ? -raw : raw, decimals, tag)}
+        </span>
+      </FeedField>
+      <FeedField label={t("address.colTime")}>
+        <span className="tabular-nums" suppressHydrationWarning>
+          {tx.timestamp != null ? formatStamp(tx.timestamp) : "—"}
+        </span>
+      </FeedField>
+      <FeedField label={t("detail.block")}>{height ?? "—"}</FeedField>
+    </>
+  );
+  if (r && tx.meaning) {
+    // What the tx did (shared words), with this token's own amount on the right.
+    const [mk, mg] = meaningTile(tx.meaning);
+    return (
+      <FeedRow
+        k={mk}
+        glyph={mg}
+        tileTitle={r.where ? `${r.word} · ${r.where}` : r.word}
+        lead={lead}
+        leadSub={!lead.same ? height : undefined}
+        href={`/tx/${tx.id}`}
+        enterClass={enterClass}
+        className={r.quiet ? "mx-row is-quiet" : "mx-row"}
+        title={<MeaningTitle r={r} href={`/tx/${tx.id}`} title={tx.id} />}
+        facts={meaningFacts(r)}
+        value={value}
+        detail={() => (
+          <FeedFields>
+            <MeaningPhraseField m={tx.meaning!} />
+            <FeedField label={t("detail.tx")} wide>
+              <FeedIdLine href={`/tx/${tx.id}`} id={tx.id} />
+            </FeedField>
+            {fields}
+          </FeedFields>
+        )}
+      />
+    );
+  }
   return (
     <FeedRow
       k={trade ? (side === "buy" ? "in" : "out") : tx.kind}
@@ -1532,34 +1596,13 @@ function FeedTokenTxRow({
           </>
         )
       }
-      value={<FeedAmount raw={raw} decimals={decimals} unit={unit} signed={amt.signed} glance />}
+      value={value}
       detail={() => (
         <FeedFields>
           <FeedField label={t("detail.tx")} wide>
             <FeedIdLine href={`/tx/${tx.id}`} id={tx.id} />
           </FeedField>
-          <FeedField label={t("token.colFrom")}>
-            <span className="feed-list">
-              {from.length ? from.map((a) => <FeedParty key={a} list={[a]} many={many} manyHint={manyHint} />) : "—"}
-            </span>
-          </FeedField>
-          <FeedField label={t("token.colTo")}>
-            <span className="feed-list">
-              {to.length ? to.map((a) => <FeedParty key={a} list={[a]} many={many} manyHint={manyHint} />) : "—"}
-            </span>
-          </FeedField>
-          <FeedField label={t("token.colAmount")}>
-            <span className="tabular-nums">
-              {amt.signed && raw > 0n ? "+" : amt.signed && raw < 0n ? "−" : ""}
-              {formatScaledAmount(raw < 0n ? -raw : raw, decimals, tag)}
-            </span>
-          </FeedField>
-          <FeedField label={t("address.colTime")}>
-            <span className="tabular-nums" suppressHydrationWarning>
-              {tx.timestamp != null ? formatStamp(tx.timestamp) : "—"}
-            </span>
-          </FeedField>
-          <FeedField label={t("detail.block")}>{height ?? "—"}</FeedField>
+          {fields}
         </FeedFields>
       )}
     />
