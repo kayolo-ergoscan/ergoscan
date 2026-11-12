@@ -309,11 +309,6 @@ html[data-look="c"] ::selection {
 
 /* ───────────────────── refinements ───────────────────── */
 
-/* The header scout canvas carries the robot only. */
-html[data-look] .stage-col > header > canvas[aria-hidden] {
-  display: none;
-}
-
 html[data-look="c"] .seg-on,
 html[data-look="c"][data-float] .seg-on {
   background: #ffffff !important;
