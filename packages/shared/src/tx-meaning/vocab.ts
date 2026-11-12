@@ -47,6 +47,8 @@ export type MeaningWord = {
   family: MeaningFamily;
   /** Quiet tile and title (sent to self, consolidation, upkeep). */
   quiet?: boolean;
+  /** Made by machines, not people (oracle posts, block rewards and fees, upkeep): lists fold these. */
+  fold?: boolean;
 };
 
 export const MEANING_VOCAB: Readonly<Record<MeaningActionId, MeaningWord>> = {
@@ -54,8 +56,8 @@ export const MEANING_VOCAB: Readonly<Record<MeaningActionId, MeaningWord>> = {
   multisend: { ru: "Массовая отправка", en: "Multi-send", family: "move" },
   self: { ru: "Перевод себе", en: "Sent to self", family: "move", quiet: true },
   consolidate: { ru: "Объединение боксов", en: "Consolidation", family: "move", quiet: true },
-  "block-reward": { ru: "Награда за блок", en: "Block reward", family: "mining" },
-  "fee-collect": { ru: "Комиссии блока", en: "Block fees", family: "mining" },
+  "block-reward": { ru: "Награда за блок", en: "Block reward", family: "mining", fold: true },
+  "fee-collect": { ru: "Комиссии блока", en: "Block fees", family: "mining", fold: true },
   "miner-payout": { ru: "Выплата майнерам", en: "Miner payout", family: "mining" },
   rent: { ru: "Плата за хранение", en: "Storage rent", family: "mining" },
   "token-issue": { ru: "Выпуск токена", en: "Token issued", family: "token" },
@@ -79,9 +81,9 @@ export const MEANING_VOCAB: Readonly<Record<MeaningActionId, MeaningWord>> = {
   "bridge-out": { ru: "Мост: отправка", en: "Bridge out", family: "bridge" },
   "bridge-in": { ru: "Мост: получение", en: "Bridge in", family: "bridge" },
   mix: { ru: "Микширование", en: "Mixing", family: "mixer" },
-  "oracle-post": { ru: "Цена от оракула", en: "Oracle price post", family: "service", quiet: true },
-  "oracle-update": { ru: "Обновление курса", en: "Oracle update", family: "service", quiet: true },
-  service: { ru: "Служебная", en: "Protocol upkeep", family: "service", quiet: true },
+  "oracle-post": { ru: "Цена от оракула", en: "Oracle price post", family: "service", quiet: true, fold: true },
+  "oracle-update": { ru: "Обновление курса", en: "Oracle update", family: "service", quiet: true, fold: true },
+  service: { ru: "Служебная", en: "Protocol upkeep", family: "service", quiet: true, fold: true },
   "contract-call": { ru: "Вызов контракта", en: "Contract call", family: "unknown" },
   "to-contract": { ru: "Отправка в контракт", en: "Sent to contract", family: "unknown" },
 };
@@ -92,7 +94,15 @@ export function meaningWord(id: MeaningActionId): MeaningWord {
   return MEANING_VOCAB[id];
 }
 
-/** Rows the lists fold by default («Служебные: N · показать»). */
+/** The service family: oracle posts and updates, protocol upkeep (the `service` flag). */
 export function isServiceAction(id: MeaningActionId): boolean {
   return MEANING_VOCAB[id].family === "service";
+}
+
+/**
+ * Rows a busy list folds into «Служебные: N · показать»: the service family plus block rewards
+ * and block fees. Machines make them every block; people rarely look for them.
+ */
+export function isFoldedAction(id: MeaningActionId): boolean {
+  return MEANING_VOCAB[id].fold === true;
 }

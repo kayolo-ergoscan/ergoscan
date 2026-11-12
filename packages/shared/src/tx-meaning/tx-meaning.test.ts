@@ -9,7 +9,9 @@ import {
   classifyTxMeaning,
   compactMeaning,
   formatAmount,
+  meaningRow,
   meaningView,
+  isFoldedAction,
   multisigOf,
   sayMeaning,
   type MeaningBox,
@@ -248,6 +250,114 @@ describe("tx meaning: list form", () => {
   it("the phrase module has no node imports (the browser uses it)", () => {
     const src = fs.readFileSync(new URL("./summary.ts", import.meta.url), "utf8");
     assert.ok(!/from "node:|require\(|process\.|Buffer/.test(src));
+  });
+});
+
+describe("tx meaning: list row", () => {
+  const row = (p: string, lang: "ru" | "en" = "ru") => {
+    const g = byId(p);
+    return meaningRow(compactMeaning(classifyTxMeaning(txOf(g), ctxOf(g))), lang);
+  };
+
+  it("the list form and the full form give the same row", () => {
+    for (const g of GOLDEN) {
+      const m = classifyTxMeaning(txOf(g), ctxOf(g));
+      for (const lang of ["ru", "en"] as const) {
+        assert.deepEqual(meaningRow(JSON.parse(JSON.stringify(compactMeaning(m))), lang), meaningRow(m, lang), g.id);
+      }
+    }
+  });
+
+  it("a swap: who, the pools, gave left of the arrow, got big, «за …» on a phone", () => {
+    const r = row("a323e730");
+    assert.equal(r.word, "Обмен");
+    assert.equal(r.where, "ErgoDex");
+    assert.ok(r.who?.addr.startsWith("9fYV"));
+    assert.equal(r.to, null);
+    assert.deepEqual(r.gave.map((a) => a.token ?? "ERG"), ["ERG"]);
+    assert.equal(r.big?.name, "RSN");
+    assert.equal(r.phoneSub, "за 4.95 ERG");
+    assert.deepEqual(r.notes, ["ещё 1.77 ERG → 9gvv…DDPB"]);
+    assert.equal(row("a323e730", "en").phoneSub, "for 4.95 ERG");
+    assert.equal(row("4f929c15").where, "Crux + ErgoDex + ErgoDex V3");
+  });
+
+  it("a transfer: who → whom, one figure, nothing on the left", () => {
+    const r = row("ed512b15");
+    assert.equal(r.to?.name, "KuCoin");
+    assert.deepEqual(r.gave, []);
+    assert.equal(r.big?.amount, "6000568900000");
+    assert.equal(r.phoneSub, null);
+    assert.equal(r.fold, false);
+    assert.equal(row("b56cd85e").to, null);
+    assert.deepEqual(row("b56cd85e").notes, ["между своими адресами"]);
+  });
+
+  it("a pool payout counts miners; the reemission share is a note", () => {
+    const r = row("d0f6f6f5");
+    assert.equal(r.who?.name, "Hero Miners");
+    assert.deepEqual(r.notes, ["20 майнерам", "ещё 36.00 ERG → реэмиссия"]);
+    assert.equal(r.phoneSub, "20 майнерам");
+    assert.equal(row("d0f6f6f5", "en").phoneSub, "to 20 miners");
+    assert.equal(r.where, null);
+  });
+
+  it("lp remove: the LP chip on the left, two tokens on the right", () => {
+    const r = row("c580819c");
+    assert.equal(r.gave.length, 1);
+    assert.equal(r.big?.name, "GIF");
+    assert.equal(r.more.length, 1);
+    assert.equal(r.sub, "+ 118 GreasyCex");
+    assert.equal(r.phoneSub, "+ 118 GreasyCex");
+    assert.deepEqual(r.notes, ["по заявке"]);
+  });
+
+  it("machine rows fold and are quiet; people rows do not", () => {
+    for (const p of ["9a430ec5", "39451a3d", "2f583c66", "84c4b346", "8733450c"]) {
+      const r = row(p);
+      assert.equal(r.fold, true, p);
+      assert.equal(r.quiet, true, p);
+    }
+    for (const p of ["a323e730", "ed512b15", "d0f6f6f5", "9162503f"]) assert.equal(row(p).fold, false, p);
+    assert.equal(row("9a430ec5").big, null);
+    assert.equal(row("9a430ec5").where, "Оракул ERG/USD");
+    const v1 = byId("39451a3d");
+    const listed = compactMeaning(classifyTxMeaning({ ...txOf(v1), dataInputs: undefined }, ctxOf(v1)));
+    assert.deepEqual(meaningRow(listed, "ru").notes, [], "lists have no data inputs: no count");
+    assert.deepEqual(row("39451a3d").notes, ["по 4 ответам операторов"]);
+    assert.ok(isFoldedAction("block-reward") && !isFoldedAction("miner-payout"));
+  });
+
+  it("bridges name the other chain; a guess says so; unknown is a contract call", () => {
+    assert.deepEqual(row("e1494456").notes, ["из Cardano"]);
+    assert.equal(row("e1494456").phoneSub, "из Cardano");
+    assert.deepEqual(row("2161fa06").notes, ["в Cardano"]);
+    assert.equal(row("2161fa06", "en").phoneSub, "to Cardano");
+    assert.equal(row("fab5371d").guess, "вероятно");
+    assert.equal(row("a323e730").guess, null);
+    const u = row("67ff4af6");
+    assert.equal(u.word, "Вызов контракта");
+    assert.ok(u.to?.addr.startsWith("GZYz"));
+  });
+
+  it("a contract with no signer: no who, the venue speaks", () => {
+    const r = row("0b45de0f");
+    assert.equal(r.who, null);
+    assert.equal(r.where, "LithosDex");
+  });
+
+  it("russian counts agree with the number", () => {
+    const c = (n: number, lang: "ru" | "en" = "ru") =>
+      meaningRow({ action: "consolidate", actor: "9x", count: n, count2: 1 }, lang).notes[0];
+    assert.equal(c(1), "1 бокс → 1");
+    assert.equal(c(3), "3 бокса → 1");
+    assert.equal(c(12), "12 боксов → 1");
+    assert.equal(c(21), "21 бокс → 1");
+    assert.equal(c(1, "en"), "1 box → 1");
+    const p = (n: number) => meaningRow({ action: "miner-payout", sub: "pool", actor: "88x", count: n }, "ru").notes[0];
+    assert.equal(p(1), "1 майнеру");
+    assert.equal(p(11), "11 майнерам");
+    assert.equal(p(21), "21 майнеру");
   });
 });
 

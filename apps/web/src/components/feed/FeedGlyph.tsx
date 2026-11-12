@@ -26,6 +26,10 @@ export type FeedGlyphId =
   | "box"
   | "fee"
   | "name"
+  | "order"
+  | "cancel"
+  | "merge"
+  | "hammer"
   | "none";
 
 const PATHS: Record<FeedGlyphId, string> = {
@@ -54,6 +58,10 @@ const PATHS: Record<FeedGlyphId, string> = {
   box: "M4.5 9h15v10.5h-15zM3.5 4.5h17V9h-17zM10 13h4",
   fee: "M5 7.5h14v9H5zM9 12h6M5 10h2M17 14h2",
   name: "M4.5 6.5h9l6 5.5-6 5.5h-9zM8 12h.01",
+  order: "M12 4.5a7.5 7.5 0 1 1 0 15 7.5 7.5 0 0 1 0-15zM12 8v4l2.5 2.5",
+  cancel: "M12 4.5a7.5 7.5 0 1 1 0 15 7.5 7.5 0 0 1 0-15zM9.5 9.5l5 5M14.5 9.5l-5 5",
+  merge: "M5.5 7l5 5-5 5M12.5 7l5 5-5 5",
+  hammer: "M13.5 3.5l7 7-3 3-7-7zM11.8 10.2 4.5 17.5l2 2 7.3-7.3M4 21h8",
   none: "M6.5 12h11",
 };
 

@@ -48,10 +48,35 @@ export function useMempool(initialBalls?: BallProps[], initialP50?: number | nul
     return at != null && Date.now() - at < SEALED_KEEP_MS;
   }, []);
 
+  /**
+   * `meaning` comes only with the HTTP snapshot; the WebSocket one has none. Keep the last one
+   * per tx so a row does not flip between the new and the old look.
+   */
+  const meaningsRef = useRef<Map<string, unknown> | null>(null);
+  if (meaningsRef.current == null) {
+    meaningsRef.current = new Map();
+    for (const b of Array.isArray(initialBalls) ? initialBalls : []) {
+      const m = (b as { meaning?: unknown }).meaning;
+      if (m != null) meaningsRef.current.set(b.id, m);
+    }
+  }
+  const withMeaning = useCallback((b: BallProps): BallProps => {
+    const own = (b as { meaning?: unknown }).meaning;
+    if (own != null) {
+      meaningsRef.current!.set(b.id, own);
+      return b;
+    }
+    const kept = meaningsRef.current!.get(b.id);
+    return kept != null ? ({ ...b, meaning: kept } as BallProps) : b;
+  }, []);
+
   const applySnapshot = useCallback((s: MempoolSnapshot) => {
-    setBalls(s.balls.filter((b) => !isSealed(b.id)));
+    const live = new Set(s.balls.map((b) => b.id));
+    const kept = meaningsRef.current!;
+    for (const id of kept.keys()) if (!live.has(id)) kept.delete(id);
+    setBalls(s.balls.filter((b) => !isSealed(b.id)).map(withMeaning));
     markSynced();
-  }, [markSynced, isSealed]);
+  }, [markSynced, isSealed, withMeaning]);
 
   /** Block first: its txs leave the list as «in block N», not as a plain removal. */
   const applySeal = useCallback((height: number, txIds: readonly string[]) => {
@@ -101,7 +126,7 @@ export function useMempool(initialBalls?: BallProps[], initialP50?: number | nul
               if (isSealed(msg.data.id)) return;
               setBalls((prev) => {
                 if (prev.some((b) => b.id === msg.data.id)) return prev;
-                return [...prev, msg.data];
+                return [...prev, withMeaning(msg.data)];
               });
             }
             if (msg.type === "mempool.remove") {
@@ -150,7 +175,7 @@ export function useMempool(initialBalls?: BallProps[], initialP50?: number | nul
       window.clearInterval(iv);
       wsRef.current?.close();
     };
-  }, [applySnapshot, applySeal, isSealed]);
+  }, [applySnapshot, applySeal, isSealed, withMeaning]);
 
   useEffect(() => {
     if (!leaving.length) return;

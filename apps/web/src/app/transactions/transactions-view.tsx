@@ -6,11 +6,13 @@ import { compactFigure, KpiGrid } from "@/components/KpiGrid";
 import { KpiMark } from "@/components/kpi-marks";
 import { INK } from "@/lib/palette";
 import { RankWindow } from "@/components/RankWindow";
-import { Feed, FeedCount, FeedDays, FeedEmpty } from "@/components/feed/Feed";
+import { Feed, FeedCount, FeedDays, FeedEmpty, useFeedZone } from "@/components/feed/Feed";
 import { FeedTxRow } from "@/components/feed/FeedTxRow";
+import { FeedServiceFold } from "@/components/feed/FeedMeaning";
+import { foldServiceRows, isTxFold, type TxFold } from "@/lib/tx-meaning-row";
 import { getGateway } from "@/lib/config";
 import { fetchChainStats, type ChainStats } from "@/lib/chain-stats";
-import { formatCompact, toEpochMs } from "@/lib/format";
+import { formatCompact, formatDottedDate, toEpochMs } from "@/lib/format";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { useChainTipRefresh, usePageSync } from "@/lib/page-sync";
 import { SNAPSHOT_FETCH, enteringIds, snapshotPath, useEnterIds, ENTER_MS } from "@/lib/keyed-enter";
@@ -229,6 +231,26 @@ export function TransactionsView({
     },
   ];
 
+  /* Oracle posts, block rewards, fee collects: one «Служебные: N» row per day, opened per day. */
+  const zone = useFeedZone();
+  const [openDays, setOpenDays] = useState<ReadonlySet<string>>(() => new Set());
+  const toggleDay = useCallback((day: string) => {
+    setOpenDays((prev) => {
+      const next = new Set(prev);
+      if (next.has(day)) next.delete(day);
+      else next.add(day);
+      return next;
+    });
+  }, []);
+  const tape: Array<TxListItem | TxFold<TxListItem>> = foldServiceRows(items, {
+    dayOf: (row) => {
+      const ms = toEpochMs(row.timestamp);
+      return ms == null ? "unknown" : formatDottedDate(ms, zone);
+    },
+    actionOf: (row) => row.meaning?.action,
+    isOpen: (day) => openDays.has(day),
+  });
+
   return (
     <Shell>
       <KpiGrid items={kpis} dense className="mb-3 sm:grid-cols-4" />
@@ -249,11 +271,15 @@ export function TransactionsView({
         <div className="feed-sheet">
           <Feed busy={pending} enterClass={packEnter.enterClass("pack")}>
             <FeedDays
-              items={items}
+              items={tape}
               seconds
-              msOf={(row) => toEpochMs(row.timestamp)}
+              msOf={(it) => toEpochMs(isTxFold(it) ? it.rows[0]!.timestamp : it.timestamp)}
+              sizeOf={(it) => (isTxFold(it) ? (it.open ? 0 : it.rows.length) : 1)}
               countOf={(n) => <FeedCount k="feed.txCount" n={n} />}
-              render={(row, lead) => (
+              render={(row, lead) =>
+                isTxFold(row) ? (
+                  <FeedServiceFold key={row.key} fold={row} lead={lead} onToggle={() => toggleDay(row.day)} />
+                ) : (
                 <FeedTxRow
                   key={row.id}
                   row={row}
@@ -267,7 +293,8 @@ export function TransactionsView({
                     toggle: () => toggleFav(row.id),
                   }}
                 />
-              )}
+                )
+              }
             />
           </Feed>
           <RankWindow

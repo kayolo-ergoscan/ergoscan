@@ -108,7 +108,7 @@ export function compactMeaning(m: TxMeaning): CompactMeaning {
 }
 
 export { readFacts, multisigOf, shortAddr } from "./facts.js";
-export { assetLabel, formatAmount, sayLines, sayMeaning } from "./summary.js";
+export { assetLabel, assetText, extraNote, formatAmount, sayLines, sayMeaning } from "./summary.js";
 export { meaningView, type MeaningView, type MeaningViewRole } from "./perspective.js";
 export {
   PROTOCOL_NAMES,
@@ -122,3 +122,4 @@ export {
 } from "./registry.js";
 export * from "./types.js";
 export * from "./vocab.js";
+export { meaningRow, type MeaningParty, type MeaningRow, type MeaningRowInput } from "./row.js";

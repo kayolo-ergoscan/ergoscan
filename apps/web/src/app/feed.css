@@ -1263,3 +1263,98 @@ button.feed-caret:hover {
     animation: none;
   }
 }
+
+/* ── tx rows from the gateway's meaning (FeedMeaning.tsx) ──
+   Line 1 «Обмен · ErgoDex»: the action word in the text colour, where it happened muted.
+   Line 2 «кто → с кем · заметки». Right: «отдал →» chips, then the figure. */
+.feed-title > .mx-word {
+  flex: 0 1 auto;
+  font-weight: 600;
+  color: var(--text);
+}
+html[data-look="c"] main .feed-title > a.mx-word {
+  color: var(--text) !important;
+}
+.feed-title > a.mx-word:hover {
+  text-decoration: underline;
+}
+.feed-title > .mx-where {
+  flex: 0 1 auto;
+  overflow: hidden;
+  font-size: 13px;
+  color: var(--muted-2);
+  text-overflow: ellipsis;
+}
+.feed-title > .mx-where::before {
+  content: "·";
+  padding-right: 8px;
+}
+/* Machine rows (oracle posts, block rewards, upkeep): quiet word, quiet figure. */
+.feed-row.is-quiet .feed-title > .mx-word {
+  font-weight: 500;
+  color: var(--muted);
+}
+html[data-look="c"] main .feed-row.is-quiet .feed-title > a.mx-word {
+  color: var(--muted) !important;
+}
+.feed-row.is-quiet .feed-amt {
+  font-weight: 500;
+  color: var(--muted);
+}
+/* «кто → с кем» is one fact: it wraps or cuts as a whole, like any other fact. */
+.mx-route > .mx-arrow {
+  padding: 0 5px;
+}
+.mx-arrow {
+  color: var(--muted-2);
+}
+/* A guess says so in a dimmer word. */
+.feed-facts > .mx-guess {
+  color: color-mix(in oklab, var(--muted-2) 70%, transparent);
+}
+.mx-gave {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+.mx-phrase {
+  line-height: 1.45;
+  color: var(--text);
+}
+/* «Служебные: 23 · …» with «показать»: the title and the chip both open the day's rows. */
+.mx-fold-title {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.mx-fold-title:hover {
+  text-decoration: underline;
+}
+.mx-fold-btn {
+  cursor: pointer;
+}
+@media (max-width: 639px) {
+  .mx-desk,
+  .mx-gave {
+    display: none;
+  }
+  .feed-sub:has(> .mx-desk:only-child) {
+    display: none;
+  }
+}
+@media (min-width: 640px) {
+  .mx-phone {
+    display: none;
+  }
+  /* The phone's «where» fact is hidden here, so the fact after it starts the line without a dot. */
+  .feed-facts > .feed-when + .mx-where-fact + *::before {
+    content: none;
+  }
+  .feed-sub:has(> .mx-phone:only-child) {
+    display: none;
+  }
+}

@@ -73,7 +73,7 @@ export type TxMeaning = {
   v: number;
   action: MeaningActionId;
   family: MeaningFamily;
-  /** Fold on lists by default. */
+  /** The service family (oracle, upkeep). Lists fold by isFoldedAction(action). */
   service: boolean;
   /** Protocol id (see PROTOCOL_NAMES); null for plain wallet moves and unknown contracts. */
   protocol: string | null;
@@ -152,7 +152,7 @@ export type CompactMeaning = {
   v: number;
   action: MeaningActionId;
   protocol?: string;
-  /** Fold on lists by default. Present only when true. */
+  /** The service family (oracle, upkeep). Present only when true. */
   service?: true;
   /** Left out when exact. */
   conf?: Exclude<MeaningConf, "exact">;
