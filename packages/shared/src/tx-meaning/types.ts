@@ -99,7 +99,80 @@ export type TxMeaning = {
   chain?: string | null;
   /** The boxes were cut short; amounts may be partial. */
   truncated?: boolean;
+  /** Phrase variant inside one action (commit, request, borrow, own, claim…). */
+  sub?: string;
+  /** Contract name for «вызвал «…»» and upkeep lines; the name for a name registration. */
+  label?: string;
+  /** Oracle pair, or the pool pair of a new pool. */
+  pair?: string;
+  /** Second number for the phrase (boxes out on a consolidation). */
+  count2?: number;
   /** Which rule answered (consensus, oracle, pools, wallets…), for «Как определили». */
   rule: string;
   say: { ru: string; en: string };
+};
+
+/** An asset as lists send it: no token = ERG. */
+export type MeaningAssetLike = {
+  token?: string | null;
+  amount: string;
+  name?: string | null;
+  decimals?: number;
+};
+
+export type MeaningExtraLike = { to: string; asset: MeaningAssetLike; role?: string; name?: string | null };
+
+/** Everything a phrase needs. The full TxMeaning and the list form (CompactMeaning) both fit. */
+export type MeaningPhraseInput = {
+  action: MeaningActionId;
+  protocol?: string | null;
+  actor?: string | null;
+  actorName?: string | null;
+  counterparty?: string | null;
+  counterpartyName?: string | null;
+  count?: number;
+  count2?: number;
+  gave?: readonly MeaningAssetLike[];
+  got?: readonly MeaningAssetLike[];
+  venues?: readonly string[];
+  extra?: readonly MeaningExtraLike[];
+  viaOrder?: boolean;
+  chain?: string | null;
+  label?: string;
+  pair?: string | null;
+  sub?: string;
+};
+
+/**
+ * The list form of TxMeaning: no phrase, no «how», no fee amount (the row has `fee`), defaults
+ * left out (conf exact, empty lists, ERG token id). Build the phrase with sayMeaning(m, lang);
+ * the family comes from MEANING_VOCAB[action].
+ */
+export type CompactMeaning = {
+  v: number;
+  action: MeaningActionId;
+  protocol?: string;
+  /** Fold on lists by default. Present only when true. */
+  service?: true;
+  /** Left out when exact. */
+  conf?: Exclude<MeaningConf, "exact">;
+  actor?: string;
+  actorName?: string;
+  counterparty?: string;
+  counterpartyName?: string;
+  count?: number;
+  count2?: number;
+  gave?: MeaningAssetLike[];
+  got?: MeaningAssetLike[];
+  /** Present only when the fee was not the actor's: another payer, or null (an executor paid). */
+  feePayer?: string | null;
+  venues?: string[];
+  extra?: MeaningExtraLike[];
+  secondary?: MeaningActionId[];
+  viaOrder?: true;
+  chain?: string;
+  truncated?: true;
+  sub?: string;
+  label?: string;
+  pair?: string;
 };

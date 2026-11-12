@@ -192,7 +192,11 @@ const ruleConsensus: Rule = (f, ctx) => {
   const locks = f.ins.filter((b) => b.role?.role === "reward-lock");
   if (locks.length && f.ins.every((b) => !b.role || b.role.p === "ergo")) {
     const lockAddrs = new Set(locks.map((b) => b.address));
-    const receivers = walletGainers(f, lockAddrs).filter((a) => ergGain(f, a) > 0n);
+    const gainers = walletGainers(f, lockAddrs).filter((a) => ergGain(f, a) > 0n);
+    // A wallet that spent a box here and got money back is the pool (its change and share), not a miner.
+    const spenders = new Set(f.ins.filter((b) => b.wallet).map((b) => b.address));
+    const receivers = gainers.filter((a) => !spenders.has(a));
+    const named = stable(locks).find((b) => ctx.nameOf?.(b.address));
     let total = 0n;
     for (const a of receivers) total += ergGain(f, a);
     const extra: NonNullable<Draft["extra"]> = [];
@@ -203,22 +207,24 @@ const ruleConsensus: Rule = (f, ctx) => {
       }
     }
     const why: WhyFact[] = [{ k: "spent", v: "Miner reward lock", n: locks.length }];
-    if (receivers.length <= 1) {
+    if (!receivers.length || (receivers.length === 1 && !named && !spenders.size)) {
+      // A miner takes its own reward (into a fresh address or back to its own wallet).
+      const actor = receivers[0] ?? gainers[0] ?? f.payer ?? stable(locks)[0]!.address;
+      const got = ergGain(f, actor);
       return {
         action: "miner-payout",
         protocol: "ergo",
         conf: "exact",
-        actor: receivers[0] ?? f.payer ?? stable(locks)[0]!.address,
+        actor,
         count: 1,
         count2: locks.length,
-        got: [[ERG, total]],
+        got: got > 0n ? [[ERG, got]] : [],
         extra,
         sub: "claim",
         why,
       };
     }
     // The pool: whoever the reward lock is named after (else the lock itself).
-    const named = stable(locks).find((b) => ctx.nameOf?.(b.address));
     const lock0 = stable(locks)[0]!;
     return {
       action: "miner-payout",
@@ -408,6 +414,7 @@ const rulePools: Rule = (f, ctx) => {
 
   const orders = f.ins.filter((b) => !pools.includes(b) && isOrderBox(f, b));
   let actor: string | null;
+  let noSigner: string | null = null;
   let extra: NonNullable<Draft["extra"]> = [];
   if (orders.length) {
     actor = bestGainer(f, new Set(f.ins.filter((b) => b.wallet).map((b) => b.address)));
@@ -416,9 +423,10 @@ const rulePools: Rule = (f, ctx) => {
     actor = f.payer;
     extra = extrasFrom(f, actor);
   } else {
-    // A contract traded (no wallet signed): name the script that came back.
+    // A contract traded on its own (no wallet signed): no actor; the venue is the subject.
     const bot = stable(f.ins.filter((b) => !b.wallet && !b.fee && !pools.includes(b) && f.outs.some((o) => o.address === b.address)))[0];
-    actor = bot?.address ?? null;
+    actor = null;
+    noSigner = bot?.address ?? "";
   }
   // The protocol most of the spent pools belong to (ties: by id), not the first box.
   const tally = new Map<ProtocolId, number>();
@@ -426,6 +434,7 @@ const rulePools: Rule = (f, ctx) => {
   const protocol = [...tally].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))[0]![0];
   const why: WhyFact[] = pools.map((b) => ROLE_WHY(b));
   if (orders.length) why.push(...orders.map((b) => ({ k: "order", v: b.role?.label ?? b.address })));
+  if (noSigner != null) why.push(noSigner ? { k: "no-signer", v: noSigner } : { k: "no-signer" });
   return {
     action,
     protocol,
@@ -559,18 +568,17 @@ const ruleRosen: Rule = (f) => {
   }
   if (locked.length && !spent.some((b) => b.role!.role === "bridge-lock") && f.payer) {
     const lockAddrs = new Set(locked.map((b) => b.address));
+    const c = lockChain(locked[0]!);
     return {
       action: "bridge-out",
       protocol: "rosen",
-      conf: "exact",
+      // The lock is known; without its registers the other side is not read, only the flow.
+      conf: c ? "exact" : "flow",
       actor: f.payer,
       gave: positive(sumBags(locked)),
       extra: extrasFrom(f, f.payer, lockAddrs, true),
-      chain: (() => {
-        const c = lockChain(locked[0]!);
-        return c ? chainLabel(c) : null;
-      })(),
-      why: [ROLE_WHY(locked[0]!, "created")],
+      chain: c ? chainLabel(c) : null,
+      why: [ROLE_WHY(locked[0]!, "created"), ...(c ? [] : [{ k: "no-registers" }])],
     };
   }
   const permit = spent.find((b) => b.role!.role === "bridge-permit");

@@ -28,7 +28,7 @@ import { catchAsyncRoutes, jsonErrorHandler, logUnhandledRejections } from "./li
 import { isPartnerIp, parsePartnerList } from "./lib/rateAllow.js";
 import { installExactJson } from "./lib/exactJson.js";
 import { stampTemplateHashes } from "./lib/txTemplateHash.js";
-import { mempoolMeaning, warmMempoolMeanings, type TxMeaning } from "./lib/txMeaning.js";
+import { mempoolMeaning, mempoolMeaningSlim, warmMempoolMeanings, type CompactMeaning } from "./lib/txMeaning.js";
 import { SubblockEngine } from "./lib/subblocks.js";
 import { SealWatcher } from "./lib/seal.js";
 import { registerExplorerRoutes } from "./routes/explorer.js";
@@ -282,10 +282,10 @@ function snapshot(): MempoolSnapshot {
   };
 }
 
-/** HTTP only: balls with the additive `meaning`. The WebSocket snapshot stays as it was. */
-function withMeanings(list: BallProps[]): Array<BallProps & { meaning?: TxMeaning }> {
+/** HTTP only: balls with the additive list-form `meaning`. The WebSocket snapshot stays as it was. */
+function withMeanings(list: BallProps[]): Array<BallProps & { meaning?: CompactMeaning }> {
   return list.map((b) => {
-    const meaning = mempoolMeaning(b.id);
+    const meaning = mempoolMeaningSlim(b.id);
     return meaning ? { ...b, meaning } : b;
   });
 }

@@ -36,7 +36,7 @@ import {
 import { classifyTxShape, pickTxAction, txTapeFields, rentTapePaint, MINERS_FEE_ADDRESS, MINERS_FEE_TREE, fillRentWeekGaps, parseRentSeries, parseRentTape, parseRentEpochBoxes, parseRentEpochNano, pickTxLock, LITHOS_COLLAT_ADDRESS, LITHOS_COLLAT_TOKEN_ID, LITHOS_MINED_HEIGHTS_SQL, type RentTapeCategory, type RentTapeRow } from "@ergoscan/shared";
 import { blockHeaderFromRow, type BlockHeaderView } from "./blockHeader.js";
 import { loadTxIo, meaningsFor, type TxIo } from "./txMeaning.js";
-import type { MeaningTx, TxMeaning } from "@ergoscan/shared";
+import type { CompactMeaning, MeaningTx } from "@ergoscan/shared";
 
 export const SNAP_BLOCKS = "blocks_latest";
 export const SNAP_TXS = "txs_recent";
@@ -89,7 +89,8 @@ export type TxListItem = {
   /** Distinct tokens on boxes created or spent by this tx. Additive. */
   tokenCount?: number;
   /** What the tx did (action, protocol, amounts, phrase). Additive; computed at read time. */
-  meaning?: TxMeaning;
+  /** List form: the web builds the phrase with sayMeaning(meaning, lang). */
+  meaning?: CompactMeaning;
 };
 
 export type SnapshotMeta = {

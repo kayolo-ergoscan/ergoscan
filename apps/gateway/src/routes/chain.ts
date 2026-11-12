@@ -28,7 +28,7 @@ import {
 } from "@ergoscan/shared";
 import { laterTs } from "../lib/later-ts.js";
 import { stampTemplateHashes } from "../lib/txTemplateHash.js";
-import { meaningForPage, meaningsByIds, mempoolMeaning, type TxMeaning } from "../lib/txMeaning.js";
+import { meaningForPage, meaningsByIds, mempoolMeaningSlim, type CompactMeaning, type TxMeaning } from "../lib/txMeaning.js";
 import { pageLimit } from "../lib/page-limit.js";
 import { addressFromErgoTree, ergoTreeFromAddress, normErgoTree } from "../lib/ergoAddress.js";
 import { decodeErgoTree, type ErgoTreeDecode } from "../lib/ergoTree.js";
@@ -389,7 +389,7 @@ function mapIo(x: Record<string, unknown> | { boxId?: string; value?: number }) 
 type IoMapped = ReturnType<typeof mapIo>;
 
 /** Additive: rows without a meaning keep their old shape (no `meaning: null`). */
-function withMeaning(m: TxMeaning | null | undefined): { meaning?: TxMeaning } {
+function withMeaning<M extends TxMeaning | CompactMeaning>(m: M | null | undefined): { meaning?: M } {
   return m ? { meaning: m } : {};
 }
 
@@ -1159,12 +1159,12 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
         ? addressTxActivity(address, pageTxIds)
         : Promise.resolve({});
     // Read alongside activity: cache hits are free, misses are indexed reads by tx id.
-    const meaningsP: Promise<Map<string, TxMeaning>> =
+    const meaningsP: Promise<Map<string, CompactMeaning>> =
       wantLists && idxTxs?.items.length
         ? meaningsByIds(idxTxs.items.map((row) => row.id), rentTapeMarks).catch(
-            () => new Map<string, TxMeaning>()
+            () => new Map<string, CompactMeaning>()
           )
-        : Promise.resolve(new Map<string, TxMeaning>());
+        : Promise.resolve(new Map<string, CompactMeaning>());
     const partiesP: Promise<Record<string, { from: string[]; to: string[] }>> =
       pageTxIds.length > 0 ? addressTxParties(address, pageTxIds) : Promise.resolve({});
     const [summary, idxBoxes, tokenBals, idxSt, activity, parties] = await Promise.all([
@@ -1316,7 +1316,7 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
         },
         unspentBoxes: unspentList,
         recentTxs,
-        mempoolTxs: mempoolPack.txs.map((t) => ({ ...t, ...withMeaning(mempoolMeaning(t.id)) })),
+        mempoolTxs: mempoolPack.txs.map((t) => ({ ...t, ...withMeaning(mempoolMeaningSlim(t.id)) })),
         tokenCount: summary?.tokenCount ?? tokens.length,
         firstTs: summary?.firstTs ?? null,
         lastTs: laterTs(
@@ -1671,7 +1671,7 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
       return;
     }
     const meanings = await meaningsByIds(idx.items.map((row) => row.id), rentTapeMarks).catch(
-      () => new Map<string, TxMeaning>()
+      () => new Map<string, CompactMeaning>()
     );
     const items = idx.items.map((row) => ({
       id: row.id,

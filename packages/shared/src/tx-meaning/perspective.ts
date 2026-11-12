@@ -2,7 +2,7 @@
  * The same tx through one address's eyes (address page, token page): the word changes,
  * the facts do not. «Перевод» → «Отправлено» / «Получено», a pool payout → «Выплата от пула».
  */
-import type { TxMeaning } from "./types.js";
+import type { MeaningPhraseInput } from "./types.js";
 import { MEANING_VOCAB } from "./vocab.js";
 
 export type MeaningViewRole = "actor" | "counterparty" | "other";
@@ -24,7 +24,7 @@ function chainWord(chain: string | null | undefined, lang: "ru" | "en", into: bo
  * `ergDelta` = the address's own ERG change in this tx (nanoERG, string or bigint) when the caller
  * knows it (address activity does); else the sign comes from the meaning alone.
  */
-export function meaningView(m: TxMeaning, address: string, ergDelta?: string | bigint | null): MeaningView {
+export function meaningView(m: MeaningPhraseInput, address: string, ergDelta?: string | bigint | null): MeaningView {
   const role: MeaningViewRole =
     m.actor === address ? "actor" : m.counterparty === address ? "counterparty" : "other";
   let sign: -1 | 0 | 1 = 0;
@@ -36,7 +36,9 @@ export function meaningView(m: TxMeaning, address: string, ergDelta?: string | b
       sign = 0;
     }
   }
-  if (sign === 0 && role === "actor") sign = m.gave.length && !m.got.length ? -1 : m.got.length && !m.gave.length ? 1 : 0;
+  const gave = m.gave?.length ?? 0;
+  const got = m.got?.length ?? 0;
+  if (sign === 0 && role === "actor") sign = gave && !got ? -1 : got && !gave ? 1 : 0;
   if (sign === 0 && role !== "actor" && ["send", "multisend", "miner-payout"].includes(m.action)) sign = 1;
   const base = MEANING_VOCAB[m.action];
   const t = (ru: string, en: string) => ({ role, title: { ru, en }, sign });
@@ -58,7 +60,7 @@ export function meaningView(m: TxMeaning, address: string, ergDelta?: string | b
     case "oracle-post":
       return role === "actor" ? t("Цена отправлена", "Price posted") : t(base.ru, base.en);
     default:
-      if (role === "other" && sign > 0 && m.extra.some((e) => e.to === address)) return t("Получено", "Received");
+      if (role === "other" && sign > 0 && (m.extra ?? []).some((e) => e.to === address)) return t("Получено", "Received");
       return t(base.ru, base.en);
   }
 }

@@ -12,7 +12,7 @@ import {
 import type { RawTx } from "@ergoscan/shared";
 import { estimateFee, txToBall } from "@ergoscan/shared";
 import { getConfirmedRecentTxs, parseTxTapeCursor } from "../lib/snapshots.js";
-import { mempoolMeaning } from "../lib/txMeaning.js";
+import { mempoolMeaningSlim } from "../lib/txMeaning.js";
 import { cacheList, cacheNoStore } from "../lib/httpCache.js";
 import {
   listTokensCatalog,
@@ -201,7 +201,7 @@ export function registerMarketRoutes(app: Express, deps: MarketDeps) {
               outputs: mem.outputs?.length ?? 0,
               value: ball.value,
               confirmed: false,
-              ...(mempoolMeaning(mem.id) ? { meaning: mempoolMeaning(mem.id)! } : {}),
+              ...(mempoolMeaningSlim(mem.id) ? { meaning: mempoolMeaningSlim(mem.id)! } : {}),
             };
           })
           .sort((a, b) => b.timestamp - a.timestamp)

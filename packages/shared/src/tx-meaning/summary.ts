@@ -1,13 +1,13 @@
 /**
- * One plain sentence per tx, RU and EN, from the draft. Amounts use the token's decimals:
- * at or above a million — whole units; at or above 1 — two decimals; below 1 — four
- * significant digits. Thousands are split with a space. Unknown owners stay short addresses.
+ * One plain sentence per tx, RU and EN, built from the meaning itself: the full form (tx page)
+ * or the list form (CompactMeaning). Pure: no node imports and no lookups, so the browser
+ * builds list phrases with this same code. Amounts use the asset's decimals: at or above a
+ * million — whole units; at or above 1 — two decimals; below 1 — four significant digits.
+ * Thousands are split with a space. Unknown owners stay short addresses.
  */
 import { ERG, shortAddr, type AssetKey } from "./facts.js";
-import { PROTOCOL_NAMES } from "./registry.js";
-import type { Draft } from "./rules.js";
-import type { MeaningAsset, MeaningCtx } from "./types.js";
-
+import { PROTOCOL_NAMES, type ProtocolId } from "./registry.js";
+import type { MeaningAsset, MeaningAssetLike, MeaningCtx, MeaningExtraLike, MeaningPhraseInput } from "./types.js";
 function group(int: bigint): string {
   const s = int.toString();
   return s.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
@@ -36,10 +36,11 @@ export function formatAmount(raw: bigint | string, decimals: number): string {
   return s;
 }
 
-export function tokenLabel(key: AssetKey, ctx: MeaningCtx): string {
-  if (key === ERG) return "ERG";
-  const name = ctx.token?.(key)?.name?.trim();
-  if (!name) return `${key.slice(0, 6)}…`;
+/** The short name of an asset: ERG, the token name (cut to 24) or the token id head. */
+export function assetLabel(a: MeaningAssetLike): string {
+  if (!a.token) return "ERG";
+  const name = a.name?.trim();
+  if (!name) return `${a.token.slice(0, 6)}…`;
   return name.length > 24 ? `${name.slice(0, 23)}…` : name;
 }
 
@@ -53,51 +54,57 @@ export function toAsset(key: AssetKey, amount: bigint, ctx: MeaningCtx): Meaning
   return asset;
 }
 
-function amt(key: AssetKey, v: bigint, ctx: MeaningCtx): string {
-  const dec = key === ERG ? 9 : (ctx.token?.(key)?.decimals ?? 0);
-  return `${formatAmount(v, dec)} ${tokenLabel(key, ctx)}`;
+function amt(a: MeaningAssetLike): string {
+  const dec = a.token ? (a.decimals ?? 0) : 9;
+  return `${formatAmount(a.amount, dec)} ${assetLabel(a)}`;
 }
 
-function list(items: Array<[AssetKey, bigint]> | undefined, ctx: MeaningCtx, lang: "ru" | "en"): string {
+function list(items: readonly MeaningAssetLike[] | undefined, lang: Lang): string {
   const xs = items ?? [];
   if (!xs.length) return lang === "ru" ? "ничего" : "nothing";
-  const shown = xs.slice(0, 2).map(([k, v]) => amt(k, v, ctx));
+  const shown = xs.slice(0, 2).map(amt);
   const and = lang === "ru" ? " и " : " and ";
   if (xs.length <= 2) return shown.join(and);
   const more = xs.length - 2;
   return lang === "ru" ? `${shown.join(", ")} и ещё ${more}` : `${shown.join(", ")} and ${more} more`;
 }
 
-export function who(addr: string | null | undefined, ctx: MeaningCtx): string | null {
+function who(addr: string | null | undefined, name: string | null | undefined): string | null {
   if (!addr) return null;
-  const n = ctx.nameOf?.(addr)?.name;
-  return n || shortAddr(addr);
+  return name || shortAddr(addr);
 }
 
-function proto(d: Draft, lang: "ru" | "en"): string {
-  return d.protocol ? PROTOCOL_NAMES[d.protocol][lang] : "";
+type Lang = "ru" | "en";
+
+/** English count with the right noun; Russian lines put the number in brackets instead. */
+function many(n: number, one: string, more: string): string {
+  return `${n} ${n === 1 ? one : more}`;
 }
 
-function venues(d: Draft, lang: "ru" | "en"): string {
-  const v = d.venues?.length ? d.venues : d.protocol ? [PROTOCOL_NAMES[d.protocol][lang]] : [];
+function protoName(p: string | null | undefined, lang: Lang): string {
+  if (!p) return "";
+  return PROTOCOL_NAMES[p as ProtocolId]?.[lang] ?? p;
+}
+
+function venues(m: MeaningPhraseInput, lang: Lang): string {
+  const v = m.venues?.length ? m.venues : m.protocol ? [protoName(m.protocol, lang)] : [];
   return v.join(" + ");
 }
 
-function extraTail(d: Draft, ctx: MeaningCtx, lang: "ru" | "en"): string {
-  const xs = d.extra ?? [];
-  if (!xs.length) return "";
+function extraTail(xs: readonly MeaningExtraLike[] | undefined, lang: Lang): string {
+  if (!xs?.length) return "";
   // One entry per receiver: «ещё 0.001 ERG и 1 HNS → 9eed…BgzL».
-  const by = new Map<string, { role?: string; items: Array<[AssetKey, bigint]> }>();
+  const by = new Map<string, { to: string; role?: string; name?: string | null; items: MeaningAssetLike[] }>();
   for (const e of xs) {
     const k = `${e.role ?? ""}|${e.to}`;
-    const row = by.get(k) ?? { role: e.role, items: [] };
-    row.items.push([e.key, e.amount]);
+    const row = by.get(k) ?? { to: e.to, role: e.role, name: e.name, items: [] };
+    row.items.push(e.asset);
     by.set(k, row);
   }
-  const rows = [...by].map(([k, v]) => ({ to: k.slice(k.indexOf("|") + 1), ...v }));
+  const rows = [...by.values()];
   const parts = rows.slice(0, 2).map((r) => {
-    const to = r.role === "reemission" ? (lang === "ru" ? "реэмиссия" : "reemission") : who(r.to, ctx);
-    return `${list(r.items, ctx, lang)} → ${to}`;
+    const to = r.role === "reemission" ? (lang === "ru" ? "реэмиссия" : "reemission") : who(r.to, r.name);
+    return `${list(r.items, lang)} → ${to}`;
   });
   const left = rows.length - 2;
   const more = left > 0 ? (lang === "ru" ? ` и ещё ${left}` : ` and ${left} more`) : "";
@@ -106,78 +113,85 @@ function extraTail(d: Draft, ctx: MeaningCtx, lang: "ru" | "en"): string {
 
 type Lines = { ru: string; en: string };
 
-export function sayDraft(d: Draft, ctx: MeaningCtx): Lines {
-  const A = who(d.actor, ctx);
+export function sayLines(m: MeaningPhraseInput): Lines {
+  const A = who(m.actor, m.actorName);
   const ru = A ?? "Кто-то";
   const en = A ?? "Someone";
-  const P = { ru: proto(d, "ru"), en: proto(d, "en") };
-  const V = { ru: venues(d, "ru"), en: venues(d, "en") };
-  const gave = { ru: list(d.gave, ctx, "ru"), en: list(d.gave, ctx, "en") };
-  const got = { ru: list(d.got, ctx, "ru"), en: list(d.got, ctx, "en") };
-  const to = who(d.counterparty, ctx) ?? "?";
-  const tail = { ru: extraTail(d, ctx, "ru"), en: extraTail(d, ctx, "en") };
-  const n = d.count ?? 0;
-  const pair = d.pair ? ` ${d.pair}` : "";
+  const P = { ru: protoName(m.protocol, "ru"), en: protoName(m.protocol, "en") };
+  const V = { ru: venues(m, "ru"), en: venues(m, "en") };
+  const gave = { ru: list(m.gave, "ru"), en: list(m.gave, "en") };
+  const got = { ru: list(m.got, "ru"), en: list(m.got, "en") };
+  const to = who(m.counterparty, m.counterpartyName) ?? "?";
+  const tail = { ru: extraTail(m.extra, "ru"), en: extraTail(m.extra, "en") };
+  const n = m.count ?? 0;
+  const pair = m.pair ? ` ${m.pair}` : "";
 
-  switch (d.action) {
+  switch (m.action) {
     case "send":
-      if (d.sub === "own") {
+      if (m.sub === "own") {
         return { ru: `${ru} перевёл ${gave.ru} между своими адресами${tail.ru}`, en: `${en} moved ${gave.en} between its own addresses${tail.en}` };
       }
       return { ru: `${ru} отправил ${gave.ru} → ${to}${tail.ru}`, en: `${en} sent ${gave.en} to ${to}${tail.en}` };
     case "multisend":
-      return { ru: `${ru} отправил ${gave.ru} адресам (${n})`, en: `${en} sent ${gave.en} to ${n} addresses` };
+      return { ru: `${ru} отправил ${gave.ru} адресам (${n})`, en: `${en} sent ${gave.en} to ${many(n, "address", "addresses")}` };
     case "self":
       return { ru: `${ru} перевёл средства себе`, en: `${en} moved funds to itself` };
     case "consolidate":
-      return { ru: `${ru} объединил боксы: ${n} → ${d.count2 ?? 0}`, en: `${en} merged ${n} boxes into ${d.count2 ?? 0}` };
+      return { ru: `${ru} объединил боксы: ${n} → ${m.count2 ?? 0}`, en: `${en} merged ${n} boxes into ${m.count2 ?? 0}` };
     case "block-reward":
       return { ru: `Майнер ${ru} получил ${got.ru} за блок`, en: `Miner ${en} got ${got.en} for the block` };
     case "fee-collect":
       return { ru: `Майнер ${ru} забрал комиссии блока: ${got.ru}`, en: `Miner ${en} took the block fees: ${got.en}` };
     case "miner-payout":
-      if (d.sub === "claim") {
+      if (m.sub === "claim") {
         return { ru: `Майнер ${ru} забрал награду: ${got.ru}${tail.ru}`, en: `Miner ${en} claimed the reward: ${got.en}${tail.en}` };
       }
-      return { ru: `${ru} выплатил ${gave.ru} майнерам (${n})${tail.ru}`, en: `${en} paid ${gave.en} to ${n} miners${tail.en}` };
+      return { ru: `${ru} выплатил ${gave.ru} майнерам (${n})${tail.ru}`, en: `${en} paid ${gave.en} to ${many(n, "miner", "miners")}${tail.en}` };
     case "rent":
       return {
         ru: `Майнер ${ru} взял плату за хранение со старых боксов (${n}): ${got.ru}`,
-        en: `Miner ${en} took storage rent from ${n} old boxes: ${got.en}`,
+        en: `Miner ${en} took storage rent from ${many(n, "old box", "old boxes")}: ${got.en}`,
       };
     case "token-issue":
       return { ru: `${ru} выпустил ${got.ru}`, en: `${en} issued ${got.en}` };
     case "nft-mint": {
-      const [k] = d.got?.[0] ?? [""];
-      const name = tokenLabel(k, ctx);
+      const name = m.got?.[0] ? assetLabel(m.got[0]) : "?";
       return { ru: `${ru} выпустил NFT «${name}»`, en: `${en} minted NFT “${name}”` };
     }
     case "burn":
       return { ru: `${ru} сжёг ${gave.ru}`, en: `${en} burned ${gave.en}` };
     case "name-register":
-      if (d.sub === "commit") {
+      if (m.sub === "commit") {
         return { ru: `${ru} подал заявку на имя · ${P.ru}`, en: `${en} requested a name on ${P.en}` };
       }
-      return d.label
-        ? { ru: `${ru} зарегистрировал имя ${d.label} · ${P.ru}`, en: `${en} registered the name ${d.label} on ${P.en}` }
+      return m.label
+        ? { ru: `${ru} зарегистрировал имя ${m.label} · ${P.ru}`, en: `${en} registered the name ${m.label} on ${P.en}` }
         : { ru: `${ru} зарегистрировал имя · ${P.ru}`, en: `${en} registered a name on ${P.en}` };
     case "swap": {
-      const by = d.viaOrder ? { ru: " по заявке", en: " by order" } : { ru: "", en: "" };
+      const by = m.viaOrder ? { ru: " по заявке", en: " by order" } : { ru: "", en: "" };
+      if (!A) {
+        // No wallet signed (a contract traded on its own): the venue is the subject.
+        return {
+          ru: `${V.ru} обменял ${gave.ru} на ${got.ru}${by.ru}${tail.ru}`,
+          en: `${V.en} swapped ${gave.en} for ${got.en}${by.en}${tail.en}`,
+        };
+      }
       return {
         ru: `${ru} обменял ${gave.ru} на ${got.ru} · ${V.ru}${by.ru}${tail.ru}`,
         en: `${en} swapped ${gave.en} for ${got.en} on ${V.en}${by.en}${tail.en}`,
       };
     }
     case "lp-add": {
-      const by = d.viaOrder ? { ru: " по заявке", en: " by order" } : { ru: "", en: "" };
-      const g = d.gave?.length ? d.gave : [];
+      const by = m.viaOrder ? { ru: " по заявке", en: " by order" } : { ru: "", en: "" };
+      if (!A) return { ru: `В пул вложено ${gave.ru} · ${V.ru}${by.ru}`, en: `${gave.en} added to a pool on ${V.en}${by.en}` };
       return {
-        ru: `${ru} вложил ${list(g, ctx, "ru")} в пул · ${V.ru}${by.ru}${tail.ru}`,
-        en: `${en} added ${list(g, ctx, "en")} to a pool on ${V.en}${by.en}${tail.en}`,
+        ru: `${ru} вложил ${gave.ru} в пул · ${V.ru}${by.ru}${tail.ru}`,
+        en: `${en} added ${gave.en} to a pool on ${V.en}${by.en}${tail.en}`,
       };
     }
     case "lp-remove": {
-      const by = d.viaOrder ? { ru: " по заявке", en: " by order" } : { ru: "", en: "" };
+      const by = m.viaOrder ? { ru: " по заявке", en: " by order" } : { ru: "", en: "" };
+      if (!A) return { ru: `Из пула забрано ${got.ru} · ${V.ru}${by.ru}`, en: `${got.en} removed from a pool on ${V.en}${by.en}` };
       return {
         ru: `${ru} забрал ${got.ru} из пула · ${V.ru}${by.ru}${tail.ru}`,
         en: `${en} removed ${got.en} from a pool on ${V.en}${by.en}${tail.en}`,
@@ -188,7 +202,7 @@ export function sayDraft(d: Draft, ctx: MeaningCtx): Lines {
     case "order-place":
       return { ru: `${ru} создал заявку на обмен ${gave.ru} · ${P.ru}`, en: `${en} placed a swap order with ${gave.en} on ${P.en}` };
     case "order-cancel":
-      if (d.sub === "loan") {
+      if (m.sub === "loan") {
         return { ru: `${ru} отменил заявку на заём, вернулось ${got.ru} · ${P.ru}`, en: `${en} cancelled a loan request, ${got.en} returned · ${P.en}` };
       }
       return { ru: `${ru} отменил заявку, вернулось ${got.ru} · ${P.ru}`, en: `${en} cancelled an order, ${got.en} returned · ${P.en}` };
@@ -197,9 +211,9 @@ export function sayDraft(d: Draft, ctx: MeaningCtx): Lines {
     case "stable-redeem":
       return { ru: `${ru} погасил ${gave.ru} и получил ${got.ru} · ${P.ru}${tail.ru}`, en: `${en} redeemed ${gave.en} for ${got.en} on ${P.en}${tail.en}` };
     case "loan":
-      switch (d.sub) {
+      switch (m.sub) {
         case "lend":
-          return { ru: `${ru} выдал заём ${gave.ru}${d.counterparty ? ` → ${to}` : ""} · ${P.ru}`, en: `${en} lent ${gave.en}${d.counterparty ? ` to ${to}` : ""} on ${P.en}` };
+          return { ru: `${ru} выдал заём ${gave.ru}${m.counterparty ? ` → ${to}` : ""} · ${P.ru}`, en: `${en} lent ${gave.en}${m.counterparty ? ` to ${to}` : ""} on ${P.en}` };
         case "request":
           return { ru: `${ru} создал заявку на заём под залог ${gave.ru} · ${P.ru}`, en: `${en} asked for a loan against ${gave.en} on ${P.en}` };
         case "claim":
@@ -212,27 +226,27 @@ export function sayDraft(d: Draft, ctx: MeaningCtx): Lines {
     case "loan-repay":
       return { ru: `${ru} погасил заём ${gave.ru} · ${P.ru}`, en: `${en} repaid ${gave.en} on ${P.en}` };
     case "stake":
-      if (d.sub === "open") {
+      if (m.sub === "open") {
         return { ru: `${ru} открыл резерв ${gave.ru} · ${P.ru}`, en: `${en} opened a reserve with ${gave.en} · ${P.en}` };
       }
       return { ru: `${ru} внёс ${gave.ru} · ${P.ru}`, en: `${en} deposited ${gave.en} on ${P.en}` };
     case "unstake":
       return { ru: `${ru} вывел ${got.ru} · ${P.ru}`, en: `${en} withdrew ${got.en} from ${P.en}` };
     case "payout":
-      if (d.sub === "reserve") {
+      if (m.sub === "reserve") {
         return { ru: `${ru} получил ${got.ru} из резерва · ${P.ru}`, en: `${en} received ${got.en} from a reserve · ${P.en}` };
       }
       return { ru: `${ru} получил выплату ${got.ru} · ${P.ru}`, en: `${en} received ${got.en} from ${P.en}` };
     case "auction":
-      if (d.sub === "list") return { ru: `${ru} выставил лот на аукцион · ${P.ru}`, en: `${en} listed a lot on ${P.en}` };
-      if (d.sub === "bid") return { ru: `${ru} сделал ставку ${gave.ru} · ${P.ru}`, en: `${en} bid ${gave.en} on ${P.en}` };
+      if (m.sub === "list") return { ru: `${ru} выставил лот на аукцион · ${P.ru}`, en: `${en} listed a lot on ${P.en}` };
+      if (m.sub === "bid") return { ru: `${ru} сделал ставку ${gave.ru} · ${P.ru}`, en: `${en} bid ${gave.en} on ${P.en}` };
       return { ru: `Лот закрыт: ${ru} получил ${got.ru} · ${P.ru}`, en: `Lot settled: ${en} got ${got.en} on ${P.en}` };
     case "bridge-out": {
-      const c = d.chain ? { ru: d.chain, en: d.chain } : { ru: "другую сеть", en: "another chain" };
+      const c = m.chain ? { ru: m.chain, en: m.chain } : { ru: "другую сеть", en: "another chain" };
       return { ru: `${ru} отправил ${gave.ru} в ${c.ru} · ${P.ru}${tail.ru}`, en: `${en} sent ${gave.en} to ${c.en} via ${P.en}${tail.en}` };
     }
     case "bridge-in": {
-      const c = d.chain ? { ru: d.chain, en: d.chain } : { ru: "другой сети", en: "another chain" };
+      const c = m.chain ? { ru: m.chain, en: m.chain } : { ru: "другой сети", en: "another chain" };
       return { ru: `${ru} получил ${got.ru} из ${c.ru} · ${P.ru}`, en: `${en} received ${got.en} from ${c.en} via ${P.en}` };
     }
     case "mix":
@@ -241,37 +255,42 @@ export function sayDraft(d: Draft, ctx: MeaningCtx): Lines {
       return { ru: `Оператор ${ru} отправил цену в оракул${pair}`, en: `Operator ${en} posted a price to the${pair} oracle` };
     case "oracle-update":
       return n
-        ? { ru: `Оракул${pair} обновил курс по ответам операторов (${n})`, en: `The${pair} oracle updated its rate from ${n} operator posts` }
+        ? { ru: `Оракул${pair} обновил курс по ответам операторов (${n})`, en: `The${pair} oracle updated its rate from ${many(n, "operator post", "operator posts")}` }
         : { ru: `Оракул${pair} обновил курс`, en: `The${pair} oracle updated its rate` };
     case "service":
-      switch (d.sub) {
+      switch (m.sub) {
         case "oracle-round":
           return { ru: `Оракул${pair} начал новый раунд сбора цен`, en: `The${pair} oracle started a new round` };
         case "oracle-governance":
           return { ru: `Голосование за контракт оракула${pair}`, en: `The${pair} oracle contract vote` };
         case "bridge-settle":
           return {
-            ru: `Мост закрыл перевод${d.chain ? ` в ${d.chain}` : ""}: награды наблюдателям · ${P.ru}`,
-            en: `Bridge settled a transfer${d.chain ? ` to ${d.chain}` : ""}: watcher rewards · ${P.en}`,
+            ru: `Мост закрыл перевод${m.chain ? ` в ${m.chain}` : ""}: награды наблюдателям · ${P.ru}`,
+            en: `Bridge settled a transfer${m.chain ? ` to ${m.chain}` : ""}: watcher rewards · ${P.en}`,
           };
         case "watcher-report":
           return { ru: `Наблюдатель ${ru} подтвердил перевод через мост · ${P.ru}`, en: `Watcher ${en} reported a bridge transfer · ${P.en}` };
         default:
-          return d.label
-            ? { ru: `Служебная операция «${d.label}» · ${P.ru}`, en: `${P.en} upkeep: “${d.label}”` }
+          return m.label
+            ? { ru: `Служебная операция «${m.label}» · ${P.ru}`, en: `${P.en} upkeep: “${m.label}”` }
             : { ru: `Служебная операция · ${P.ru}`, en: `${P.en} upkeep` };
       }
     case "contract-call":
-      if (d.protocol && d.label) {
-        return { ru: `${ru} вызвал «${d.label}» · ${P.ru}`, en: `${en} called “${d.label}” · ${P.en}` };
+      if (m.protocol && m.label) {
+        return { ru: `${ru} вызвал «${m.label}» · ${P.ru}`, en: `${en} called “${m.label}” · ${P.en}` };
       }
-      return d.got?.length
+      return m.got?.length
         ? { ru: `${ru} вызвал контракт ${to}, получил ${got.ru}`, en: `${en} called contract ${to} and got ${got.en}` }
         : { ru: `${ru} вызвал контракт ${to}`, en: `${en} called contract ${to}` };
     case "to-contract":
-      if (d.protocol && d.label) {
-        return { ru: `${ru} отправил ${gave.ru} в «${d.label}» · ${P.ru}`, en: `${en} sent ${gave.en} to “${d.label}” · ${P.en}` };
+      if (m.protocol && m.label) {
+        return { ru: `${ru} отправил ${gave.ru} в «${m.label}» · ${P.ru}`, en: `${en} sent ${gave.en} to “${m.label}” · ${P.en}` };
       }
       return { ru: `${ru} отправил ${gave.ru} в контракт ${to}`, en: `${en} sent ${gave.en} to contract ${to}` };
   }
+}
+
+/** The phrase in one language. The web calls this for list rows (CompactMeaning). */
+export function sayMeaning(m: MeaningPhraseInput, lang: Lang): string {
+  return sayLines(m)[lang];
 }

@@ -7,9 +7,11 @@ import {
   PROTOCOL_NAMES,
   TX_MEANING_VERSION,
   classifyTxMeaning,
+  compactMeaning,
   formatAmount,
   meaningView,
   multisigOf,
+  sayMeaning,
   type MeaningBox,
   type MeaningCtx,
   type MeaningTx,
@@ -167,6 +169,35 @@ describe("tx meaning: rules", () => {
     assert.equal(multisigOf("0008cd02b78225fbf94345e65ac70306b545702fb8fa64862c1e24af3143a35bf2a27842"), null);
   });
 
+  it("a pool payout does not count the pool's own wallet (it spent a box and got change)", () => {
+    const g = byId("c787bf08");
+    const m = classifyTxMeaning(txOf(g), ctxOf(g));
+    const spenders = new Set(g.inputs.filter((b) => b.address.startsWith("9")).map((b) => b.address));
+    assert.ok(spenders.size >= 1);
+    assert.equal(m.count, 1);
+    assert.equal(m.actorName, "2miners");
+    assert.equal(m.sub, "pool");
+    // 6 ERG left the locks; the pool's own wallet kept its part, the one miner got the rest.
+    assert.ok(BigInt(m.gave[0]!.amount) < 3_000_000_000n);
+  });
+
+  it("a contract that trades on its own is not named: the venue is the subject", () => {
+    const m = classifyTxMeaning(txOf(byId("0b45de0f")), ctxOf(byId("0b45de0f")));
+    assert.equal(m.actor, null);
+    assert.equal(m.fee.payer, null);
+    assert.ok(m.why.some((w) => w.k === "no-signer"));
+    assert.ok(m.say.ru.startsWith("LithosDex обменял"));
+    assert.ok(m.say.en.startsWith("LithosDex swapped"));
+  });
+
+  it("a bridge lock without registers is not exact: the other side is unknown", () => {
+    const m = classifyTxMeaning(txOf(byId("7ba689a5")), ctxOf(byId("7ba689a5")));
+    assert.equal(m.action, "bridge-out");
+    assert.equal(m.conf, "flow");
+    assert.ok(!m.chain);
+    assert.equal(classifyTxMeaning(txOf(byId("2161fa06")), ctxOf(byId("2161fa06"))).conf, "exact");
+  });
+
   it("a huge cut-short tx is flagged and still counted", () => {
     const g = byId("70e7d6c7");
     const tx = txOf(g);
@@ -175,6 +206,48 @@ describe("tx meaning: rules", () => {
     assert.equal(m.truncated, true);
     assert.equal(m.action, "multisend");
     assert.ok((m.count ?? 0) >= 90);
+  });
+});
+
+describe("tx meaning: list form", () => {
+  it("the list form gives the same phrase in both languages, also after JSON", () => {
+    for (const g of GOLDEN) {
+      const m = classifyTxMeaning(txOf(g), ctxOf(g));
+      const c = JSON.parse(JSON.stringify(compactMeaning(m)));
+      assert.equal(sayMeaning(c, "ru"), m.say.ru, g.id);
+      assert.equal(sayMeaning(c, "en"), m.say.en, g.id);
+      assert.equal(c.service === true, m.service, g.id);
+      for (const k of ["say", "why", "rule", "family", "fee"]) assert.ok(!(k in c), `${g.id}: ${k}`);
+    }
+  });
+
+  it("the list form is smaller and keeps the fee payer only when it is not the actor", () => {
+    let full = 0;
+    let slim = 0;
+    for (const g of GOLDEN) {
+      const m = classifyTxMeaning(txOf(g), ctxOf(g));
+      const c = compactMeaning(m);
+      full += JSON.stringify(m).length;
+      slim += JSON.stringify(c).length;
+      if (m.fee.nano === "0" || m.fee.payer === m.actor) assert.ok(!("feePayer" in c), g.id);
+      else assert.equal(c.feePayer, m.fee.payer, g.id);
+    }
+    assert.ok(slim * 2 < full, `${slim} vs ${full}`);
+    const fill = compactMeaning(classifyTxMeaning(txOf(byId("b99df42b")), ctxOf(byId("b99df42b"))));
+    assert.equal(fill.feePayer, null);
+  });
+
+  it("the address view reads the list form the same way", () => {
+    for (const g of GOLDEN) {
+      const m = classifyTxMeaning(txOf(g), ctxOf(g));
+      if (!m.actor) continue;
+      assert.deepEqual(meaningView(compactMeaning(m), m.actor), meaningView(m, m.actor), g.id);
+    }
+  });
+
+  it("the phrase module has no node imports (the browser uses it)", () => {
+    const src = fs.readFileSync(new URL("./summary.ts", import.meta.url), "utf8");
+    assert.ok(!/from "node:|require\(|process\.|Buffer/.test(src));
   });
 });
 

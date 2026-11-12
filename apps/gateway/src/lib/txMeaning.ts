@@ -3,12 +3,16 @@
  * In-memory LRU keyed by tx id + TX_MEANING_VERSION; confirmed txs never change, so entries
  * only leave by size. Mempool meanings live in their own map and leave with the tx.
  *
- * Lists (recent, block, address, token) read the same box facts, so one cache serves them all.
- * The tx page computes its own copy with registers and data inputs and does not write here.
+ * Lists (recent, block, address, token, mempool) get the list form (CompactMeaning: no phrase,
+ * no «how»; the web builds the phrase with sayMeaning). They read the same box facts, so one
+ * cache of list forms serves them all. The tx page and /v1/mempool/:id get the full meaning;
+ * the tx page computes its own copy with registers and data inputs and does not write here.
  */
 import {
   TX_MEANING_VERSION,
   classifyTxMeaning,
+  compactMeaning,
+  type CompactMeaning,
   type MeaningBox,
   type MeaningCtx,
   type MeaningName,
@@ -20,19 +24,19 @@ import { cachedDexLockHints, getIndexPool, tokenMetaMany } from "./indexDb.js";
 import { namesBook } from "./names.js";
 import { isHex64, packedReadEnabled } from "./packedRead.js";
 
-export type { TxMeaning };
+export type { CompactMeaning, TxMeaning };
 
 const CACHE_MAX = Math.max(1000, Number(process.env.TX_MEANING_CACHE ?? 20_000) || 20_000);
 /** A tx with more boxes than this is read cut short: inputs and outputs, this many each. */
 export const MEANING_FULL_BOXES = 400;
 
-const lru = new Map<string, TxMeaning>();
+const lru = new Map<string, CompactMeaning>();
 let hits = 0;
 let misses = 0;
 
 const key = (id: string) => `${id.toLowerCase()}:${TX_MEANING_VERSION}`;
 
-export function meaningCached(id: string): TxMeaning | null {
+export function meaningCached(id: string): CompactMeaning | null {
   const k = key(id);
   const hit = lru.get(k);
   if (!hit) return null;
@@ -41,7 +45,7 @@ export function meaningCached(id: string): TxMeaning | null {
   return hit;
 }
 
-function remember(id: string, m: TxMeaning) {
+function remember(id: string, m: CompactMeaning) {
   const k = key(id);
   lru.delete(k);
   lru.set(k, m);
@@ -120,9 +124,9 @@ function safeClassify(tx: MeaningTx, ctx: MeaningCtx): TxMeaning | null {
   }
 }
 
-/** Compute for txs whose boxes the caller already holds; cached ones are reused. */
-export async function meaningsFor(txs: MeaningTx[]): Promise<Map<string, TxMeaning>> {
-  const out = new Map<string, TxMeaning>();
+/** List forms for txs whose boxes the caller already holds; cached ones are reused. */
+export async function meaningsFor(txs: MeaningTx[]): Promise<Map<string, CompactMeaning>> {
+  const out = new Map<string, CompactMeaning>();
   const todo: MeaningTx[] = [];
   for (const tx of txs) {
     const hit = meaningCached(tx.id);
@@ -140,8 +144,9 @@ export async function meaningsFor(txs: MeaningTx[]): Promise<Map<string, TxMeani
   for (const tx of todo) {
     const m = safeClassify(tx, ctx);
     if (!m) continue;
-    remember(tx.id, m);
-    out.set(tx.id, m);
+    const c = compactMeaning(m);
+    remember(tx.id, c);
+    out.set(tx.id, c);
   }
   return out;
 }
@@ -317,8 +322,8 @@ type RentMarks = (ids: string[], minH: number, maxH: number) => Promise<Map<stri
  * Meaning for tx ids the caller has only as ids (address history, token txs).
  * Cache first; misses read their boxes by indexed tx id, huge txs cut short.
  */
-export async function meaningsByIds(ids: string[], rentMarks?: RentMarks): Promise<Map<string, TxMeaning>> {
-  const out = new Map<string, TxMeaning>();
+export async function meaningsByIds(ids: string[], rentMarks?: RentMarks): Promise<Map<string, CompactMeaning>> {
+  const out = new Map<string, CompactMeaning>();
   const miss: string[] = [];
   for (const raw of new Set(ids)) {
     if (!isHex64(raw)) continue;
@@ -381,7 +386,7 @@ export async function meaningsByIds(ids: string[], rentMarks?: RentMarks): Promi
 
 // ── mempool ─────────────────────────────────────────────────────────────────
 
-const mempoolMeanings = new Map<string, TxMeaning>();
+const mempoolMeanings = new Map<string, { full: TxMeaning; slim: CompactMeaning }>();
 let mempoolBusy = false;
 
 /** Node tx JSON (unconfirmed dump: inputs are full boxes), after addresses and hashes are stamped. */
@@ -404,8 +409,14 @@ function nodeBox(raw: object): MeaningBox {
   };
 }
 
+/** Full meaning (phrase and «how»): /v1/mempool/:id. */
 export function mempoolMeaning(id: string): TxMeaning | null {
-  return mempoolMeanings.get(id) ?? null;
+  return mempoolMeanings.get(id)?.full ?? null;
+}
+
+/** List form: mempool lists. */
+export function mempoolMeaningSlim(id: string): CompactMeaning | null {
+  return mempoolMeanings.get(id)?.slim ?? null;
 }
 
 /**
@@ -429,7 +440,7 @@ export async function warmMempoolMeanings(txs: readonly NodeTx[]): Promise<void>
     const ctx = await meaningCtx(tokenIdsOf(fresh));
     for (const tx of fresh) {
       const m = safeClassify(tx, ctx);
-      if (m) mempoolMeanings.set(tx.id, m);
+      if (m) mempoolMeanings.set(tx.id, { full: m, slim: compactMeaning(m) });
     }
   } finally {
     mempoolBusy = false;
