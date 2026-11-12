@@ -81,6 +81,7 @@ html[data-look="c"][data-ink] {
   --k-bridge: #e6e6e6;
   --k-reward: var(--c-block);
   --k-rent: #ff8a65;
+  --k-box: var(--c-box);
   --k-contract: var(--c-addr);
   --k-mixer: #8a8a8a;
   --k-quiet: #2f2f2f;

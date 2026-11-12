@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import clsx from "clsx";
 import { Shell } from "@/components/Shell";
+import { StuckPin } from "@/components/StuckPin";
 import { KpiGrid } from "@/components/KpiGrid";
 import { RankWindow } from "@/components/RankWindow";
 import { lookupAddress } from "@/lib/address-book";
@@ -171,7 +172,6 @@ export function BuybackView({ kind, initial }: { kind: BuybackKind; initial?: Bu
   const [pending, setPending] = useState(false);
   const [offset, setOffset] = useState(0);
   const [stuck, setStuck] = useState(false);
-  const pinRef = useRef<HTMLDivElement>(null);
   const packRef = useRef(pack);
   packRef.current = pack;
   const skipMount = useRef(!!initial);
@@ -201,18 +201,6 @@ export function BuybackView({ kind, initial }: { kind: BuybackKind; initial?: Bu
     void load(true);
   }, [load, markSynced]);
 
-  useEffect(() => {
-    const el = pinRef.current;
-    if (!el) return;
-    const chrome = document.querySelector(".stage-frame header.sticky");
-    const pin = (chrome instanceof HTMLElement ? chrome.getBoundingClientRect().height : 64) + 8;
-    const obs = new IntersectionObserver(([entry]) => setStuck(!entry?.isIntersecting), {
-      threshold: 1,
-      rootMargin: `-${pin}px 0px 0px 0px`,
-    });
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [pack.moves.length]);
 
   const points = useMemo(
     () =>
@@ -470,7 +458,7 @@ export function BuybackView({ kind, initial }: { kind: BuybackKind; initial?: Bu
             </div>
 
             <div className="addr-sheet mt-2">
-              <div ref={pinRef} className="h-px w-full" aria-hidden />
+              <StuckPin onStuck={setStuck} />
               <div className="addr-pan">
                 <div
                   className={clsx(

@@ -42,6 +42,7 @@
 [data-k="reward"],
 [data-k="block"] { --k: var(--k-reward); }
 [data-k="rent"] { --k: var(--k-rent); }
+[data-k="box"] { --k: var(--k-box); }
 [data-k="contract"],
 [data-k="addr"] { --k: var(--k-contract); }
 [data-k="mixer"] { --k: var(--k-mixer); }
@@ -373,6 +374,10 @@
   white-space: nowrap;
   color: var(--text);
 }
+.feed-sub .feed-amt {
+  font-size: 12px;
+  font-weight: 500;
+}
 .feed-amt.is-up,
 .feed-chip .is-up {
   color: var(--up);
@@ -597,6 +602,7 @@ button.feed-caret:hover {
 
 /* Sort chips on a ranked plate */
 .feed-sort {
+  position: relative;
   display: flex;
   min-width: 0;
   gap: 6px;
@@ -605,6 +611,16 @@ button.feed-caret:hover {
 }
 .feed-sort::-webkit-scrollbar {
   display: none;
+}
+/* More chips past an edge: that edge fades, so the row reads as scrollable. */
+.feed-sort[data-more="end"] {
+  mask-image: linear-gradient(to right, black calc(100% - 2rem), transparent);
+}
+.feed-sort[data-more="start"] {
+  mask-image: linear-gradient(to left, black calc(100% - 2rem), transparent);
+}
+.feed-sort[data-more="both"] {
+  mask-image: linear-gradient(to right, transparent, black 2rem, black calc(100% - 2rem), transparent);
 }
 .feed-sort-chip {
   display: inline-flex;
@@ -853,4 +869,65 @@ button.feed-caret:hover {
   .feed-row.mp-sealed .feed-tile {
     animation: none;
   }
+
+/* ── small parts batch 2 added ── */
+
+/* A source line under a board. */
+.feed-note {
+  margin: 10px 4px 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted-2);
+}
+/* A fact that matters more than its neighbours (a name a project gave itself). */
+.feed-facts > .feed-accent {
+  color: rgb(var(--accent-rgb));
+}
+/* Ids in a detail field: wrap, one gap apart. */
+.feed-id-run {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+
+/* NFT card caption: the feed's name and facts line under the picture. */
+.nft-cap {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 12px 11px;
+}
+.nft-cap-name {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nft-cap-facts {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.25;
+  white-space: nowrap;
+  color: var(--muted-2);
+}
+.nft-cap-facts > * {
+  flex: 0 0 auto;
+}
+.nft-cap-facts > :last-child {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nft-cap-facts > * + *::before {
+  content: "·";
+  padding: 0 6px;
+  color: var(--muted-2);
 }

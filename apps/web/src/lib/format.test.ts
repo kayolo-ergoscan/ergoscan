@@ -69,8 +69,11 @@ test("formatEmissionGlance groups millions and compacts from a billion", () => {
   assert.equal(vis(formatEmissionGlance(999_999_999n, 0, "en").text), "999 999 999");
   assert.equal(formatEmissionGlance(1_000_000_000n, 0, "en").text, "1B");
   assert.match(formatEmissionGlance(1_000_000_000n, 0, "ru").text, /млрд/);
-  assert.equal(vis(formatEmissionGlance(10n ** 18n, 3, "en").text), "1 000 000 000 000 000");
+  assert.equal(formatEmissionGlance(10n ** 18n, 3, "en").text, "1×10¹⁵");
   assert.doesNotMatch(formatEmissionGlance(10n ** 18n, 3, "en").text, /E|T/);
+  assert.equal(formatEmissionGlance(10n ** 18n + 1n, 0, "en").text, "1×10¹⁸");
+  assert.equal(formatEmissionGlance(25n * 10n ** 14n, 0, "ru").text, "2,5×10¹⁵");
+  assert.equal(vis(formatEmissionGlance(10n ** 18n, 3, "en").exact), "1 000 000 000 000 000");
 });
 
 test("dust uses a tiny-zero mark", () => {

@@ -313,8 +313,24 @@ function intlCompact(n: number, locale?: string): string {
   }).format(n);
 }
 
+const SUPERSCRIPT = "⁰¹²³⁴⁵⁶⁷⁸⁹";
+
+/** Past trillions ICU compact turns into `1000T` / `1E15`; print a power of ten instead: 1×10¹⁸, 2,5×10¹⁵. */
+function powerGlance(whole: bigint, locale?: string): string {
+  const digits = whole.toString();
+  const exp = digits.length - 1;
+  const mantissa = Number(digits.slice(0, 4)) / 1000;
+  const head = new Intl.NumberFormat(numberLocale(locale), { maximumSignificantDigits: 3 }).format(mantissa);
+  const sup = String(exp)
+    .split("")
+    .map((d) => SUPERSCRIPT[Number(d)])
+    .join("");
+  return `${head}×10${sup}`;
+}
+
 /**
- * Tight-column token amounts: 1.01B / 1,01 млрд via ICU compact.
+ * Tight-column token amounts: 1.01B / 1,01 млрд via ICU compact; from a
+ * quadrillion on, a power of ten (1×10¹⁸).
  * Exact grouped string stays on title / aria-label.
  */
 export function formatScaledGlance(
@@ -325,7 +341,12 @@ export function formatScaledGlance(
 ): { text: string; exact: string } {
   const exact = formatScaledAmount(raw, decimals, locale);
   const abs = raw < 0n ? -raw : raw;
-  if (scaledWhole(abs, decimals) < from || scaledToCompactNumber(abs, decimals) == null) {
+  const whole = scaledWhole(abs, decimals);
+  if (whole < from) return { text: exact, exact };
+  if (whole >= GLANCE_GROUPED_FROM) {
+    return { text: `${raw < 0n ? "-" : ""}${powerGlance(whole, locale)}`, exact };
+  }
+  if (scaledToCompactNumber(abs, decimals) == null) {
     return { text: exact, exact };
   }
   const sign = raw < 0n ? "-" : "";
