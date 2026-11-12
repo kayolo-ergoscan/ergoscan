@@ -708,7 +708,7 @@ export const ru: Record<string, string> = {
   "token.tab.pools": "Пулы",
   "token.tab.holders": "Держатели",
   "token.tab.txs": "Транзакции",
-  "token.tab.swaps": "Свопы",
+  "token.tab.swaps": "Обмены",
   "token.tab.mintburn": "Выпуск / сжигание",
   "token.tab.about": "Метаданные",
   "token.tab.metadata": "Метаданные",

@@ -19,6 +19,8 @@ import {
 } from "@/lib/list-snapshots";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, SITE_URL } from "@/lib/site-meta";
 import { tokenSymbol } from "@/lib/token-meta";
+import { parseFullMeaning } from "@/lib/tx-meaning-row";
+import { meaningRow, sayMeaning } from "@ergoscan/shared";
 
 export const cachedHome = cache(fetchHomeSnapshot);
 export const cachedTx = cache(fetchTransaction);
@@ -254,6 +256,18 @@ export function txPageMeta(id: string, tx: Awaited<ReturnType<typeof fetchTransa
   const ins = tx.inputCount ?? (Array.isArray(tx.inputs) ? tx.inputs.length : 0);
   const outs = tx.outputCount ?? (Array.isArray(tx.outputs) ? tx.outputs.length : 0);
   if (ins || outs) bits.push(`${ins} input${ins === 1 ? "" : "s"}, ${outs} output${outs === 1 ? "" : "s"}.`);
+  // What it did, in the site's public language (English): «Swap · ErgoDex» and the phrase.
+  const meaning = parseFullMeaning(tx.meaning);
+  if (meaning) {
+    const r = meaningRow(meaning, "en");
+    const phrase = sayMeaning(meaning, "en");
+    return pageMeta({
+      title: `${r.where ? `${r.word} · ${r.where}` : r.word} · ${tx.confirmed ? "tx" : "mempool tx"} ${shortId(tx.id, 8)}`,
+      description: `${phrase}. ${bits[0]} Ergo transaction ${tx.id}.`,
+      path,
+      image: `/og/tx/${tx.id}`,
+    });
+  }
   return pageMeta({
     title: `${tx.confirmed ? "Tx" : "Mempool tx"} ${shortId(tx.id, 8)}`,
     description: `Ergo transaction ${tx.id}. ${bits.join(" ")}`,

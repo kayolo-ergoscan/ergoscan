@@ -25,9 +25,9 @@ import {
   type FeedLead,
 } from "@/components/feed/Feed";
 import { FeedHolderRow } from "@/components/feed/FeedHolderRow";
-import { MeaningPhraseField, MeaningTitle, meaningFacts, useMeaningRow } from "@/components/feed/FeedMeaning";
+import { MeaningPhraseField, MeaningTitle, meaningFacts, meaningLang, useMeaningRow } from "@/components/feed/FeedMeaning";
 import { meaningTile, parseMeaning } from "@/lib/tx-meaning-row";
-import type { CompactMeaning } from "@ergoscan/shared";
+import { MEANING_VOCAB, type CompactMeaning } from "@ergoscan/shared";
 import { compactFigure, KpiLabelMark, KpiNum, KpiTileRail } from "@/components/KpiGrid";
 import { KpiMark } from "@/components/kpi-marks";
 import { NameMarquee } from "@/components/NameMarquee";
@@ -1458,14 +1458,11 @@ function FeedTokenTxRow({
   const r = useMeaningRow(tx.meaning);
   const amt = tokenTapeAmount(tx);
   const raw = tx.kind === "swap" && tx.moved?.includes(".") ? scaledDecimalToRaw(tx.moved, decimals) : amt.raw;
+  // The list words (MEANING_VOCAB) for a row the gateway sent without a meaning.
   const kindLabel =
-    tx.kind === "mint"
-      ? t("tx.minted")
-      : tx.kind === "burn"
-        ? t("tx.burned")
-        : tx.kind === "swap"
-          ? t("token.kind.swap")
-          : t("token.kind.transfer");
+    MEANING_VOCAB[tx.kind === "mint" ? "token-issue" : tx.kind === "burn" ? "burn" : tx.kind === "swap" ? "swap" : "send"][
+      meaningLang(locale)
+    ];
   const from = partyList(tx.from);
   const to = partyList(tx.to);
   const many = t("address.multiple");

@@ -37,6 +37,9 @@ import { countText } from "@/lib/i18n/messages";
 import { readHashTab, setHashTab } from "@/lib/hash-tab";
 import { useKeepFresh, usePageSync } from "@/lib/page-sync";
 import { SNAPSHOT_FETCH, useEnterIds } from "@/lib/keyed-enter";
+import { meaningLang } from "@/components/feed/FeedMeaning";
+import { parseMeaning } from "@/lib/tx-meaning-row";
+import { meaningRow, type CompactMeaning } from "@ergoscan/shared";
 import type { BoxAsset, BoxRegisterTyped, BoxSnapshot } from "@/lib/list-snapshots";
 
 const BOX_TABS = ["summary", "tokens", "registers"] as const;
@@ -199,6 +202,7 @@ export function BoxView({
   );
   const treeConsts = data?.treeConstants ?? [];
   const spent = Boolean(data?.spentTransactionId);
+  const txWords = useTxWords([data?.transactionId, data?.spentTransactionId]);
   const mempool = data?.source === "mempool";
   const inclusion = asNum(data?.inclusionHeight) ?? asNum(data?.settlementHeight);
   const creation = asNum(data?.creationHeight);
@@ -485,6 +489,8 @@ export function BoxView({
                   spentHeight={spentHeight}
                   spentTs={asNum(data.spentTs)}
                   confs={confs}
+                  createdWord={data.transactionId ? txWords.get(data.transactionId) : undefined}
+                  spentWord={data.spentTransactionId ? txWords.get(data.spentTransactionId) : undefined}
                 />
               </div>
             ) : null}
@@ -742,6 +748,55 @@ function LifeWire({ className }: { className?: string }) {
   );
 }
 
+/**
+ * What the txs that made and spent this box did («Обмен · ErgoDex»), read from their `meaning`
+ * on the tx endpoint after the page is up. A tx without a meaning keeps its bare id.
+ */
+function useTxWords(ids: ReadonlyArray<string | null | undefined>): Map<string, CompactMeaning> {
+  const [words, setWords] = useState<Map<string, CompactMeaning>>(() => new Map());
+  const key = ids.filter((x): x is string => !!x && /^[0-9a-f]{64}$/i.test(x)).join(",");
+  useEffect(() => {
+    if (!key) return;
+    const ctl = new AbortController();
+    const list = [...new Set(key.split(","))];
+    void (async () => {
+      for (const id of list) {
+        try {
+          const r = await fetch(`${getGateway()}/v1/transactions/${encodeURIComponent(id)}`, {
+            ...SNAPSHOT_FETCH,
+            signal: ctl.signal,
+          });
+          if (!r.ok) continue;
+          const m = parseMeaning(((await r.json()) as { meaning?: unknown }).meaning);
+          if (m) setWords((prev) => new Map(prev).set(id, m));
+        } catch {
+          if (ctl.signal.aborted) return;
+        }
+      }
+    })();
+    return () => ctl.abort();
+  }, [key]);
+  return words;
+}
+
+/** «Обмен · ErgoDex» over a tx id in the box's life line. */
+function TxWord({ m, href, locale }: { m: CompactMeaning | undefined; href: string | null; locale: string }) {
+  if (!m) return null;
+  const r = meaningRow(m, meaningLang(locale));
+  return (
+    <p className="box-life-word">
+      {href ? (
+        <Link prefetch={false} href={href} className="box-life-act">
+          {r.word}
+        </Link>
+      ) : (
+        <span className="box-life-act">{r.word}</span>
+      )}
+      {r.where ? <span className="box-life-where">{r.where}</span> : null}
+    </p>
+  );
+}
+
 function BoxLife({
   t,
   locale,
@@ -760,7 +815,11 @@ function BoxLife({
   spentHeight,
   spentTs,
   confs,
+  createdWord,
+  spentWord,
 }: {
+  createdWord?: CompactMeaning;
+  spentWord?: CompactMeaning;
   t: (k: string) => string;
   locale: string;
   enterClass?: string;
@@ -783,7 +842,8 @@ function BoxLife({
     <div className="contents" aria-label={t("box.life")}>
       <article className={clsx("box-life-node box-life-in", enterClass)}>
         <p className="box-k">{t("box.in")}</p>
-        <p className="mt-2 flex min-w-0 items-center gap-1">
+        <TxWord m={createdWord} href={createdHref} locale={locale} />
+        <p className={clsx("flex min-w-0 items-center gap-1", createdWord ? "mt-0.5" : "mt-2")}>
           {createdHref && createdId ? (
             <Link prefetch={false} href={createdHref} className="min-w-0 truncate font-mono text-[13px] text-accent hover:underline">
               {shortId(createdId, 8)}
@@ -823,7 +883,8 @@ function BoxLife({
       </article>
       <article className={clsx("box-life-node box-life-out", enterClass)}>
         <p className="box-k">{spent ? t("box.out") : t("box.unspent")}</p>
-        <p className="mt-2 flex min-w-0 items-center gap-1">
+        {spent ? <TxWord m={spentWord} href={spentHref} locale={locale} /> : null}
+        <p className={clsx("flex min-w-0 items-center gap-1", spent && spentWord ? "mt-0.5" : "mt-2")}>
           {spent && spentHref && spentId ? (
             <Link prefetch={false} href={spentHref} className="min-w-0 truncate font-mono text-[13px] text-accent hover:underline">
               {shortId(spentId, 8)}
