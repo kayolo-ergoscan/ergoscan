@@ -130,7 +130,10 @@ export async function detectRosenWindow(
     // Do not filter boxes.address without a tx id — unspent index is length≤200.
     const created = await client.query<TriggerRow>(
       `WITH addrs AS (
-         SELECT id, address FROM packed.addr WHERE address = ANY($1::text[])
+         -- addr_md5 key, not address = ANY (no index on address: a 1 M-row seq scan per block).
+         SELECT id, address FROM packed.addr
+          WHERE addr_md5 = ANY (SELECT md5(x) FROM unnest($1::text[]) AS x)
+            AND address = ANY($1::text[])
        ),
        hits AS (
          SELECT
