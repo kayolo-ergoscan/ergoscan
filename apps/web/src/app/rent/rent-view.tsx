@@ -14,6 +14,7 @@ import {
   type RentSeriesPoint,
 } from "@ergoscan/shared";
 import { Shell } from "@/components/Shell";
+import { StuckPin } from "@/components/StuckPin";
 import { AddressPageSkeleton } from "@/components/AddressPageSkeleton";
 import { AddrFactCard } from "@/components/AddrFactCard";
 import { EvidenceBadge } from "@/components/EvidenceBadge";
@@ -167,7 +168,6 @@ export function RentView({
   const packEnter = useEnterIds();
   const [listReady, setListReady] = useState(false);
   const opened = useRef(false);
-  const pinRef = useRef<HTMLDivElement>(null);
   const seq = useRef(0);
   const painted = useRef(false);
   const tapeRef = useRef<RentBoxRow[] | null>(null);
@@ -330,19 +330,6 @@ export function RentView({
     loadRef.current(true);
   });
 
-  useEffect(() => {
-    const el = pinRef.current;
-    if (!el) return;
-    const chrome = document.querySelector(".stage-frame header.sticky");
-    const pin =
-      (chrome instanceof HTMLElement ? chrome.getBoundingClientRect().height : 64) + 8;
-    const obs = new IntersectionObserver(
-      ([entry]) => setStuck(!entry.isIntersecting),
-      { threshold: 1, rootMargin: `-${pin}px 0px 0px 0px` }
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [data?.items.length, offset]);
 
   const settled = data != null;
   const items = pane === "upcoming" ? (tape ?? []) : (data?.items ?? []);
@@ -565,7 +552,7 @@ export function RentView({
           {listReady && (
           <div className="mt-2 min-w-0">
             <div className="addr-sheet">
-              <div ref={pinRef} className="h-px w-full" aria-hidden />
+              <StuckPin onStuck={setStuck} />
               <div className={packEnter.enterClass("pack")}>
               <div
                 className={clsx(

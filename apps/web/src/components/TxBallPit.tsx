@@ -413,8 +413,11 @@ function seedFromBody(b: WellBody): WellSeed {
   };
 }
 
-/** Wait for block.sealed — tip often lands seconds before txIds. */
-const SEAL_HOLD_MS = 16_000;
+/**
+ * The gateway seals a block from the node within ~0.3 s, before the indexer tip.
+ * A tip that still comes first holds the balls this long for the seal's tx list.
+ */
+const SEAL_HOLD_MS = 8_000;
 
 type WellTip = {
   id: string;
@@ -494,6 +497,8 @@ export function TxBallPit({
   sealRef.current = seal;
   const seenTip = useRef<string | null>(null);
   const seenSeal = useRef<string | null>(null);
+  /** Highest block height whose seal we already played. A later tip for it holds nothing. */
+  const sealedHeight = useRef(0);
   const includedRef = useRef<Set<string>>(new Set());
   const departedRef = useRef<Map<string, WellSeed>>(new Map());
   const sealUntil = useRef(0);
@@ -695,13 +700,16 @@ export function TxBallPit({
         if (b.more || liveIds.has(b.id)) continue;
         if (!departedRef.current.has(b.id)) departedRef.current.set(b.id, seedFromBody(b));
       }
+      const ev = sealRef.current;
+      if (ev && Number.isFinite(ev.height)) sealedHeight.current = Math.max(sealedHeight.current, ev.height);
       const tip = tipRef.current;
       const tipKey = tip ? `${tip.height}:${tip.headerId}` : null;
       if (tipKey && seenTip.current === null) seenTip.current = tipKey;
       const tipGrew = Boolean(tipKey && seenTip.current && seenTip.current !== tipKey);
       if (tipKey) seenTip.current = tipKey;
-      if (tipGrew) holdUntil.current = Math.max(holdUntil.current, now + SEAL_HOLD_MS);
-      const ev = sealRef.current;
+      if (tipGrew && tip && tip.height > sealedHeight.current) {
+        holdUntil.current = Math.max(holdUntil.current, now + SEAL_HOLD_MS);
+      }
       const sealKey =
         ev && Array.isArray(ev.txIds) && ev.txIds.length ? `${ev.height}:${ev.blockId}` : null;
       if (sealKey && seenSeal.current !== sealKey) {

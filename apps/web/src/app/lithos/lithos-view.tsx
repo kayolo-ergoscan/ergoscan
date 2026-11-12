@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties, type Reac
 import Link from "next/link";
 import clsx from "clsx";
 import { Shell } from "@/components/Shell";
+import { StuckPin } from "@/components/StuckPin";
 import { KpiNum, KpiTileRail } from "@/components/KpiGrid";
 import { RankWindow } from "@/components/RankWindow";
 import {
@@ -166,7 +167,6 @@ export function LithosProtocolView({ initial }: { initial: LithosProtocolSnap | 
   const cursorStack = useRef<(string | null)[]>([]);
   const nextCursorRef = useRef<string | null>(initial?.nextCursor ?? null);
   const hasMoreRef = useRef(initial?.hasMore === true);
-  const pinRef = useRef<HTMLDivElement>(null);
   const items = snap?.items ?? [];
   const itemsRef = useRef(items);
   itemsRef.current = items;
@@ -222,19 +222,6 @@ export function LithosProtocolView({ initial }: { initial: LithosProtocolSnap | 
     setListReady(true);
   }, [items, enter.mark, packEnter.mark]);
 
-  useEffect(() => {
-    const el = pinRef.current;
-    if (!el) return;
-    const chrome = document.querySelector(".stage-frame header.sticky");
-    const pin =
-      (chrome instanceof HTMLElement ? chrome.getBoundingClientRect().height : 64) + 8;
-    const obs = new IntersectionObserver(
-      ([entry]) => setStuck(!entry.isIntersecting),
-      { threshold: 1, rootMargin: `-${pin}px 0px 0px 0px` }
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [items.length, listReady]);
 
   const privateLine = t("lithosP.private")
     .replace("{team}", lit(share?.teamLit ?? "0", locale))
@@ -312,7 +299,7 @@ export function LithosProtocolView({ initial }: { initial: LithosProtocolSnap | 
         <p className="text-[13px] text-[var(--muted)]">{t("lithosP.empty")}</p>
       ) : (
         <div className="addr-sheet">
-          <div ref={pinRef} className="h-px w-full" aria-hidden />
+          <StuckPin onStuck={setStuck} />
           <div className={packEnter.enterClass("pack")}>
             <div
               className={clsx(

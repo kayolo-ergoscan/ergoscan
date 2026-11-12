@@ -23,6 +23,9 @@ export type FeedGlyphId =
   | "exchange"
   | "pool"
   | "protocol"
+  | "box"
+  | "fee"
+  | "name"
   | "none";
 
 const PATHS: Record<FeedGlyphId, string> = {
@@ -48,6 +51,9 @@ const PATHS: Record<FeedGlyphId, string> = {
   exchange: "M4 9.5 12 4.5l8 5M5.5 9.5v8M10 9.5v8M14 9.5v8M18.5 9.5v8M4 19.5h16",
   pool: "M3.5 10c2.8 0 2.8-2 5.6-2s2.8 2 5.6 2 2.8-2 5.8-2M3.5 16c2.8 0 2.8-2 5.6-2s2.8 2 5.6 2 2.8-2 5.8-2",
   protocol: "M12 3.5 19.5 8v8L12 20.5 4.5 16V8zM12 9.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5z",
+  box: "M4.5 9h15v10.5h-15zM3.5 4.5h17V9h-17zM10 13h4",
+  fee: "M5 7.5h14v9H5zM9 12h6M5 10h2M17 14h2",
+  name: "M4.5 6.5h9l6 5.5-6 5.5h-9zM8 12h.01",
   none: "M6.5 12h11",
 };
 

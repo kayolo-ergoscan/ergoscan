@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
 import { CATEGORY_COLORS } from "@ergoscan/shared";
@@ -18,7 +18,18 @@ import { KpiNum } from "@/components/KpiGrid";
 import { SegBar, segItem } from "@/components/SegBar";
 import { TxBallPit, type TxBallSeed } from "@/components/TxBallPit";
 import { TxIoMark } from "@/components/TxIoMark";
-import { TokenAvatar } from "@/components/TokenBadge";
+import {
+  Feed,
+  FeedAmount,
+  FeedBoard,
+  FeedCount,
+  FeedEmpty,
+  FeedField,
+  FeedPlate,
+  FeedSection,
+  type FeedTokenMeta,
+} from "@/components/feed/Feed";
+import { FeedBoxRow, FeedHoldingRow, FeedPartyRow } from "@/components/feed/FeedBoxRow";
 import { getGateway } from "@/lib/config";
 import type { TxPageSnapshot, TxTokenMeta } from "@/lib/list-snapshots";
 import {
@@ -27,18 +38,14 @@ import {
   formatErgPrecise,
   formatFeeRate,
   formatNumericDate,
-  formatTokenAmount,
   shortId,
-  visibleAddress,
   toBigIntAmt,
 } from "@/lib/format";
-import { describeParty } from "@/lib/address-labels";
 import { lockCaption, lockIdFromIo, txChipCaption } from "@/lib/tx-lock";
 import { tokenDecimals, tokenSymbol } from "@/lib/token-meta";
 import {
   groupParties,
   markFeeOutputIndexes,
-  tokenEntries,
   type Party,
   type TxIo,
 } from "@/lib/tx-flow";
@@ -277,6 +284,13 @@ export function TxView({
   const toParties = dests.filter((p) => !p.isFee);
   const feeParties = dests.filter((p) => p.isFee);
   const tokens = useMemo(() => metaMap(data?.tokenMeta), [data?.tokenMeta]);
+  const chipMeta = useCallback(
+    (tid: string): FeedTokenMeta | undefined => {
+      const m = tokens.get(tid.toLowerCase());
+      return m ? { name: m.name, decimals: tokenDecimals(tid, m.decimals) } : undefined;
+    },
+    [tokens]
+  );
   const feeFromBoxes = feeParties.reduce((s, p) => s + p.erg, 0n);
   const feeShown = feeNano > 0n ? feeNano : feeFromBoxes;
 
@@ -573,116 +587,133 @@ export function TxView({
           </div>
 
           {sheetReady && tab === "summary" && (
-            <div className="addr-sheet mt-3">
-              <SheetBlock title={t("tx.from")}>
-                {!fromParties.length ? (
-                  <p className="px-3 py-2.5 text-[13px] text-[var(--muted)]">
-                    {isCoinbase ? t("tx.cat.coinbase") : t("tx.noIo")}
-                  </p>
-                ) : (
-                  fromParties.map((p) => (
-                    <PartyRow
-                      key={p.key}
-                      party={p}
-                      side="in"
-                      locale={locale}
-                      t={t}
-                      tokens={tokens}
-                      enterClass={enter.enterClass(p.key)}
-                    />
-                  ))
-                )}
-              </SheetBlock>
-              <SheetBlock title={t("tx.to")} className="mt-2 border-t border-[var(--border)]">
-                {!toParties.length && !feeParties.length ? (
-                  <p className="px-3 py-2.5 text-[13px] text-[var(--muted)]">{t("tx.noIo")}</p>
-                ) : (
-                  <>
-                    {toParties.map((p) => (
-                      <PartyRow
+            <div className="feed-sheet mt-3">
+              <Feed className="is-rank">
+                {fromParties.length ? (
+                  <FeedSection
+                    plate={
+                      <FeedPlate
+                        tag={t("tx.from")}
+                        count={<FeedCount k="feed.addresses" n={fromParties.length} />}
+                        end={<FeedAmount raw={inSum} />}
+                      />
+                    }
+                  >
+                    {fromParties.map((p, i) => (
+                      <FeedPartyRow
                         key={p.key}
                         party={p}
-                        side="out"
-                        locale={locale}
-                        t={t}
-                        tokens={tokens}
+                        side="from"
+                        meta={chipMeta}
+                        rank={i + 1}
                         enterClass={enter.enterClass(p.key)}
                       />
                     ))}
-                    {feeParties.map((p) => (
-                      <PartyRow
+                  </FeedSection>
+                ) : (
+                  <FeedEmpty
+                    k={isCoinbase ? "reward" : "quiet"}
+                    title={isCoinbase ? t("tx.cat.coinbase") : t("tx.noIo")}
+                    plate={<FeedPlate tag={t("tx.from")} />}
+                  />
+                )}
+                {toParties.length || feeParties.length ? (
+                  <FeedSection
+                    plate={
+                      <FeedPlate
+                        tag={t("tx.to")}
+                        count={<FeedCount k="feed.addresses" n={toParties.length + feeParties.length} />}
+                        end={<FeedAmount raw={outSum} />}
+                      />
+                    }
+                  >
+                    {toParties.map((p, i) => (
+                      <FeedPartyRow
+                        key={p.key}
+                        party={p}
+                        side="to"
+                        meta={chipMeta}
+                        rank={i + 1}
+                        enterClass={enter.enterClass(p.key)}
+                      />
+                    ))}
+                    {feeParties.map((p, i) => (
+                      <FeedPartyRow
                         key={p.key}
                         party={p}
                         side="fee"
-                        locale={locale}
-                        t={t}
-                        tokens={tokens}
+                        meta={chipMeta}
+                        rank={toParties.length + i + 1}
                         enterClass={enter.enterClass(p.key)}
                       />
                     ))}
-                  </>
+                  </FeedSection>
+                ) : (
+                  <FeedEmpty title={t("tx.noIo")} plate={<FeedPlate tag={t("tx.to")} />} />
                 )}
-              </SheetBlock>
+              </Feed>
             </div>
           )}
 
           {sheetReady && tab === "boxes" && (
-            <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
-              <BoxColumn
-                title={t("tx.sheet.spent")}
-                items={inputs}
-                side="in"
-                locale={locale}
-                t={t}
-                tokens={tokens}
-                enterClass={enter.enterClass}
-                partial={
-                  partialIn
-                    ? t("tx.ioPartial")
-                        .replace("{have}", String(inputs.length))
-                        .replace("{want}", String(declaredIn))
-                    : null
-                }
-              />
-              <BoxColumn
-                title={t("tx.sheet.created")}
-                items={outputs}
-                side="out"
-                locale={locale}
-                t={t}
-                tokens={tokens}
-                enterClass={enter.enterClass}
-                feeIdx={feeIdx}
-                partial={
-                  partialOut
-                    ? t("tx.ioPartial")
-                        .replace("{have}", String(outputs.length))
-                        .replace("{want}", String(declaredOut))
-                    : null
-                }
-              />
+            <div className="feed-sheet mt-3">
+              <Feed className="is-rank">
+                <TxBoxSection
+                  title={t("tx.sheet.spent")}
+                  items={inputs}
+                  side="in"
+                  meta={chipMeta}
+                  enterClass={enter.enterClass}
+                  partial={
+                    partialIn
+                      ? t("tx.ioPartial")
+                          .replace("{have}", String(inputs.length))
+                          .replace("{want}", String(declaredIn))
+                      : null
+                  }
+                />
+                <TxBoxSection
+                  title={t("tx.sheet.created")}
+                  items={outputs}
+                  side="out"
+                  meta={chipMeta}
+                  enterClass={enter.enterClass}
+                  feeIdx={feeIdx}
+                  partial={
+                    partialOut
+                      ? t("tx.ioPartial")
+                          .replace("{have}", String(outputs.length))
+                          .replace("{want}", String(declaredOut))
+                      : null
+                  }
+                />
+              </Feed>
             </div>
           )}
 
           {sheetReady && tab === "tokens" && (
-            <div className="addr-sheet mt-3">
-              <div className="addr-head flex items-baseline justify-between gap-2 px-3 py-2 text-[12px] font-medium">
-                <span>{t("tx.tab.tokens")}</span>
-                <span className="tabular-nums text-[var(--muted)]">{ranked.length}</span>
-              </div>
-              {!ranked.length ? (
-                <p className="px-3 py-2.5 text-[13px] text-[var(--muted)]">{t("tx.noTokens")}</p>
-              ) : (
-                ranked.map((row) => (
-                  <TokenSheetRow
-                    key={row.tokenId}
-                    row={row}
-                    meta={tokens}
-                    locale={locale}
-                    enterClass={enter.enterClass(`tok-${row.tokenId}`)}
-                  />
-                ))
-              )}
+            <div className="feed-sheet mt-3">
+              <Feed className="is-rank">
+                {!ranked.length ? (
+                  <FeedEmpty k="token" title={t("tx.noTokens")} plate={<FeedPlate tag={t("tx.tab.tokens")} />} />
+                ) : (
+                  <FeedBoard
+                    plate={
+                      <FeedPlate tag={t("tx.tab.tokens")} count={<FeedCount k="feed.tokens" n={ranked.length} />} />
+                    }
+                  >
+                    {ranked.map((row, i) => (
+                      <TxTokenRow
+                        key={row.tokenId}
+                        row={row}
+                        rank={i + 1}
+                        meta={tokens}
+                        enterClass={enter.enterClass(`tok-${row.tokenId}`)}
+                      />
+                    ))}
+                  </FeedBoard>
+                )}
+              </Feed>
             </div>
           )}
         </>
@@ -691,148 +722,12 @@ export function TxView({
   );
 }
 
-function SheetBlock({
-  title,
-  children,
-  className,
-}: {
-  title: string;
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <section className={className}>
-      <p className="px-3 py-2 text-[12px] font-medium text-[var(--muted)]">{title}</p>
-      {children}
-    </section>
-  );
-}
-
-function PartyRow({
-  party,
-  side,
-  locale,
-  t,
-  tokens,
-  enterClass,
-}: {
-  party: Party;
-  side: "in" | "out" | "fee";
-  locale: string;
-  t: (k: string) => string;
-  tokens: Map<string, TxTokenMeta>;
-  enterClass?: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const d = describeParty(party.address, party.isFee);
-  const boxId = party.boxes.find((box) => box.boxId)?.boxId ?? null;
-  const shown = party.address
-    ? visibleAddress(party.address)
-    : boxId
-      ? shortId(boxId, 6)
-      : t("tx.unknown");
-  const name =
-    side === "fee" || party.isFee ? t("tx.minerFee") : shown;
-  const boxCap = countText(t, locale, "tx.boxes", party.boxes.length);
-  const tone = side === "in" ? "down" : side === "out" ? "up" : "gold";
-  const nano = side === "in" ? -party.erg : party.erg;
-  const tokenRows = tokenEntries(party.tokens);
-  const tokenSign: "in" | "out" = side === "in" ? "in" : "out";
-  const fee = side === "fee" || party.isFee;
-  return (
-    <div
-      className={clsx("border-t border-[var(--border-soft)] px-3 py-2.5 text-[13px]", enterClass)}
-      style={fee ? { color: INK.gold } : undefined}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="flex min-w-0 items-center gap-1">
-            {party.address ? (
-              <Link
-                prefetch={false}
-                href={`/address/${party.address}`}
-                title={party.address}
-                className={clsx(
-                  "min-w-0 break-all font-mono hover:underline",
-                  fee ? "text-inherit" : "text-accent"
-                )}
-              >
-                {name}
-              </Link>
-            ) : boxId ? (
-              <Link
-                prefetch={false}
-                href={`/box/${boxId}`}
-                title={boxId}
-                className="min-w-0 truncate font-mono text-accent hover:underline"
-              >
-                {name}
-              </Link>
-            ) : (
-              <span className="truncate">{name}</span>
-            )}
-            {party.address && (
-              <CopyChip
-                text={party.address}
-                copyLabel={t("tx.copy")}
-                copiedLabel={t("tx.copied")}
-                inherit={fee}
-              />
-            )}
-          </p>
-          <p className={clsx("mt-0.5 truncate text-[11px]", fee ? "text-inherit" : "text-[var(--muted)]")}>
-            {fee && party.address ? (
-              <>
-                <span className="font-mono" title={party.address}>
-                  {visibleAddress(party.address)}
-                </span>
-                {" · "}
-              </>
-            ) : d.known ? (
-              <>
-                <span>{d.known}</span>
-                {" · "}
-              </>
-            ) : null}
-            {boxCap}
-          </p>
-        </div>
-        <div className="flex shrink-0 flex-col items-end">
-          <ErgFigure
-            nano={nano}
-            locale={locale}
-            signed={side !== "fee"}
-            size="md"
-            tone={tone}
-          />
-          <TokenFoldToggle
-            open={open}
-            sign={tokenSign}
-            disabled={!tokenRows.length}
-            showLabel={t("tx.showTokens")}
-            hideLabel={t("tx.hideTokens")}
-            onToggle={() => setOpen((v) => !v)}
-          />
-        </div>
-      </div>
-      <TokenFold
-        open={open}
-        rows={tokenRows}
-        tokens={tokens}
-        locale={locale}
-        sign={tokenSign}
-      />
-    </div>
-  );
-}
-
-function BoxColumn({
+/** Spent or created boxes: index as the lead, owner as the title. */
+function TxBoxSection({
   title,
   items,
   side,
-  locale,
-  t,
-  tokens,
+  meta,
   enterClass,
   feeIdx,
   partial,
@@ -840,316 +735,95 @@ function BoxColumn({
   title: string;
   items: TxIo[];
   side: "in" | "out";
-  locale: string;
-  t: (k: string) => string;
-  tokens: Map<string, TxTokenMeta>;
+  meta: (tid: string) => FeedTokenMeta | undefined;
   enterClass: (id: string) => string | undefined;
   feeIdx?: Set<number>;
   partial: string | null;
 }) {
-  return (
-    <div className="addr-sheet">
-      <div className="addr-head flex items-baseline justify-between gap-2 px-3 py-2 text-[12px] font-medium">
-        <span>{title}</span>
-        <span className="tabular-nums text-[var(--muted)]">{items.length}</span>
-      </div>
-      {partial && (
-        <p className="px-3 pb-1 text-[11px] text-[var(--muted)]">{partial}</p>
-      )}
-      {!items.length ? (
-        <p className="px-3 py-2.5 text-[13px] text-[var(--muted)]">{t("tx.noIo")}</p>
-      ) : (
-        items.map((io, i) => (
-          <BoxRow
-            key={ioKey(io, i, side)}
-            io={io}
-            side={side}
-            locale={locale}
-            t={t}
-            tokens={tokens}
-            fee={!!feeIdx?.has(i)}
-            enterClass={enterClass(ioKey(io, i, side))}
-          />
-        ))
-      )}
-    </div>
-  );
-}
-
-function BoxRow({
-  io,
-  side,
-  locale,
-  t,
-  tokens,
-  fee,
-  enterClass,
-}: {
-  io: TxIo;
-  side: "in" | "out";
-  locale: string;
-  t: (k: string) => string;
-  tokens: Map<string, TxTokenMeta>;
-  fee: boolean;
-  enterClass?: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const d = describeParty(io.address, fee);
-  const shown = io.address
-    ? visibleAddress(io.address)
-    : io.boxId
-      ? shortId(io.boxId, 6)
-      : t("tx.unknown");
-  const name = fee ? t("tx.minerFee") : shown;
-  const tokenRows: [string, bigint][] = (io.assets ?? [])
-    .filter((a) => a.tokenId && !/^0+$/.test(a.tokenId))
-    .map((a) => [a.tokenId.toLowerCase(), toBigIntAmt(a.amount)]);
-  const tone = side === "in" ? "down" : "up";
-  const nano = side === "in" ? -toBigIntAmt(io.value) : toBigIntAmt(io.value);
-  return (
-    <div
-      className={clsx("border-t border-[var(--border-soft)] px-3 py-2.5 text-[13px]", enterClass)}
-      style={fee ? { color: INK.gold } : undefined}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="flex min-w-0 items-center gap-1.5">
-            {io.address ? (
-              <Link
-                prefetch={false}
-                href={`/address/${io.address}`}
-                title={io.address}
-                className={clsx(
-                  "min-w-0 break-all hover:underline",
-                  !fee && "font-mono",
-                  fee ? "text-inherit" : "text-accent"
-                )}
-              >
-                {name}
-              </Link>
-            ) : io.boxId ? (
-              <Link
-                prefetch={false}
-                href={`/box/${io.boxId}`}
-                title={io.boxId}
-                className="min-w-0 truncate font-mono text-accent hover:underline"
-              >
-                {name}
-              </Link>
-            ) : (
-              <span className="truncate">{name}</span>
-            )}
-            {io.address && (
-              <CopyChip
-                text={io.address}
-                copyLabel={t("tx.copy")}
-                copiedLabel={t("tx.copied")}
-                inherit={fee}
-              />
-            )}
-          </p>
-          <p className={clsx("mt-0.5 break-all text-[11px]", fee ? "text-inherit" : "text-[var(--muted)]")}>
-            {fee && io.address ? (
-              <span className="font-mono" title={io.address}>
-                {shown}
-              </span>
-            ) : d.known ? (
-              <span>{d.known}</span>
-            ) : null}
-            {(fee && io.address) || d.known ? " · " : null}
-            {io.boxId ? (
-              <Link prefetch={false} href={`/box/${io.boxId}`} className="font-mono text-accent hover:underline">
-                {shortId(io.boxId, 6)}
-              </Link>
-            ) : (
-              t("tx.box")
-            )}
-          </p>
-        </div>
-        <div className="flex shrink-0 flex-col items-end">
-          <ErgFigure
-            nano={nano}
-            locale={locale}
-            signed
-            size="md"
-            tone={fee ? "gold" : tone}
-          />
-          <TokenFoldToggle
-            open={open}
-            sign={side}
-            disabled={!tokenRows.length}
-            showLabel={t("tx.showTokens")}
-            hideLabel={t("tx.hideTokens")}
-            onToggle={() => setOpen((v) => !v)}
-          />
-        </div>
-      </div>
-      <TokenFold
-        open={open}
-        rows={tokenRows}
-        tokens={tokens}
-        locale={locale}
-        sign={side}
-      />
-    </div>
-  );
-}
-
-function TokenFoldToggle({
-  open,
-  sign,
-  disabled,
-  showLabel,
-  hideLabel,
-  onToggle,
-}: {
-  open: boolean;
-  sign: "in" | "out";
-  disabled: boolean;
-  showLabel: string;
-  hideLabel: string;
-  onToggle: () => void;
-}) {
-  if (disabled) return null;
-  return (
-    <button
-      type="button"
-      aria-expanded={open}
-      aria-label={open ? hideLabel : showLabel}
-      onClick={onToggle}
-      className={clsx(
-        "token-seal chip-press mt-1 inline-flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full transition-colors duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
-        sign === "in" ? "text-[var(--down)]" : "text-[var(--up)]",
-        open
-          ? "is-pressed bg-[var(--wash-strong)]"
-          : "bg-[var(--wash-mid)] hover:bg-[var(--wash-strong)]"
-      )}
-    >
-      <TokenSeal open={open} sign={sign} />
-    </button>
-  );
-}
-
-/** Closed: one punched coin. Open: the stack fans, and the paper stays dented. */
-function TokenSeal({ open, sign }: { open: boolean; sign: "in" | "out" }) {
-  const leave = sign === "in";
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden className="token-seal-mark">
-      {open ? (
+  const t = useT();
+  const plate = (
+    <FeedPlate
+      tag={title}
+      count={
         <>
-          <circle
-            cx={leave ? 10.4 : 5.6}
-            cy="9"
-            r="3.05"
-            fill="currentColor"
-            opacity="0.4"
-          />
-          <path
-            fill="currentColor"
-            fillRule="evenodd"
-            d={punchedCoin(leave ? 6 : 10, 7.2, 3.25, 1.05)}
-          />
+          <FeedCount k="feed.boxes" n={items.length} />
+          {partial ? <span className="feed-plate-live"> · {partial}</span> : null}
         </>
-      ) : (
-        <path fill="currentColor" fillRule="evenodd" d={punchedCoin(8, 8, 5.15, 1.7)} />
-      )}
-    </svg>
+      }
+      end={items.length ? <FeedAmount raw={sumIo(items)} /> : undefined}
+    />
   );
-}
-
-function punchedCoin(cx: number, cy: number, r: number, hole: number): string {
-  const ring = (radius: number, sweep: 0 | 1) =>
-    `M ${cx - radius} ${cy} a ${radius} ${radius} 0 1 ${sweep} ${radius * 2} 0 a ${radius} ${radius} 0 1 ${sweep} ${-radius * 2} 0 z`;
-  return `${ring(r, 0)} ${ring(hole, 1)}`;
-}
-
-function TokenFold({
-  open,
-  rows,
-  tokens,
-  locale,
-  sign,
-}: {
-  open: boolean;
-  rows: [string, bigint][];
-  tokens: Map<string, TxTokenMeta>;
-  locale: string;
-  sign: "in" | "out";
-}) {
-  if (!rows.length) return null;
+  if (!items.length) return <FeedEmpty k="box" title={t("tx.noIo")} plate={plate} />;
   return (
-    <div className={clsx("addr-token-fold", open && "is-open")} aria-hidden={!open}>
-      <div className="addr-token-fold-body">
-        <ul className="flex flex-col gap-1 pt-2">
-          {rows.map(([tid, amt]) => {
-            const meta = tokens.get(tid.toLowerCase());
-            const name = tokenSymbol(tid, meta?.name) || shortId(tid, 4);
-            const dec = tokenDecimals(tid, meta?.decimals);
-            return (
-              <li key={tid} className="flex min-w-0 items-center justify-between gap-3 text-[12px]">
-                <Link
-                  prefetch={false}
-                  href={`/token/${tid}`}
-                  className="flex min-w-0 items-center gap-1.5 text-accent hover:underline"
-                >
-                  <TokenAvatar tokenId={tid} symbol={name} size={16} />
-                  <span className="min-w-0 truncate">{name}</span>
-                </Link>
-                <span
-                  className={clsx(
-                    "shrink-0 tabular-nums",
-                    sign === "in" ? "text-[var(--down)]" : "text-[var(--up)]"
-                  )}
-                >
-                  {sign === "in" ? "−" : "+"}
-                  {formatTokenAmount(amt, dec, locale)}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
-    </div>
+    <FeedSection plate={plate}>
+      {items.map((io, i) => (
+        <FeedBoxRow
+          key={ioKey(io, i, side)}
+          boxId={io.boxId}
+          nano={toBigIntAmt(io.value)}
+          tokens={(io.assets ?? [])
+            .filter((a) => a.tokenId && !/^0+$/.test(a.tokenId))
+            .map((a) => [a.tokenId.toLowerCase(), toBigIntAmt(a.amount)] as [string, bigint])}
+          meta={meta}
+          lead={{ rank: String(io.index ?? i) }}
+          side={side}
+          owner={io.address ?? null}
+          fee={!!feeIdx?.has(i)}
+          height={io.creationHeight}
+          enterClass={enterClass(ioKey(io, i, side))}
+        />
+      ))}
+    </FeedSection>
   );
 }
 
-function TokenSheetRow({
+/** A token the transaction moved: what came out on top, what went in under it. */
+function TxTokenRow({
   row,
+  rank,
   meta,
-  locale,
   enterClass,
 }: {
   row: TokenRank;
+  rank: number;
   meta: Map<string, TxTokenMeta>;
-  locale: string;
   enterClass?: string;
 }) {
-  const name = tokenSymbol(row.tokenId, meta.get(row.tokenId)?.name) || shortId(row.tokenId, 4);
-  const dec = tokenDecimals(row.tokenId, meta.get(row.tokenId)?.decimals);
+  const t = useT();
+  const m = meta.get(row.tokenId);
+  const dec = tokenDecimals(row.tokenId, m?.decimals);
+  const minted = row.inAmt === 0n && row.outAmt > 0n;
+  const burned = row.outAmt === 0n && row.inAmt > 0n;
+  const partBurn = !burned && row.outAmt < row.inAmt;
   return (
-    <div
-      className={clsx(
-        "flex items-center justify-between gap-3 border-t border-[var(--border-soft)] px-3 py-2.5 text-[13px]",
-        enterClass
-      )}
-    >
-      <Link
-        prefetch={false}
-        href={`/token/${row.tokenId}`}
-        className="flex min-w-0 items-center gap-2 text-accent hover:underline"
-      >
-        <TokenAvatar tokenId={row.tokenId} symbol={name} size={20} />
-        <span className="min-w-0 truncate font-medium">{name}</span>
-      </Link>
-      <div className="flex shrink-0 flex-col items-end gap-0.5 text-[12px] tabular-nums">
-        {row.inAmt > 0n ? (
-          <span className="text-[var(--down)]">−{formatTokenAmount(row.inAmt, dec, locale)}</span>
-        ) : null}
-        {row.outAmt > 0n ? (
-          <span className="text-[var(--up)]">+{formatTokenAmount(row.outAmt, dec, locale)}</span>
-        ) : null}
-      </div>
-    </div>
+    <FeedHoldingRow
+      tokenId={row.tokenId}
+      name={m?.name ?? null}
+      decimals={dec}
+      amount={row.outAmt > 0n ? row.outAmt : -row.inAmt}
+      signed
+      lead={{ rank: String(rank) }}
+      enterClass={enterClass}
+      facts={
+        minted ? (
+          <span className="feed-kind">{t("tx.minted")}</span>
+        ) : burned || partBurn ? (
+          <span className="feed-kind">{t("tx.burned")}</span>
+        ) : null
+      }
+      sub={
+        row.outAmt > 0n && row.inAmt > 0n ? (
+          <FeedAmount raw={-row.inAmt} decimals={dec} unit={null} signed glance />
+        ) : null
+      }
+      more={() =>
+        row.inAmt > 0n && row.outAmt > 0n ? (
+          <FeedField label={t("tx.sheet.spent")}>
+            <FeedAmount raw={-row.inAmt} decimals={dec} unit={null} signed />
+          </FeedField>
+        ) : null
+      }
+    />
   );
 }
 

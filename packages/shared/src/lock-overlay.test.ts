@@ -116,6 +116,15 @@ test("spent named lock beats a named output", () => {
   assert.equal(r?.id, "sigmausd");
 });
 
+test("a data input never names the lock", () => {
+  const r = pickTxLock({
+    inputs: [p2pk],
+    dataInputs: [{ address: SIGMAUSD_BANK_ADDRESS }],
+    outputs: [p2pk, { address: MINERS_FEE_ADDRESS }],
+  });
+  assert.equal(r, null);
+});
+
 test("pay into Rosen is still Rosen", () => {
   const r = pickTxLock({
     inputs: [p2pk],

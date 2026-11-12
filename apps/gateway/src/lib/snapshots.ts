@@ -1512,6 +1512,18 @@ export async function peekChainTip(): Promise<ChainTip | null> {
   return { height, headerId, updatedAt: snap?.updatedAt ?? null };
 }
 
+/** Height + write time of the block list snapshot, without its payload. For a fast tip tick. */
+export async function peekChainTipStamp(): Promise<string | null> {
+  const rows = await q<{ height: string | number | null; updated_at: Date | string | null }>(
+    `SELECT height, updated_at FROM snapshot_kv WHERE key = $1`,
+    [SNAP_BLOCKS]
+  );
+  const row = rows?.[0];
+  if (!row) return null;
+  const at = row.updated_at instanceof Date ? row.updated_at.toISOString() : String(row.updated_at ?? "");
+  return `${row.height ?? ""}:${at}`;
+}
+
 export async function getHolderBands(): Promise<{
   p2pk: { id: string; n: number; nanoerg: string }[];
   all: { id: string; n: number; nanoerg: string }[];

@@ -4,13 +4,27 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
 import { Shell } from "@/components/Shell";
-import { AddressPip } from "@/components/AddressPip";
 import { AddressStatTile } from "@/components/AddressStatTile";
-import { AddressActivityWhen } from "@/components/AddressTapeRow";
 import { BookKindMark, type BookTileId } from "@/components/BookKindMark";
 import { FavoriteHeart } from "@/components/FavoriteHeart";
-import { NameMarquee } from "@/components/NameMarquee";
 import { RankWindow } from "@/components/RankWindow";
+import {
+  Feed,
+  FeedAmount,
+  FeedBoard,
+  FeedCount,
+  FeedEmpty,
+  FeedField,
+  FeedFields,
+  FeedIdLine,
+  FeedPhrase,
+  FeedPlate,
+  FeedRow,
+  FeedSort,
+  feedLoc,
+  type FeedKind,
+} from "@/components/feed/Feed";
+import type { FeedGlyphId } from "@/components/feed/FeedGlyph";
 import {
   BOOK_DIRECTORY_KINDS,
   countBookKinds,
@@ -23,7 +37,7 @@ import {
 import { listPip } from "@/lib/address-pips";
 import { getGateway } from "@/lib/config";
 import { useFavoriteAddresses } from "@/lib/favorites";
-import { formatErgFixed, shortId } from "@/lib/format";
+import { formatRelTime, formatScaledAmount, formatTs, shortId, toBigIntAmt } from "@/lib/format";
 import { useT, useI18n } from "@/lib/i18n/I18nProvider";
 import { enteringIds, useEnterIds } from "@/lib/keyed-enter";
 import { ADDRESS_PACK, type AddressListDir } from "@/lib/list-snapshots";
@@ -54,6 +68,8 @@ type NameStats = {
 };
 
 type SortKey = "name" | "txs" | "erg" | "last";
+
+const NAME_SORTS: SortKey[] = ["name", "erg", "txs", "last"];
 
 function typeLabel(kind: BookDirectoryKind, t: (k: string) => string): string {
   if (kind === "wallet") return t("addresses.pip.holder");
@@ -91,64 +107,6 @@ function useNameStats(): Map<string, NameStats> | null {
   return stats;
 }
 
-function SortMark({ on, dir }: { on: boolean; dir: AddressListDir }) {
-  return (
-    <span className="sort-mark" aria-hidden>
-      <span className={clsx("sort-caret sort-caret-up", on && dir === "asc" && "is-on")} />
-      <span className={clsx("sort-caret sort-caret-dn", on && dir === "desc" && "is-on")} />
-    </span>
-  );
-}
-
-function SortCol({
-  label,
-  k,
-  sort,
-  dir,
-  align,
-  onSort,
-  className,
-}: {
-  label: string;
-  k: SortKey;
-  sort: SortKey;
-  dir: AddressListDir;
-  align: "left" | "right";
-  onSort: (k: SortKey) => void;
-  className: string;
-}) {
-  const t = useT();
-  const on = sort === k;
-  return (
-    <div
-      className={clsx("h-full min-w-0 items-center", align === "right" && "justify-end", className)}
-      aria-sort={on ? (dir === "asc" ? "ascending" : "descending") : "none"}
-    >
-      <button
-        type="button"
-        onClick={() => onSort(k)}
-        aria-label={on ? `${label}, ${dir === "asc" ? t("addresses.sortAsc") : t("addresses.sortDesc")}` : label}
-        className={clsx(
-          "chip-press inline-flex shrink-0 items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[10px] px-2 py-1.5 text-[12px] font-medium leading-none transition-colors duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:text-[var(--text)]",
-          on ? "is-pressed bg-[var(--wash-strong)] text-[var(--text)]" : "text-[var(--muted)]"
-        )}
-      >
-        {align === "right" ? <SortMark on={on} dir={dir} /> : null}
-        <span>{label}</span>
-        {align === "left" ? <SortMark on={on} dir={dir} /> : null}
-      </button>
-    </div>
-  );
-}
-
-function HeadLabel({ label, className }: { label: string; className: string }) {
-  return (
-    <div className={clsx("h-full min-w-0 items-center px-2", className)}>
-      <span className="whitespace-nowrap text-[12px] font-medium leading-none text-[var(--muted)]">{label}</span>
-    </div>
-  );
-}
-
 export function NamesView() {
   const t = useT();
   const { locale } = useI18n();
@@ -159,11 +117,9 @@ export function NamesView() {
   const [sort, setSort] = useState<SortKey>("name");
   const [dir, setDir] = useState<AddressListDir>("asc");
   const [offset, setOffset] = useState(0);
-  const [stuck, setStuck] = useState(false);
   const enter = useEnterIds();
   const packEnter = useEnterIds();
   const [listReady, setListReady] = useState(false);
-  const pinRef = useRef<HTMLDivElement>(null);
   const idsRef = useRef<string[]>([]);
   const painted = useRef(false);
 
@@ -206,20 +162,6 @@ export function NamesView() {
     idsRef.current = next;
   }, [packKey, enter.mark, packEnter.mark]);
 
-  useEffect(() => {
-    const el = pinRef.current;
-    if (!el) return;
-    const chrome = document.querySelector(".stage-frame header.sticky");
-    const pin =
-      (chrome instanceof HTMLElement ? chrome.getBoundingClientRect().height : 64) + 8;
-    const obs = new IntersectionObserver(
-      ([entry]) => setStuck(!entry.isIntersecting),
-      { threshold: 1, rootMargin: `-${pin}px 0px 0px 0px` }
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [slice.length]);
-
   const { ids: favIds, toggle: toggleFav } = useFavoriteAddresses();
   const favReady = favIds != null;
   const favSet = useMemo(() => new Set(favIds ?? []), [favIds]);
@@ -261,50 +203,49 @@ export function NamesView() {
       </div>
 
       {!listReady ? null : rows.length === 0 ? (
-        <p className="text-[var(--muted)]">{t("addresses.book.empty")}</p>
+        <Feed>
+          <FeedEmpty k="addr" title={t("addresses.book.empty")} />
+        </Feed>
       ) : (
-        <div className="addr-sheet">
-          <div ref={pinRef} className="h-px w-full" aria-hidden />
-          <div className={packEnter.enterClass("pack")}>
-          <div
-            className={clsx(
-              "addr-pan transition-opacity duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)]"
-            )}
-          >
-          <div
-            className={clsx(
-              "addr-head addr-lane addr-lane-x book-lane text-[12px] font-medium",
-              stuck && "is-stuck"
-            )}
-          >
-            <SortCol className="book-name" label={t("addresses.colName")} k="name" sort={sort} dir={dir} align="left" onSort={onSort} />
-            <HeadLabel className="book-addr" label={t("addresses.colAddress")} />
-            <HeadLabel className="book-src" label={t("names.colSource")} />
-            <SortCol className="book-txs" label={t("addresses.colTxs")} k="txs" sort={sort} dir={dir} align="right" onSort={onSort} />
-            <SortCol className="book-erg" label={t("addresses.colErg")} k="erg" sort={sort} dir={dir} align="right" onSort={onSort} />
-            <SortCol className="book-last" label={t("addresses.colLast")} k="last" sort={sort} dir={dir} align="right" onSort={onSort} />
-          </div>
-          {slice.map((row) => (
-            <NameTapeRow
-              key={row.address}
-              row={row}
-              stats={stats?.get(row.address)}
-              t={t}
-              loc={loc}
-              enterClass={enter.enterClass(row.address)}
-              fav={favSet.has(row.address)}
-              favReady={favReady}
-              onToggleFav={toggleFav}
-            />
-          ))}
-          </div>
-          <p className="px-3 py-2 text-[11px] text-[var(--muted-2)]">
+        <div className="feed-sheet">
+          <Feed className="is-rank" enterClass={packEnter.enterClass("pack")}>
+            <FeedBoard
+              plate={
+                <FeedPlate
+                  tag={tileLabel(kind, t)}
+                  now
+                  count={<FeedCount k="feed.names" n={rows.length} />}
+                  end={
+                    <FeedSort
+                      label={t("feed.sort.label")}
+                      options={NAME_SORTS.map((key) => ({ key, label: t(`feed.sort.${key}`) }))}
+                      active={sort}
+                      dir={dir}
+                      onSort={onSort}
+                    />
+                  }
+                />
+              }
+            >
+              {slice.map((row, i) => (
+                <NameFeedRow
+                  key={row.address}
+                  row={row}
+                  rank={offset + i + 1}
+                  sort={sort}
+                  stats={stats?.get(row.address)}
+                  enterClass={enter.enterClass(row.address)}
+                  fav={{ on: favSet.has(row.address), ready: favReady, toggle: toggleFav }}
+                />
+              ))}
+            </FeedBoard>
+          </Feed>
+          <p className="feed-note">
             {t("addresses.book.sourceNote")}{" "}
             <a href={NAMES_REGISTRY_URL} target="_blank" rel="noreferrer" className="text-accent hover:underline">
               {t("addresses.book.registryLink")}
             </a>
           </p>
-          </div>
           <RankWindow
             offset={offset}
             pageSize={ADDRESS_PACK}
@@ -325,153 +266,149 @@ export function NamesView() {
   );
 }
 
-function CopyAddress({ text, t }: { text: string; t: (k: string) => string }) {
-  const [ok, setOk] = useState(false);
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        void navigator.clipboard?.writeText(text).then(() => {
-          setOk(true);
-          window.setTimeout(() => setOk(false), 1200);
-        });
-      }}
-      aria-label={ok ? t("tx.copied") : t("tx.copy")}
-      title={ok ? t("tx.copied") : t("tx.copy")}
-      className="chip-press inline-flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-[6px] text-[var(--muted)] transition-colors duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[var(--wash)] hover:text-[var(--text)]"
-    >
-      {ok ? (
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
-          <path d="M2.4 6.2 4.8 8.6 9.6 3.4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      ) : (
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
-          <rect x="4" y="4" width="6" height="6" rx="1.2" stroke="currentColor" strokeWidth="1.4" />
-          <path d="M3 8.2V3.4A1.2 1.2 0 0 1 4.2 2.2H8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-        </svg>
-      )}
-    </button>
-  );
-}
+const KIND_TILE: Record<BookDirectoryKind, [FeedKind, FeedGlyphId]> = {
+  protocol: ["defi", "protocol"],
+  exchange: ["exchange", "exchange"],
+  pool: ["reward", "pool"],
+  contract: ["contract", "contract"],
+  wallet: ["addr", "holder"],
+};
 
-function NameTapeRow({
+/** One named address. The figure on the right is what the list is sorted by; by name it is the balance. */
+function NameFeedRow({
   row,
+  rank,
+  sort,
   stats,
-  t,
-  loc,
   enterClass,
   fav,
-  favReady,
-  onToggleFav,
 }: {
   row: BookEntry;
+  rank: number;
+  sort: SortKey;
   stats: NameStats | undefined;
-  t: (k: string) => string;
-  loc: string;
   enterClass?: string;
-  fav: boolean;
-  favReady: boolean;
-  onToggleFav: (id: string) => void;
+  fav: { on: boolean; ready: boolean; toggle: (address: string) => void };
 }) {
-  const pip = listPip(row.address);
+  const { t, locale } = useI18n();
+  const tag = feedLoc(locale);
   const kind = directoryKind(row);
+  const pip = listPip(row.address);
+  const [k, g] = kind ? KIND_TILE[kind] : (["addr", "holder"] as [FeedKind, FeedGlyphId]);
   const type =
     kind === "contract" ? t("address.type.contract") : kind ? typeLabel(kind, t) : t(`addresses.pip.${pip.id}`);
   const project = stats?.project ?? (row.registry ? row.note : undefined);
-  const sub = project && project !== row.name ? `${project} · ${type}` : type;
   const by = stats?.by ?? row.registry?.by ?? null;
   const fileUrl = stats?.fileUrl ?? row.registry?.fileUrl ?? null;
-  const nano = stats?.nanoerg ?? null;
-  const aria = [row.name, shortId(row.address, 10), sub].join(" · ");
+  const href = `/address/${encodeURIComponent(row.address)}`;
+  let erg: bigint | null = null;
+  try {
+    erg = stats?.nanoerg != null ? toBigIntAmt(stats.nanoerg) : null;
+  } catch {
+    erg = null;
+  }
+  const active = stats?.lastTs != null ? formatRelTime(stats.lastTs, locale) : null;
+  const byLabel = by ? t(by === "project" ? "names.byProject" : "names.byErgoscan") : null;
+  const value =
+    sort === "txs" ? (
+      <span className="feed-amt tabular-nums">{stats?.txCount != null ? stats.txCount.toLocaleString(tag) : "—"}</span>
+    ) : sort === "last" ? (
+      <span className="feed-amt tabular-nums" suppressHydrationWarning>
+        {active ?? "—"}
+      </span>
+    ) : (
+      <FeedAmount raw={erg} glance />
+    );
   return (
-    <div
-      className={clsx(
-        "addr-lane addr-lane-x book-lane border-t border-[var(--border-soft)] py-2.5 text-[13px]",
-        enterClass
-      )}
+    <FeedRow
+      k={k}
+      glyph={g}
+      tileTitle={type}
+      lead={{ rank: rank.toLocaleString(tag) }}
+      enterClass={enterClass}
       onPointerEnter={() => prefetchAddressPage(row.address)}
-    >
-      <div className="book-name min-w-0 items-center px-3">
-        <div className="flex min-h-[1.35em] min-w-0 items-center gap-2">
-          <AddressPip
-            address={row.address}
-            nanoerg={nano ?? "0"}
-            kindLabel={t(`addresses.pip.${pip.id}`)}
-            className="h-[18px] w-[18px] shrink-0"
-          />
+      title={
+        <>
           <Link
             prefetch={false}
-            href={`/address/${encodeURIComponent(row.address)}`}
-            aria-label={aria}
-            className="min-w-0 text-soft hover:underline"
-            title={row.name}
+            href={href}
+            title={row.address}
+            className="feed-name hover:underline"
             onFocus={() => prefetchAddressPage(row.address)}
           >
-            <NameMarquee text={row.name} />
+            {row.name}
           </Link>
           <FavoriteHeart
             size="sm"
-            on={fav}
-            ready={favReady}
-            title={fav ? t("favorites.remove") : t("favorites.add")}
-            onToggle={() => onToggleFav(row.address)}
+            on={fav.on}
+            ready={fav.ready}
+            title={fav.on ? t("favorites.remove") : t("favorites.add")}
+            onToggle={() => fav.toggle(row.address)}
           />
-        </div>
-      </div>
-      <div className="book-addr min-w-0 flex-col justify-center px-3">
-        <div className="flex min-w-0 items-center gap-1">
-          <span className="min-w-0 truncate font-mono text-[12px] leading-none text-[var(--muted)]" title={row.address}>
-            {shortId(row.address, 6)}
-          </span>
-          <CopyAddress text={row.address} t={t} />
-        </div>
-        <p className="mt-1 truncate text-[11px] leading-none text-[var(--muted)]">{sub}</p>
-      </div>
-      <div className="book-src min-w-0 flex-col justify-center px-3">
-        {by ? (
-          <>
-            <p
-              className={clsx("truncate leading-none", by === "project" ? "text-accent" : "text-[var(--text)]")}
-              title={t(by === "project" ? "address.nameByProject" : "address.nameByErgoscan")}
-            >
-              {t(by === "project" ? "names.byProject" : "names.byErgoscan")}
-            </p>
-            {fileUrl ? (
-              <a
-                href={fileUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-1 w-fit text-[11px] leading-none text-accent hover:underline"
-              >
-                ergo-names
-              </a>
-            ) : null}
-          </>
-        ) : (
-          <span className="text-[var(--muted)]">—</span>
-        )}
-      </div>
-      <div className="book-txs items-center justify-end px-3 tabular-nums leading-none text-[var(--muted)]">
-        {stats?.txCount != null ? stats.txCount.toLocaleString(loc) : "—"}
-      </div>
-      <div
-        className={clsx(
-          "book-erg items-center justify-end whitespace-nowrap px-3 font-medium tabular-nums leading-none",
-          nano == null || nano === "0" ? "font-normal text-[var(--muted)]" : "text-[var(--up)]"
-        )}
-      >
-        {nano != null ? formatErgFixed(nano, loc) : "—"}
-      </div>
-      <div className="book-last items-center justify-end">
-        <AddressActivityWhen
-          ts={stats?.lastTs ?? null}
-          locale={loc}
-          align="right"
-          openLabel={t("addresses.openTx")}
-          copyLabel={t("tx.copy")}
-          copiedLabel={t("tx.copied")}
-        />
-      </div>
-    </div>
+        </>
+      }
+      facts={
+        <>
+          <span className="feed-kind">{type}</span>
+          {project && project !== row.name ? <span className="feed-narrow-off">{project}</span> : null}
+          <span className="font-mono tabular-nums">{shortId(row.address, 6)}</span>
+          {byLabel ? <span className={clsx("feed-mid", by === "project" && "feed-accent")}>{byLabel}</span> : null}
+          {sort !== "txs" && stats?.txCount != null ? (
+            <FeedCount k="feed.txCount" n={stats.txCount} className="feed-mid" />
+          ) : null}
+          {sort !== "last" && active ? (
+            <span className="feed-wide">
+              <FeedPhrase text={t("feed.active")} value={active} />
+            </span>
+          ) : null}
+        </>
+      }
+      value={value}
+      sub={sort === "txs" || sort === "last" ? t(`feed.sort.${sort}`) : undefined}
+      subMinor
+      detail={() => (
+        <FeedFields>
+          <FeedField label={t("addresses.colAddress")} wide>
+            <FeedIdLine href={href} id={row.address} />
+          </FeedField>
+          <FeedField label={t("addresses.colName")}>
+            <span>{[row.name, project && project !== row.name ? project : null, type].filter(Boolean).join(" · ")}</span>
+          </FeedField>
+          <FeedField label={t("names.colSource")}>
+            <span>
+              {byLabel ?? "—"}
+              {fileUrl ? (
+                <>
+                  {" · "}
+                  <a href={fileUrl} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+                    ergo-names
+                  </a>
+                </>
+              ) : null}
+            </span>
+          </FeedField>
+          <FeedField label={t("addresses.colErg")}>
+            <span className="tabular-nums">{erg != null ? formatScaledAmount(erg, 9, tag) : "—"}</span>
+          </FeedField>
+          <FeedField label={t("addresses.colTxs")}>
+            <span className="tabular-nums">
+              {stats?.txCount != null ? stats.txCount.toLocaleString(tag) : "—"}
+              {stats?.tokenCount ? (
+                <span className="text-[var(--muted-2)]">
+                  {" · "}
+                  <FeedCount k="feed.tokens" n={stats.tokenCount} />
+                </span>
+              ) : null}
+            </span>
+          </FeedField>
+          <FeedField label={t("addresses.colLast")}>
+            <span className="tabular-nums" suppressHydrationWarning>
+              {stats?.lastTs != null ? formatTs(stats.lastTs) : "—"}
+              {active ? <span className="text-[var(--muted-2)]"> · {active}</span> : null}
+            </span>
+          </FeedField>
+        </FeedFields>
+      )}
+    />
   );
 }

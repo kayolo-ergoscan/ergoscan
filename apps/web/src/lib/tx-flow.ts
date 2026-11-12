@@ -239,7 +239,8 @@ export function addressFlow(
     outputs.filter((o) => o.address === address).map((o) => ({
       boxId: o.boxId,
       assets: o.assets,
-    }))
+    })),
+    inputs.map((i) => i.boxId)
   );
   const netErg = outErg - inErg;
   const kind = classifyAddrFlow({

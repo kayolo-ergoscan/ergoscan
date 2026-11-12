@@ -15,7 +15,8 @@ import { SegBar, segItem } from "@/components/SegBar";
 import { IconBlocks, IconRent, IconRentSoon } from "@/components/nav-icons";
 import { KpiMarkBox, KpiMarkWalletMinimal } from "@/components/kpi-marks";
 import { KpiNum } from "@/components/KpiGrid";
-import { TokenBadge } from "@/components/TokenBadge";
+import { Feed, FeedBoard, FeedCount, FeedEmpty, FeedPlate } from "@/components/feed/Feed";
+import { FeedHoldingRow } from "@/components/feed/FeedBoxRow";
 import { PrettyUsd } from "@/components/PrettyNum";
 import { ListWhen } from "@/components/ListWhen";
 import { getGateway } from "@/lib/config";
@@ -24,7 +25,6 @@ import { fetchErgUsd } from "@/lib/list-snapshots";
 import {
   formatBytes,
   formatErgPrecise,
-  formatTokenAmount,
   nanoToUsd,
   shortId,
   toBigIntAmt,
@@ -585,46 +585,40 @@ export function BoxView({
           )}
 
           {sheetReady && tab === "tokens" && (
-            <div className="box-tab">
-              {assets.length ? (
-                <ul className="mod box-plate divide-y divide-[var(--border-soft)]">
-                  {assets.map((a, i) => {
-                    const info = tokenInfo.get(a.tokenId.toLowerCase());
-                    const dec = info?.decimals ?? a.decimals ?? 0;
-                    const raw = toBigIntAmt(a.amount);
-                    const name = a.name ?? info?.name ?? null;
-                    const symbol = info?.symbol ?? null;
-                    const valueUsd = tokenAmountToUsd(raw, dec, info?.priceUsd);
-                    const mint = a.tokenId.toLowerCase() === id.toLowerCase();
-                    return (
-                      <li
-                        key={assetKey(a, i)}
-                        className={clsx(
-                          "flex min-w-0 items-center justify-between gap-3 px-3.5 py-2",
-                          enter.enterClass(assetKey(a, i))
-                        )}
-                      >
-                        <div className="min-w-0">
-                          <TokenBadge tokenId={a.tokenId} name={name} symbol={symbol} showName size="sm" />
-                          {mint ? (
-                            <p className="mt-0.5 text-[11px] text-[var(--muted-2)]">{t("box.payload.minted")}</p>
-                          ) : null}
-                        </div>
-                        <div className="shrink-0 text-right tabular-nums">
-                          <div className="text-[13px] font-medium">{formatTokenAmount(raw, dec, locale)}</div>
-                          {valueUsd != null && Number.isFinite(valueUsd) ? (
-                            <p className="mt-0.5 text-[12px] text-[var(--muted)]">
-                              <PrettyUsd n={valueUsd} />
-                            </p>
-                          ) : null}
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              ) : (
-                <p className="px-1 text-[13px] text-[var(--muted)]">{t("box.noTokens")}</p>
-              )}
+            <div className="box-tab feed-sheet">
+              <Feed className="is-rank">
+                {assets.length ? (
+                  <FeedBoard
+                    plate={<FeedPlate tag={t("box.tab.tokens")} count={<FeedCount k="feed.tokens" n={assets.length} />} />}
+                  >
+                    {assets.map((a, i) => {
+                      const info = tokenInfo.get(a.tokenId.toLowerCase());
+                      const dec = info?.decimals ?? a.decimals ?? 0;
+                      const raw = toBigIntAmt(a.amount);
+                      return (
+                        <FeedHoldingRow
+                          key={assetKey(a, i)}
+                          tokenId={a.tokenId}
+                          name={a.name ?? info?.name ?? info?.symbol ?? null}
+                          decimals={dec}
+                          amount={raw}
+                          priceUsd={info?.priceUsd ?? null}
+                          valueUsd={tokenAmountToUsd(raw, dec, info?.priceUsd)}
+                          lead={{ rank: String(i + 1) }}
+                          facts={
+                            a.tokenId.toLowerCase() === id.toLowerCase() ? (
+                              <span className="feed-kind">{t("box.payload.minted")}</span>
+                            ) : null
+                          }
+                          enterClass={enter.enterClass(assetKey(a, i))}
+                        />
+                      );
+                    })}
+                  </FeedBoard>
+                ) : (
+                  <FeedEmpty k="token" title={t("box.noTokens")} plate={<FeedPlate tag={t("box.tab.tokens")} />} />
+                )}
+              </Feed>
             </div>
           )}
 

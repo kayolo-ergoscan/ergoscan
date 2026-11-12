@@ -1,7 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
 import { Shell } from "@/components/Shell";
@@ -21,7 +20,17 @@ import {
 } from "@/components/kpi-marks";
 import { KpiNum } from "@/components/KpiGrid";
 import { NftCard } from "@/components/NftCard";
-import { Feed, FeedEmpty, FeedSkeleton } from "@/components/feed/Feed";
+import {
+  Feed,
+  FeedBoard,
+  FeedCount,
+  FeedEmpty,
+  FeedField,
+  FeedPhrase,
+  FeedPlate,
+  FeedSkeleton,
+} from "@/components/feed/Feed";
+import { FeedBoxRow, FeedHoldingRow } from "@/components/feed/FeedBoxRow";
 import { ActivityFeed } from "@/components/feed/FeedActivity";
 import {
   peekAddressPageCache,
@@ -31,12 +40,10 @@ import { RankWindow } from "@/components/RankWindow";
 import { SegBar, segItem } from "@/components/SegBar";
 import { PrettyUsd } from "@/components/PrettyNum";
 import { getGateway, getWsUrl } from "@/lib/config";
-import { TokenLogo } from "@/components/TokenBadge";
 import {
   formatErgPrecise,
   formatGroupedNumber,
   formatRelTime,
-  formatScaledGlance,
   formatTs,
   nanoToUsd,
   shortId,
@@ -49,7 +56,6 @@ import { suggestNameUrl } from "@/lib/address-book";
 import type { AddressRegistryName } from "@/lib/list-snapshots";
 import { useFavorite } from "@/lib/favorites";
 import { NameMarquee } from "@/components/NameMarquee";
-import { tokenDecimals, tokenSymbol, tokenTickerInk } from "@/lib/token-meta";
 import { type AddrFlow, type AddrFlowKind } from "@/lib/tx-flow";
 import { asAddrFlowKind, rentTapeTone } from "@ergoscan/shared";
 import { INK } from "@/lib/palette";
@@ -268,17 +274,6 @@ function loc(locale: string): string {
   return locale === "ru" ? "ru-RU" : "en-US";
 }
 
-function signedTokenGlance(
-  raw: bigint,
-  decimals: number,
-  locale?: string
-): { text: string; exact: string } {
-  const { text, exact } = formatScaledGlance(raw < 0n ? -raw : raw, decimals, locale);
-  if (raw > 0n) return { text: `+${text}`, exact: `+${exact}` };
-  if (raw < 0n) return { text: `−${text}`, exact: `−${exact}` };
-  return { text, exact };
-}
-
 export type AddressPageData = AddrData;
 
 export function AddressView({
@@ -303,7 +298,6 @@ export function AddressView({
   const [boxOffset, setBoxOffset] = useState(0);
   const [tokenOffset, setTokenOffset] = useState(0);
   const [listsPending, setListsPending] = useState(() => !tapeComplete(initial));
-  const [stuck, setStuck] = useState(false);
   const txEnter = useEnterIds();
   const packEnter = useEnterIds();
   const [listReady, setListReady] = useState(false);
@@ -843,24 +837,6 @@ export function AddressView({
     }
     // Replay keyed enter when the tab panel remounts (same motion as Tokens).
   }, [tab, txEnter.mark, boxEnter.mark, tokenEnter.mark, nftEnter.mark]);
-
-  useEffect(() => {
-    if (tab !== "activity" && tab !== "boxes" && tab !== "tokens") {
-      setStuck(false);
-      return;
-    }
-    const el = pinRef.current;
-    if (!el) return;
-    const chrome = document.querySelector(".stage-frame header.sticky");
-    const pin =
-      (chrome instanceof HTMLElement ? chrome.getBoundingClientRect().height : 64) + 8;
-    const obs = new IntersectionObserver(
-      ([entry]) => setStuck(!entry.isIntersecting),
-      { threshold: 1, rootMargin: `-${pin}px 0px 0px 0px` }
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [tab, data?.recentTxs?.length, data?.unspentBoxes?.length, data?.balance?.tokens?.length, txPage, boxOffset, tokenOffset]);
 
   useEffect(() => {
     void fetch(`${getGateway()}/v1/prices/erg`)
@@ -1415,41 +1391,27 @@ export function AddressView({
               ) : !tokenRows.length ? (
                 <FavKayolo line={t("address.noTokens")} />
               ) : (
-                <div className="addr-sheet">
-                  <div ref={pinRef} className="h-px w-full" aria-hidden />
-                  <div
-                    className={clsx(
-                      "addr-pan transition-opacity duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
-                      tokensLoading && tokenRows.length > 0 && "opacity-60"
-                    )}
-                  >
-                    <div
-                      className={clsx(
-                        "addr-head addr-lane addr-lane-x addr-token-tape text-[12px] font-medium",
-                        stuck && "is-stuck"
-                      )}
+                <div className="feed-sheet">
+                  <Feed className="is-rank" busy={tokensLoading && tokenRows.length > 0}>
+                    <FeedBoard
+                      plate={
+                        <FeedPlate
+                          tag={t("address.tab.tokens")}
+                          now
+                          count={<FeedCount k="feed.tokens" n={tokenRows.length} />}
+                        />
+                      }
                     >
-                      <div className="min-w-0">{t("address.colToken")}</div>
-                      <div className="block-lane-pair min-w-0 justify-between">
-                        <span>{t("address.colAmount")}</span>
-                        <span className="justify-end">{t("address.colPrice")}</span>
-                      </div>
-                      <div className="min-w-0 justify-end">{t("address.colValue")}</div>
-                      <div className="block-lane-pair min-w-0 justify-between">
-                        <span>{t("address.colFirst")}</span>
-                        <span className="justify-end">{t("address.colId")}</span>
-                      </div>
-                      <div className="min-w-0 justify-end">{t("address.colLast")}</div>
-                    </div>
-                    {tokenPage.map((row) => (
-                      <TokenHistoryRow
-                        key={row.tokenId}
-                        row={row}
-                        locale={locale}
-                        enterClass={tokenEnter.enterClass(row.tokenId)}
-                      />
-                    ))}
-                  </div>
+                      {tokenPage.map((row, i) => (
+                        <AddressHoldingRow
+                          key={row.tokenId}
+                          row={row}
+                          rank={tokenOffset + i + 1}
+                          enterClass={tokenEnter.enterClass(row.tokenId)}
+                        />
+                      ))}
+                    </FeedBoard>
+                  </Feed>
                   <RankWindow
                     offset={tokenOffset}
                     pageSize={TOKEN_PAGE}
@@ -1535,34 +1497,33 @@ export function AddressView({
                 <FavKayolo line={t("address.noBoxes")} />
               )}
               {((data.unspentBoxes?.length ?? 0) > 0 || boxOffset > 0) && (
-                <div className="addr-sheet">
-                  <div ref={pinRef} className="h-px w-full" aria-hidden />
-                  <div
-                    className={clsx(
-                      "addr-pan transition-opacity duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
-                      listsPending && "opacity-60"
-                    )}
-                  >
-                    <div
-                      className={clsx("addr-head addr-lane addr-lane-x addr-boxes", stuck && "is-stuck")}
+                <div className="feed-sheet">
+                  <Feed className="is-rank" busy={listsPending}>
+                    <FeedBoard
+                      plate={
+                        <FeedPlate
+                          tag={t("address.tab.boxes")}
+                          now
+                          count={<FeedCount k="feed.boxes" n={boxCount > 0 ? boxCount : (data.unspentBoxes?.length ?? 0)} />}
+                        />
+                      }
                     >
-                      <div className="min-w-0">{t("address.colBox")}</div>
-                      <div className="min-w-0 justify-end">{t("address.colAmount")}</div>
-                      <div className="min-w-0 justify-end">{t("tx.tab.tokens")}</div>
-                      <div className="min-w-0 justify-end">{t("address.colTx")}</div>
-                      <div className="min-w-0 justify-end">{t("address.colHeight")}</div>
-                    </div>
-                    {(data.unspentBoxes ?? []).map((b) => (
-                      <BoxHistoryRow
-                        key={b.boxId}
-                        box={b}
-                        locale={locale}
-                        t={t}
-                        tokenMeta={tokenMeta}
-                        enterClass={boxEnter.enterClass(b.boxId)}
-                      />
-                    ))}
-                  </div>
+                      {(data.unspentBoxes ?? []).map((b, i) => (
+                        <FeedBoxRow
+                          key={b.boxId}
+                          boxId={b.boxId}
+                          nano={toBigIntAmt(b.value)}
+                          tokens={boxTokens(b)}
+                          meta={(tid) => tokenMeta.get(tid.toLowerCase())}
+                          lead={{ rank: (boxOffset + i + 1).toLocaleString(loc(locale)) }}
+                          txId={b.transactionId}
+                          index={b.index}
+                          height={b.creationHeight}
+                          enterClass={boxEnter.enterClass(b.boxId)}
+                        />
+                      ))}
+                    </FeedBoard>
+                  </Feed>
                   <RankWindow
                     offset={boxOffset}
                     pageSize={BOX_PAGE}
@@ -1587,410 +1548,76 @@ export function AddressView({
   );
 }
 
-function TokenAmtText({
-  amt,
-  decimals,
-  locale,
-  label,
-  href,
-  tokenId,
-  className,
-  signed = false,
-}: {
-  amt: bigint;
-  decimals: number;
-  locale?: string;
-  label?: string;
-  href?: string;
-  tokenId?: string;
-  className?: string;
-  signed?: boolean;
-}) {
-  const glance = signed
-    ? signedTokenGlance(amt, decimals, locale)
-    : formatScaledGlance(amt, decimals, locale);
-  const suffix = label ? ` ${label}` : "";
-  const full = `${glance.exact}${suffix}`;
-  const nameInk = tokenId ? { color: tokenTickerInk(tokenId) } : undefined;
+function boxTokens(box: BoxRow): [string, bigint][] {
+  return (box.assets ?? [])
+    .map((a) => [a.tokenId.toLowerCase(), toBigIntAmt(a.amount)] as [string, bigint])
+    .filter(([, n]) => n !== 0n);
+}
+
+function whenText(ts: number | null | undefined, height: number | null | undefined, locale: string): string | null {
+  if (ts != null && ts > 0) return formatRelTime(ts, locale);
+  return height != null ? `#${height.toLocaleString(loc(locale))}` : null;
+}
+
+function WhenValue({ ts, height, locale }: { ts?: number | null; height?: number | null; locale: string }) {
+  const rel = ts != null && ts > 0 ? formatRelTime(ts, locale) : null;
   return (
-    <span className={clsx("inline-flex min-w-0 max-w-full items-baseline gap-1 whitespace-nowrap", className)} title={full} aria-label={full}>
-      <span className="shrink-0">{glance.text}</span>
-      {label ? (
-        href ? (
-          <Link prefetch={false} href={href} className="min-w-0 hover:underline" style={nameInk}>
-            <NameMarquee text={label} />
+    <span className="tabular-nums" suppressHydrationWarning>
+      {ts != null && ts > 0 ? formatTs(ts) : "—"}
+      {rel ? <span className="text-[var(--muted-2)]"> · {rel}</span> : null}
+      {height != null ? (
+        <span className="text-[var(--muted-2)]">
+          {" · "}
+          <Link prefetch={false} href={`/block/${height}`} className="hover:underline">
+            {height.toLocaleString(loc(locale))}
           </Link>
-        ) : (
-          <NameMarquee text={label} style={nameInk} />
-        )
+        </span>
       ) : null}
     </span>
   );
 }
 
-function TokenFlowPeek({
-  lines,
-  tokenMeta,
-  locale,
-  moreLabel,
-  signed = true,
-}: {
-  lines: [string, bigint][];
-  tokenMeta: Map<string, TokenRow>;
-  locale: string;
-  moreLabel: string;
-  signed?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const [up, setUp] = useState(false);
-  const [box, setBox] = useState<{
-    left: number;
-    width: number;
-    height: number;
-    top?: number;
-    bottom?: number;
-    maxHeight: number;
-  } | null>(null);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const head = lines.slice(0, 2);
-  const rest = lines.slice(2);
-
-  useEffect(() => {
-    if (!open) return;
-    const onPtr = (e: PointerEvent) => {
-      const t = e.target as Node;
-      if (rootRef.current?.contains(t) || menuRef.current?.contains(t)) return;
-      setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    const onMove = (e: Event) => {
-      if (menuRef.current?.contains(e.target as Node)) return;
-      setOpen(false);
-    };
-    document.addEventListener("pointerdown", onPtr);
-    document.addEventListener("keydown", onKey);
-    window.addEventListener("scroll", onMove, true);
-    window.addEventListener("resize", onMove);
-    return () => {
-      document.removeEventListener("pointerdown", onPtr);
-      document.removeEventListener("keydown", onKey);
-      window.removeEventListener("scroll", onMove, true);
-      window.removeEventListener("resize", onMove);
-    };
-  }, [open]);
-
-  useLayoutEffect(() => {
-    if (!open) {
-      setUp(false);
-      setBox(null);
-      return;
-    }
-    const menu = menuRef.current;
-    const cell = rootRef.current?.closest(".addr-token-cell");
-    if (!menu || !(cell instanceof HTMLElement)) return;
-    const cellBox = cell.getBoundingClientRect();
-    const sheet = rootRef.current?.closest(".addr-sheet");
-    const foot = sheet?.querySelector(".list-more");
-    const cols = sheet?.querySelector(".addr-head");
-    const floor =
-      Math.min(
-        foot instanceof HTMLElement ? foot.getBoundingClientRect().top : Infinity,
-        window.innerHeight
-      ) - 8;
-    const ceil =
-      (cols instanceof HTMLElement ? cols.getBoundingClientRect().bottom : 8) + 8;
-    const need = menu.scrollHeight;
-    const goUp = cellBox.bottom + need > floor;
-    const anchor = goUp ? Math.min(cellBox.top, floor) : cellBox.bottom;
-    const room = goUp ? anchor - ceil : floor - cellBox.bottom;
-    const height = Math.min(need, Math.max(48, room));
-    setUp(goUp);
-    setBox({
-      left: cellBox.left,
-      width: cellBox.width,
-      maxHeight: height,
-      height,
-      ...(goUp
-        ? { bottom: window.innerHeight - anchor }
-        : { top: cellBox.bottom }),
-    });
-  }, [open, rest.length]);
-
-  if (!lines.length) return null;
-
-  const paint = (tid: string, amt: bigint, className: string) => {
-    const meta = tokenMeta.get(tid.toLowerCase());
-    const label = tokenSymbol(tid, meta?.name) || shortId(tid, 4);
-    return (
-      <TokenAmtText
-        key={tid}
-        amt={amt}
-        decimals={tokenDecimals(tid, meta?.decimals)}
-        locale={locale}
-        label={label}
-        tokenId={tid}
-        href={`/token/${tid}`}
-        signed={signed}
-        className={clsx(
-          "min-w-0 text-[12px] tabular-nums",
-          signed
-            ? amt > 0n
-              ? "text-[var(--up)]"
-              : "text-[var(--down)]"
-            : "text-[var(--text)]",
-          className
-        )}
-      />
-    );
-  };
-
+/** A token this address holds: amount and dollar value; when it first came and last moved. */
+function AddressHoldingRow({ row, rank, enterClass }: { row: TokenRow; rank: number; enterClass?: string }) {
+  const { t, locale } = useI18n();
+  const last = whenText(row.lastTs, row.lastHeight, locale);
+  const first = whenText(row.firstTs, row.firstHeight, locale);
   return (
-    <div ref={rootRef} className="addr-token-peek">
-      <div className="addr-token-peek-line">
-        {head.map(([tid, amt], i) =>
-          paint(
-            tid,
-            amt,
-            i < head.length - 1
-              ? "flex-1 overflow-hidden"
-              : head.length > 1
-                ? "max-w-[58%]"
-                : "max-w-full"
-          )
-        )}
-      </div>
-      {rest.length > 0 && (
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-haspopup="listbox"
-          onClick={() => setOpen((v) => !v)}
-          className={clsx(
-            "chip-press mt-0.5 inline-flex shrink-0 items-center self-end overflow-hidden rounded-[10px] py-0.5 pl-2 pr-0 text-[12px] font-medium leading-none transition-colors duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
-            open
-              ? "is-pressed bg-[var(--wash-strong)] text-[var(--text)]"
-              : "text-[var(--muted)] hover:text-[var(--text)]"
-          )}
-        >
-          {moreLabel}
-        </button>
+    <FeedHoldingRow
+      tokenId={row.tokenId}
+      name={row.name}
+      decimals={row.decimals}
+      artworkUrl={row.artworkUrl}
+      amount={toBigIntAmt(row.amount)}
+      priceUsd={row.priceUsd}
+      valueUsd={row.valueUsd}
+      lead={{ rank: rank.toLocaleString(loc(locale)) }}
+      enterClass={enterClass}
+      facts={
+        <>
+          {last ? (
+            <span>
+              <FeedPhrase text={t("feed.active")} value={last} />
+            </span>
+          ) : null}
+          {first && first !== last ? (
+            <span className="feed-wide">
+              <FeedPhrase text={t("feed.first")} value={first} />
+            </span>
+          ) : null}
+        </>
+      }
+      more={() => (
+        <>
+          <FeedField label={t("address.colFirst")}>
+            <WhenValue ts={row.firstTs} height={row.firstHeight} locale={locale} />
+          </FeedField>
+          <FeedField label={t("address.colLast")}>
+            <WhenValue ts={row.lastTs} height={row.lastHeight} locale={locale} />
+          </FeedField>
+        </>
       )}
-      {rest.length > 0 &&
-        open &&
-        createPortal(
-          <div
-            ref={menuRef}
-            className={clsx("addr-token-menu is-open", up && "is-up")}
-            role="listbox"
-            onWheel={(e) => e.stopPropagation()}
-            onScroll={(e) => e.stopPropagation()}
-            style={
-              box
-                ? {
-                    left: box.left,
-                    width: box.width,
-                    height: box.height,
-                    maxHeight: box.maxHeight,
-                    top: box.top,
-                    bottom: box.bottom,
-                  }
-                : { left: 0, top: 0, visibility: "hidden" }
-            }
-          >
-            {rest.map(([tid, amt]) => paint(tid, amt, "max-w-full"))}
-          </div>,
-          document.body
-        )}
-    </div>
-  );
-}
-
-function BoxHistoryRow({
-  box,
-  locale,
-  t,
-  tokenMeta,
-  enterClass,
-}: {
-  box: BoxRow;
-  locale: string;
-  t: (k: string) => string;
-  tokenMeta: Map<string, TokenRow>;
-  enterClass?: string;
-}) {
-  const tokenLines = (box.assets ?? [])
-    .map((a) => [a.tokenId.toLowerCase(), toBigIntAmt(a.amount)] as [string, bigint])
-    .filter(([, n]) => n !== 0n);
-  const height = box.creationHeight;
-  const title =
-    box.index != null ? `${box.boxId} #${box.index}` : box.boxId;
-
-  return (
-    <div
-      className={clsx(
-        "addr-lane addr-lane-x addr-boxes border-t border-[var(--border-soft)] py-2.5 text-[13px]",
-        enterClass
-      )}
-    >
-      <Link
-        prefetch={false}
-        href={`/box/${box.boxId}`}
-        title={title}
-        className="min-w-0 truncate px-3 font-mono text-[12px] text-accent hover:underline"
-      >
-        {shortId(box.boxId, 10)}
-      </Link>
-      <div className="flex min-w-0 items-center justify-end px-3">
-        <ErgFigure nano={toBigIntAmt(box.value)} locale={locale} tone="up" />
-      </div>
-      <div className="addr-token-cell flex min-w-0 items-center justify-end px-3">
-        <TokenFlowPeek
-          lines={tokenLines}
-          tokenMeta={tokenMeta}
-          locale={locale}
-          moreLabel={t("address.more")}
-          signed={false}
-        />
-      </div>
-      <div className="flex min-w-0 items-center justify-end px-3">
-        {box.transactionId ? (
-          <Link
-            prefetch={false}
-            href={`/tx/${box.transactionId}`}
-            title={box.transactionId}
-            className="font-mono text-[12px] text-accent hover:underline"
-          >
-            {shortId(box.transactionId, 10)}
-          </Link>
-        ) : (
-          <span className="text-[var(--muted)]">—</span>
-        )}
-      </div>
-      <div className="flex min-w-0 items-center justify-end px-3">
-        {height != null ? (
-          <Link
-            prefetch={false}
-            href={`/block/${height}`}
-            className="tabular-nums text-accent hover:underline"
-          >
-            {height.toLocaleString(loc(locale))}
-          </Link>
-        ) : (
-          <span className="text-[var(--muted)]">—</span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function TokenWhen({
-  ts,
-  height,
-  locale,
-  align,
-}: {
-  ts: number | null | undefined;
-  height: number | null | undefined;
-  locale: string;
-  align: "left" | "right";
-}) {
-  const rel = ts != null ? formatRelTime(ts, locale) : null;
-  const title = ts != null ? formatTs(ts) : undefined;
-  const label =
-    rel && rel !== "—"
-      ? rel
-      : height != null
-        ? `#${height.toLocaleString(loc(locale))}`
-        : "—";
-  const body =
-    height != null ? (
-      <Link
-        prefetch={false}
-        href={`/block/${height}`}
-        className="truncate hover:underline"
-        title={title}
-      >
-        {label}
-      </Link>
-    ) : (
-      <span className="truncate" title={title}>
-        {label}
-      </span>
-    );
-  return (
-    <div
-      className={clsx(
-        "flex h-full min-w-0 items-center whitespace-nowrap px-3 tabular-nums text-[var(--muted)]",
-        align === "right" && "justify-end text-right"
-      )}
-    >
-      {body}
-    </div>
-  );
-}
-
-function TokenHistoryRow({
-  row,
-  locale,
-  enterClass,
-}: {
-  row: TokenRow;
-  locale: string;
-  enterClass?: string;
-}) {
-  const title = row.name ? `${row.name} · ${row.tokenId}` : row.tokenId;
-  const label = tokenSymbol(row.tokenId, row.name) || shortId(row.tokenId, 10);
-  const href = `/token/${row.tokenId}`;
-  return (
-    <div
-      className={clsx(
-        "addr-lane addr-lane-x addr-token-tape border-t border-[var(--border-soft)] py-2.5 text-[13px]",
-        enterClass
-      )}
-    >
-      <div className="flex min-w-0 items-center gap-2 px-3">
-        <TokenLogo tokenId={row.tokenId} artworkUrl={row.artworkUrl} size={20} />
-        <Link
-          prefetch={false}
-          href={href}
-          title={title}
-          className="min-w-0 font-medium hover:underline"
-          style={{ color: tokenTickerInk(row.tokenId) }}
-        >
-          <NameMarquee text={label} />
-        </Link>
-      </div>
-      <div className="block-lane-pair">
-        <div className="flex min-w-0 items-center px-3 tabular-nums">
-          <TokenAmtText
-            amt={toBigIntAmt(row.amount)}
-            decimals={tokenDecimals(row.tokenId, row.decimals)}
-            locale={locale}
-          />
-        </div>
-        <div className="flex min-w-0 items-center justify-end px-3 tabular-nums text-[var(--muted)]">
-          <PrettyUsd n={row.priceUsd} digits={6} />
-        </div>
-      </div>
-      <div className="flex min-w-0 items-center justify-end px-3 tabular-nums text-accent">
-        <PrettyUsd n={row.valueUsd} />
-      </div>
-      <div className="block-lane-pair">
-        <TokenWhen ts={row.firstTs} height={row.firstHeight} locale={locale} align="left" />
-        <Link
-          prefetch={false}
-          href={href}
-          title={row.tokenId}
-          className="flex shrink-0 items-center justify-end whitespace-nowrap px-3 font-mono text-[12px] text-accent hover:underline"
-        >
-          {shortId(row.tokenId, 8)}
-        </Link>
-      </div>
-      <TokenWhen ts={row.lastTs} height={row.lastHeight} locale={locale} align="right" />
-    </div>
+    />
   );
 }
 

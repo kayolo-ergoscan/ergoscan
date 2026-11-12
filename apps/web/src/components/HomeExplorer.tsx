@@ -43,6 +43,7 @@ import { HomeRentTape } from "@/components/HomeRentTape";
 import { parseRentDanger, type RentDangerRow } from "@/lib/rent-danger";
 import { HomeMempoolStage } from "@/components/HomeMempoolStage";
 import { CadenceYard, type CadenceYardBlock } from "@/components/CadenceYard";
+import { HomeVersionNodes } from "@/components/HomeVersionNodes";
 import { ERGO_MAX_BLOCK_SIZE } from "@/lib/ergo-emission";
 import { isSupplyDigit, zipSupplyGlyphs } from "@/lib/supply-flip";
 
@@ -610,7 +611,7 @@ export function HomeExplorer({
             </div>
             <KpiValue flush full muted={mcap == null}>
               {mcap != null ? (
-                <ReelText text={`${formatGroupedNumber(Math.round(mcap), 0, 0)} $`} />
+                <ReelText text={`$${formatGroupedNumber(Math.round(mcap), 0, 0)}`} />
               ) : (
                 mcapMiss
               )}
@@ -619,7 +620,7 @@ export function HomeExplorer({
               <TileName>{t("home.volume24h")}</TileName>
               <KpiValue flush full muted={vol24 == null}>
                 {vol24 != null ? (
-                  <ReelText text={`${formatGroupedNumber(Math.round(vol24), 0, 0)} $`} />
+                  <ReelText text={`$${formatGroupedNumber(Math.round(vol24), 0, 0)}`} />
                 ) : (
                   "—"
                 )}
@@ -833,12 +834,10 @@ export function HomeExplorer({
           className="home-tile-enter max-lg:order-4 lg:col-start-1 lg:row-start-3"
           style={enterAt(9)}
         />
-        <section
-          className="home-tile-enter home-meet-right mod flex h-full min-h-0 flex-col rounded-[20px] border border-[var(--border)] bg-[var(--module)] px-3.5 py-3 max-lg:order-3 lg:col-start-2 lg:row-start-3"
+        <HomeVersionNodes
+          className="home-tile-enter home-meet-right h-full min-h-0 max-lg:order-3 lg:col-start-2 lg:row-start-3"
           style={enterAt(11)}
-        >
-          <p className="text-[13px]" style={{ color: HOME.forming }}>{t("home.versionNodes")}</p>
-        </section>
+        />
         </div>
 
         <HomeRentTape
@@ -1180,15 +1179,16 @@ function EpochBar({
           {t("home.epoch")} <ReelText text={n.toLocaleString(loc)} />
         </p>
         <div className="flex min-w-0 items-center gap-3 text-[12px] leading-none tabular-nums">
-          <span className="epoch-slot inline-flex min-w-0 items-baseline gap-1 font-semibold">
+          <span className="epoch-slot inline-flex shrink-0 items-baseline gap-1 whitespace-nowrap font-semibold">
             <ReelText text={slot.toLocaleString(loc)} />
-            <span className="font-medium opacity-70">/ {ERGO_EPOCH_LEN.toLocaleString(loc)}</span>
+            {/* A phone keeps the slot and the %; the epoch length is the same every time. */}
+            <span className="font-medium opacity-70 max-sm:hidden">/ {ERGO_EPOCH_LEN.toLocaleString(loc)}</span>
           </span>
           <span className="epoch-slot inline-flex shrink-0 items-center gap-1 font-semibold">
             <EpochClock />
             <ReelText text={`${pct.toFixed(0)}%`} />
           </span>
-          <span className="epoch-left inline-flex shrink-0 items-center gap-1 font-medium">
+          <span className="epoch-left inline-flex shrink-0 items-center gap-1 whitespace-nowrap font-medium">
             <EpochFlag />
             <ReelText text={formatRemain(leftMs)} />
             <span className="font-normal opacity-80">{t("home.epochLeft")}</span>
@@ -1221,7 +1221,7 @@ const CADENCE_TRACK = 52;
 const CADENCE_HEAD = 64;
 const MEMPOOL_HTTP_MS = 8_000;
 /** Tip can move before block.sealed brings the tx list. Don't close the slot on that gap. */
-const SEAL_LIST_WAIT_MS = 16_000;
+const SEAL_LIST_WAIT_MS = 8_000;
 /** Backup if the pour canvas never calls done. Longer than the pour itself. */
 const ASSEMBLE_FAILSAFE_MS = 20_000;
 
@@ -1581,7 +1581,7 @@ function HomeLiveStrip({
           txUnit={txUnit}
           reduce={!!reduce}
           pitLabel={t("home.mempoolPit")}
-          formingHeight={(tip?.height ?? tape[0]?.height ?? 0) + 1}
+          formingHeight={Math.max(tip?.height ?? 0, mp.seal?.height ?? 0, tape[0]?.height ?? 0) + 1}
           formingSince={formSince ?? tape[0]?.timestamp ?? null}
           onSealPour={(seeds) => {
             const ink = seeds.length

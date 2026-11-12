@@ -3,18 +3,11 @@
 import { useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
-import { AddressPip } from "@/components/AddressPip";
-import { FavoriteHeart } from "@/components/FavoriteHeart";
-import { NameMarquee } from "@/components/NameMarquee";
-import { prefetchAddressPage } from "@/lib/address-page-cache";
-import { listPip } from "@/lib/address-pips";
 import {
-  formatErgFixed,
   formatFactWhen,
   formatRelTime,
   relAgeTone,
   relAgeToneClass,
-  shortId,
 } from "@/lib/format";
 
 export type AddressTapeData = {
@@ -27,82 +20,6 @@ export type AddressTapeData = {
   firstTxId?: string | null;
   lastTxId?: string | null;
 };
-
-export function AddressTapeNameHead({ label }: { label: string }) {
-  return (
-    <div className="flex h-full min-w-0 items-center">
-      <span className="whitespace-nowrap text-[12px] font-medium leading-none text-[var(--muted)]">
-        {label}
-      </span>
-    </div>
-  );
-}
-
-export function AddressTapeHead({
-  stuck,
-  address,
-  name,
-  erg,
-  tokens,
-  txs,
-  first,
-  last,
-}: {
-  stuck: boolean;
-  address: string;
-  name: string;
-  erg: string;
-  tokens: string;
-  txs: string;
-  first: string;
-  last: string;
-}) {
-  return (
-    <div
-      className={clsx(
-        "addr-head addr-lane addr-lane-x block-tx-pairs addr-list text-[12px] font-medium",
-        stuck && "is-stuck"
-      )}
-    >
-      <div className="block-lane-pair">
-        <AddressTapeNameHead label={address} />
-        <div className="min-w-0" aria-hidden />
-      </div>
-      <div className="block-lane-pair">
-        <AddressTapeNameHead label={name} />
-        <div className="flex h-full min-w-0 items-center justify-end">
-          <span className="whitespace-nowrap text-[12px] font-medium leading-none text-[var(--muted)]">
-            {txs}
-          </span>
-        </div>
-      </div>
-      <div className="block-lane-pair">
-        <AddressTapeNameHead label={tokens} />
-        <div className="flex h-full min-w-0 items-center justify-end">
-          <span className="whitespace-nowrap text-[12px] font-medium leading-none text-[var(--muted)]">
-            {erg}
-          </span>
-        </div>
-      </div>
-      <div className="block-lane-pair">
-        <div className="min-w-0" aria-hidden />
-        <div className="flex h-full min-w-0 items-center justify-end">
-          <span className="whitespace-nowrap text-[12px] font-medium leading-none text-[var(--muted)]">
-            {first}
-          </span>
-        </div>
-      </div>
-      <div className="block-lane-pair">
-        <div className="min-w-0" aria-hidden />
-        <div className="flex h-full min-w-0 items-center justify-end">
-          <span className="whitespace-nowrap text-[12px] font-medium leading-none text-[var(--muted)]">
-            {last}
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export function AddressActivityWhen({
   ts,
@@ -214,117 +131,3 @@ export function AddressActivityWhen({
     </div>
   );
 }
-
-export function AddressTapeRow({
-  row,
-  loc,
-  t,
-  enterClass,
-  fav,
-  favReady,
-  onToggleFav,
-}: {
-  row: AddressTapeData;
-  loc: string;
-  t: (k: string) => string;
-  enterClass?: string;
-  fav: boolean;
-  favReady: boolean;
-  onToggleFav: (id: string) => void;
-}) {
-  const nano = row.nanoerg ?? "0";
-  const pip = listPip(row.address, nano);
-  const kindLabel = t(`addresses.pip.${pip.id}`);
-  const aria = [shortId(row.address, 10), pip.name, pip.note, kindLabel]
-    .filter(Boolean)
-    .join(" · ");
-  return (
-    <div
-      className={clsx(
-        "addr-lane addr-lane-x block-tx-pairs addr-list relative z-0 border-t border-[var(--border-soft)] py-2.5 text-[13px] hover:z-30 focus-within:z-30",
-        enterClass
-      )}
-      onPointerEnter={() => prefetchAddressPage(row.address)}
-    >
-      <div className="block-lane-pair">
-        <div className="lane-id min-w-0 px-3">
-          <div className="flex h-[18px] items-center gap-2">
-            <AddressPip
-              address={row.address}
-              nanoerg={nano}
-              kindLabel={kindLabel}
-              kindGlyph
-              className="h-[18px] w-[18px] shrink-0"
-            />
-            <Link
-              prefetch={false}
-              href={`/address/${encodeURIComponent(row.address)}`}
-              aria-label={aria}
-              className="min-w-0 whitespace-nowrap font-mono leading-none text-soft hover:underline lg:shrink-0"
-              title={row.address}
-              onFocus={() => prefetchAddressPage(row.address)}
-            >
-              <span className="lg:hidden">{shortId(row.address, 4)}</span>
-              <span className="hidden lg:inline">{shortId(row.address, 10)}</span>
-            </Link>
-            <FavoriteHeart
-              size="sm"
-              on={fav}
-              ready={favReady}
-              title={fav ? t("favorites.remove") : t("favorites.add")}
-              onToggle={() => onToggleFav(row.address)}
-            />
-          </div>
-        </div>
-      </div>
-      <div className="block-lane-pair">
-        <div className="flex min-w-0 items-center px-3">
-          {pip.name ? (
-            <NameMarquee text={pip.name} className="min-w-0 w-full text-[var(--text)]" />
-          ) : null}
-        </div>
-        <div className="whitespace-nowrap px-3 text-right tabular-nums leading-none text-[var(--muted)]">
-          {row.txCount != null ? row.txCount.toLocaleString(loc) : "—"}
-        </div>
-      </div>
-      <div className="block-lane-pair">
-        <div className="min-w-0 px-3 tabular-nums leading-none text-[var(--muted)]">
-          {row.tokenCount != null ? row.tokenCount.toLocaleString(loc) : "—"}
-        </div>
-        <div
-          className={clsx(
-            "whitespace-nowrap px-3 text-right font-medium tabular-nums leading-none",
-            row.nanoerg != null && "text-[var(--up)]"
-          )}
-        >
-          {row.nanoerg != null ? formatErgFixed(row.nanoerg, loc) : "—"}
-        </div>
-      </div>
-      <div className="block-lane-pair addr-act-pair">
-        <div className="min-w-0" aria-hidden />
-        <AddressActivityWhen
-          ts={row.firstTs}
-          txId={row.firstTxId}
-          locale={loc}
-          align="right"
-          openLabel={t("addresses.openTx")}
-          copyLabel={t("tx.copy")}
-          copiedLabel={t("tx.copied")}
-        />
-      </div>
-      <div className="block-lane-pair addr-act-pair">
-        <div className="min-w-0" aria-hidden />
-        <AddressActivityWhen
-          ts={row.lastTs}
-          txId={row.lastTxId}
-          locale={loc}
-          align="right"
-          openLabel={t("addresses.openTx")}
-          copyLabel={t("tx.copy")}
-          copiedLabel={t("tx.copied")}
-        />
-      </div>
-    </div>
-  );
-}
-

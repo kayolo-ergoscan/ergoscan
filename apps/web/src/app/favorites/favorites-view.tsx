@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { AnimatePresence, motion } from "framer-motion";
 import clsx from "clsx";
-import { AddressTapeHead, AddressTapeRow } from "@/components/AddressTapeRow";
 import { KpiNum, KpiTileRail } from "@/components/KpiGrid";
 import {
   KpiMarkCoins,
@@ -14,10 +12,13 @@ import {
 } from "@/components/kpi-marks";
 import { Shell } from "@/components/Shell";
 import { FavKayolo } from "@/components/FavKayolo";
-import { BlockTapeRow } from "@/app/blocks/blocks-view";
-import { PoolTapeRow } from "@/app/defi/pool/pool-view";
-import { TokenTapeRow } from "@/app/tokens/tokens-view";
-import { TxLaneRow } from "@/components/TxLaneRow";
+import { FeedBlockRow } from "@/app/blocks/blocks-view";
+import { FeedTokenRow } from "@/app/tokens/tokens-view";
+import { Feed, FeedBoard, FeedCount, FeedDays, FeedPlate, FeedSkeleton } from "@/components/feed/Feed";
+import { FeedAddressRow } from "@/components/feed/FeedHolderRow";
+import { FeedPoolRow } from "@/components/feed/FeedPoolRow";
+import { FeedTxRow } from "@/components/feed/FeedTxRow";
+import { toEpochMs } from "@/lib/format";
 import { getGateway } from "@/lib/config";
 import {
   useFavorites,
@@ -244,30 +245,6 @@ function KindTile({
   );
 }
 
-function col(label: string, align: "left" | "right" | "center" = "left") {
-  return (
-    <div
-      className={clsx(
-        "flex h-full min-w-0 items-center",
-        align === "right" && "justify-end",
-        align === "center" && "justify-center"
-      )}
-    >
-      <span
-        className={clsx(
-          "inline-flex shrink-0 items-center whitespace-nowrap px-2 py-1.5 text-[12px] font-medium leading-none text-[var(--muted)]",
-          align === "right" && "w-full justify-end text-right",
-          align === "center" && "w-full justify-center text-center"
-        )}
-      >
-        {label}
-      </span>
-    </div>
-  );
-}
-
-const SHEET_EASE = [0.4, 0, 0.2, 1] as const;
-
 export function FavoritesView() {
   const t = useT();
   const { locale } = useI18n();
@@ -294,8 +271,6 @@ export function FavoritesView() {
   const [listReady, setListReady] = useState(false);
   const seenKind = useRef<FavoriteKind | null>(null);
   const markEnter = enter.mark;
-  const pinRef = useRef<HTMLDivElement>(null);
-  const [stuck, setStuck] = useState(false);
   const ids = store?.[kind] ?? null;
 
   useKeepFresh(() => markSynced());
@@ -421,20 +396,6 @@ export function FavoritesView() {
     };
   }, [ids, kind]);
 
-  useEffect(() => {
-    const el = pinRef.current;
-    if (!el) return;
-    const chrome = document.querySelector(".stage-frame header.sticky");
-    const pin =
-      (chrome instanceof HTMLElement ? chrome.getBoundingClientRect().height : 64) + 8;
-    const obs = new IntersectionObserver(
-      ([entry]) => setStuck(!entry.isIntersecting),
-      { threshold: 1, rootMargin: `-${pin}px 0px 0px 0px` }
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [kind, ids?.length]);
-
   const tiles: { id: FavoriteKind; label: string; ink: string; mark: ReactNode }[] = [
     { id: "addresses", label: t("addresses.title"), ink: INK.violet, mark: <KpiMarkUsers tone={INK.violet} /> },
     { id: "tokens", label: t("tokens.title"), ink: INK.gold, mark: <KpiMarkCoins tone={INK.gold} /> },
@@ -443,12 +404,13 @@ export function FavoritesView() {
     { id: "pools", label: t("defi.pools"), ink: INK.gold, mark: <KpiMarkVault tone={INK.gold} /> },
   ];
 
-  const heart = (id: string, on: boolean) => ({
-    fav: on,
-    favReady: true,
-    favTitle: on ? t("favorites.remove") : t("favorites.add"),
-    onToggleFav: () => remove(id),
-  });
+  /** Every row here is saved; its heart removes it. */
+  const saved = (id: string) => ({ on: true, ready: true, title: t("favorites.remove"), toggle: () => remove(id) });
+  const now = Date.now();
+  const blockItems = (ids ?? []).map((id) => blocks[id] ?? blankBlock(id)).sort((a, b) => b.height - a.height);
+  const txItems = (ids ?? [])
+    .map((id) => txs[id] ?? blankTx(id))
+    .sort((a, b) => (toEpochMs(b.timestamp) ?? -1) - (toEpochMs(a.timestamp) ?? -1));
 
   const rowReady = (id: string) => {
     if (kind === "addresses") return addresses[id] != null;
@@ -479,208 +441,103 @@ export function FavoritesView() {
               />
             ))}
           </div>
-          <AnimatePresence mode="wait" initial={false}>
-            {!ids?.length ? (
-              <motion.div
-                key={`empty-${kind}`}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.22, ease: SHEET_EASE }}
-              >
-                <FavKayolo line={t(EMPTY_KEY[kind])} />
-              </motion.div>
-            ) : tapeReady ? (
-              <motion.div
-                key={kind}
-                className="addr-sheet"
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -12 }}
-                transition={{ duration: 0.28, ease: SHEET_EASE }}
-              >
-                <div ref={pinRef} className="h-px w-full" aria-hidden />
+          {!ids?.length ? (
+            <FavKayolo line={t(EMPTY_KEY[kind])} />
+          ) : !tapeReady ? (
+            <Feed busy>
+              <FeedSkeleton rows={Math.min(ids.length, 6)} />
+            </Feed>
+          ) : (
+            <div className="feed-sheet" key={kind}>
+              <Feed className={kind === "blocks" || kind === "transactions" ? undefined : "is-rank"}>
                 {kind === "addresses" ? (
-                  <div className="addr-pan kpi-tape">
-                    <AddressTapeHead
-                      stuck={stuck}
-                      address={t("addresses.colAddress")}
-                      name={t("addresses.colName")}
-                      erg={t("addresses.colErg")}
-                      tokens={t("addresses.colTokens")}
-                      txs={t("addresses.colTxs")}
-                      first={t("addresses.colFirst")}
-                      last={t("addresses.colLast")}
-                    />
-                    {ids.map((id) => (
-                      <AddressTapeRow
+                  <FeedBoard
+                    plate={
+                      <FeedPlate tag={t("addresses.title")} now count={<FeedCount k="feed.addresses" n={ids.length} />} />
+                    }
+                  >
+                    {ids.map((id, i) => (
+                      <FeedAddressRow
                         key={id}
                         row={addresses[id] ?? blankAddress(id)}
-                        loc={loc}
-                        t={t}
+                        rank={i + 1}
                         enterClass={enter.enterClass(id)}
-                        fav
-                        favReady
-                        onToggleFav={() => remove(id)}
+                        fav={{ on: true, ready: true, toggle: () => remove(id) }}
                       />
                     ))}
-                  </div>
+                  </FeedBoard>
                 ) : null}
                 {kind === "tokens" ? (
-                  <div className={clsx("addr-pan", stuck && "is-stuck")}>
-                    <div className="addr-head addr-lane addr-lane-x token-lane text-[12px] font-medium">
-                      <div className="token-lane-name">
-                        <div className="justify-center !px-2" aria-hidden />
-                        {col(t("tokens.colName"))}
-                      </div>
-                      <div className="token-lane-id min-w-0 grid">
-                        {col(t("tokens.colId"))}
-                        {col(t("tokens.colSupply"), "right")}
-                      </div>
-                      <div className="token-lane-pair min-w-0 grid">
-                        {col(t("tokens.colFirst"))}
-                        {col(t("tokens.colLast"), "right")}
-                      </div>
-                      <div className="token-lane-triple">
-                        {col(t("tokens.colTxs"))}
-                        {col(t("tokens.colHolders"), "right")}
-                      </div>
-                    </div>
-                    {ids.map((id) => (
-                      <TokenTapeRow
+                  <FeedBoard
+                    plate={<FeedPlate tag={t("tokens.title")} now count={<FeedCount k="feed.tokens" n={ids.length} />} />}
+                  >
+                    {ids.map((id, i) => (
+                      <FeedTokenRow
                         key={id}
                         row={tokens[id] ?? blankToken(id)}
-                        locale={locale}
+                        rank={i + 1}
+                        sort="holders"
                         enterClass={enter.enterClass(id)}
-                        {...heart(id, true)}
+                        fav={saved(id)}
                       />
                     ))}
-                  </div>
+                  </FeedBoard>
                 ) : null}
                 {kind === "blocks" ? (
-                  <div className="addr-pan">
-                    <div
-                      className={clsx(
-                        "addr-head addr-lane addr-lane-x block-lane blocks-tape text-[12px] font-medium",
-                        stuck && "is-stuck"
-                      )}
-                    >
-                      <div className="block-lane-pair">
-                        {col(t("blocks.height"))}
-                        <div className="lithos-col" aria-hidden />
-                        {col(t("blocks.txs"), "right")}
-                      </div>
-                      <div className="block-lane-pair">
-                        {col(t("blocks.interval"))}
-                        {col(t("blocks.blockTime"), "right")}
-                      </div>
-                      <div className="block-lane-pair">
-                        {col(t("blocks.miner"))}
-                        {col(t("blocks.transferred"), "right")}
-                      </div>
-                      <div className="block-lane-pair">
-                        {col(t("blocks.id"))}
-                        {col(t("blocks.size"), "right")}
-                      </div>
-                    </div>
-                    {ids.map((id) => (
-                      <BlockTapeRow
-                        key={id}
-                        row={blocks[id] ?? blankBlock(id)}
-                        locale={locale}
-                        miss={t("home.unavailable")}
-                        t={t}
-                        now={Date.now()}
-                        intervalMs={blockGaps[id] ?? null}
-                        enterClass={enter.enterClass(id)}
-                        {...heart(id, true)}
+                  <FeedDays
+                    items={blockItems}
+                    msOf={(b) => toEpochMs(b.timestamp)}
+                    seconds
+                    countOf={(n) => <FeedCount k="feed.blockCount" n={n} />}
+                    render={(b, lead) => (
+                      <FeedBlockRow
+                        key={b.id}
+                        row={b}
+                        lead={lead}
+                        now={now}
+                        intervalMs={blockGaps[b.id] ?? null}
+                        enterClass={enter.enterClass(b.id)}
+                        fav={saved(b.id)}
                       />
-                    ))}
-                  </div>
+                    )}
+                  />
                 ) : null}
                 {kind === "transactions" ? (
-                  <div className="addr-pan kpi-tape">
-                    <div
-                      className={clsx(
-                        "addr-head addr-lane addr-lane-x block-tx-pairs text-[12px] font-medium",
-                        stuck && "is-stuck"
-                      )}
-                    >
-                      <div className="block-lane-pair">
-                        {col(t("detail.tx"))}
-                        {col(t("blocks.txIo"), "right")}
-                      </div>
-                      <div className="block-lane-pair">
-                        {col(t("block.col.tokens"))}
-                        {col(t("blocks.time"), "right")}
-                      </div>
-                      <div className="block-lane-pair">
-                        {col(t("tx.fee"))}
-                        {col(t("txs.outputSum"), "right")}
-                      </div>
-                      <div className="block-lane-pair is-triple">
-                        {col(t("blocks.txIndex"))}
-                        <div className="min-w-0 text-center text-[12px] font-medium text-[var(--muted)]">
-                          {t("blocks.size")}
-                        </div>
-                        {col(t("blocks.height"), "right")}
-                      </div>
-                    </div>
-                    {ids.map((id) => (
-                      <TxLaneRow
-                        key={id}
-                        row={txs[id] ?? blankTx(id)}
-                        index={txs[id]?.index ?? 0}
-                        locale={locale}
-                        t={t}
+                  <FeedDays
+                    items={txItems}
+                    msOf={(x) => toEpochMs(x.timestamp)}
+                    seconds
+                    countOf={(n) => <FeedCount k="feed.txCount" n={n} />}
+                    render={(x, lead) => (
+                      <FeedTxRow
+                        key={x.id}
+                        row={x}
+                        lead={lead}
                         showHeight
-                        enterClass={enter.enterClass(id)}
-                        {...heart(id, true)}
+                        enterClass={enter.enterClass(x.id)}
+                        fav={saved(x.id)}
                       />
-                    ))}
-                  </div>
+                    )}
+                  />
                 ) : null}
                 {kind === "pools" ? (
-                  <div className="addr-pan kpi-tape">
-                    <div
-                      className={clsx(
-                        "addr-head addr-lane addr-lane-x block-tx-pairs text-[12px] font-medium",
-                        stuck && "is-stuck"
-                      )}
-                    >
-                      <div className="block-lane-pair">
-                        {col(t("pool.colPair"))}
-                        {col(t("spectrum.tvl"), "right")}
-                      </div>
-                      <div className="block-lane-pair">
-                        {col(t("spectrum.volume"))}
-                        {col(t("pool.colDay"), "right")}
-                      </div>
-                      <div className="block-lane-pair">
-                        {col(t("spectrum.traders"))}
-                        {col(t("pool.colFirst"), "right")}
-                      </div>
-                      <div className="block-lane-pair">
-                        {col(t("spectrum.trades"))}
-                        {col(t("pool.colLast"), "right")}
-                      </div>
-                    </div>
-                    {ids.map((id) => (
-                      <PoolTapeRow
+                  <FeedBoard
+                    plate={<FeedPlate tag={t("defi.pools")} now count={<FeedCount k="feed.pools" n={ids.length} />} />}
+                  >
+                    {ids.map((id, i) => (
+                      <FeedPoolRow
                         key={id}
                         row={pools[id] ?? blankPool(id)}
-                        locale={locale}
-                        miss={t("home.unavailable")}
-                        t={t}
+                        rank={i + 1}
                         enterClass={enter.enterClass(id)}
-                        {...heart(id, true)}
+                        fav={saved(id)}
                       />
                     ))}
-                  </div>
+                  </FeedBoard>
                 ) : null}
-              </motion.div>
-            ) : null}
-          </AnimatePresence>
+              </Feed>
+            </div>
+          )}
         </>
       )}
     </Shell>

@@ -161,15 +161,26 @@ export function netValueParties(
   return { from, to };
 }
 
-/** Ergo EIP-4: token id is the box id of the issuing output. */
-export function eip4MintOfOutputs(outputs: Eip4MintBox[]): Map<string, bigint> {
+/**
+ * Ergo EIP-4: a new token's id is the box id of the tx's FIRST INPUT. A box is spent only once,
+ * so a token whose id equals any input box id was minted by this tx, and the inputs need no
+ * order (Postgres keeps none). Minted amount = what the given outputs hold.
+ */
+export function eip4MintOfOutputs(
+  outputs: Eip4MintBox[],
+  inputBoxIds: Iterable<string | null | undefined>
+): Map<string, bigint> {
   const mint = new Map<string, bigint>();
+  const spent = new Set<string>();
+  for (const id of inputBoxIds) {
+    const key = id?.trim().toLowerCase();
+    if (key) spent.add(key);
+  }
+  if (!spent.size) return mint;
   for (const box of outputs) {
-    const boxId = box.boxId?.toLowerCase();
-    if (!boxId) continue;
     for (const asset of box.assets ?? []) {
       const tokenId = asset.tokenId?.toLowerCase();
-      if (!tokenId || tokenId !== boxId) continue;
+      if (!tokenId || !spent.has(tokenId)) continue;
       const amt = parseNanoErg(asset.amount);
       if (amt <= 0n) continue;
       mint.set(tokenId, (mint.get(tokenId) ?? 0n) + amt);

@@ -10,6 +10,7 @@ import {
   oracleAgeBlocks,
 } from "@ergoscan/shared";
 import { Shell } from "@/components/Shell";
+import { StuckPin } from "@/components/StuckPin";
 import { KpiGrid } from "@/components/KpiGrid";
 import {
   KpiMarkBell,
@@ -89,7 +90,6 @@ export function OracleFeedView({
   const [tapeLens, setTapeLens] = useState<"live" | "silent">("live");
   const [stuck, setStuck] = useState(false);
   const [listReady, setListReady] = useState(false);
-  const pinRef = useRef<HTMLDivElement>(null);
   const enter = useEnterIds();
   const packEnter = useEnterIds();
   const opened = useRef(false);
@@ -180,19 +180,6 @@ export function OracleFeedView({
     if (ids.length) packEnter.mark(["pack"]);
   }, [tapeLens, tapeOps, enter.mark, packEnter.mark]);
 
-  useEffect(() => {
-    const el = pinRef.current;
-    if (!el) return;
-    const chrome = document.querySelector(".stage-frame header.sticky");
-    const pin =
-      (chrome instanceof HTMLElement ? chrome.getBoundingClientRect().height : 64) + 8;
-    const obs = new IntersectionObserver(
-      ([entry]) => setStuck(!entry.isIntersecting),
-      { threshold: 1, rootMargin: `-${pin}px 0px 0px 0px` }
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [pack.operators.length, listReady]);
 
   const battle = Boolean(def.refreshNft);
   const answer = fmtQuote(slug, pack.quote, locale);
@@ -384,7 +371,7 @@ export function OracleFeedView({
 
         {listReady ? (
         <div className="addr-sheet">
-          <div ref={pinRef} className="h-px w-full" aria-hidden />
+          <StuckPin onStuck={setStuck} />
           <div className="addr-pan">
             <div
               className={clsx(

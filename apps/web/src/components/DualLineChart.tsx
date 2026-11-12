@@ -388,6 +388,8 @@ export function DualLineChart({
             axisLabel: {
               color: chrome.muted,
               fontSize: 11,
+              // The padded max is not a round tick; its label sat on top of the next one (97.3 over 90.0).
+              showMaxLabel: false,
               formatter: (v: number) => yFmt(v),
             },
           },
@@ -404,6 +406,7 @@ export function DualLineChart({
             axisLabel: {
               color: chrome.muted,
               fontSize: 11,
+              showMaxLabel: false,
               formatter: (v: number) => fmtFees.current(v),
             },
           },

@@ -31,9 +31,7 @@ import { fetchChainStats, type ChainStats } from "@/lib/chain-stats";
 import {
   formatBlockTime,
   formatBytes,
-  formatDottedDate,
   formatErgPrecise,
-  formatH24,
   formatRelTime,
   formatScaledAmount,
   formatStamp,
@@ -44,7 +42,6 @@ import {
 } from "@/lib/format";
 import { lookupAddress } from "@/lib/address-book";
 import { minerEmissionAtHeight, ERGO_EPOCH_LEN, ERGO_MAX_BLOCK_SIZE } from "@/lib/ergo-emission";
-import clsx from "clsx";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { useChainTipRefresh, usePageSync } from "@/lib/page-sync";
 import { SNAPSHOT_FETCH, enteringIds, snapshotPath, useEnterIds, ENTER_MS } from "@/lib/keyed-enter";
@@ -391,139 +388,7 @@ function minerLabel(address: string | null | undefined, snapName: string | null 
   return `${address.slice(0, 2)}…${address.slice(-8)}`;
 }
 
-export function BlockTapeRow({
-  row,
-  locale,
-  miss,
-  t,
-  now,
-  intervalMs,
-  enterClass,
-  fav = false,
-  favReady = true,
-  favTitle,
-  onToggleFav,
-}: {
-  row: BlockListItem;
-  locale: string;
-  miss: string;
-  t: (k: string) => string;
-  now: number;
-  intervalMs: number | null;
-  enterClass?: string;
-  fav?: boolean;
-  favReady?: boolean;
-  favTitle?: string;
-  onToggleFav?: () => void;
-}) {
-  const minerAddr = row.minerAddress && row.minerAddress.length ? row.minerAddress : null;
-  const miner = minerAddr ? minerLabel(minerAddr, row.minerName) : "—";
-  const rewardNano = minerEmissionAtHeight(row.height) + toBigIntAmt(row.feeNano);
-  const out = splitBlockOutput(row.valueNano, row.userValueNano);
-  const hasOut = hasAmt(row.userValueNano) || hasAmt(row.valueNano);
-  return (
-    <div
-      className={clsx(
-        "addr-lane addr-lane-x block-lane blocks-tape border-t border-[var(--border-soft)] py-2.5 text-[13px]",
-        enterClass
-      )}
-      onPointerEnter={() => prefetchBlockCard(row.id)}
-    >
-      <div className="block-lane-pair">
-        <div className="min-w-0 px-3">
-          <div className="flex min-w-0 items-center gap-2">
-            <Link
-              prefetch={false}
-              href={`/block/${row.id}`}
-              onFocus={() => prefetchBlockCard(row.id)}
-              className="min-w-0 truncate font-mono tabular-nums text-accent hover:underline"
-            >
-              {row.height.toLocaleString(loc(locale))}
-            </Link>
-            {onToggleFav ? (
-              <FavoriteHeart
-                size="sm"
-                on={fav}
-                ready={favReady}
-                title={favTitle ?? ""}
-                onToggle={onToggleFav}
-              />
-            ) : null}
-          </div>
-        </div>
-        <div className="lithos-col">
-          {row.lithos ? (
-            <Link prefetch={false} href="/lithos" title={t("block.chip.lithosHint")} className="chip-press inline-flex">
-              <img
-                src="/lithos-mark.png"
-                alt=""
-                width={18}
-                height={18}
-                className="h-[18px] w-[18px] object-contain"
-              />
-            </Link>
-          ) : null}
-        </div>
-        <div className="flex min-w-0 items-center justify-end gap-1.5 whitespace-nowrap px-3 text-right tabular-nums">
-          {row.txCount === 1 ? (
-            <span className="text-[11px] font-normal text-[var(--muted)]">{t("blocks.coinbaseOnly")}</span>
-          ) : null}
-          <span>{row.txCount != null ? row.txCount.toLocaleString(loc(locale)) : miss}</span>
-        </div>
-      </div>
-      <div className="block-lane-pair">
-        <div className="min-w-0 px-3">
-          <p className="tabular-nums">{intervalMs != null ? formatBlockTime(intervalMs) : "—"}</p>
-        </div>
-        <div className="min-w-0 px-3 text-right">
-          <BlockWhen ts={row.timestamp} now={now} />
-        </div>
-      </div>
-      <div className="block-lane-pair">
-        <div className="min-w-0 px-3">
-          {minerAddr ? (
-            <Link prefetch={false} href={`/address/${minerAddr}`} className="block min-w-0 truncate text-accent hover:underline">
-              {miner}
-            </Link>
-          ) : (
-            <p className="truncate text-[var(--muted)]">{miner}</p>
-          )}
-          <p className="mt-0.5 truncate tabular-nums text-[12px] text-[var(--muted)]">
-            {formatErgPrecise(rewardNano, locale)}
-          </p>
-        </div>
-        <div className="min-w-0 px-3 text-right tabular-nums">
-          <p className={clsx("tabular-nums", hasOut && "text-[var(--up)]")}>
-            {hasOut ? formatErgPrecise(out.user, locale) : "—"}
-          </p>
-          {out.emission > 0n ? (
-            <p className="mt-0.5 truncate tabular-nums text-[11px] text-[var(--muted)]">
-              {formatErgPrecise(out.emission, locale)} {t("blocks.emission")}
-            </p>
-          ) : null}
-        </div>
-      </div>
-      <div className="block-lane-pair">
-        <div className="min-w-0 px-3">
-          <Link
-            prefetch={false}
-            href={`/block/${row.id}`}
-            className="block whitespace-nowrap font-mono text-accent hover:underline"
-          >
-            {shortId(row.id, 8)}
-          </Link>
-        </div>
-        <div className="min-w-0 px-3">
-          <p className="text-right tabular-nums text-[var(--text)]">{formatBytes(row.size)}</p>
-          <BlockSizeWave bytes={row.size} locale={locale} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/** One block on the feed: height, who found it, what it moved, how full it is. */
-function FeedBlockRow({
+export function FeedBlockRow({
   row,
   lead,
   now,
@@ -652,28 +517,6 @@ function FeedBlockRow({
   );
 }
 
-function BlockWhen({ ts, now }: { ts: number | null | undefined; now: number }) {
-  const { locale } = useI18n();
-  const clock = formatH24(ts, undefined, true);
-  const date = formatDottedDate(ts);
-  if (clock === "—" || date === "—") {
-    return <span className="text-[var(--muted)]">—</span>;
-  }
-  return (
-    <div>
-      <p suppressHydrationWarning className="tabular-nums text-[var(--text)]">
-        {formatRelTime(ts, now, locale)}
-      </p>
-      <p
-        suppressHydrationWarning
-        className="mt-0.5 whitespace-nowrap text-[11px] tabular-nums text-[var(--muted)]"
-      >
-        {clock} · {date}
-      </p>
-    </div>
-  );
-}
-
 function sizePctLabel(pct: number, locale: string): string {
   const ru = locale === "ru";
   if (pct <= 0) return ru ? "0 %" : "0%";
@@ -681,44 +524,4 @@ function sizePctLabel(pct: number, locale: string): string {
     pct < 0.1 ? pct.toFixed(2) : pct < 10 ? pct.toFixed(1) : String(Math.round(pct));
   const n = ru ? body.replace(".", ",") : body;
   return ru ? `${n} %` : `${n}%`;
-}
-
-function BlockSizeWave({
-  bytes,
-  locale,
-}: {
-  bytes: number;
-  locale: string;
-}) {
-  const pct =
-    bytes > 0 ? Math.min(100, (bytes / ERGO_MAX_BLOCK_SIZE) * 100) : 0;
-  return (
-    <div
-      className="block-size-track"
-      role="img"
-      aria-label={sizePctLabel(pct, locale)}
-    >
-      <div className="block-size-liquid" style={{ width: `${pct}%` }}>
-        <div
-          className="block-size-waves"
-          aria-hidden
-          style={{ animationDelay: `${(bytes % 9) * -0.18}s` }}
-        >
-          <svg viewBox="0 0 120 8" preserveAspectRatio="none">
-            <path
-              fill="currentColor"
-              d="M0 5c10-5 20 5 30 0s20 5 30 0 20 5 30 0 20 5 30 0v3H0z"
-            />
-          </svg>
-          <svg viewBox="0 0 120 8" preserveAspectRatio="none">
-            <path
-              fill="currentColor"
-              d="M0 5c10-5 20 5 30 0s20 5 30 0 20 5 30 0 20 5 30 0v3H0z"
-            />
-          </svg>
-        </div>
-      </div>
-      <span className="block-size-pct">{sizePctLabel(pct, locale)}</span>
-    </div>
-  );
 }
