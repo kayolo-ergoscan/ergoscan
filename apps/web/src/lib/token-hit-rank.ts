@@ -27,12 +27,24 @@ export function orderByHolderRank<T extends { type: string; id: string }>(
   return hits.map((h) => (h.type === "token" ? sorted[i++]! : h));
 }
 
+/** Token hits keep the holder count the ranking request already returned. */
+function withHolders<T extends { type: string; id: string }>(
+  hits: T[],
+  held: ReadonlyMap<string, number>
+): Array<T & { holders?: number }> {
+  if (!held.size) return hits;
+  return hits.map((h) => {
+    const n = h.type === "token" ? held.get(h.id) : undefined;
+    return n != null ? { ...h, holders: n } : h;
+  });
+}
+
 export async function orderTokenHitsByHolders<T extends { type: string; id: string }>(
   q: string,
   hits: T[],
   gateway: string,
   signal?: AbortSignal
-): Promise<T[]> {
+): Promise<Array<T & { holders?: number }>> {
   if (hits.filter((h) => h.type === "token").length < 2) return hits;
   const query = q.trim();
   if (query.length < 2) return hits;
@@ -42,11 +54,16 @@ export async function orderTokenHitsByHolders<T extends { type: string; id: stri
       { signal, cache: "no-store", headers: { Accept: "application/json" } }
     );
     if (!r.ok) return hits;
-    const j = (await r.json()) as { items?: { tokenId?: unknown }[] };
-    const ids = Array.isArray(j.items)
-      ? j.items.flatMap((it) => (typeof it.tokenId === "string" ? [it.tokenId] : []))
-      : [];
-    return orderByHolderRank(hits, ids);
+    const j = (await r.json()) as { items?: { tokenId?: unknown; holders?: unknown }[] };
+    const items = Array.isArray(j.items) ? j.items : [];
+    const ids = items.flatMap((it) => (typeof it.tokenId === "string" ? [it.tokenId] : []));
+    const held = new Map<string, number>();
+    for (const it of items) {
+      if (typeof it.tokenId === "string" && typeof it.holders === "number" && Number.isFinite(it.holders)) {
+        held.set(it.tokenId, it.holders);
+      }
+    }
+    return withHolders(orderByHolderRank(hits, ids), held);
   } catch {
     return hits;
   }
