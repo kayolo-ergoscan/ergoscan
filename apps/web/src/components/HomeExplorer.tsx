@@ -43,6 +43,7 @@ import { HomeRentTape } from "@/components/HomeRentTape";
 import { parseRentDanger, type RentDangerRow } from "@/lib/rent-danger";
 import { HomeMempoolStage } from "@/components/HomeMempoolStage";
 import { CadenceYard, type CadenceYardBlock } from "@/components/CadenceYard";
+import { HomeVersionNodes } from "@/components/HomeVersionNodes";
 import { ERGO_MAX_BLOCK_SIZE } from "@/lib/ergo-emission";
 import { isSupplyDigit, zipSupplyGlyphs } from "@/lib/supply-flip";
 
@@ -833,12 +834,10 @@ export function HomeExplorer({
           className="home-tile-enter max-lg:order-4 lg:col-start-1 lg:row-start-3"
           style={enterAt(9)}
         />
-        <section
-          className="home-tile-enter home-meet-right mod flex h-full min-h-0 flex-col rounded-[20px] border border-[var(--border)] bg-[var(--module)] px-3.5 py-3 max-lg:order-3 lg:col-start-2 lg:row-start-3"
+        <HomeVersionNodes
+          className="home-tile-enter home-meet-right h-full min-h-0 max-lg:order-3 lg:col-start-2 lg:row-start-3"
           style={enterAt(11)}
-        >
-          <p className="text-[13px]" style={{ color: HOME.forming }}>{t("home.versionNodes")}</p>
-        </section>
+        />
         </div>
 
         <HomeRentTape

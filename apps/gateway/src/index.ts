@@ -32,6 +32,7 @@ import { stampTemplateHashes } from "./lib/txTemplateHash.js";
 import { SubblockEngine } from "./lib/subblocks.js";
 import { SealWatcher } from "./lib/seal.js";
 import { RecentIds, VanishClock, freshIds } from "./lib/live-pool.js";
+import { nodeVersionCache, type PeerSync } from "./lib/node-versions.js";
 import { registerExplorerRoutes } from "./routes/explorer.js";
 import { registerMediaRoutes } from "./routes/media.js";
 import { registerChainRoutes } from "./routes/chain.js";
@@ -1004,6 +1005,7 @@ registerChainRoutes(app, {
   getFullHeight: () => nodeInfo.fullHeight,
   getNodeInfoRaw: () => nodeInfoRaw,
   getOrbit: () => orbitPeers.get(),
+  getNodeVersions: nodeVersionCache(() => nodeGet<PeerSync[]>("/peers/syncInfo", 5000)),
   blocksLimit: BLOCKS_LIMIT,
 });
 

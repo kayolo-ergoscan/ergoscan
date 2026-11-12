@@ -68,6 +68,7 @@ import {
 } from "../lib/indexDb.js";
 import { rentWriterHealth } from "../lib/rentIndex.js";
 import { addressName } from "../lib/names.js";
+import type { NodeVersions } from "../lib/node-versions.js";
 import { BLOCK_TX_PACK, getAddressesPage, getBlockCard, getBlockSections, getBlocksList, getHolderBands, getHomePage, getRentPage, getStatusSnapshot, parseBlockHeightCursor, peekChainTip, rentTapeMarks } from "../lib/snapshots.js";
 import { publicIndexerStatus } from "../lib/public-health.js";
 import { holderFilterTotal } from "../lib/addressListFilter.js";
@@ -81,6 +82,8 @@ export type ChainDeps = {
   getFullHeight: () => number | null | undefined;
   getNodeInfoRaw?: () => Record<string, unknown>;
   getOrbit: () => OrbitSnap;
+  /** Versions and modes of the peers our node is connected to (home «Version nodes»). */
+  getNodeVersions?: () => Promise<NodeVersions | null>;
   blocksLimit: number;
 };
 
@@ -1459,6 +1462,18 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
       peers: snap.peers,
       regions: snap.regions,
     });
+  });
+
+  /** Additive: versions and modes of the connected peers, from the node, cached one minute. */
+  app.get("/v1/network/versions", async (_req, res) => {
+    const got = deps.getNodeVersions ? await deps.getNodeVersions() : null;
+    if (!got) {
+      cacheNoStore(res);
+      res.status(503).json({ error: "stale", stale: true, total: 0, versions: [], modes: [] });
+      return;
+    }
+    cacheTokens(res);
+    res.json(got);
   });
 
   app.get("/v1/networkState", async (_req, res) => {
