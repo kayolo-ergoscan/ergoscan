@@ -17,6 +17,8 @@
  */
 
 import {
+  useEffect,
+  useRef,
   useState,
   useSyncExternalStore,
   type MouseEvent,
@@ -51,6 +53,7 @@ export type FeedKind =
   | "burn"
   | "addr"
   | "exchange"
+  | "box"
   | "quiet";
 
 export function feedLoc(locale: string): string {
@@ -265,8 +268,34 @@ export function FeedSort<K extends string>({
   label: string;
   disabled?: boolean;
 }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    /* A row of chips wider than the plate scrolls; the edge that hides more chips fades. */
+    const mark = () => {
+      const start = el.scrollLeft > 2;
+      const end = el.scrollLeft + el.clientWidth < el.scrollWidth - 2;
+      const more = start && end ? "both" : start ? "start" : end ? "end" : "";
+      if (more) el.dataset.more = more;
+      else delete el.dataset.more;
+    };
+    mark();
+    const pressed = el.querySelector<HTMLElement>("[aria-pressed='true']");
+    if (pressed && pressed.offsetLeft + pressed.offsetWidth > el.clientWidth) {
+      el.scrollLeft = pressed.offsetLeft - 8;
+      mark();
+    }
+    el.addEventListener("scroll", mark, { passive: true });
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(mark) : null;
+    ro?.observe(el);
+    return () => {
+      el.removeEventListener("scroll", mark);
+      ro?.disconnect();
+    };
+  }, [active]);
   return (
-    <span className="feed-sort" role="group" aria-label={label}>
+    <span ref={ref} className="feed-sort" role="group" aria-label={label}>
       {options.map((o) => {
         const on = o.key === active;
         return (

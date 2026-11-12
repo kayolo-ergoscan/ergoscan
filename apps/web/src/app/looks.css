@@ -81,6 +81,7 @@ html[data-look="c"][data-ink] {
   --k-bridge: #e6e6e6;
   --k-reward: var(--c-block);
   --k-rent: #ff8a65;
+  --k-box: var(--c-box);
   --k-contract: var(--c-addr);
   --k-mixer: #8a8a8a;
   --k-quiet: #2f2f2f;
@@ -308,11 +309,6 @@ html[data-look="c"] ::selection {
 }
 
 /* ───────────────────── refinements ───────────────────── */
-
-/* The header scout canvas carries the robot only. */
-html[data-look] .stage-col > header > canvas[aria-hidden] {
-  display: none;
-}
 
 html[data-look="c"] .seg-on,
 html[data-look="c"][data-float] .seg-on {

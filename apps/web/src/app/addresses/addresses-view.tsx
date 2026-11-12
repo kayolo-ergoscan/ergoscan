@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Shell } from "@/components/Shell";
 import { AddressKindKey } from "@/components/AddressKindKey";
-import { AddressTapeNameHead, AddressTapeRow } from "@/components/AddressTapeRow";
+import { Feed, FeedBoard, FeedCount, FeedEmpty, FeedPlate, FeedSort } from "@/components/feed/Feed";
+import { FeedAddressRow } from "@/components/feed/FeedHolderRow";
 import { HolderBandStrip } from "@/components/HolderBandStrip";
 import { RankWindow } from "@/components/RankWindow";
 import { getGateway } from "@/lib/config";
@@ -24,7 +25,9 @@ import {
 import { HOLDER_BAND_IDS, bandCount, mergeBands, type HolderBandId } from "@/lib/holder-bands";
 import { mergeKinds, type ListEntityId } from "@/lib/address-pips";
 import { ENTER_MS, SNAPSHOT_FETCH, enteringIds, snapshotPath, useEnterIds } from "@/lib/keyed-enter";
-import clsx from "clsx";
+
+/** Sort chips, in the order a reader asks: who holds most, who is busiest. */
+const ADDRESS_SORTS: AddressListSort[] = ["erg", "txs", "tokens", "last", "first", "address"];
 
 function pathFor(
   offset: number,
@@ -123,71 +126,6 @@ function orderLocal(
   });
 }
 
-function SortMark({ on, dir }: { on: boolean; dir: AddressListDir }) {
-  return (
-    <span className="sort-mark" aria-hidden>
-      <span className={clsx("sort-caret sort-caret-up", on && dir === "asc" && "is-on")} />
-      <span className={clsx("sort-caret sort-caret-dn", on && dir === "desc" && "is-on")} />
-    </span>
-  );
-}
-
-function SortCol({
-  label,
-  k,
-  sort,
-  dir,
-  align,
-  onSort,
-  className,
-}: {
-  label: string;
-  k: AddressListSort;
-  sort: AddressListSort;
-  dir: AddressListDir;
-  align: "left" | "right";
-  onSort: (k: AddressListSort) => void;
-  className?: string;
-}) {
-  const t = useT();
-  const on = sort === k;
-  const hint = on
-    ? `${label}, ${dir === "asc" ? t("addresses.sortAsc") : t("addresses.sortDesc")}`
-    : label;
-  return (
-    <div
-      className={clsx(
-        "flex h-full min-w-0 items-center",
-        align === "right" && "justify-end",
-        className
-      )}
-      aria-sort={on ? (dir === "asc" ? "ascending" : "descending") : "none"}
-    >
-      <button
-        type="button"
-        onClick={() => onSort(k)}
-        aria-label={hint}
-        className={clsx(
-          "chip-press inline-flex shrink-0 items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[10px] px-2 py-1.5 text-[12px] font-medium leading-none transition-colors duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:text-[var(--text)]",
-          on ? "is-pressed bg-[var(--wash-strong)] text-[var(--text)]" : "text-[var(--muted)]"
-        )}
-      >
-        {align === "right" ? (
-          <>
-            <SortMark on={on} dir={dir} />
-            <span>{label}</span>
-          </>
-        ) : (
-          <>
-            <span>{label}</span>
-            <SortMark on={on} dir={dir} />
-          </>
-        )}
-      </button>
-    </div>
-  );
-}
-
 function seedFilter(initial: AddressesPageData): {
   bands: HolderBandId[];
   kinds: ListEntityId[];
@@ -215,7 +153,6 @@ export function AddressesView({ initial }: { initial: AddressesPageData }) {
   const [dir, setDir] = useState<AddressListDir>("desc");
   const [selBands, setSelBands] = useState<HolderBandId[]>(seed.bands);
   const [selKinds, setSelKinds] = useState<ListEntityId[]>(seed.kinds);
-  const [stuck, setStuck] = useState(false);
   const [bands, setBands] = useState(initial.bands);
   const [paged, setPaged] = useState(typeof initial.offset === "number");
   const [windowMax, setWindowMax] = useState<number | null>(null);
@@ -237,7 +174,6 @@ export function AddressesView({ initial }: { initial: AddressesPageData }) {
   kindRef.current = selKinds;
   const itemsRef = useRef(items);
   itemsRef.current = items;
-  const pinRef = useRef<HTMLDivElement>(null);
   const wideRef = useRef<{ key: string; items: AddressListItem[] } | null>(null);
 
   const applyRows = useCallback(
@@ -394,20 +330,6 @@ export function AddressesView({ initial }: { initial: AddressesPageData }) {
     writeFilterQuery(selBands, selKinds);
   }, [selBands, selKinds]);
 
-  useEffect(() => {
-    const el = pinRef.current;
-    if (!el) return;
-    const chrome = document.querySelector(".stage-frame header.sticky");
-    const pin =
-      (chrome instanceof HTMLElement ? chrome.getBoundingClientRect().height : 64) + 8;
-    const obs = new IntersectionObserver(
-      ([entry]) => setStuck(!entry.isIntersecting),
-      { threshold: 1, rootMargin: `-${pin}px 0px 0px 0px` }
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [items.length]);
-
   const catalogN = bandCount(bands?.all);
   const mixed = selBands.length > 0 && selKinds.length > 0;
   const layerN = mixed
@@ -510,102 +432,45 @@ export function AddressesView({ initial }: { initial: AddressesPageData }) {
       )}
 
       {!listReady && !err ? null : !items.length && !err ? (
-        <p className="text-[var(--muted)]">{emptyCopy}</p>
+        <Feed>
+          <FeedEmpty k="addr" title={emptyCopy} />
+        </Feed>
       ) : null}
 
       {listReady && items.length > 0 && (
-        <div className="addr-sheet">
-          <div ref={pinRef} className="h-px w-full" aria-hidden />
-          <div
-            className={clsx(
-              "addr-pan kpi-tape transition-opacity duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
-              pending && "opacity-60"
-            )}
-          >
-            <div
-              className={clsx(
-                "addr-head addr-lane addr-lane-x block-tx-pairs addr-list text-[12px] font-medium",
-                stuck && "is-stuck"
-              )}
+        <div className="feed-sheet">
+          <Feed busy={pending} className="is-rank" enterClass={packEnter.enterClass("pack")}>
+            <FeedBoard
+              plate={
+                <FeedPlate
+                  tag={t("addresses.title")}
+                  now
+                  count={packTotal != null ? <FeedCount k="feed.addresses" n={packTotal} /> : undefined}
+                  end={
+                    <FeedSort
+                      label={t("feed.sort.label")}
+                      options={ADDRESS_SORTS.map((key) => ({ key, label: t(`feed.sort.${key}`) }))}
+                      active={sort}
+                      dir={dir}
+                      onSort={onSort}
+                      disabled={pending}
+                    />
+                  }
+                />
+              }
             >
-              <div className="block-lane-pair">
-                <SortCol
-                  label={t("addresses.colAddress")}
-                  k="address"
-                  sort={sort}
-                  dir={dir}
-                  align="left"
-                  onSort={onSort}
-                />
-                <div className="min-w-0" aria-hidden />
-              </div>
-              <div className="block-lane-pair">
-                <AddressTapeNameHead label={t("addresses.colName")} />
-                <SortCol
-                  label={t("addresses.colTxs")}
-                  k="txs"
-                  sort={sort}
-                  dir={dir}
-                  align="right"
-                  onSort={onSort}
-                />
-              </div>
-              <div className="block-lane-pair">
-                <SortCol
-                  label={t("addresses.colTokens")}
-                  k="tokens"
-                  sort={sort}
-                  dir={dir}
-                  align="left"
-                  onSort={onSort}
-                />
-                <SortCol
-                  label={t("addresses.colErg")}
-                  k="erg"
-                  sort={sort}
-                  dir={dir}
-                  align="right"
-                  onSort={onSort}
-                />
-              </div>
-              <div className="block-lane-pair">
-                <div className="min-w-0" aria-hidden />
-                <SortCol
-                  label={t("addresses.colFirst")}
-                  k="first"
-                  sort={sort}
-                  dir={dir}
-                  align="right"
-                  onSort={onSort}
-                />
-              </div>
-              <div className="block-lane-pair">
-                <div className="min-w-0" aria-hidden />
-                <SortCol
-                  label={t("addresses.colLast")}
-                  k="last"
-                  sort={sort}
-                  dir={dir}
-                  align="right"
-                  onSort={onSort}
-                />
-              </div>
-            </div>
-            <div className={packEnter.enterClass("pack")}>
-              {items.map((row) => (
-                <AddressTapeRow
+              {items.map((row, i) => (
+                <FeedAddressRow
                   key={row.address}
                   row={row}
-                  loc={loc}
-                  t={t}
+                  rank={row.rank || offset + i + 1}
+                  sort={sort}
                   enterClass={enter.enterClass(row.address)}
-                  fav={favSet.has(row.address)}
-                  favReady={favReady}
-                  onToggleFav={toggleFav}
+                  fav={{ on: favSet.has(row.address), ready: favReady, toggle: toggleFav }}
                 />
               ))}
-            </div>
-          </div>
+            </FeedBoard>
+          </Feed>
 
           <RankWindow
             offset={offset}

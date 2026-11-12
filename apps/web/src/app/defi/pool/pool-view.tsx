@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
 import { Shell } from "@/components/Shell";
+import { StuckPin } from "@/components/StuckPin";
 import { KpiGrid } from "@/components/KpiGrid";
 import {
   KpiMarkHandshake,
@@ -134,7 +135,6 @@ export function PoolView({ initial }: { initial: PoolBoardSnap | null }) {
   const enter = useEnterIds();
   const packEnter = useEnterIds();
   const opened = useRef(false);
-  const pinRef = useRef<HTMLDivElement>(null);
   const miss = t("home.unavailable");
 
   const load = useCallback(
@@ -185,19 +185,6 @@ export function PoolView({ initial }: { initial: PoolBoardSnap | null }) {
     setListReady(true);
   }, [ready, pageKey, enter.mark, packEnter.mark]);
 
-  useEffect(() => {
-    const el = pinRef.current;
-    if (!el) return;
-    const chrome = document.querySelector(".stage-frame header.sticky");
-    const pin =
-      (chrome instanceof HTMLElement ? chrome.getBoundingClientRect().height : 64) + 8;
-    const obs = new IntersectionObserver(
-      ([entry]) => setStuck(!entry.isIntersecting),
-      { threshold: 1, rootMargin: `-${pin}px 0px 0px 0px` }
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [pageRows.length]);
 
   const loadRef = useRef(load);
   loadRef.current = load;
@@ -271,7 +258,7 @@ export function PoolView({ initial }: { initial: PoolBoardSnap | null }) {
 
       {listReady && sorted.length > 0 && (
         <div className="addr-sheet">
-          <div ref={pinRef} className="h-px w-full" aria-hidden />
+          <StuckPin onStuck={setStuck} />
           <div className={packEnter.enterClass("pack")}>
             <div
               className={clsx(

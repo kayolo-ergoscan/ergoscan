@@ -37,7 +37,7 @@ import {
   shortId,
   toBigIntAmt,
 } from "@/lib/format";
-import { TOKEN_CATALOG, tokenTickerInk } from "@/lib/token-meta";
+import { TOKEN_CATALOG } from "@/lib/token-meta";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { useChainTipRefresh, usePageSync } from "@/lib/page-sync";
 import { SNAPSHOT_FETCH, enteringIds, snapshotPath, useEnterIds, ENTER_MS } from "@/lib/keyed-enter";
@@ -74,15 +74,6 @@ function pathFor(
   const qq = q.trim();
   if (qq) params.set("q", qq);
   return snapshotPath(`/v1/tokens?${params}`, height);
-}
-
-function fmtSupply(row: TokenListItem, locale: string, miss: string): string {
-  if (row.emission == null || row.emission === "") return miss;
-  try {
-    return formatScaledAmount(toBigIntAmt(row.emission), row.decimals ?? 0, locale);
-  } catch {
-    return miss;
-  }
 }
 
 function tokenName(row: TokenListItem): string | null {
@@ -445,7 +436,7 @@ function relOrHeight(ts: number | null | undefined, height: number | null | unde
 }
 
 /** One token on the ranked feed. The figure on the right is whatever the list is sorted by. */
-function FeedTokenRow({
+export function FeedTokenRow({
   row,
   rank,
   sort,
@@ -572,113 +563,5 @@ function FeedTokenRow({
         </FeedFields>
       )}
     />
-  );
-}
-
-export function TokenTapeRow({
-  row,
-  locale,
-  enterClass,
-  fav = false,
-  favReady = true,
-  favTitle,
-  onToggleFav,
-}: {
-  row: TokenListItem;
-  locale: string;
-  enterClass?: string;
-  fav?: boolean;
-  favReady?: boolean;
-  favTitle?: string;
-  onToggleFav?: () => void;
-}) {
-  const name = tokenName(row);
-  const firstTs = row.firstTs;
-  const lastTs = row.lastTs ?? row.firstTs;
-  const href = `/token/${row.tokenId}`;
-  return (
-    <div
-      className={clsx(
-        "addr-lane addr-lane-x token-lane border-t border-[var(--border-soft)] py-2.5 text-[13px]",
-        enterClass
-      )}
-      onPointerEnter={() => prefetchTokenHolders(row.tokenId)}
-    >
-      <div className="token-lane-name">
-        <div className="flex items-center justify-center !px-2">
-          <TokenLogo tokenId={row.tokenId} artworkUrl={row.artworkUrl} size={28} />
-        </div>
-        <div className="min-w-0 px-2">
-          <div className="flex min-w-0 items-center gap-1.5">
-            {name ? (
-              <Link
-                prefetch={false}
-                href={href}
-                className="min-w-0 truncate font-semibold hover:underline"
-                style={{ color: tokenTickerInk(row.tokenId) }}
-                onFocus={() => prefetchTokenHolders(row.tokenId)}
-              >
-                {name}
-              </Link>
-            ) : null}
-            {onToggleFav ? (
-              <FavoriteHeart
-                size="sm"
-                on={fav}
-                ready={favReady}
-                title={favTitle ?? ""}
-                onToggle={onToggleFav}
-              />
-            ) : null}
-          </div>
-        </div>
-      </div>
-      <div className="token-lane-id min-w-0 grid">
-        <div className="min-w-0 px-2">
-          <Link
-            prefetch={false}
-            href={href}
-            className="block truncate font-mono text-[12px] text-accent hover:underline"
-            title={row.tokenId}
-            onFocus={() => prefetchTokenHolders(row.tokenId)}
-          >
-            {shortId(row.tokenId, 8)}
-          </Link>
-        </div>
-        <div className="min-w-0 px-2 text-right tabular-nums">{fmtSupply(row, locale, "—")}</div>
-      </div>
-      <div className="token-lane-pair min-w-0 grid">
-        <div
-          suppressHydrationWarning
-          className="min-w-0 px-2 text-left tabular-nums text-[var(--muted)]"
-          title={firstTs != null ? formatTs(firstTs) : undefined}
-        >
-          {firstTs != null
-            ? formatRelTime(firstTs, locale)
-            : row.firstHeight != null
-              ? `#${row.firstHeight.toLocaleString(loc(locale))}`
-              : "—"}
-        </div>
-        <div
-          suppressHydrationWarning
-          className="min-w-0 px-2 text-right tabular-nums"
-          title={lastTs != null ? formatTs(lastTs) : undefined}
-        >
-          {lastTs != null
-            ? formatRelTime(lastTs, locale)
-            : row.lastHeight != null
-              ? `#${row.lastHeight.toLocaleString(loc(locale))}`
-              : "—"}
-        </div>
-      </div>
-      <div className="token-lane-triple">
-        <div className="min-w-0 px-2 text-left tabular-nums text-[var(--muted)]">
-          {row.txCount != null ? row.txCount.toLocaleString(loc(locale)) : "—"}
-        </div>
-        <div className="min-w-0 px-2 text-right tabular-nums">
-          {row.holders != null ? row.holders.toLocaleString(loc(locale)) : "—"}
-        </div>
-      </div>
-    </div>
   );
 }

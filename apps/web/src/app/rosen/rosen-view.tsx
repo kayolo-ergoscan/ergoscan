@@ -5,6 +5,7 @@ import Link from "next/link";
 import clsx from "clsx";
 import { ROSEN_CHAINS, ROSEN_CONTRACTS_VERSION } from "@ergoscan/shared";
 import { AddrFactCard } from "@/components/AddrFactCard";
+import { StuckPin } from "@/components/StuckPin";
 import { PrettyAmt } from "@/components/PrettyNum";
 import { Shell } from "@/components/Shell";
 import { KpiNum } from "@/components/KpiGrid";
@@ -83,7 +84,6 @@ export function RosenView({
   const packEnter = useEnterIds();
   const [listReady, setListReady] = useState(false);
   const opened = useRef(false);
-  const pinRef = useRef<HTMLDivElement>(null);
   const cursorRef = useRef<string | null>(null);
   const cursorStack = useRef<(string | null)[]>([]);
   const nextCursorRef = useRef(initialNextCursor);
@@ -200,19 +200,6 @@ export function RosenView({
       });
   });
 
-  useEffect(() => {
-    const el = pinRef.current;
-    if (!el) return;
-    const chrome = document.querySelector(".stage-frame header.sticky");
-    const pin =
-      (chrome instanceof HTMLElement ? chrome.getBoundingClientRect().height : 64) + 8;
-    const obs = new IntersectionObserver(
-      ([entry]) => setStuck(!entry.isIntersecting),
-      { threshold: 1, rootMargin: `-${pin}px 0px 0px 0px` }
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [items.length]);
 
   const onFilter = (next: string) => {
     if (next === status) return;
@@ -309,7 +296,7 @@ export function RosenView({
             {scanCaption ? t("rosen.emptyScan") : t("rosen.emptyTape")}
           </p>
         ) : null}
-        <div ref={pinRef} className="h-px w-full" aria-hidden />
+        <StuckPin onStuck={setStuck} />
         <div className={packEnter.enterClass("pack")}>
         <div
           className={clsx(
