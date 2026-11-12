@@ -1151,6 +1151,7 @@ export const ru: Record<string, string> = {
   "fees.kpiP50": "p50",
   "fees.kpiP90": "p90",
   "fees.kpiEta": "Следующий блок",
+  "fees.etaDue": "вот-вот",
   "fees.economy": "Эконом",
   "fees.normal": "Норма",
   "fees.turbo": "Турбо",

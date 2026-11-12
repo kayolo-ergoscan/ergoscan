@@ -1149,6 +1149,7 @@ export const en: Record<string, string> = {
   "fees.kpiP50": "p50",
   "fees.kpiP90": "p90",
   "fees.kpiEta": "Next block",
+  "fees.etaDue": "any moment",
   "fees.economy": "Economy",
   "fees.normal": "Normal",
   "fees.turbo": "Turbo",
