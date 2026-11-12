@@ -1,4 +1,5 @@
 import type express from "express";
+import { isHex64 } from "./packedRead.js";
 
 /**
  * Honest offset paging (12 Nov 2026 audit). Before, an offset above a route's ceiling was
@@ -25,5 +26,26 @@ export function offsetTooLarge(res: express.Response, max: number): void {
     error: "offset_too_large",
     maxOffset: max,
     reason: `offset above ${max}: page with cursor (nextCursor from the previous page) instead`,
+  });
+}
+
+/**
+ * Box-list keyset cursor `height:boxId` (nextCursor of the previous page).
+ * undefined: no cursor given; null: given but malformed (400, never silently page 1 again).
+ */
+export function boxCursor(v: unknown): { height: number; id: string } | null | undefined {
+  const raw = Array.isArray(v) ? v[0] : v;
+  if (raw == null || String(raw).trim() === "") return undefined;
+  const m = /^(\d{1,10}):([0-9a-fA-F]{64})$/.exec(String(raw).trim());
+  if (!m) return null;
+  const height = Number(m[1]);
+  return Number.isSafeInteger(height) && isHex64(m[2]) ? { height, id: m[2].toLowerCase() } : null;
+}
+
+export function badCursor(res: express.Response): void {
+  res.setHeader("Cache-Control", "no-store");
+  res.status(400).json({
+    error: "bad_cursor",
+    reason: "cursor must be the nextCursor of the previous page (height:boxId)",
   });
 }

@@ -2,7 +2,13 @@
  * Official explorer v1 path aliases.
  * Read index + mempool RAM. Submit-tx is the only user POST to the node.
  */
-import { ADDRESS_OFFSET_MAX, offsetTooLarge, pageOffset } from "../lib/pageOffset.js";
+import {
+  ADDRESS_OFFSET_MAX,
+  badCursor,
+  boxCursor,
+  offsetTooLarge,
+  pageOffset,
+} from "../lib/pageOffset.js";
 import type { Express, Request, Response } from "express";
 import type { RawTx } from "@ergoscan/shared";
 import { apiContractHtml } from "../lib/api-contract.js";
@@ -117,9 +123,11 @@ async function sendBoxesByTemplate(
     return;
   }
   const limit = qInt(req.query.limit, 20, 1, 100);
-  const offset = pageOffset(req.query.offset, 500);
+  const cursor = boxCursor(req.query.cursor);
+  if (cursor === null) return badCursor(res);
+  const offset = cursor ? 0 : pageOffset(req.query.offset, 500);
   if (offset == null) return offsetTooLarge(res, 500);
-  const page = await boxesByErgoTreeTemplate(hash, offset, limit, unspentOnly);
+  const page = await boxesByErgoTreeTemplate(hash, offset, limit, unspentOnly, cursor ?? null);
   if (!page) {
     res.status(504).json({ error: "timeout", reason: "template hash query exceeded 4s" });
     return;
@@ -129,6 +137,7 @@ async function sendBoxesByTemplate(
     offset,
     limit,
     hasMore: page.hasMore,
+    nextCursor: page.nextCursor,
     source: "index",
   });
 }
@@ -145,9 +154,11 @@ async function sendTemplateSearch(req: Request, res: Response, unspentOnly: bool
   }
   cacheList(res);
   const limit = qInt(req.query.limit, 20, 1, 100);
-  const offset = pageOffset(req.query.offset, 500);
+  const cursor = boxCursor(req.query.cursor);
+  if (cursor === null) return badCursor(res);
+  const offset = cursor ? 0 : pageOffset(req.query.offset, 500);
   if (offset == null) return offsetTooLarge(res, 500);
-  const page = await boxesByErgoTreeTemplate(parsed.hash, offset, limit, unspentOnly);
+  const page = await boxesByErgoTreeTemplate(parsed.hash, offset, limit, unspentOnly, cursor ?? null);
   if (!page) {
     res.status(504).json({ error: "timeout", reason: "template hash query exceeded 4s" });
     return;
@@ -157,6 +168,7 @@ async function sendTemplateSearch(req: Request, res: Response, unspentOnly: bool
     offset,
     limit,
     hasMore: page.hasMore,
+    nextCursor: page.nextCursor,
     source: "index",
   });
 }
@@ -181,9 +193,11 @@ async function sendBoxesByTree(
     return;
   }
   const limit = qInt(req.query.limit, 20, 1, 100);
-  const offset = pageOffset(req.query.offset, 500);
+  const cursor = boxCursor(req.query.cursor);
+  if (cursor === null) return badCursor(res);
+  const offset = cursor ? 0 : pageOffset(req.query.offset, 500);
   if (offset == null) return offsetTooLarge(res, 500);
-  const page = await boxesByErgoTree(tree, offset, limit, unspentOnly);
+  const page = await boxesByErgoTree(tree, offset, limit, unspentOnly, cursor ?? null);
   if (!page) {
     res.status(504).json({ error: "timeout", reason: "ergo tree query exceeded 4s" });
     return;
@@ -193,6 +207,7 @@ async function sendBoxesByTree(
     offset,
     limit,
     hasMore: page.hasMore,
+    nextCursor: page.nextCursor,
     source: "index",
   });
 }

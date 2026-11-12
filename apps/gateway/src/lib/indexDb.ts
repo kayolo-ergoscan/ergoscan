@@ -117,6 +117,13 @@ function makePool(url: string): pg.Pool {
   p.on("error", () => {
     lastFail = Date.now();
   });
+  // A checked-out client (qSlow, cursors) whose backend dies emits 'error' on itself; without a
+  // listener that kills the gateway. Its query fails anyway and the pool drops it on release.
+  p.on("connect", (client) => {
+    client.on("error", (e) => {
+      if (isDbOutage(e)) lastFail = Date.now();
+    });
+  });
   return p;
 }
 
@@ -1037,8 +1044,9 @@ export async function boxesByErgoTree(
   tree: string,
   offset: number,
   limit: number,
-  unspentOnly: boolean
-): Promise<{ items: IdxBoxRow[]; hasMore: boolean } | null> {
+  unspentOnly: boolean,
+  cursor: KeysetCursor | null = null
+): Promise<{ items: IdxBoxRow[]; hasMore: boolean; nextCursor: string | null } | null> {
   const take = Math.max(1, Math.min(TREE_LIMIT_MAX, Math.floor(limit)));
   const skip = Math.max(0, Math.min(TREE_OFFSET_MAX, Math.floor(offset)));
   const script = await qSlow<{ id: string }>(
@@ -1050,10 +1058,13 @@ export async function boxesByErgoTree(
     GIX_STREAM_TIMEOUT_MS
   );
   if (!script) return null;
-  if (!script.length) return { items: [], hasMore: false };
-  const where = unspentOnly
-    ? `b.script_id = $1 AND b.spent_tx_id IS NULL`
-    : `b.script_id = $1`;
+  if (!script.length) return { items: [], hasMore: false, nextCursor: null };
+  const keyset = !!(cursor && isHex64(cursor.id) && Number.isSafeInteger(cursor.height));
+  const where =
+    (unspentOnly ? `b.script_id = $1 AND b.spent_tx_id IS NULL` : `b.script_id = $1`) +
+    (keyset
+      ? ` AND (b.creation_height < $3 OR (b.creation_height = $3 AND b.box_id < decode($4, 'hex')))`
+      : "");
   const rows = await qSlow<BoxSqlRow>(
     `SELECT encode(b.box_id, 'hex') AS box_id,
             b.value_nano::text AS value_nano,
@@ -1071,8 +1082,10 @@ export async function boxesByErgoTree(
        LEFT JOIN packed.script s ON s.id = b.script_id
       WHERE ${where}
       ORDER BY b.creation_height DESC, b.box_id DESC
-      LIMIT $2 OFFSET $3`,
-    [script[0].id, take + 1, skip],
+      LIMIT $2${keyset ? "" : " OFFSET $3"}`,
+    keyset
+      ? [script[0].id, take + 1, cursor!.height, cursor!.id.toLowerCase()]
+      : [script[0].id, take + 1, skip],
     GIX_STREAM_TIMEOUT_MS
   );
   if (!rows) return null;
@@ -1082,9 +1095,11 @@ export async function boxesByErgoTree(
     GIX_STREAM_TIMEOUT_MS
   );
   if (!assetResult.complete) return null;
+  const hasMore = rows.length > take;
   return {
     items: page.map((r) => boxSqlToRow(r, assetResult.assets)),
-    hasMore: rows.length > take,
+    hasMore,
+    nextCursor: hasMore ? boxPageCursor(page) : null,
   };
 }
 
@@ -1093,8 +1108,12 @@ const TEMPLATE_LOCAL = [
   "SET LOCAL max_parallel_workers_per_gather = 0",
 ];
 
-function templateBoxSql(unspentOnly: boolean): string {
+function templateBoxSql(unspentOnly: boolean, keyset = false): string {
   const spent = unspentOnly ? "AND b.spent_tx_id IS NULL" : "";
+  // Keyset after (creation_height, box_id) of the previous page's last box: $3, $4.
+  const after = keyset
+    ? "AND (t.creation_height < $3 OR (t.creation_height = $3 AND t.box_id < decode($4, 'hex')))"
+    : "";
   return `SELECT encode(b.box_id, 'hex') AS box_id,
             b.value_nano::text AS value_nano,
             s.ergo_tree,
@@ -1112,8 +1131,16 @@ function templateBoxSql(unspentOnly: boolean): string {
        LEFT JOIN packed.script s ON s.id = b.script_id
       WHERE t.template_hash = $1
         ${spent}
+        ${after}
       ORDER BY t.creation_height DESC, t.box_id DESC
-      LIMIT $2 OFFSET $3`;
+      LIMIT $2${keyset ? "" : " OFFSET $3"}`;
+}
+
+/** Keyset cursor of a box page: the last box's (creation_height, box_id). */
+function boxPageCursor(rows: { creation_height: string | null; box_id: string }[]): string | null {
+  const last = rows[rows.length - 1];
+  if (!last || last.creation_height == null) return null;
+  return encodeKeysetCursor(Number(last.creation_height), last.box_id);
 }
 
 /** Boxes sharing one ErgoTree template hash. Index on packed.box_template. No boxes seq-scan. */
@@ -1121,13 +1148,17 @@ export async function boxesByErgoTreeTemplate(
   hashHex: string,
   offset: number,
   limit: number,
-  unspentOnly: boolean
-): Promise<{ items: IdxBoxRow[]; hasMore: boolean } | null> {
+  unspentOnly: boolean,
+  cursor: KeysetCursor | null = null
+): Promise<{ items: IdxBoxRow[]; hasMore: boolean; nextCursor: string | null } | null> {
   const take = Math.max(1, Math.min(TREE_LIMIT_MAX, Math.floor(limit)));
   const skip = Math.max(0, Math.min(TREE_OFFSET_MAX, Math.floor(offset)));
+  const keyset = !!(cursor && isHex64(cursor.id) && Number.isSafeInteger(cursor.height));
   const rows = await qSlow<BoxSqlRow>(
-    templateBoxSql(unspentOnly),
-    [Buffer.from(hashHex, "hex"), take + 1, skip],
+    templateBoxSql(unspentOnly, keyset),
+    keyset
+      ? [Buffer.from(hashHex, "hex"), take + 1, cursor!.height, cursor!.id.toLowerCase()]
+      : [Buffer.from(hashHex, "hex"), take + 1, skip],
     GIX_STREAM_TIMEOUT_MS,
     TEMPLATE_LOCAL
   );
@@ -1138,9 +1169,11 @@ export async function boxesByErgoTreeTemplate(
     GIX_STREAM_TIMEOUT_MS
   );
   if (!assetResult.complete) return null;
+  const hasMore = rows.length > take;
   return {
     items: page.map((r) => boxSqlToRow(r, assetResult.assets)),
-    hasMore: rows.length > take,
+    hasMore,
+    nextCursor: hasMore ? boxPageCursor(page) : null,
   };
 }
 
