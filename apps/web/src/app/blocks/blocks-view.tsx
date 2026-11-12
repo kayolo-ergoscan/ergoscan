@@ -7,12 +7,7 @@ import { Shell } from "@/components/Shell";
 import { FavoriteHeart } from "@/components/FavoriteHeart";
 import { KpiGrid } from "@/components/KpiGrid";
 import { INK } from "@/lib/palette";
-import {
-  KpiMarkCircleGauge,
-  KpiMarkRulerDimension,
-  KpiMarkSquareStack,
-  KpiMarkWorkflow,
-} from "@/components/kpi-marks";
+import { KpiMark } from "@/components/kpi-marks";
 import { RankWindow } from "@/components/RankWindow";
 import {
   Feed,
@@ -245,7 +240,7 @@ export function BlocksView({
         epoch != null
           ? t("blocks.kpiEpoch").replace("{n}", epoch.toLocaleString(loc(locale)))
           : "\u00a0",
-      mark: <KpiMarkSquareStack tone={INK.green} />,
+      mark: <KpiMark id="height" tone={INK.green} />,
       ink: INK.green,
       enter: 0,
     },
@@ -259,7 +254,7 @@ export function BlocksView({
               .replace("{n}", s24.blocks.toLocaleString(loc(locale)))
               .replace("{exp}", String(EXPECTED_BLOCKS_24H))
           : "\u00a0",
-      mark: <KpiMarkCircleGauge tone={INK.gold} />,
+      mark: <KpiMark id="block" tone={INK.gold} />,
       ink: INK.gold,
       enter: 1,
     },
@@ -268,7 +263,7 @@ export function BlocksView({
       value: s24?.avgBlockMs != null ? formatBlockTime(s24.avgBlockMs) : miss,
       unavailable: s24?.avgBlockMs == null,
       sub: t("blocks.kpiTarget"),
-      mark: <KpiMarkRulerDimension tone={INK.teal} />,
+      mark: <KpiMark id="interval" tone={INK.teal} />,
       enter: 2,
     },
     {
@@ -276,7 +271,7 @@ export function BlocksView({
       value: s24?.txs != null ? s24.txs.toLocaleString(loc(locale)) : miss,
       unavailable: s24?.txs == null,
       sub: t("blocks.kpiLast24h"),
-      mark: <KpiMarkWorkflow tone={INK.cyan} />,
+      mark: <KpiMark id="tx" tone={INK.cyan} />,
       ink: INK.cyan,
       enter: 3,
     },

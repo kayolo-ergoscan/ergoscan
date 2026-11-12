@@ -25,14 +25,8 @@ import {
   type FeedLead,
 } from "@/components/feed/Feed";
 import { FeedHolderRow } from "@/components/feed/FeedHolderRow";
-import { KpiNum, KpiTileRail } from "@/components/KpiGrid";
-import {
-  KpiMarkBox,
-  KpiMarkFootprints,
-  KpiMarkInfo,
-  KpiMarkScrollText,
-  KpiMarkUsers,
-} from "@/components/kpi-marks";
+import { compactFigure, KpiLabelMark, KpiNum, KpiTileRail } from "@/components/KpiGrid";
+import { KpiMark } from "@/components/kpi-marks";
 import { NameMarquee } from "@/components/NameMarquee";
 import { NftThumb } from "@/components/NftCard";
 import { describeParty, isFeeAddress } from "@/lib/address-labels";
@@ -296,12 +290,15 @@ function DescCard({
     >
       <KpiTileRail />
       <div className="kpi-tile-body flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <p
-          className="relative z-[1] shrink-0 truncate bg-[var(--module)] pb-1 pr-10 text-[13px] leading-[1.15]"
-          style={{ color: HOME.forming }}
-        >
-          {label}
-        </p>
+        <div className="kpi-label-row">
+          <KpiLabelMark mark={mark} color={ink} />
+          <p
+            className="relative z-[1] shrink-0 truncate bg-[var(--module)] pb-1 pr-10 text-[13px] leading-[1.15]"
+            style={{ color: HOME.forming }}
+          >
+            {label}
+          </p>
+        </div>
         {description ? (
           <div className="token-desc-body scrollbar-none">
             <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
@@ -843,7 +840,7 @@ export function TokenView({
               enter={1}
               label={t("token.card.description")}
               ink={INK.cyan}
-              mark={<KpiMarkInfo className="h-9 w-9" />}
+              mark={<KpiMark id="info" />}
               description={description}
               empty={t("token.descEmpty")}
             />
@@ -852,10 +849,10 @@ export function TokenView({
               enter={2}
               label={t("token.card.holders")}
               ink={INK.sky}
-              mark={<KpiMarkUsers className="h-9 w-9" />}
+              mark={<KpiMark id="holders" />}
             >
               <p className="mt-0.5 text-[17px] font-semibold leading-[1.15] tabular-nums tracking-tight">
-                <KpiNum>{holderN != null ? holderN.toLocaleString(loc(locale)) : dash}</KpiNum>
+                <KpiNum compact={compactFigure(holderN)}>{holderN != null ? holderN.toLocaleString(loc(locale)) : dash}</KpiNum>
               </p>
               <p className="mt-0.5 truncate text-[12px] leading-[1.15] text-[var(--muted-2)]">
                 {t("token.cap.holders")}
@@ -866,7 +863,7 @@ export function TokenView({
               enter={3}
               label={t("token.card.boxes")}
               ink={INK.sky}
-              mark={<KpiMarkBox className="h-9 w-9" />}
+              mark={<KpiMark id="box" />}
             >
               <p
                 className={clsx(
@@ -875,7 +872,7 @@ export function TokenView({
                 )}
               >
                 {boxN != null && boxN > 0 ? (
-                  <KpiNum>{boxN.toLocaleString(loc(locale))}</KpiNum>
+                  <KpiNum compact={compactFigure(boxN)}>{boxN.toLocaleString(loc(locale))}</KpiNum>
                 ) : (
                   dash
                 )}
@@ -889,10 +886,10 @@ export function TokenView({
               enter={4}
               label={t("token.card.txs")}
               ink={INK.cyan}
-              mark={<KpiMarkScrollText className="h-9 w-9" />}
+              mark={<KpiMark id="tx" />}
             >
               <p className="mt-0.5 text-[17px] font-semibold leading-[1.15] tabular-nums tracking-tight">
-                <KpiNum>{txN != null ? txN.toLocaleString(loc(locale)) : dash}</KpiNum>
+                <KpiNum compact={compactFigure(txN)}>{txN != null ? txN.toLocaleString(loc(locale)) : dash}</KpiNum>
               </p>
               <p className="mt-0.5 truncate text-[12px] leading-[1.15] text-[var(--muted-2)]">
                 {t("token.cap.txs")}
@@ -903,7 +900,7 @@ export function TokenView({
               enter={5}
               label={t("token.card.activity")}
               ink={INK.teal}
-              mark={<KpiMarkFootprints className="h-9 w-9" />}
+              mark={<KpiMark id="activity" />}
             >
               <p className="mt-0.5 text-[17px] font-semibold leading-[1.15] tabular-nums tracking-tight">
                 <KpiNum>

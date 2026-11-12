@@ -6,17 +6,9 @@ import clsx from "clsx";
 import { Shell } from "@/components/Shell";
 import { FavoriteHeart } from "@/components/FavoriteHeart";
 import { AddrFactCard } from "@/components/AddrFactCard";
-import { KpiNum } from "@/components/KpiGrid";
+import { compactFigure, KpiNum } from "@/components/KpiGrid";
 import { SegBar, segItem } from "@/components/SegBar";
-import {
-  KpiMarkBadgePercent,
-  KpiMarkCalendar,
-  KpiMarkFootprints,
-  KpiMarkHandCoins,
-  KpiMarkScrollText,
-  KpiMarkVault,
-  KpiMarkTrendingUp,
-} from "@/components/kpi-marks";
+import { KpiMark } from "@/components/kpi-marks";
 import { TokenAvatar } from "@/components/TokenBadge";
 import { PrettyPrice } from "@/components/PrettyNum";
 import { RankWindow } from "@/components/RankWindow";
@@ -278,10 +270,12 @@ export function PoolCardView({
           enter={1}
           label={t("spectrum.tvl")}
           ink={INK.gold}
-          mark={<KpiMarkVault className="h-9 w-9" />}
+          mark={<KpiMark id="pool" />}
         >
           <p className="mt-0.5 text-[17px] font-semibold leading-[1.15] tabular-nums tracking-tight">
-            <KpiNum>{pool && pool.tvlErg > 0 ? fmtErgFull(pool.tvlErg) : miss}</KpiNum>
+            <KpiNum compact={pool && pool.tvlErg > 0 ? compactFigure(pool.tvlErg, "ERG") : undefined}>
+              {pool && pool.tvlErg > 0 ? fmtErgFull(pool.tvlErg) : miss}
+            </KpiNum>
           </p>
           <p className="mt-0.5 truncate text-[12px] leading-[1.15]">
             <span className="capitalize" style={{ color: HOME.forming }}>{t("pool.fee")}</span>{" "}
@@ -332,7 +326,7 @@ export function PoolCardView({
           enter={2}
           label={t("pool.apr")}
           ink={INK.green}
-          mark={<KpiMarkBadgePercent className="h-9 w-9" />}
+          mark={<KpiMark id="percent" />}
         >
           <p className="mt-0.5 text-[17px] font-semibold leading-[1.15] tabular-nums tracking-tight">
             <KpiNum>{pool?.apr30Pct != null ? fmtPct(pool.apr30Pct) : miss}</KpiNum>
@@ -346,10 +340,10 @@ export function PoolCardView({
           enter={3}
           label={t("spectrum.volume")}
           ink={INK.cyan}
-          mark={<KpiMarkTrendingUp className="h-9 w-9" />}
+          mark={<KpiMark id="volume" />}
         >
           <p className="mt-0.5 text-[17px] font-semibold leading-[1.15] tabular-nums tracking-tight">
-            <KpiNum>
+            <KpiNum compact={pool?.volErg != null && pool.volErg > 0 ? compactFigure(pool.volErg, "ERG") : undefined}>
               {pool?.volErg != null && pool.volErg > 0 ? fmtErgFull(pool.volErg) : miss}
             </KpiNum>
           </p>
@@ -362,10 +356,10 @@ export function PoolCardView({
           enter={4}
           label={t("spectrum.trades")}
           ink={INK.gold}
-          mark={<KpiMarkScrollText className="h-9 w-9" />}
+          mark={<KpiMark id="swap" />}
         >
           <p className="mt-0.5 text-[17px] font-semibold leading-[1.15] tabular-nums tracking-tight">
-            <KpiNum>
+            <KpiNum compact={compactFigure(pool?.trades)}>
               {pool?.trades != null ? pool.trades.toLocaleString(loc(locale)) : miss}
             </KpiNum>
           </p>
@@ -378,7 +372,7 @@ export function PoolCardView({
           enter={5}
           label={t("pool.income")}
           ink={INK.cyan}
-          mark={<KpiMarkHandCoins className="h-9 w-9" />}
+          mark={<KpiMark id="fee" />}
         >
           <p className="mt-0.5 text-[17px] font-semibold leading-[1.15] tabular-nums tracking-tight">
             <KpiNum>
@@ -394,7 +388,7 @@ export function PoolCardView({
           enter={6}
           label={t("pool.colFirst")}
           ink={INK.teal}
-          mark={<KpiMarkCalendar className="h-9 w-9" />}
+          mark={<KpiMark id="since" />}
         >
           <p className={clsx("mt-0.5 text-[17px] font-semibold leading-[1.15] tabular-nums tracking-tight", relAgeToneClass(relAgeTone(pool?.firstTs)))}>
             <KpiNum>{pool?.firstTs ? formatRelTime(pool.firstTs, locale) : miss}</KpiNum>
@@ -408,7 +402,7 @@ export function PoolCardView({
           enter={7}
           label={t("pool.colLast")}
           ink={INK.teal}
-          mark={<KpiMarkFootprints className="h-9 w-9" />}
+          mark={<KpiMark id="activity" />}
         >
           <p className={clsx("mt-0.5 text-[17px] font-semibold leading-[1.15] tabular-nums tracking-tight", relAgeToneClass(relAgeTone(pool?.lastTs)))}>
             <KpiNum>{pool?.lastTs ? formatRelTime(pool.lastTs, locale) : miss}</KpiNum>

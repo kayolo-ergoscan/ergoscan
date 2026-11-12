@@ -4,8 +4,10 @@ import { useMemo } from "react";
 import Link from "next/link";
 import { Shell } from "@/components/Shell";
 import { KpiGrid } from "@/components/KpiGrid";
+import { KpiMark } from "@/components/kpi-marks";
 import { useMempool } from "@/lib/useMempool";
 import { formatFeeRate, formatScaledAmount } from "@/lib/format";
+import { INK } from "@/lib/palette";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { countText } from "@/lib/i18n/messages";
 import {
@@ -39,10 +41,30 @@ export default function FeesPage() {
   );
 
   const kpis = [
-    { label: t("fees.kpiTxs"), value: balls.length.toLocaleString(), enter: 0 },
-    { label: t("fees.kpiP50"), value: fees ? formatFeeRate(fees.p50) : "—", enter: 1 },
-    { label: t("fees.kpiP90"), value: fees ? formatFeeRate(fees.p90) : "—", enter: 2 },
-    { label: t("fees.kpiEta"), value: formatEta(fees?.eta?.nextEtaSec), enter: 3 },
+    {
+      label: t("fees.kpiTxs"),
+      value: balls.length.toLocaleString(),
+      mark: <KpiMark id="mempool" tone={INK.cyan} />,
+      enter: 0,
+    },
+    {
+      label: t("fees.kpiP50"),
+      value: fees ? formatFeeRate(fees.p50) : "—",
+      mark: <KpiMark id="fee-rate" tone={INK.teal} />,
+      enter: 1,
+    },
+    {
+      label: t("fees.kpiP90"),
+      value: fees ? formatFeeRate(fees.p90) : "—",
+      mark: <KpiMark id="fee-rate" tone={INK.teal} />,
+      enter: 2,
+    },
+    {
+      label: t("fees.kpiEta"),
+      value: formatEta(fees?.eta?.nextEtaSec),
+      mark: <KpiMark id="interval" tone={INK.teal} />,
+      enter: 3,
+    },
   ];
 
   return (

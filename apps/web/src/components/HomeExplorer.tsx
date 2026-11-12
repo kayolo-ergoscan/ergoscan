@@ -13,6 +13,7 @@ import { Shell } from "@/components/Shell";
 import { getGateway } from "@/lib/config";
 import { patchHomeStats, type ChainStats, type PoolShare } from "@/lib/chain-stats";
 import { KpiNum } from "@/components/KpiGrid";
+import { KpiMark } from "@/components/kpi-marks";
 import { ReelText } from "@/components/ReelText";
 import { HOME } from "@/lib/palette";
 import { fetchErgChart } from "@/lib/price-history";
@@ -976,13 +977,12 @@ function formatFeeKpi(v: number): string {
   return Number.isInteger(rounded) ? String(Math.round(rounded)) : rounded.toFixed(1);
 }
 
+/** The holders tile wears the same field and glyph as every KPI tile. */
 function HoldersMark() {
   return (
-    <svg className="holders-mark" viewBox="0 0 24 24" aria-hidden>
-      <path className="holders-mark-back" d="M22 20c0-3.37-2-6.5-4-8a5 5 0 0 0-.45-8.3" />
-      <path d="M18 21a8 8 0 0 0-16 0" />
-      <circle cx="10" cy="8" r="4.2" className="holders-mark-head" />
-    </svg>
+    <span className="holders-mark" aria-hidden>
+      <KpiMark id="holders" />
+    </span>
   );
 }
 

@@ -2,12 +2,7 @@ import clsx from "clsx";
 import { Tip } from "@/components/Tip";
 import { EntityMark } from "@/components/EntityMark";
 import { HolderMark } from "@/components/HolderMark";
-import {
-  KpiMarkCpu,
-  KpiMarkFileCode,
-  KpiMarkPickaxe,
-  KpiMarkStore,
-} from "@/components/kpi-marks";
+import { KpiMark } from "@/components/kpi-marks";
 import { listPip, LIST_ENTITY_INK, type ListEntityId } from "@/lib/address-pips";
 import { INK } from "@/lib/palette";
 import type { HolderBandId } from "@/lib/holder-bands";
@@ -20,12 +15,13 @@ const BAND_INK: Record<HolderBandId, string> = {
   overlord: INK.coral,
 };
 
+/** Same concept icons as the kind tiles on /addresses. */
 function KindGlyph({ id }: { id: ListEntityId }) {
   const common = "h-full w-full";
-  if (id === "protocol") return <KpiMarkCpu spin className={common} />;
-  if (id === "exchange") return <KpiMarkStore spin className={common} />;
-  if (id === "pool") return <KpiMarkPickaxe spin className={common} />;
-  return <KpiMarkFileCode spin className={common} />;
+  if (id === "protocol") return <KpiMark id="protocol" className={common} />;
+  if (id === "exchange") return <KpiMark id="exchange" className={common} />;
+  if (id === "pool") return <KpiMark id="miner" className={common} />;
+  return <KpiMark id="contract" className={common} />;
 }
 
 export function AddressPip({
@@ -39,7 +35,7 @@ export function AddressPip({
   nanoerg: string;
   kindLabel: string;
   className?: string;
-  /** List row and the address card: same mark as the kind tile, still orbiting. */
+  /** List row and the address card: same mark as the kind tile. */
   kindGlyph?: boolean;
 }) {
   const pip = listPip(address, nanoerg);

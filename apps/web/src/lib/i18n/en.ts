@@ -1055,6 +1055,8 @@ export const en: Record<string, string> = {
   "addresses.pip.pool": "Miner reward",
   "addresses.pip.contract": "Leftover scripts",
   "addresses.pip.protocol": "Protocol",
+  "addresses.chip.pool": "Miner reward",
+  "addresses.chip.contract": "Scripts",
   "addresses.kind.protocolRange": "Emission",
   "addresses.kind.exchangeRange": "CEX book",
   "addresses.kind.poolRange": "88…",

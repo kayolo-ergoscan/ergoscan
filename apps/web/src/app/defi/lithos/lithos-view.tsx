@@ -5,13 +5,8 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import clsx from "clsx";
 import { Shell } from "@/components/Shell";
-import { KpiGrid } from "@/components/KpiGrid";
-import {
-  KpiMarkHandshake,
-  KpiMarkScrollText,
-  KpiMarkTrendingUp,
-  KpiMarkVault,
-} from "@/components/kpi-marks";
+import { compactFigure, KpiGrid } from "@/components/KpiGrid";
+import { KpiMark } from "@/components/kpi-marks";
 import { TokenAvatar } from "@/components/TokenBadge";
 import { RankWindow } from "@/components/RankWindow";
 import { INK } from "@/lib/palette";
@@ -246,18 +241,20 @@ export function LithosView({
     {
       label: t("lithos.tvl"),
       value: tvl != null && tvl > 0 ? fmtErgFull(tvl) : miss,
+      compact: compactFigure(tvl, "ERG"),
       unavailable: tvl == null || tvl <= 0,
       sub: t("lithos.tvlSub"),
-      mark: <KpiMarkVault tone={INK.gold} />,
+      mark: <KpiMark id="pool" tone={INK.gold} />,
       ink: INK.gold,
       enter: 0,
     },
     {
       label: t("lithos.volume"),
       value: vol != null && vol > 0 ? fmtErgFull(vol) : miss,
+      compact: compactFigure(vol, "ERG"),
       unavailable: vol == null || vol <= 0,
       sub: t("lithos.volumeSub"),
-      mark: <KpiMarkTrendingUp tone={INK.cyan} />,
+      mark: <KpiMark id="volume" tone={INK.cyan} />,
       ink: INK.cyan,
       enter: 1,
     },
@@ -265,9 +262,10 @@ export function LithosView({
       label: t("lithos.traders"),
       value:
         snap?.tradersCount != null ? snap.tradersCount.toLocaleString(loc(locale)) : miss,
+      compact: compactFigure(snap?.tradersCount),
       unavailable: snap?.tradersCount == null,
       sub: t("lithos.tradersSub"),
-      mark: <KpiMarkHandshake tone={INK.violet} />,
+      mark: <KpiMark id="trader" tone={INK.violet} />,
       ink: INK.violet,
       enter: 2,
     },
@@ -275,9 +273,10 @@ export function LithosView({
       label: t("lithos.trades"),
       value:
         snap?.tradesCount != null ? snap.tradesCount.toLocaleString(loc(locale)) : miss,
+      compact: compactFigure(snap?.tradesCount),
       unavailable: snap?.tradesCount == null,
       sub: t("lithos.tradesSub"),
-      mark: <KpiMarkScrollText tone={INK.gold} />,
+      mark: <KpiMark id="swap" tone={INK.gold} />,
       ink: INK.gold,
       enter: 3,
     },

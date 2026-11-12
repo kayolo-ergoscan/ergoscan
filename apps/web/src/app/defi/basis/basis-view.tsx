@@ -23,13 +23,7 @@ import {
   feedLoc,
   type FeedKind,
 } from "@/components/feed/Feed";
-import {
-  KpiMarkBox,
-  KpiMarkCoins,
-  KpiMarkFingerprint,
-  KpiMarkVault,
-  KpiMarkWalletMinimal,
-} from "@/components/kpi-marks";
+import { KpiMark } from "@/components/kpi-marks";
 import { INK } from "@/lib/palette";
 import { describeRentErg, formatRelTime, formatScaledAmount, formatScaledGlance, formatTs, shortId } from "@/lib/format";
 import { resolveTokenMeta } from "@/lib/token-meta";
@@ -447,7 +441,7 @@ export function BasisView({ initial }: { initial: BasisSnap | null }) {
       value: ready && snap?.reserveCount != null ? snap.reserveCount.toLocaleString(loc) : miss,
       unavailable: !ready,
       sub: t("basis.safesSub"),
-      mark: <KpiMarkVault tone={INK.gold} />,
+      mark: <KpiMark id="vault" tone={INK.gold} />,
       ink: INK.gold,
       enter: 0,
     },
@@ -456,7 +450,7 @@ export function BasisView({ initial }: { initial: BasisSnap | null }) {
       value: erg != null ? `${erg} ERG` : miss,
       unavailable: erg == null,
       sub: t("basis.ergSub"),
-      mark: <KpiMarkWalletMinimal tone={INK.cyan} />,
+      mark: <KpiMark id="locked" tone={INK.cyan} />,
       ink: INK.cyan,
       enter: 1,
     },
@@ -465,7 +459,7 @@ export function BasisView({ initial }: { initial: BasisSnap | null }) {
       value: totalNano != null ? describeRentErg(totalNano).text ?? miss : miss,
       unavailable: totalNano == null,
       sub: unpriced > 0 ? t("basis.totalGap") : t("basis.totalSub"),
-      mark: <KpiMarkCoins tone={INK.teal} />,
+      mark: <KpiMark id="erg" tone={INK.teal} />,
       ink: INK.teal,
       enter: 2,
     },
@@ -477,7 +471,7 @@ export function BasisView({ initial }: { initial: BasisSnap | null }) {
           : miss,
       unavailable: !ready,
       sub: t("basis.tokenSafesSub"),
-      mark: <KpiMarkBox tone={INK.violet} />,
+      mark: <KpiMark id="token" tone={INK.violet} />,
       ink: INK.violet,
       enter: 3,
     },
@@ -486,7 +480,7 @@ export function BasisView({ initial }: { initial: BasisSnap | null }) {
       value: ready && snap?.trackerCount != null ? snap.trackerCount.toLocaleString(loc) : miss,
       unavailable: !ready,
       sub: t("basis.trackersSub"),
-      mark: <KpiMarkFingerprint tone={INK.green} />,
+      mark: <KpiMark id="tracker" tone={INK.green} />,
       ink: INK.green,
       enter: 4,
     },

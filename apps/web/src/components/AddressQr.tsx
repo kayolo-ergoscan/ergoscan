@@ -36,7 +36,14 @@ function naturalStatHeight(stat: HTMLElement): number {
   let content = 0;
   if (col) {
     for (const child of col.children) {
-      content += (child as HTMLElement).offsetHeight;
+      const node = child as HTMLElement;
+      // The label row is `display: contents` on desk and has no box of its own:
+      // count the label it holds.
+      if (getComputedStyle(node).display === "contents") {
+        for (const inner of node.children) content += (inner as HTMLElement).offsetHeight;
+      } else {
+        content += node.offsetHeight;
+      }
     }
   }
   const mark = stat.querySelector<HTMLElement>(":scope > .kpi-tile-mark");

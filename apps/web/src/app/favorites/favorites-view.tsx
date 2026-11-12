@@ -2,14 +2,8 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import clsx from "clsx";
-import { KpiNum, KpiTileRail } from "@/components/KpiGrid";
-import {
-  KpiMarkCoins,
-  KpiMarkSquareStack,
-  KpiMarkUsers,
-  KpiMarkVault,
-  KpiMarkWorkflow,
-} from "@/components/kpi-marks";
+import { KpiLabelMark, KpiNum, KpiTileRail } from "@/components/KpiGrid";
+import { KpiMark } from "@/components/kpi-marks";
 import { Shell } from "@/components/Shell";
 import { FavKayolo } from "@/components/FavKayolo";
 import { FeedBlockRow } from "@/app/blocks/blocks-view";
@@ -229,13 +223,16 @@ function KindTile({
     >
       <KpiTileRail />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13px] leading-[1.15]" style={{ color: INK.coral }}>
-          {label}
+        <span className="kpi-label-row">
+          <KpiLabelMark mark={mark} color={ink} />
+          <span className="block truncate text-[13px] leading-[1.15]" style={{ color: INK.coral }}>
+            {label}
+          </span>
         </span>
-        <span className="mt-0.5 block text-[17px] font-semibold leading-[1.15] tabular-nums tracking-tight">
+        <span className="kpi-value mt-0.5 block text-[17px] font-semibold leading-[1.15] tabular-nums tracking-tight">
           <KpiNum>{n.toLocaleString(loc)}</KpiNum>
         </span>
-        <span className="mt-0.5 block truncate text-[12px] leading-[1.15] text-[var(--muted-2)]">
+        <span className="kpi-sub mt-0.5 block truncate text-[12px] leading-[1.15] text-[var(--muted-2)]">
           {caption}
         </span>
       </span>
@@ -399,11 +396,11 @@ export function FavoritesView() {
   }, [ids, kind]);
 
   const tiles: { id: FavoriteKind; label: string; ink: string; mark: ReactNode }[] = [
-    { id: "addresses", label: t("addresses.title"), ink: INK.violet, mark: <KpiMarkUsers tone={INK.violet} /> },
-    { id: "tokens", label: t("tokens.title"), ink: INK.gold, mark: <KpiMarkCoins tone={INK.gold} /> },
-    { id: "blocks", label: t("blocks.title"), ink: INK.green, mark: <KpiMarkSquareStack tone={INK.green} /> },
-    { id: "transactions", label: t("txs.title"), ink: INK.cyan, mark: <KpiMarkWorkflow tone={INK.cyan} /> },
-    { id: "pools", label: t("defi.pools"), ink: INK.gold, mark: <KpiMarkVault tone={INK.gold} /> },
+    { id: "addresses", label: t("addresses.title"), ink: INK.violet, mark: <KpiMark id="address" tone={INK.violet} /> },
+    { id: "tokens", label: t("tokens.title"), ink: INK.gold, mark: <KpiMark id="token" tone={INK.gold} /> },
+    { id: "blocks", label: t("blocks.title"), ink: INK.green, mark: <KpiMark id="block" tone={INK.green} /> },
+    { id: "transactions", label: t("txs.title"), ink: INK.cyan, mark: <KpiMark id="tx" tone={INK.cyan} /> },
+    { id: "pools", label: t("defi.pools"), ink: INK.gold, mark: <KpiMark id="pool" tone={INK.gold} /> },
   ];
 
   /** Every row here is saved; its heart removes it. */
@@ -427,7 +424,7 @@ export function FavoritesView() {
     <Shell>
       {store == null || !listReady ? null : (
         <>
-          <div className="mb-2 grid grid-cols-2 items-stretch gap-2 sm:grid-cols-3 lg:grid-cols-5">
+          <div className="kpi-grid--odd mb-2 grid grid-cols-2 items-stretch gap-2 sm:grid-cols-3 lg:grid-cols-5">
             {tiles.map((tile, i) => (
               <KindTile
                 key={tile.id}

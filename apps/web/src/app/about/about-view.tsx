@@ -3,6 +3,7 @@
 import { useEffect, type CSSProperties } from "react";
 import { Tip } from "@/components/Tip";
 import { AddrFactCard } from "@/components/AddrFactCard";
+import { KpiMark } from "@/components/kpi-marks";
 import { Shell } from "@/components/Shell";
 import { ABOUT_DEV, ABOUT_KUSHTI, ABOUT_LINKS, ABOUT_SUPPORT, type AboutCredit } from "@/lib/about-credits";
 import { NAMES_REGISTRY_URL } from "@/lib/address-book";
@@ -27,7 +28,7 @@ export function AboutView() {
           enter={0}
           label={t("about.eyebrow")}
           ink={INK.cyan}
-          mark={<AboutMark />}
+          mark={<KpiMark id="info" />}
         >
           <h1 className="mt-0.5 text-[17px] font-semibold leading-none tracking-tight">
             {t("about.title")}
@@ -175,12 +176,3 @@ function XMark() {
   );
 }
 
-function AboutMark() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden className="h-10 w-10">
-      <circle cx="12" cy="12" r="8.2" stroke="currentColor" strokeWidth="1.55" />
-      <path d="M12 11.2v5" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" />
-      <circle cx="12" cy="8.2" r="0.95" fill="currentColor" />
-    </svg>
-  );
-}

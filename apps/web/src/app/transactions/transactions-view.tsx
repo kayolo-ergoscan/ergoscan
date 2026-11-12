@@ -2,13 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Shell } from "@/components/Shell";
-import { KpiGrid } from "@/components/KpiGrid";
-import {
-  KpiMarkDice5,
-  KpiMarkLayers,
-  KpiMarkReceipt,
-  KpiMarkWorkflow,
-} from "@/components/kpi-marks";
+import { compactFigure, KpiGrid } from "@/components/KpiGrid";
+import { KpiMark } from "@/components/kpi-marks";
 import { INK } from "@/lib/palette";
 import { RankWindow } from "@/components/RankWindow";
 import { Feed, FeedCount, FeedDays, FeedEmpty } from "@/components/feed/Feed";
@@ -197,18 +192,20 @@ export function TransactionsView({
     {
       label: t("txs.kpiTxs24h"),
       value: txs24 != null ? txs24.toLocaleString(loc(locale)) : miss,
+      compact: compactFigure(txs24),
       unavailable: txs24 == null,
       sub: t("blocks.kpiLast24h"),
-      mark: <KpiMarkWorkflow tone={INK.cyan} />,
+      mark: <KpiMark id="tx" tone={INK.cyan} />,
       ink: INK.cyan,
       enter: 0,
     },
     {
       label: t("txs.kpiTotal"),
       value: txTotal != null ? txTotal.toLocaleString(loc(locale)) : miss,
+      compact: compactFigure(txTotal),
       unavailable: txTotal == null,
       sub: t("txs.kpiTotalSub"),
-      mark: <KpiMarkLayers tone={INK.violet} />,
+      mark: <KpiMark id="tx-total" tone={INK.violet} />,
       ink: INK.violet,
       enter: 1,
     },
@@ -217,7 +214,7 @@ export function TransactionsView({
       value: perBlock != null ? perBlock.toLocaleString(loc(locale)) : miss,
       unavailable: perBlock == null,
       sub: t("txs.kpiPerBlockSub"),
-      mark: <KpiMarkDice5 tone={INK.teal} />,
+      mark: <KpiMark id="per-block" tone={INK.teal} />,
       ink: INK.teal,
       enter: 2,
     },
@@ -226,7 +223,7 @@ export function TransactionsView({
       value: s24?.feesErg != null ? `${formatCompact(s24.feesErg)} ERG` : miss,
       unavailable: s24?.feesErg == null,
       sub: t("blocks.kpiLast24h"),
-      mark: <KpiMarkReceipt tone={INK.gold} />,
+      mark: <KpiMark id="fee" tone={INK.gold} />,
       ink: INK.gold,
       enter: 3,
     },

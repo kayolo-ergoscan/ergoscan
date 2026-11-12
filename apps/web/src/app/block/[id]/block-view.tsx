@@ -7,15 +7,13 @@ import clsx from "clsx";
 import { Shell } from "@/components/Shell";
 import { FavoriteHeart } from "@/components/FavoriteHeart";
 import { AddrFactCard } from "@/components/AddrFactCard";
-import { AddrFactMark } from "@/components/AddrFactMark";
 import { HopNav } from "@/components/HopNav";
 import { SegBar, segItem } from "@/components/SegBar";
 import { BlockHeaderSheet } from "./block-header";
 import { TxBallPit } from "@/components/TxBallPit";
 import { Feed, FeedBoard, FeedCount, FeedEmpty, FeedPlate } from "@/components/feed/Feed";
 import { FeedTxRow } from "@/components/feed/FeedTxRow";
-import { BlockMarkMiner, BlockMarkOutput } from "@/components/block-marks";
-import { KpiMarkFees, KpiMarkPayload } from "@/components/kpi-marks";
+import { KpiMark } from "@/components/kpi-marks";
 import { KpiNum } from "@/components/KpiGrid";
 import { RankWindow } from "@/components/RankWindow";
 import { getGateway } from "@/lib/config";
@@ -544,7 +542,7 @@ export function BlockView({
             enter={arrive ? 1 : undefined}
             label={t("block.card.output")}
             ink={INK.cyan}
-            mark={<BlockMarkOutput className="h-10 w-10" />}
+            mark={<KpiMark id="erg" />}
           >
             <div className="mt-2">
               {showOutput ? (
@@ -607,7 +605,7 @@ export function BlockView({
             enter={arrive ? 2 : undefined}
             label={t("block.card.miner")}
             ink={INK.sky}
-            mark={<BlockMarkMiner className="h-9 w-9" />}
+            mark={<KpiMark id="miner" />}
           >
             <p className="mt-0.5 truncate text-[17px] font-semibold leading-none tracking-tight">
               {minerAddr ? (
@@ -633,7 +631,7 @@ export function BlockView({
             enter={arrive ? 3 : undefined}
             label={t("block.card.fees")}
             ink={INK.gold}
-            mark={<KpiMarkFees className="h-9 w-9" />}
+            mark={<KpiMark id="fee" />}
           >
             <p className="mt-0.5 truncate text-[17px] font-semibold leading-none tabular-nums tracking-tight">
               <KpiNum>
@@ -650,7 +648,7 @@ export function BlockView({
             enter={arrive ? 4 : undefined}
             label={t("block.card.size")}
             ink={INK.green}
-            mark={<KpiMarkPayload className="h-9 w-9" />}
+            mark={<KpiMark id="size" />}
           >
             <p className="mt-0.5 truncate text-[17px] font-semibold leading-none tabular-nums tracking-tight">
               <KpiNum>{formatBytes(head.size)}</KpiNum>
@@ -664,7 +662,7 @@ export function BlockView({
             enter={arrive ? 5 : undefined}
             label={t("block.card.time")}
             ink={INK.teal}
-            mark={<AddrFactMark id="clock" className="h-9 w-9" />}
+            mark={<KpiMark id="time" />}
           >
             <p className="mt-0.5 truncate text-[17px] font-semibold leading-none tabular-nums tracking-tight">
               <KpiNum>{head.timestamp ? formatRelTime(head.timestamp, locale) : dash}</KpiNum>
