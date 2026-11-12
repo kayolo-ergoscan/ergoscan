@@ -29,6 +29,7 @@ import {
 import { laterTs } from "../lib/later-ts.js";
 import { stampTemplateHashes } from "../lib/txTemplateHash.js";
 import { meaningForPage, meaningsByIds, mempoolMeaningSlim, type CompactMeaning, type TxMeaning } from "../lib/txMeaning.js";
+import { boxMeaningFields, loadBoxMeanings } from "../lib/boxMeaning.js";
 import { pageLimit } from "../lib/page-limit.js";
 import { addressFromErgoTree, ergoTreeFromAddress, normErgoTree } from "../lib/ergoAddress.js";
 import { decodeErgoTree, type ErgoTreeDecode } from "../lib/ergoTree.js";
@@ -1015,9 +1016,11 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
         assetsCount: idx.assets.length,
         registerBytes: registerPayloadBytes(idx.additionalRegisters ?? {}),
       });
-      const [heads, meta] = await Promise.all([
+      const [heads, meta, meanings] = await Promise.all([
         getTxHeads([idx.creationTxId ?? "", idx.spentTxId ?? ""]),
         tokenMetaMany(idx.assets.map((a) => a.tokenId)),
+        // List-form meanings of both txs: LRU hits are free, misses cost what a list row costs.
+        loadBoxMeanings(idx.creationTxId, idx.spentTxId, (ids) => meaningsByIds(ids, rentTapeMarks)),
       ]);
       const created = idx.creationTxId ? heads.get(idx.creationTxId) : undefined;
       const spent = idx.spentTxId ? heads.get(idx.spentTxId) : undefined;
@@ -1063,7 +1066,11 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
         idx.ergoTree,
         idx.additionalRegisters ?? {}
       );
-      return res.json({ ...card, ...decoded });
+      return res.json({
+        ...card,
+        ...decoded,
+        ...boxMeaningFields(meanings, idx.creationTxId, idx.spentTxId),
+      });
     }
 
     for (const tx of deps.getRawMempool().values()) {
@@ -1096,7 +1103,8 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
             String(o.ergoTree ?? ""),
             (o.additionalRegisters as Record<string, unknown>) ?? {}
           );
-          return res.json({ ...card, ...decoded });
+          const madeBy = mempoolMeaningSlim(tx.id);
+          return res.json({ ...card, ...decoded, ...(madeBy ? { creationMeaning: madeBy } : {}) });
         }
       }
     }

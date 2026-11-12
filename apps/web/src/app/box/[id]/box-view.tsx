@@ -202,7 +202,9 @@ export function BoxView({
   );
   const treeConsts = data?.treeConstants ?? [];
   const spent = Boolean(data?.spentTransactionId);
-  const txWords = useTxWords([data?.transactionId, data?.spentTransactionId]);
+  // What the txs that made and spent the box did, in the list form the gateway puts on the box.
+  const createdWord = useMemo(() => parseMeaning(data?.creationMeaning), [data?.creationMeaning]);
+  const spentWord = useMemo(() => parseMeaning(data?.spentMeaning), [data?.spentMeaning]);
   const mempool = data?.source === "mempool";
   const inclusion = asNum(data?.inclusionHeight) ?? asNum(data?.settlementHeight);
   const creation = asNum(data?.creationHeight);
@@ -489,8 +491,8 @@ export function BoxView({
                   spentHeight={spentHeight}
                   spentTs={asNum(data.spentTs)}
                   confs={confs}
-                  createdWord={data.transactionId ? txWords.get(data.transactionId) : undefined}
-                  spentWord={data.spentTransactionId ? txWords.get(data.spentTransactionId) : undefined}
+                  createdWord={createdWord}
+                  spentWord={spent ? spentWord : undefined}
                 />
               </div>
             ) : null}
@@ -746,37 +748,6 @@ function LifeWire({ className }: { className?: string }) {
       <path d="M0 22 C 26 22, 54 10, 80 22" stroke="currentColor" strokeWidth="1.35" vectorEffect="non-scaling-stroke" />
     </svg>
   );
-}
-
-/**
- * What the txs that made and spent this box did («Обмен · ErgoDex»), read from their `meaning`
- * on the tx endpoint after the page is up. A tx without a meaning keeps its bare id.
- */
-function useTxWords(ids: ReadonlyArray<string | null | undefined>): Map<string, CompactMeaning> {
-  const [words, setWords] = useState<Map<string, CompactMeaning>>(() => new Map());
-  const key = ids.filter((x): x is string => !!x && /^[0-9a-f]{64}$/i.test(x)).join(",");
-  useEffect(() => {
-    if (!key) return;
-    const ctl = new AbortController();
-    const list = [...new Set(key.split(","))];
-    void (async () => {
-      for (const id of list) {
-        try {
-          const r = await fetch(`${getGateway()}/v1/transactions/${encodeURIComponent(id)}`, {
-            ...SNAPSHOT_FETCH,
-            signal: ctl.signal,
-          });
-          if (!r.ok) continue;
-          const m = parseMeaning(((await r.json()) as { meaning?: unknown }).meaning);
-          if (m) setWords((prev) => new Map(prev).set(id, m));
-        } catch {
-          if (ctl.signal.aborted) return;
-        }
-      }
-    })();
-    return () => ctl.abort();
-  }, [key]);
-  return words;
 }
 
 /** «Обмен · ErgoDex» over a tx id in the box's life line. */
