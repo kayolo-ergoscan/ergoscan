@@ -34,7 +34,7 @@ import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { splitExtension } from "@/lib/extension-section";
 import { readHashTab, setHashTab } from "@/lib/hash-tab";
 import { useChainTipRefresh, useKeepFresh, usePageSync } from "@/lib/page-sync";
-import { SNAPSHOT_FETCH, enteringIds, snapshotPath, useEnterIds } from "@/lib/keyed-enter";
+import { ENTER_MS, SNAPSHOT_FETCH, enteringIds, snapshotPath, useEnterIds } from "@/lib/keyed-enter";
 import {
   BLOCK_TX_PACK,
   parseBlockCard,
@@ -192,6 +192,7 @@ export function BlockView({
   newerRow,
   initialHeader = null,
   initialLithos = false,
+  initialTxs = [],
 }: {
   id: string;
   initialRow: BlockListItem | null;
@@ -201,6 +202,8 @@ export function BlockView({
   initialHeader?: BlockHeaderFields | null;
   /** Known on the first paint, so the Lithos chip does not pop in after the card. */
   initialLithos?: boolean;
+  /** First tx page from the server: drawn in the first HTML, with the same entry animation. */
+  initialTxs?: TxListItem[];
 }) {
   const hopQuiet = useRef(blockHopQuiet);
   const [arrive, setArrive] = useState(false);
@@ -221,20 +224,21 @@ export function BlockView({
   const [tab, setTab] = useState<BlockTab>("txs");
   const [header, setHeader] = useState<BlockHeaderFields | null>(initialHeader);
   const hashApplied = useRef(false);
-  const [txs, setTxs] = useState<TxListItem[]>([]);
+  const seeded = initialTxs.length > 0;
+  const [txs, setTxs] = useState<TxListItem[]>(initialTxs);
   const [txTotal, setTxTotal] = useState(initialRow?.txCount ?? 0);
-  const [txReady, setTxReady] = useState(false);
+  const [txReady, setTxReady] = useState(seeded);
   const [offset, setOffset] = useState(0);
   const [pending, setPending] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [stuck, setStuck] = useState(false);
-  const enter = useEnterIds();
-  const packEnter = useEnterIds();
+  const enter = useEnterIds(ENTER_MS, [], seeded);
+  const packEnter = useEnterIds(ENTER_MS, seeded ? ["pack"] : []);
   const pinRef = useRef<HTMLDivElement>(null);
   const offsetRef = useRef(0);
   const txsRef = useRef(txs);
   const headRef = useRef(head);
-  const txReadyRef = useRef(false);
+  const txReadyRef = useRef(seeded);
   const dumpRef = useRef<TxListItem[] | null>(null);
   offsetRef.current = offset;
   txsRef.current = txs;

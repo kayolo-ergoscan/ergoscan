@@ -26,7 +26,7 @@ import {
 import { TOKEN_CATALOG, tokenTickerInk } from "@/lib/token-meta";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { useChainTipRefresh, usePageSync } from "@/lib/page-sync";
-import { SNAPSHOT_FETCH, enteringIds, snapshotPath, useEnterIds } from "@/lib/keyed-enter";
+import { SNAPSHOT_FETCH, enteringIds, snapshotPath, useEnterIds, ENTER_MS } from "@/lib/keyed-enter";
 import { prefetchTokenHolders } from "@/lib/token-page-cache";
 import { useFavoriteList } from "@/lib/favorites";
 import {
@@ -242,10 +242,12 @@ export function TokensView({ initial }: { initial: TokensPageData }) {
   const [ready, setReady] = useState(initial.items.length > 0);
   const [err, setErr] = useState<string | null>(null);
   const [stuck, setStuck] = useState(false);
-  const enter = useEnterIds();
-  const packEnter = useEnterIds();
-  const [listReady, setListReady] = useState(false);
-  const opened = useRef(false);
+  // Rows the server already has go into the first HTML, with the same entry animation.
+  const seedIds = initial.items.map((row) => row.tokenId);
+  const enter = useEnterIds(ENTER_MS, seedIds);
+  const packEnter = useEnterIds(ENTER_MS, seedIds.length ? ["pack"] : []);
+  const [listReady, setListReady] = useState(seedIds.length > 0);
+  const opened = useRef(seedIds.length > 0);
   const pinRef = useRef<HTMLDivElement>(null);
   const offsetRef = useRef(offset);
   offsetRef.current = offset;

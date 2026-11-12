@@ -32,7 +32,7 @@ import { minerEmissionAtHeight, ERGO_EPOCH_LEN, ERGO_MAX_BLOCK_SIZE } from "@/li
 import clsx from "clsx";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { useChainTipRefresh, usePageSync } from "@/lib/page-sync";
-import { SNAPSHOT_FETCH, enteringIds, snapshotPath, useEnterIds } from "@/lib/keyed-enter";
+import { SNAPSHOT_FETCH, enteringIds, snapshotPath, useEnterIds, ENTER_MS } from "@/lib/keyed-enter";
 import {
   BLOCK_PACK,
   type BlockListItem,
@@ -88,10 +88,12 @@ export function BlocksView({
   const [stuck, setStuck] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [prevBlockTs, setPrevBlockTs] = useState<number | null>(initialOlderTs);
-  const enter = useEnterIds();
-  const packEnter = useEnterIds();
-  const [listReady, setListReady] = useState(false);
-  const opened = useRef(false);
+  // Rows the server already has go into the first HTML, with the same entry animation.
+  const seedIds = initialItems.map((row) => row.id);
+  const enter = useEnterIds(ENTER_MS, seedIds);
+  const packEnter = useEnterIds(ENTER_MS, seedIds.length ? ["pack"] : []);
+  const [listReady, setListReady] = useState(seedIds.length > 0);
+  const opened = useRef(seedIds.length > 0);
   const cursorRef = useRef<string | null>(null);
   const cursorStack = useRef<(string | null)[]>([]);
   const nextCursorRef = useRef<string | null>(initialNextCursor);

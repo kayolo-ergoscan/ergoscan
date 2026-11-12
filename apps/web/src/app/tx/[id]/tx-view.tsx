@@ -47,7 +47,7 @@ import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { useFavoriteOf } from "@/lib/favorites";
 import { readHashTab, setHashTab } from "@/lib/hash-tab";
 import { useKeepFresh, usePageSync } from "@/lib/page-sync";
-import { SNAPSHOT_FETCH, enteringIds, useEnterIds } from "@/lib/keyed-enter";
+import { ENTER_MS, SNAPSHOT_FETCH, enteringIds, useEnterIds } from "@/lib/keyed-enter";
 import { paintTxSnapshot } from "@/lib/tx-shape-paint";
 import { TxExplanationPanel } from "./TxExplanationPanel";
 
@@ -183,16 +183,18 @@ export function TxView({
   const txFav = useFavoriteOf("transactions", id);
   const { locale } = useI18n();
   const { markSynced } = usePageSync();
-  const enter = useEnterIds();
   const ioIdsRef = useRef<string[]>([]);
   const [data, setData] = useState<TxPageSnapshot | null>(() => {
     const snap = asTxData(initial);
     if (snap) ioIdsRef.current = snapIds(snap);
     return snap;
   });
+  // A tx the server already has is drawn in the first HTML (Summary tab; a #boxes / #tokens
+  // link switches before paint), with the same entry animation.
+  const enter = useEnterIds(ENTER_MS, [], data != null);
   const [err, setErr] = useState<string | null>(null);
   const [tab, setTab] = useState<TxTab>("summary");
-  const [sheetReady, setSheetReady] = useState(false);
+  const [sheetReady, setSheetReady] = useState(() => data != null);
   const sheetReadyRef = useRef(false);
   const idsForTabRef = useRef<(t: TxTab) => string[]>(() => []);
 

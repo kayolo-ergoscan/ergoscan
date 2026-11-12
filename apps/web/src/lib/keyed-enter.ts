@@ -14,7 +14,17 @@ export function leavingIds<T extends { id: string }>(prev: T[], next: T[]): stri
   return prev.filter((r) => !have.has(r.id)).map((r) => r.id);
 }
 
-export function useEnterIds(ms = ENTER_MS, initialIds: readonly string[] = []) {
+/**
+ * Rows marked with `mark` get "list-row-enter" for `ms`. `initialIds` (or every row, with
+ * `firstPaintAll`) start marked, so rows the server already drew carry the class in the first
+ * HTML and animate on first paint instead of waiting for JS.
+ */
+export function useEnterIds(
+  ms = ENTER_MS,
+  initialIds: readonly string[] = [],
+  firstPaintAll = false
+) {
+  const [all, setAll] = useState(firstPaintAll);
   const [ids, setIds] = useState<Set<string>>(() => new Set(initialIds));
   const live = useRef<Set<string>>(new Set(initialIds));
   const timer = useRef<number | null>(null);
@@ -46,9 +56,17 @@ export function useEnterIds(ms = ENTER_MS, initialIds: readonly string[] = []) {
     };
   }, [arm]);
 
+  useEffect(() => {
+    if (!firstPaintAll) return;
+    const id = window.setTimeout(() => setAll(false), ms);
+    return () => window.clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- first paint only
+  }, []);
+
   const enterClass = useCallback(
-    (id: string) => (live.current.has(id) || ids.has(id) ? "list-row-enter" : undefined),
-    [ids]
+    (id: string) =>
+      all || live.current.has(id) || ids.has(id) ? "list-row-enter" : undefined,
+    [ids, all]
   );
 
   return { mark, enterClass };
