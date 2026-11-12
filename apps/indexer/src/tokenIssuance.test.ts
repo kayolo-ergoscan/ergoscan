@@ -88,3 +88,27 @@ test("tokenRowFromOutputAsset: known decimals on a transfer, still no emission",
   assert.equal(row.emission, null);
   assert.equal(row.decimals, 2);
 });
+
+test("tokenRowFromOutputAsset: mint output without R6 → 0 decimals (EIP-4, as the node)", () => {
+  const row = tokenRowFromOutputAsset({
+    tokenId: MINT,
+    boxId: OTHER,
+    height: 9,
+    amount: "9223372036854774807",
+    registers: { R4: "0e114552475f456c656d656e743131355f4c50" },
+    issuance: true,
+  });
+  assert.equal(row.emission, "9223372036854774807");
+  assert.equal(row.decimals, 0);
+});
+
+test("issuancePatch: mint found without R6 → 0; mint not found → unknown", () => {
+  const noR6 = issuancePatch(MINT, { R4: "0e0141" }, "9223372036854774807");
+  assert.equal(noR6.decimals, 0);
+  assert.equal(noR6.emission, "9223372036854774807");
+  assert.equal(noR6.forceDecimals, false);
+
+  const unknown = issuancePatch(MINT, null, null);
+  assert.equal(unknown.decimals, null);
+  assert.equal(unknown.emission, null);
+});

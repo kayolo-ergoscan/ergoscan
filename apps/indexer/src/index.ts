@@ -1903,7 +1903,7 @@ async function enrichTokenMeta(pool: Pool, budget = 24) {
            name = COALESCE($2, name),
            description = COALESCE($3, description),
            decimals = COALESCE($4, decimals),
-           emission = COALESCE($5, emission),
+           emission = COALESCE($5::numeric, emission),
            box_id = COALESCE($6, box_id),
            artwork_url = CASE
              WHEN $7::text IS NOT NULL AND $7::text <> '' THEN $7
@@ -1916,7 +1916,11 @@ async function enrichTokenMeta(pool: Pool, budget = 24) {
           name,
           desc,
           meta.decimals != null ? Number(meta.decimals) : null,
-          meta.emissionAmount != null ? Number(meta.emissionAmount) : null,
+          // Exact digits: parseErgoJson keeps big ints as strings; Number() would round
+          // 9223372036854774807 to 9223372036854775000 (seen on 26 LP tokens, 12 Nov 2026).
+          meta.emissionAmount != null && /^\d+$/.test(String(meta.emissionAmount))
+            ? String(meta.emissionAmount)
+            : null,
           issuanceBoxId,
           artVal,
         ]
