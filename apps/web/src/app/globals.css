@@ -3813,38 +3813,8 @@ html[data-ink="day"] .mcap-vol {
 
 @media (prefers-reduced-motion: reduce) {
   .holders-mark,
-  .holders-mark-back,
-  .rent-danger-run {
+  .holders-mark-back {
     animation: none;
-  }
-}
-
-.rent-danger-well.is-loop {
-  -webkit-mask-image: linear-gradient(
-    180deg,
-    transparent,
-    #000 16px,
-    #000 calc(100% - 16px),
-    transparent
-  );
-  mask-image: linear-gradient(180deg, transparent, #000 16px, #000 calc(100% - 16px), transparent);
-}
-
-.rent-danger-run {
-  animation: rent-danger-reel var(--reel, 24s) linear infinite;
-}
-
-.rent-danger-well:hover .rent-danger-run,
-.rent-danger-well:focus-within .rent-danger-run {
-  animation-play-state: paused;
-}
-
-@keyframes rent-danger-reel {
-  from {
-    transform: translate3d(0, 0, 0);
-  }
-  to {
-    transform: translate3d(0, -50%, 0);
   }
 }
 

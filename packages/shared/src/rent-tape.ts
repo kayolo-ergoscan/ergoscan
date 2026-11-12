@@ -122,15 +122,30 @@ export function rentRailLayout(
   return out;
 }
 
-/** Cadence-like clock: due | 6h | 2d. */
-export function rentTapeClock(blocksUntilRent: number): { due: true } | { due: false; label: string } {
+/** About two minutes a block. */
+export const RENT_TAPE_MINUTES_PER_BLOCK = 2;
+/** Hours up to two days, then days: "36h" says more than "2d". */
+export const RENT_TAPE_HOURS_UNTIL = 1440;
+
+export type RentClockUnit = "m" | "h" | "d";
+export type RentClock = { due: true } | { due: false; n: number; unit: RentClockUnit; label: string };
+
+/**
+ * Cadence-like clock: due | 6m | 6h | 2d. Under an hour it counts minutes, so 1–29 blocks
+ * never read as "1h". `label` is the compact English form; the UI localises `n` + `unit`.
+ */
+export function rentTapeClock(blocksUntilRent: number): RentClock {
   if (!Number.isFinite(blocksUntilRent) || blocksUntilRent <= 0) return { due: true };
-  if (blocksUntilRent < RENT_TAPE_SOON_BLOCKS) {
-    const h = Math.max(1, Math.round(blocksUntilRent / RENT_TAPE_BLOCKS_PER_HOUR));
-    return { due: false, label: `${h}h` };
+  if (blocksUntilRent < RENT_TAPE_BLOCKS_PER_HOUR) {
+    const n = Math.max(1, Math.round(blocksUntilRent * RENT_TAPE_MINUTES_PER_BLOCK));
+    return { due: false, n, unit: "m", label: `${n}m` };
   }
-  const d = Math.max(1, Math.round(blocksUntilRent / RENT_TAPE_SOON_BLOCKS));
-  return { due: false, label: `${d}d` };
+  if (blocksUntilRent < RENT_TAPE_HOURS_UNTIL) {
+    const n = Math.max(1, Math.round(blocksUntilRent / RENT_TAPE_BLOCKS_PER_HOUR));
+    return { due: false, n, unit: "h", label: `${n}h` };
+  }
+  const n = Math.max(1, Math.round(blocksUntilRent / RENT_TAPE_SOON_BLOCKS));
+  return { due: false, n, unit: "d", label: `${n}d` };
 }
 
 /**
