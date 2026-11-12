@@ -28,7 +28,7 @@ import Link from "next/link";
 import clsx from "clsx";
 import { TokenLogo } from "@/components/TokenBadge";
 import { useI18n } from "@/lib/i18n/I18nProvider";
-import { formatDottedDate, formatH24, formatScaledAmount, formatScaledGlance, shortId } from "@/lib/format";
+import { formatDottedDate, formatH24, formatScaledAmount, formatScaledFixed, formatScaledGlance, shortId } from "@/lib/format";
 import { tokenDecimals, tokenSymbol } from "@/lib/token-meta";
 import { FeedGlyph, type FeedGlyphId } from "./FeedGlyph";
 
@@ -263,7 +263,8 @@ export function FeedSort<K extends string>({
 }: {
   options: { key: K; label: string }[];
   active: K;
-  dir: "asc" | "desc";
+  /** Without a direction the chips are a filter: no arrow on the pressed one. */
+  dir?: "asc" | "desc";
   onSort: (key: K) => void;
   label: string;
   disabled?: boolean;
@@ -308,7 +309,7 @@ export function FeedSort<K extends string>({
             onClick={() => onSort(o.key)}
           >
             {o.label}
-            {on ? (
+            {on && dir ? (
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden>
                 <path
                   d={dir === "desc" ? "M12 5v14M6 13l6 6 6-6" : "M12 19V5M6 11l6-6 6 6"}
@@ -531,6 +532,7 @@ export function FeedAmount({
   unit = "ERG",
   signed = false,
   glance = false,
+  cents = false,
   className,
 }: {
   raw: bigint | null | undefined;
@@ -538,6 +540,8 @@ export function FeedAmount({
   unit?: ReactNode;
   signed?: boolean;
   glance?: boolean;
+  /** A ranked balance column: every row whole and two decimals, so the column reads one way. */
+  cents?: boolean;
   className?: string;
 }) {
   const { locale } = useI18n();
@@ -545,7 +549,14 @@ export function FeedAmount({
   const abs = raw < 0n ? -raw : raw;
   const tag = feedLoc(locale);
   const exact = formatScaledAmount(abs, decimals, tag, decimals);
-  const text = glance ? formatScaledGlance(abs, decimals, tag).text : formatScaledAmount(abs, decimals, tag);
+  const hundredth = 10n ** BigInt(Math.max(0, decimals - 2));
+  const text = cents
+    ? abs > 0n && abs < hundredth
+      ? "<0.01"
+      : formatScaledFixed(abs, decimals, 2, tag)
+    : glance
+      ? formatScaledGlance(abs, decimals, tag).text
+      : formatScaledAmount(abs, decimals, tag);
   const sign = signed ? signOf(raw) : "";
   return (
     <span

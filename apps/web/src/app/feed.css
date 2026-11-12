@@ -880,6 +880,30 @@ button.feed-caret:hover {
   line-height: 1.4;
   color: var(--muted-2);
 }
+/* A gallery under a plate: the NFT grid keeps its cards, the card holds them. */
+.feed-gallery > .addr-nft-grid {
+  padding: 12px;
+}
+@media (max-width: 639px) {
+  .feed-gallery > .addr-nft-grid {
+    gap: 8px;
+    padding: 8px;
+  }
+}
+
+/* Block header, extension and AD proof: key/value rows under plates. */
+.hdr-feed {
+  margin-top: 8px;
+}
+.hdr-doc .hdr-feed > .feed-day {
+  animation: hdr-drop 460ms var(--ease) 120ms both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hdr-doc .hdr-feed > .feed-day {
+    animation: none;
+  }
+}
+
 /* A fact that matters more than its neighbours (a name a project gave itself). */
 .feed-facts > .feed-accent {
   color: rgb(var(--accent-rgb));

@@ -14,6 +14,7 @@ import {
   KpiMarkPalette,
 } from "@/components/kpi-marks";
 import { RankWindow } from "@/components/RankWindow";
+import { Feed, FeedCount, FeedEmpty, FeedPlate, FeedSort } from "@/components/feed/Feed";
 import { SegBar, segItem } from "@/components/SegBar";
 import { getGateway } from "@/lib/config";
 import { describeParty } from "@/lib/address-labels";
@@ -414,7 +415,7 @@ export function NftsView({ initial }: { initial: NftHomeSnap }) {
         />
       </div>
 
-      <SegBar cols={3} className={tab === "catalog" || tab === "search" ? "mb-2" : "mb-3"}>
+      <SegBar cols={3} className="mb-3">
         {NFT_NAV.map((idTab) => (
           <a
             key={idTab}
@@ -429,98 +430,110 @@ export function NftsView({ initial }: { initial: NftHomeSnap }) {
           </a>
         ))}
       </SegBar>
-      {tab === "catalog" || tab === "search" ? (
-        <SegBar cols={4} className="mb-3">
-          <button
-            type="button"
-            onClick={() => onKind("")}
-            className={segItem(!kind)}
-          >
-            {t("nfts.kind.all")}
-          </button>
-          {NFT_KIND_CHIPS.map((id) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => onKind(id)}
-              className={segItem(kind === id)}
-            >
-              {t(`nfts.kind.${id}`)}
-            </button>
-          ))}
-        </SegBar>
-      ) : null}
 
-      <div className="addr-sheet">
-        {empty && !previewing ? (
-          <p className="mb-3 text-[var(--muted)]">
-            {tab === "catalog"
-              ? kind
-                ? kindReady
-                  ? t("nfts.empty.kind")
-                  : t("nfts.kindWarm")
-                : t("nfts.empty.catalog")
-              : tab === "series"
-                ? t("nfts.empty.series")
-                : tab === "feed"
-                    ? t("nfts.empty.feed")
-                    : searchQ.trim().length >= 2
-                      ? t("nfts.search.empty")
-                      : t("nfts.empty.catalog")}
-          </p>
-        ) : null}
-        {previewing && empty ? (
-          <p className="mb-3 text-[var(--muted)]">{t("nfts.readyPreview")}</p>
-        ) : null}
-
-        <div
-          className={clsx(
-            "transition-opacity duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
-            dim && "opacity-60"
-          )}
-        >
-          {tab === "series" ? (
-            <div className="addr-nft-grid">
-              {series.map((c, i) => (
-                <NftGroupCard
-                  key={c.slug}
-                  href={`/nfts/collection/${encodeURIComponent(c.slug)}`}
-                  name={c.name}
-                  coverUrl={c.coverUrl}
-                  count={c.count}
-                  hint={null}
-                  sheetEnter={sheetOn ? 5 + i : undefined}
-                  enterClass={sheetOn ? undefined : enter.enterClass(c.slug)}
+      <div className="feed-sheet">
+        <Feed busy={dim || (previewing && empty)}>
+          {(() => {
+            const plate = (
+              <FeedPlate
+                tag={t(`nfts.tab.${tab}`)}
+                now={tab === "feed"}
+                count={
+                  previewing ? undefined : (
+                    <FeedCount
+                      k={tab === "series" ? "feed.series" : "feed.nfts"}
+                      n={tab === "catalog" ? (kind ? filterTotal : catalogTotal) : painted.length}
+                    />
+                  )
+                }
+                end={
+                  tab === "catalog" || tab === "search" ? (
+                    <FeedSort
+                      label={t("nfts.kindHint")}
+                      options={[
+                        { key: "", label: t("nfts.kind.all") },
+                        ...NFT_KIND_CHIPS.map((id) => ({ key: id as string, label: t(`nfts.kind.${id}`) })),
+                      ]}
+                      active={kind}
+                      onSort={onKind}
+                    />
+                  ) : undefined
+                }
+              />
+            );
+            if (empty) {
+              return (
+                <FeedEmpty
+                  k="nft"
+                  plate={plate}
+                  title={
+                    previewing
+                      ? t("nfts.readyPreview")
+                      : tab === "catalog"
+                        ? kind
+                          ? kindReady
+                            ? t("nfts.empty.kind")
+                            : t("nfts.kindWarm")
+                          : t("nfts.empty.catalog")
+                        : tab === "series"
+                          ? t("nfts.empty.series")
+                          : tab === "feed"
+                            ? t("nfts.empty.feed")
+                            : searchQ.trim().length >= 2
+                              ? t("nfts.search.empty")
+                              : t("nfts.empty.catalog")
+                  }
                 />
-              ))}
-            </div>
-          ) : (
-            <div className="addr-nft-grid">
-              {(tab === "catalog" ? catalog : tab === "feed" ? feed : searchHits).map((row, i) => (
-                <NftCard
-                  key={row.tokenId}
-                  sheetEnter={sheetOn ? 5 + i : undefined}
-                  enterClass={sheetOn ? undefined : enter.enterClass(row.tokenId)}
-                  item={{
-                    tokenId: row.tokenId,
-                    name: row.name,
-                    collection: row.collection,
-                    artworkUrl: row.artworkUrl,
-                    kind: row.kind,
-                    kindLabel: row.kind ? t(`nfts.kind.${row.kind}`) : null,
-                    meta:
-                      tab === "feed" && row.confirmed === false
-                        ? t("nfts.mempool")
-                        : row.issuerAddress
-                          ? describeParty(row.issuerAddress).known ||
-                            describeParty(row.issuerAddress).short
-                          : null,
-                  }}
-                />
-              ))}
-            </div>
-          )}
-        </div>
+              );
+            }
+            return (
+              <section className="feed-day feed-gallery">
+                {plate}
+                {tab === "series" ? (
+                  <div className="addr-nft-grid">
+                    {series.map((c, i) => (
+                      <NftGroupCard
+                        key={c.slug}
+                        href={`/nfts/collection/${encodeURIComponent(c.slug)}`}
+                        name={c.name}
+                        coverUrl={c.coverUrl}
+                        count={c.count}
+                        hint={null}
+                        sheetEnter={sheetOn ? 5 + i : undefined}
+                        enterClass={sheetOn ? undefined : enter.enterClass(c.slug)}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="addr-nft-grid">
+                    {(tab === "catalog" ? catalog : tab === "feed" ? feed : searchHits).map((row, i) => (
+                      <NftCard
+                        key={row.tokenId}
+                        sheetEnter={sheetOn ? 5 + i : undefined}
+                        enterClass={sheetOn ? undefined : enter.enterClass(row.tokenId)}
+                        item={{
+                          tokenId: row.tokenId,
+                          name: row.name,
+                          collection: row.collection,
+                          artworkUrl: row.artworkUrl,
+                          kind: row.kind,
+                          kindLabel: row.kind ? t(`nfts.kind.${row.kind}`) : null,
+                          meta:
+                            tab === "feed" && row.confirmed === false
+                              ? t("nfts.mempool")
+                              : row.issuerAddress
+                                ? describeParty(row.issuerAddress).known ||
+                                  describeParty(row.issuerAddress).short
+                                : null,
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+              </section>
+            );
+          })()}
+        </Feed>
 
         {tab === "catalog" && !previewing ? (
           <RankWindow

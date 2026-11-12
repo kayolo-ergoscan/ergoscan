@@ -775,11 +775,16 @@ function BlockSectionSheet({
   const bytes = hex ? hex.length / 2 : 0;
   return (
     <section className="hdr-doc" aria-label={title}>
-      <div className="hdr-sheet">
-        <p className="hdr-band">
-          {title}
-          {hex ? ` · ${countText(t, locale, "block.section.bytes", bytes, bytes.toLocaleString(locale === "ru" ? "ru-RU" : "en-US"))}` : ""}
-        </p>
+      <div className="feed hdr-feed">
+        <section className="feed-day">
+        <FeedPlate
+          tag={title}
+          count={
+            hex
+              ? countText(t, locale, "block.section.bytes", bytes, bytes.toLocaleString(locale === "ru" ? "ru-RU" : "en-US"))
+              : undefined
+          }
+        />
         {hex && part === "adproof" ? (
           <ProofPane hex={hex} copyLabel={t("tx.copy")} copiedLabel={t("tx.copied")} />
         ) : hex && part === "extension" && splitExtension(hex) ? (
@@ -794,6 +799,7 @@ function BlockSectionSheet({
             <span className="hdr-empty">{t("block.section.pending")}</span>
           </p>
         ) : null}
+        </section>
       </div>
     </section>
   );

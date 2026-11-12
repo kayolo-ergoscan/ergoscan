@@ -285,7 +285,7 @@ export function FeedAddressRow({
         {(key === "first" ? created : active) ?? "—"}
       </span>
     ) : (
-      <FeedAmount raw={ergRaw} glance />
+      <FeedAmount raw={ergRaw} cents />
     );
   return (
     <FeedRow

@@ -178,6 +178,20 @@ export function formatScaledAmount(
   return describeScaledAmount(raw, decimals, locale, maxFrac).text;
 }
 
+/** Exactly `places` digits after the point, rounded half up: "910 001.39", "1.00". */
+export function formatScaledFixed(raw: bigint, decimals: number, places: number, locale?: string): string {
+  const sign = raw < 0n ? "-" : "";
+  const abs = raw < 0n ? -raw : raw;
+  const keep = Math.min(places, decimals);
+  const drop = 10n ** BigInt(decimals - keep);
+  const scaled = (abs + drop / 2n) / drop;
+  const base = 10n ** BigInt(keep);
+  const whole = formatGroupedInt(scaled / base, locale);
+  if (places <= 0) return `${sign}${whole}`;
+  const frac = (scaled % base).toString().padStart(keep, "0").padEnd(places, "0");
+  return `${sign}${whole}.${frac}`;
+}
+
 /** Approx ERG as Number for USD/KPI compact — not for stored amounts. */
 export function nanoErgToNumber(nano: string | number | bigint | null | undefined): number {
   if (typeof nano === "number") return Number.isFinite(nano) ? nano / 1e9 : 0;
