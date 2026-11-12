@@ -1,6 +1,7 @@
 /**
  * eUTXO-native explorer routes (graph, subblocks, tokens, platforms, openapi).
  */
+import { exactInt } from "../lib/exactJson.js";
 import type { Express } from "express";
 import {
   buildBoxGraph,
@@ -717,7 +718,7 @@ export function registerExplorerRoutes(app: Express, deps: ExplorerDeps) {
       name,
       description: idx?.description ?? null,
       decimals,
-      emissionAmount: emission,
+      emissionAmount: exactInt(idx?.emissionText, emission),
       boxId: idx?.boxId ?? null,
       platform: known?.platform ?? null,
       category: known?.category ?? (isNft ? "nft" : null),

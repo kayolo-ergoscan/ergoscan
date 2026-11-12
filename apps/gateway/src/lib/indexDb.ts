@@ -222,19 +222,38 @@ export function refreshSpectrumPoolNfts(): Promise<void> {
   return poolNftInflight;
 }
 
+/**
+ * True when Postgres itself is out of reach (connection refused/reset/terminated, no free
+ * connection, server shutting down). A statement timeout or a bad query is not an outage:
+ * 12 Nov 2026 audit — one slow address used to switch the index off for everyone for 3 s.
+ */
+export function isDbOutage(e: unknown): boolean {
+  const err = e as { code?: unknown; message?: unknown } | null;
+  const code = typeof err?.code === "string" ? err.code : "";
+  if (code.startsWith("08")) return true; // connection_exception class
+  if (["57P01", "57P02", "57P03", "53300", "53000"].includes(code)) return true;
+  if (["ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "EPIPE", "EHOSTUNREACH", "ENOTFOUND"].includes(code)) {
+    return true;
+  }
+  const msg = typeof err?.message === "string" ? err.message : "";
+  return /timeout exceeded when trying to connect|Connection terminated|connection is closed|Client has encountered a connection error/i.test(
+    msg
+  );
+}
+
 async function q<T extends pg.QueryResultRow>(
   sql: string,
   params: unknown[] = []
 ): Promise<T[] | null> {
   const p = getIndexPool();
   if (!p) return null;
-  // brief circuit after failure
+  // brief circuit after an outage (not after one failed query)
   if (Date.now() - lastFail < 3000) return null;
   try {
     const r = await p.query<T>(sql, params);
     return r.rows;
   } catch (e) {
-    lastFail = Date.now();
+    if (isDbOutage(e)) lastFail = Date.now();
     return null;
   }
 }
@@ -1461,6 +1480,13 @@ async function tokenBalancesUtxoReady(): Promise<boolean> {
 }
 
 /** Confirmed token balances. Ledger first after UTXO sync; else unspent boxes. */
+/**
+ * Tokens per address in balance answers (12 Nov 2026: was 200 in SQL and 80 in the routes,
+ * an arbitrary subset; the fattest address holds ~10 000, 99.99 % hold ≤ 154). One row more
+ * is read so a route can say `truncated`.
+ */
+export const ADDRESS_TOKENS_MAX = 2500;
+
 export async function addressTokensConfirmed(
   address: string
 ): Promise<{ tokenId: string; amount: string; firstHeight: number | null; lastHeight: number | null }[] | null> {
@@ -1474,7 +1500,8 @@ export async function addressTokensConfirmed(
             first_height::text, last_height::text
        FROM token_balances
       WHERE address = $1 AND amount > 0
-      LIMIT 200`,
+      ORDER BY token_id
+      LIMIT ${ADDRESS_TOKENS_MAX + 1}`,
     [address]
   );
   const fromBal =
@@ -1483,7 +1510,8 @@ export async function addressTokensConfirmed(
       `SELECT token_id, amount::text AS amount
          FROM token_balances
         WHERE address = $1 AND amount > 0
-        LIMIT 200`,
+        ORDER BY token_id
+        LIMIT ${ADDRESS_TOKENS_MAX + 1}`,
       [address]
     ))?.map((t) => ({ ...t, first_height: null as string | null, last_height: null as string | null }));
   if (fromBal && fromBal.length > 0) {
@@ -2721,11 +2749,14 @@ async function addressUnspentBoxesCursorPacked(
 export async function addressTransactionsCursor(
   address: string,
   cursor: KeysetCursor | null,
-  limit: number
+  limit: number,
+  offset = 0
 ): Promise<{ items: IdxTx[]; hasMore: boolean; nextCursor: string | null } | null> {
   const take = Math.max(1, Math.min(100, limit));
+  // Explorer clients page with offset (12 Nov 2026: it was ignored, every page was page 1).
+  const skip = cursor ? 0 : Math.max(0, Math.floor(offset) || 0);
   if (packedReadEnabled()) {
-    return addressTransactionsCursorPacked(address, cursor, take);
+    return addressTransactionsCursorPacked(address, cursor, take, skip);
   }
   const rows = await qSlow<{
     id: string;
@@ -2763,13 +2794,13 @@ export async function addressTransactionsCursor(
              FROM address_tx a
             WHERE a.address = $1
             ORDER BY a.height DESC NULLS LAST, a.tx_id DESC
-            LIMIT $2
+            LIMIT $2 OFFSET $3
          ) x
          LEFT JOIN transactions t ON t.id = x.id
          ORDER BY x.height DESC NULLS LAST, x.id DESC`,
     cursor
       ? [address, cursor.height, cursor.id, take + 1]
-      : [address, take + 1]
+      : [address, take + 1, skip]
   );
   if (!rows) return null;
   const hasMore = rows.length > take;
@@ -2867,7 +2898,8 @@ function flowForAddress(
 async function addressTransactionsCursorPacked(
   address: string,
   cursor: KeysetCursor | null,
-  take: number
+  take: number,
+  skip = 0
 ): Promise<{ items: IdxTx[]; hasMore: boolean; nextCursor: string | null } | null> {
   // Index is (addr_id, height DESC, tx_id ASC). encode() and NULLS LAST
   // force a full history scan plus a join to every transaction. Match the
@@ -2879,11 +2911,11 @@ async function addressTransactionsCursorPacked(
          OR (x.height = $2 AND x.tx_id > decode($3, 'hex'))
        )`
       : "";
-  const limitP = cursor && isHex64(cursor.id) ? "$4" : "$2";
+  const limitP = cursor && isHex64(cursor.id) ? "$4 OFFSET 0" : "$2 OFFSET $3";
   const params =
     cursor && isHex64(cursor.id)
       ? [address, cursor.height, cursor.id.toLowerCase(), take + 1]
-      : [address, take + 1];
+      : [address, take + 1, skip];
   const rows = await qSlow<{
     id: string;
     height: string | null;
@@ -3233,6 +3265,8 @@ export type IdxTokenMeta = {
   name: string | null;
   decimals: number | null;
   emission: number | null;
+  /** Exact digits of emission. */
+  emissionText: string | null;
   artworkUrl: string | null;
 };
 
@@ -3259,6 +3293,7 @@ export async function tokenMetaMany(
       name: displayErgoTokenName(r.token_id, r.name),
       decimals: r.decimals != null ? Number(r.decimals) : null,
       emission: r.emission != null ? Number(r.emission) : null,
+      emissionText: r.emission ?? null,
       artworkUrl: r.artwork_url,
     });
   }
@@ -4538,6 +4573,7 @@ export async function tokenMetaFromIndex(
   description: string | null;
   decimals: number | null;
   emission: number | null;
+  emissionText: string | null;
   boxId: string | null;
   firstHeight: number | null;
   lastHeight: number | null;
@@ -4620,6 +4656,8 @@ export async function tokenMetaFromIndex(
     decimals:
       r.decimals != null ? Number(r.decimals) : eip4DecimalsFromRegs(mintRegs),
     emission,
+    /** Exact digits (emission above 2^53 does not fit a JS number). */
+    emissionText: r.emission ?? null,
     boxId: r.box_id,
     firstHeight,
     lastHeight: r.last_height != null ? Number(r.last_height) : null,

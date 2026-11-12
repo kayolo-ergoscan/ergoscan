@@ -41,15 +41,18 @@ export function nautilusSchema(): GraphQLSchema {
   return schema;
 }
 
+/** A failed index read must not look like an empty wallet (12 Nov 2026 audit). */
+export const INDEX_UNAVAILABLE = "index_unavailable";
+
 async function defaultSql(text: string, params: unknown[] = []): Promise<Row[]> {
   const pool = getIndexPool();
-  if (!pool) return [];
+  if (!pool) throw new Error(INDEX_UNAVAILABLE);
   try {
     const r = await pool.query<Row>(text, params);
     return r.rows;
   } catch (e) {
     console.warn("[graphql] nautilus", String(e).slice(0, 240));
-    return [];
+    throw new Error(INDEX_UNAVAILABLE);
   }
 }
 

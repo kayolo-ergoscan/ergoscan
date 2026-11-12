@@ -258,3 +258,12 @@ describe("explorerCompat", () => {
     assert.equal(/DEX history/i.test(n.note), false);
   });
 });
+
+it("numConfirmations as official: tip − inclusionHeight + 1, only for mined tx", async () => {
+  const { confirmationsAt, mapExplorerTx } = await import("./explorerCompat.js");
+  assert.equal(confirmationsAt(1915128, 1915133), 6);
+  assert.equal(confirmationsAt(1915133, 1915133), 1);
+  assert.equal(confirmationsAt(null, 1915133), null);
+  assert.equal(mapExplorerTx({ id: "aa", inclusionHeight: 100, tip: 109 }).numConfirmations, 10);
+  assert.equal("numConfirmations" in mapExplorerTx({ id: "aa" }), false);
+});

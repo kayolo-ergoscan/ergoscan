@@ -1,6 +1,8 @@
 /**
  * Chain explorer routes: blocks, txs, boxes, addresses.
  */
+import { ADDRESS_OFFSET_MAX, offsetTooLarge, pageOffset } from "../lib/pageOffset.js";
+import { exactInt } from "../lib/exactJson.js";
 import type { Express } from "express";
 import {
   computeBoxRent,
@@ -29,6 +31,7 @@ import { pageLimit } from "../lib/page-limit.js";
 import { addressFromErgoTree, ergoTreeFromAddress, normErgoTree } from "../lib/ergoAddress.js";
 import { decodeErgoTree, type ErgoTreeDecode } from "../lib/ergoTree.js";
 import {
+  ADDRESS_TOKENS_MAX,
   addressBalanceConfirmed,
   addressNftsFromIndex,
   addressTokenTape,
@@ -904,15 +907,10 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
 
     const idx = await unspentBoxesByTokenId(tokenId, offset, limit);
     if (!idx) {
-      return res.json({
-        items: [],
-        total: 0,
-        offset,
-        limit,
-        tokenId,
-        source: "empty",
-        note: "Indexer unavailable.",
-      });
+      // Not an empty token: the index did not answer (12 Nov 2026 audit).
+      res.setHeader("Retry-After", "3");
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(503).json({ error: "index_unavailable", tokenId, offset, limit });
     }
     return res.json({
       items: idx.items.map((b) =>
@@ -1147,7 +1145,7 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
       timestamp: row.timestamp,
       numConfirmations:
         row.inclusionHeight != null && tip
-          ? Math.max(0, tip - row.inclusionHeight)
+          ? Math.max(0, tip - row.inclusionHeight + 1)
           : null,
       size: row.size,
       fee: row.fee,
@@ -1479,8 +1477,8 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
     const address = req.params.address;
     const bal = await addressBalanceConfirmed(address);
     if (bal) {
-      const metaMap = await tokenMetaMany(bal.tokens.slice(0, 80).map((x) => x.tokenId));
-      const tokens = bal.tokens.slice(0, 80).map((tok) => {
+      const metaMap = await tokenMetaMany(bal.tokens.slice(0, ADDRESS_TOKENS_MAX).map((x) => x.tokenId));
+      const tokens = bal.tokens.slice(0, ADDRESS_TOKENS_MAX).map((tok) => {
         const meta = metaMap.get(tok.tokenId);
         return {
           tokenId: tok.tokenId,
@@ -1489,7 +1487,7 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
             meta?.decimals != null && Number.isFinite(meta.decimals)
               ? meta.decimals
               : 0,
-          emission: meta?.emission ?? null,
+          emission: exactInt(meta?.emissionText, meta?.emission ?? null),
           name: meta?.name ?? KNOWN_TOKENS[tok.tokenId]?.name ?? null,
         };
       });
@@ -1497,7 +1495,7 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
         nanoErgs: amountStr(bal.nanoErgs),
         tokens,
         source: "indexer",
-        truncated: bal.tokens.length > 80,
+        truncated: bal.tokens.length > ADDRESS_TOKENS_MAX,
       });
       return;
     }
@@ -1599,9 +1597,11 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
     const address = req.params.address;
     const limit = Math.min(100, Math.max(1, Number(req.query.limit ?? 50) || 50));
     const cursor = parseKeysetCursor(req.query.cursor);
+    const offset = cursor ? 0 : pageOffset(req.query.offset, ADDRESS_OFFSET_MAX);
+    if (offset == null) return offsetTooLarge(res, ADDRESS_OFFSET_MAX);
     const tip = deps.getFullHeight() ?? null;
     const summary = await getAddressSummary(address);
-    const idx = await addressTransactionsCursor(address, cursor, limit);
+    const idx = await addressTransactionsCursor(address, cursor, limit, offset);
     if (!idx) {
       res.status(503).json({ error: "stale", stale: true });
       return;
@@ -1613,7 +1613,7 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
       timestamp: row.timestamp,
       numConfirmations:
         row.inclusionHeight != null && tip != null
-          ? Math.max(0, tip - row.inclusionHeight)
+          ? Math.max(0, tip - row.inclusionHeight + 1)
           : null,
       size: row.size,
       fee: row.fee,
@@ -1622,7 +1622,7 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
     res.json({
       items,
       total: summary?.txCount ?? 0,
-      offset: 0,
+      offset,
       limit,
       hasMore: idx.hasMore,
       nextCursor: idx.hasMore ? idx.nextCursor : null,

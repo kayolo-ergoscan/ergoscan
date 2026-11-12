@@ -26,6 +26,7 @@ import {
 import { createNodeClient } from "./lib/node.js";
 import { catchAsyncRoutes, jsonErrorHandler, logUnhandledRejections } from "./lib/asyncRoutes.js";
 import { isPartnerIp, parsePartnerList } from "./lib/rateAllow.js";
+import { installExactJson } from "./lib/exactJson.js";
 import { stampTemplateHashes } from "./lib/txTemplateHash.js";
 import { SubblockEngine } from "./lib/subblocks.js";
 import { SealWatcher } from "./lib/seal.js";
@@ -101,6 +102,7 @@ const orbitPeers = startOrbitPeerCache((path, timeoutMs) => node.get(path, timeo
 
 const app = express();
 catchAsyncRoutes(app);
+installExactJson(app);
 logUnhandledRejections("ergoscan-gateway");
 if (isApiContour()) {
   app.use(cors());

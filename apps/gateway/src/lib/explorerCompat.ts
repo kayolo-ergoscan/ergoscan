@@ -260,6 +260,8 @@ export type ExplorerTx = {
   id: string;
   blockId: string | null;
   inclusionHeight: number | null;
+  /** Official: tip − inclusionHeight + 1. Only for a mined tx when the tip is known. */
+  numConfirmations?: number;
   timestamp: number | null;
   index: number | null;
   globalIndex: number | null;
@@ -268,6 +270,11 @@ export type ExplorerTx = {
   outputs: ExplorerBox[];
   size: number | null;
 };
+
+export function confirmationsAt(inclusionHeight: number | null | undefined, tip: number | null | undefined): number | null {
+  if (inclusionHeight == null || tip == null || !Number.isFinite(inclusionHeight) || !Number.isFinite(tip)) return null;
+  return Math.max(0, Math.trunc(tip) - Math.trunc(inclusionHeight) + 1);
+}
 
 export function mapExplorerTx(row: {
   id: string;
@@ -279,11 +286,14 @@ export function mapExplorerTx(row: {
   inputs?: ExplorerBoxInput[];
   outputs?: ExplorerBoxInput[];
   size?: number | null;
+  tip?: number | null;
 }): ExplorerTx {
+  const confs = confirmationsAt(row.inclusionHeight, row.tip);
   return {
     id: row.id,
     blockId: row.blockId ?? null,
     inclusionHeight: row.inclusionHeight ?? null,
+    ...(confs != null ? { numConfirmations: confs } : {}),
     timestamp: row.timestamp ?? null,
     index: row.index ?? null,
     globalIndex:

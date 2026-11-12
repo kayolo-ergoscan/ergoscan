@@ -2,7 +2,7 @@ import type { Express, Request, Response } from "express";
 import type { RawTx } from "@ergoscan/shared";
 import { cacheNoStore } from "../lib/httpCache.js";
 import { parseGraphqlBody, runGraphql } from "../graphql/execute.js";
-import { runNautilus, type NautilusCtx } from "../graphql/nautilus.js";
+import { INDEX_UNAVAILABLE, runNautilus, type NautilusCtx } from "../graphql/nautilus.js";
 import type { GraphqlCtx } from "../graphql/resolvers.js";
 import {
   isSubmitTxQuery,
@@ -72,7 +72,13 @@ export function registerGraphqlRoutes(app: Express, deps: GraphqlDeps): void {
       const result = apiContour
         ? await runNautilus(parsed.query, parsed.variables, parsed.operationName, ctx)
         : await runGraphql(parsed.query, parsed.variables, parsed.operationName, ctx);
-      res.status(200).json(result);
+      // An index read failed: say so (503 + Retry-After), so a wallet retries instead of
+      // showing a zero balance from a half-empty answer.
+      const failed = (result as { errors?: readonly { message?: string }[] }).errors?.some(
+        (e) => e?.message === INDEX_UNAVAILABLE
+      );
+      if (failed) res.setHeader("Retry-After", "3");
+      res.status(failed ? 503 : 200).json(result);
     } finally {
       if (slot && slot.ok) slot.release();
     }

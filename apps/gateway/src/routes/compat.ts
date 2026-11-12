@@ -2,11 +2,13 @@
  * Official explorer v1 path aliases.
  * Read index + mempool RAM. Submit-tx is the only user POST to the node.
  */
+import { ADDRESS_OFFSET_MAX, offsetTooLarge, pageOffset } from "../lib/pageOffset.js";
 import type { Express, Request, Response } from "express";
 import type { RawTx } from "@ergoscan/shared";
 import { apiContractHtml } from "../lib/api-contract.js";
 import { cacheList, cacheNoStore, cacheTip } from "../lib/httpCache.js";
 import {
+  ADDRESS_TOKENS_MAX,
   addressBalanceConfirmed,
   addressBoxesCursor,
   addressUnspentBoxesCursor,
@@ -115,7 +117,8 @@ async function sendBoxesByTemplate(
     return;
   }
   const limit = qInt(req.query.limit, 20, 1, 100);
-  const offset = qInt(req.query.offset, 0, 0, 500);
+  const offset = pageOffset(req.query.offset, 500);
+  if (offset == null) return offsetTooLarge(res, 500);
   const page = await boxesByErgoTreeTemplate(hash, offset, limit, unspentOnly);
   if (!page) {
     res.status(504).json({ error: "timeout", reason: "template hash query exceeded 4s" });
@@ -142,7 +145,8 @@ async function sendTemplateSearch(req: Request, res: Response, unspentOnly: bool
   }
   cacheList(res);
   const limit = qInt(req.query.limit, 20, 1, 100);
-  const offset = qInt(req.query.offset, 0, 0, 500);
+  const offset = pageOffset(req.query.offset, 500);
+  if (offset == null) return offsetTooLarge(res, 500);
   const page = await boxesByErgoTreeTemplate(parsed.hash, offset, limit, unspentOnly);
   if (!page) {
     res.status(504).json({ error: "timeout", reason: "template hash query exceeded 4s" });
@@ -177,7 +181,8 @@ async function sendBoxesByTree(
     return;
   }
   const limit = qInt(req.query.limit, 20, 1, 100);
-  const offset = qInt(req.query.offset, 0, 0, 500);
+  const offset = pageOffset(req.query.offset, 500);
+  if (offset == null) return offsetTooLarge(res, 500);
   const page = await boxesByErgoTree(tree, offset, limit, unspentOnly);
   if (!page) {
     res.status(504).json({ error: "timeout", reason: "ergo tree query exceeded 4s" });
@@ -217,7 +222,8 @@ export function registerCompatRoutes(app: Express, deps: CompatDeps): void {
     cacheNoStore(res);
     const address = req.params.address;
     const limit = qInt(req.query.limit, 50, 1, 100);
-    const offset = qInt(req.query.offset, 0, 0, 400);
+    const offset = pageOffset(req.query.offset, 400);
+    if (offset == null) return offsetTooLarge(res, 400);
     const tree = await addressTree(address);
     const all = mempoolUnspentForAddress(address, deps.getRawMempool().values(), tree);
     const items = all.slice(offset, offset + limit);
@@ -231,8 +237,9 @@ export function registerCompatRoutes(app: Express, deps: CompatDeps): void {
     cacheNoStore(res);
     const address = req.params.address;
     const limit = qInt(req.query.limit, 50, 1, 100);
-    const offset = qInt(req.query.offset, 0, 0, 500);
     const cursor = parseKeysetCursor(req.query.cursor);
+    const offset = cursor ? 0 : pageOffset(req.query.offset, ADDRESS_OFFSET_MAX);
+    if (offset == null) return offsetTooLarge(res, ADDRESS_OFFSET_MAX);
     const [summary, idx] = await Promise.all([
       getAddressSummary(address),
       addressUnspentBoxesCursor(address, cursor, limit, offset),
@@ -258,8 +265,9 @@ export function registerCompatRoutes(app: Express, deps: CompatDeps): void {
     cacheNoStore(res);
     const address = req.params.address;
     const limit = qInt(req.query.limit, 50, 1, 100);
-    const offset = qInt(req.query.offset, 0, 0, 500);
     const cursor = parseKeysetCursor(req.query.cursor);
+    const offset = cursor ? 0 : pageOffset(req.query.offset, ADDRESS_OFFSET_MAX);
+    if (offset == null) return offsetTooLarge(res, ADDRESS_OFFSET_MAX);
     const idx = await addressBoxesCursor(address, cursor, limit, offset);
     if (!idx) {
       res.status(503).json({ error: "stale", stale: true });
@@ -303,7 +311,8 @@ export function registerCompatRoutes(app: Express, deps: CompatDeps): void {
   app.get("/v1/assets", async (req, res) => {
     cacheList(res);
     const limit = qInt(req.query.limit, 25, 1, 50);
-    const offset = qInt(req.query.offset, 0, 0, 500);
+    const offset = pageOffset(req.query.offset, 500);
+    if (offset == null) return offsetTooLarge(res, 500);
     const hideNfts = req.query.hideNfts === "true" || req.query.hideNfts === "1";
     const page = await listTokensCatalog({
       limit,
@@ -433,7 +442,8 @@ export function registerCompatRoutes(app: Express, deps: CompatDeps): void {
     cacheNoStore(res);
     const address = req.params.address;
     const limit = qInt(req.query.limit, 50, 1, 100);
-    const offset = qInt(req.query.offset, 0, 0, 400);
+    const offset = pageOffset(req.query.offset, 400);
+    if (offset == null) return offsetTooLarge(res, 400);
     const hits: RawTx[] = [];
     for (const tx of deps.getRawMempool().values()) {
       const blob = JSON.stringify(tx);
@@ -641,6 +651,12 @@ export function registerCompatRoutes(app: Express, deps: CompatDeps): void {
       res.json(mapExplorerBox(indexedBox(idx, head?.blockId ?? null)));
     });
 
+    /** Node tip from the cached /info (official counts confirmations from its own tip). */
+    const tipNow = (): number | null => {
+      const h = Number(deps.getNodeInfoRaw()?.fullHeight);
+      return Number.isFinite(h) && h > 0 ? h : null;
+    };
+
     app.get("/v1/transactions/:id", async (req, res, next) => {
       const id = String(req.params.id ?? "").trim().toLowerCase();
       if (!/^[0-9a-f]{64}$/.test(id)) {
@@ -659,6 +675,7 @@ export function registerCompatRoutes(app: Express, deps: CompatDeps): void {
             index: idx.indexInBlock,
             gix: idx.gix,
             size: idx.size,
+            tip: tipNow(),
             inputs: idx.inputs.map((b) => indexedBox(b, idx.blockId)),
             outputs: idx.outputs.map((b) => indexedBox(b, idx.blockId)),
           })
@@ -735,12 +752,12 @@ async function confirmedBalance(
 ): Promise<{ balance: ExplorerBalance; truncated: boolean } | null> {
   const bal = await addressBalanceConfirmed(address);
   if (!bal) return null;
-  const meta = await tokenMetaMany(bal.tokens.slice(0, 80).map((t) => t.tokenId));
+  const meta = await tokenMetaMany(bal.tokens.slice(0, ADDRESS_TOKENS_MAX).map((t) => t.tokenId));
   return {
-    truncated: bal.tokens.length > 80,
+    truncated: bal.tokens.length > ADDRESS_TOKENS_MAX,
     balance: {
       nanoErgs: bal.nanoErgs,
-      tokens: bal.tokens.slice(0, 80).map((tok) => {
+      tokens: bal.tokens.slice(0, ADDRESS_TOKENS_MAX).map((tok) => {
         const m = meta.get(tok.tokenId) ?? meta.get(tok.tokenId.toLowerCase());
         return {
           tokenId: tok.tokenId,
