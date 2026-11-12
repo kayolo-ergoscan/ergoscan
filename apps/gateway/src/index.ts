@@ -468,6 +468,35 @@ function tickSubblocks() {
   }
 }
 
+/**
+ * The whole mempool, not the node's default first 50 (12 Nov 2026 audit). Pages of 100 until a
+ * short page, at most MEMPOOL_MAX_TX; a tx seen on two pages (the pool moved) is kept once.
+ */
+const MEMPOOL_PAGE = 100;
+const MEMPOOL_MAX_TX = Math.max(MEMPOOL_PAGE, Number(process.env.MEMPOOL_MAX_TX ?? 1000) || 1000);
+
+async function nodeUnconfirmedAll(): Promise<RawTx[]> {
+  const out: RawTx[] = [];
+  const seen = new Set<string>();
+  for (let offset = 0; offset < MEMPOOL_MAX_TX; offset += MEMPOOL_PAGE) {
+    const page = await nodeGet<RawTx[]>(
+      `/transactions/unconfirmed?limit=${MEMPOOL_PAGE}&offset=${offset}`,
+      MEMPOOL_TIMEOUT_MS
+    );
+    if (!Array.isArray(page)) return offset === 0 ? page : out;
+    for (const tx of page) {
+      const id = (tx as { id?: unknown })?.id;
+      if (typeof id === "string") {
+        if (seen.has(id)) continue;
+        seen.add(id);
+      }
+      out.push(tx);
+    }
+    if (page.length < MEMPOOL_PAGE) break;
+  }
+  return out;
+}
+
 async function pollMempool(): Promise<void> {
   // Never stack polls: overlapping unconfirmed dumps + address enrich flood :9053
   if (pollInFlight) return;
@@ -478,10 +507,7 @@ async function pollMempool(): Promise<void> {
   }
   pollInFlight = true;
   try {
-    const txs = await nodeGet<RawTx[]>(
-      "/transactions/unconfirmed",
-      MEMPOOL_TIMEOUT_MS
-    );
+    const txs = await nodeUnconfirmedAll();
     lastPollOk = true;
     lastError = null;
     pollFailStreak = 0;

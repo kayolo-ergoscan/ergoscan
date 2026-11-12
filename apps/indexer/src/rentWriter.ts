@@ -16,6 +16,11 @@ const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL || "postgres://ergoscan:changeme@127.0.0.1:5432/ergoscan",
   max: 4,
 });
+// Idle client errors (Postgres restart) must not kill the writer; see db.ts.
+pool.on("error", (e) => console.warn("[rent-writer] postgres idle client error", String(e).slice(0, 200)));
+pool.on("connect", (client) => {
+  client.on("error", (e) => console.warn("[rent-writer] postgres client error", String(e).slice(0, 200)));
+});
 
 const health: {
   ok: boolean;
