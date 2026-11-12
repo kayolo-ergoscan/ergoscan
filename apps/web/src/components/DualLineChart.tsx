@@ -32,8 +32,8 @@ echarts.use([
 export type { TxActivityPoint };
 
 /** AdaStat-like: soft sky + pink, no fill. Not brand cyan / violet-on-wash. */
-const TX = "#8ec8ff";
-const FEE = "#f472b6";
+const TX = "#86a6f0";
+const FEE = "#e799b7";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function tickStepDays(tMin: number, tMax: number): number {

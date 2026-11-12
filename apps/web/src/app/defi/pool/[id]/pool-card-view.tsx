@@ -682,7 +682,7 @@ function FlowTapeRow({
   return (
     <div className={clsx("addr-lane addr-lane-x lp-flow-tape border-t border-[var(--border-soft)] text-[13px]", enterClass)}>
       <div className="lp-hold-pair">
-        <p className={clsx("px-3 font-medium leading-none", withdraw ? "text-[#FF4D6D]" : "text-[var(--up)]")}>{word}</p>
+        <p className={clsx("px-3 font-medium leading-none", withdraw ? "text-[var(--down)]" : "text-[var(--up)]")}>{word}</p>
         <div className="min-w-0 px-3">
           {quoteId ? (
             <Link prefetch={false} href={`/token/${quoteId}`} className="flex min-w-0 items-center justify-end gap-2">
@@ -814,7 +814,7 @@ function TradeTapeRow({
       </div>
       <div className="pool-split">
         <div className="flex h-full min-w-0 items-center px-3">
-          <p className={clsx("font-medium lowercase leading-none", buy && "text-[var(--up)]", sell && "text-[#FF4D6D]", !buy && !sell && "text-[var(--muted)]")}>
+          <p className={clsx("font-medium lowercase leading-none", buy && "text-[var(--up)]", sell && "text-[var(--down)]", !buy && !sell && "text-[var(--muted)]")}>
             {side}
           </p>
         </div>

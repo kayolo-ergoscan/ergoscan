@@ -33,18 +33,24 @@ html[data-look="c"][data-ink] {
   --muted: #c6c6c6;
   --muted-2: #a3a3a3;
   --link: #ffffff;
-  --accent: #ffd23c;
-  --accent-rgb: 255 210 60;
-  --accent-soft: rgba(255, 210, 60, 0.2);
-  --brand: #ffd23c;
-  --brand-soft: rgba(255, 210, 60, 0.14);
-  --soft: #ffd23c;
-  --soft-rgb: 255 210 60;
-  --up: #2fd27f;
-  --up-rgb: 47 210 127;
-  --down: #ff5468;
-  --down-rgb: 255 84 104;
-  --warning: #ffd23c;
+  /*
+   * Colour, two tiers (values picked in OKLCH, written as hex so canvas and chart code can parse them):
+   * marks  — tiles, glyphs, dots, crates, balls, chart lines: L 0.73–0.85, C ≤ 0.13, one lightness band;
+   * text   — links and long runs: L 0.84–0.88, C 0.06–0.08, a tinted neutral that still names the entity.
+   * No neon: nothing on the black panel goes above C 0.13. Every pair holds ≥ 6:1 on --module.
+   */
+  --accent: #eed286; /* oklch(0.87 0.10 90) */
+  --accent-rgb: 238 210 134;
+  --accent-soft: rgba(238, 210, 134, 0.18);
+  --brand: #eed286;
+  --brand-soft: rgba(238, 210, 134, 0.12);
+  --soft: #eed286;
+  --soft-rgb: 238 210 134;
+  --up: #88d9a5; /* oklch(0.82 0.11 155) */
+  --up-rgb: 136 217 165;
+  --down: #f4918e; /* oklch(0.76 0.12 22): units at 72 % opacity still hold 4.5:1 */
+  --down-rgb: 244 145 142;
+  --warning: #eed286;
   --invert: #ffffff;
   --invert-fg: #0e0e0e;
   --module-rgb: 26 26 26;
@@ -61,13 +67,27 @@ html[data-look="c"][data-ink] {
   --float-shadow: none;
   --float-shadow-hover: none;
   --float-shadow-press: inset 0 0 0 2px #ffffff;
-  /* One colour per chain entity, everywhere it appears. */
-  --c-block: #ffd23c;
-  --c-tx: #ff6a2b;
-  --c-addr: #ff7ab8;
-  --c-token: #5b8dff;
-  --c-box: #2fd27f;
-  --c-net: #1ec8d8;
+  /* One colour per chain entity, everywhere it appears. Mark tier. */
+  --c-block: #ebcb71; /* oklch(0.85 0.115 90) */
+  --c-tx: #ef945f; /* oklch(0.75 0.13 50) */
+  --c-addr: #e799b7; /* oklch(0.77 0.10 355) */
+  --c-token: #86a6f0; /* oklch(0.73 0.115 266) */
+  --c-box: #71d29d; /* oklch(0.79 0.12 158) */
+  --c-net: #63ccde; /* oklch(0.79 0.10 210) */
+  /* The same entities as text: links, names, long runs. */
+  --c-block-text: #ead79b; /* oklch(0.88 0.08 92) */
+  --c-tx-text: #f5c19f; /* oklch(0.85 0.075 55) */
+  --c-addr-text: #f3bed1; /* oklch(0.855 0.065 355) */
+  --c-token-text: #b6caf9; /* oklch(0.84 0.07 267) */
+  --c-box-text: #a9e4c3; /* oklch(0.87 0.075 160) */
+  --c-net-text: #a6e0e9; /* oklch(0.87 0.06 209) */
+  /* Glyph units and the Pixel's page ink follow the same marks. His brand ink (--brand-new) stays. */
+  --ent-block: var(--c-block);
+  --ent-tx: var(--c-tx);
+  --ent-addr: var(--c-addr);
+  --ent-token: var(--c-token);
+  --ent-box: var(--c-box);
+  --ent-down: var(--down);
   --tag: #2f2f2f;
   --tag-ink: #f2f2f2;
   --mark: #e6e6e6;
@@ -75,12 +95,12 @@ html[data-look="c"][data-ink] {
   /* Feed rows: one tile colour per kind of thing, black ink on every light tile. */
   --k-transfer: var(--c-tx);
   --k-token: var(--c-token);
-  --k-nft: #c08cff;
+  --k-nft: #c19fe9; /* oklch(0.76 0.11 305) */
   --k-defi: var(--c-net);
-  --k-oracle: #b9c4d0;
+  --k-oracle: #b2bfce; /* oklch(0.80 0.026 252) */
   --k-bridge: #e6e6e6;
   --k-reward: var(--c-block);
-  --k-rent: #ff8a65;
+  --k-rent: #ee9781; /* oklch(0.76 0.11 35) */
   --k-box: var(--c-box);
   --k-contract: var(--c-addr);
   --k-mixer: #8a8a8a;
@@ -142,61 +162,86 @@ html[data-look="c"] main [style*="tile-label"]:not([style*="background"]) {
   letter-spacing: 0.01em;
 }
 
-/* Page context. A coloured tag always carries black ink. */
+/* Page context. The tag is a soft chip in the page's entity colour: a tint of the hue under its
+   text-tier ink, so a page of ten tiles does not turn into ten neon blocks. The tile mark keeps the
+   mark-tier hue. */
 
 html[data-look="c"]:has(.nav-row[aria-current="page"][href="/blocks"]),
 html[data-look="c"]:has(.nav-row[aria-current="page"][href="/lithos"]) {
-  --tag: var(--c-block);
-  --tag-ink: #0e0e0e;
+  --tag: color-mix(in srgb, var(--c-block) 20%, var(--module));
+  --tag-ink: var(--c-block-text);
   --mark: var(--c-block);
 }
 html[data-look="c"]:has(.nav-row[aria-current="page"][href="/transactions"]),
 html[data-look="c"]:has(.nav-row[aria-current="page"][href="/mempool"]) {
-  --tag: var(--c-tx);
-  --tag-ink: #0e0e0e;
+  --tag: color-mix(in srgb, var(--c-tx) 20%, var(--module));
+  --tag-ink: var(--c-tx-text);
   --mark: var(--c-tx);
 }
 html[data-look="c"]:has(.nav-row[aria-current="page"][href="/addresses"]),
 html[data-look="c"]:has(.nav-row[aria-current="page"][href="/names"]) {
-  --tag: var(--c-addr);
-  --tag-ink: #0e0e0e;
+  --tag: color-mix(in srgb, var(--c-addr) 20%, var(--module));
+  --tag-ink: var(--c-addr-text);
   --mark: var(--c-addr);
 }
 html[data-look="c"]:has(.nav-row[aria-current="page"][href="/tokens"]),
 html[data-look="c"]:has(.nav-row[aria-current="page"][href="/nfts"]) {
-  --tag: var(--c-token);
-  --tag-ink: #0e0e0e;
+  --tag: color-mix(in srgb, var(--c-token) 20%, var(--module));
+  --tag-ink: var(--c-token-text);
   --mark: var(--c-token);
 }
 html[data-look="c"]:has(.nav-row[aria-current="page"][href^="/rent"]) {
+  --tag: color-mix(in srgb, var(--c-box) 20%, var(--module));
+  --tag-ink: var(--c-box-text);
+  --mark: var(--c-box);
+}
+
+/* Home tiles: the tile's own subject. One tag per tile, each a different subject, so here the
+   tag stays a solid signal in the calm mark tier with black ink (≥ 8:1). */
+html[data-look="c"] .mod:has(a[href="/blocks"]) {
+  --tag: var(--c-block);
+  --tag-ink: #0e0e0e;
+  --mark: var(--c-block);
+}
+html[data-look="c"] .mod:has(a[href="/mempool"]),
+html[data-look="c"] .mod:has(a[href="/transactions"]),
+html[data-look="c"] .mod:has(a[href="/fees"]) {
+  --tag: var(--c-tx);
+  --tag-ink: #0e0e0e;
+  --mark: var(--c-tx);
+}
+html[data-look="c"] .mod:has(a[href^="/rent"]) {
   --tag: var(--c-box);
   --tag-ink: #0e0e0e;
   --mark: var(--c-box);
 }
 
-/* Home tiles: the tile's own subject. */
-html[data-look="c"] .mod:has(a[href="/blocks"]) { --tag: var(--c-block); --tag-ink: #0e0e0e; --mark: var(--c-block); }
-html[data-look="c"] .mod:has(a[href="/mempool"]),
-html[data-look="c"] .mod:has(a[href="/transactions"]),
-html[data-look="c"] .mod:has(a[href="/fees"]) { --tag: var(--c-tx); --tag-ink: #0e0e0e; --mark: var(--c-tx); }
-html[data-look="c"] .mod:has(a[href^="/rent"]) { --tag: var(--c-box); --tag-ink: #0e0e0e; --mark: var(--c-box); }
-
 /* Links take their target's colour. */
 html[data-look="c"] main a[href^="/block/"],
 html[data-look="c"] main a[href^="/blocks?"] {
-  color: var(--c-block) !important;
+  color: var(--c-block-text) !important;
 }
 html[data-look="c"] main a[href^="/tx/"] {
-  color: var(--c-tx) !important;
+  color: var(--c-tx-text) !important;
 }
 html[data-look="c"] main a[href^="/address/"] {
-  color: var(--c-addr) !important;
+  color: var(--c-addr-text) !important;
 }
 html[data-look="c"] main a[href^="/token/"] {
-  color: var(--c-token) !important;
+  color: var(--c-token-text) !important;
 }
 html[data-look="c"] main a[href^="/box/"] {
-  color: var(--c-box) !important;
+  color: var(--c-box-text) !important;
+}
+
+/* A row's kind word (feed.css .feed-kind) is text: the tile's hue lifted toward the text colour,
+   so a column of «Transfer» / «Wallet» reads calm next to its solid tile. */
+html[data-look="c"] .feed-kind {
+  color: color-mix(in oklab, var(--k) 66%, var(--text));
+}
+html[data-look="c"] [data-k="self"] .feed-kind,
+html[data-look="c"] [data-k="quiet"] .feed-kind {
+  color: var(--muted-2);
 }
 
 /* Nav glyphs in their entity colour. */
@@ -258,10 +303,10 @@ html[data-look="c"] .kpi-tile-mark svg {
 html[data-look="c"] main [style*="background"][style*="tile-label"] {
   background: var(--c-tx) !important;
 }
-/* Coral values (rent due) follow the look. */
+/* Coral values (rent due) follow the look, in the text tier: they are names and figures. */
 html[data-look="c"] main [style*="#ff8a65"]:not([style*="tile-label"]),
 html[data-look="c"] main [style*="255, 138, 101"] {
-  color: var(--c-tx) !important;
+  color: var(--c-tx-text) !important;
 }
 
 /* Big figures, set heavier and tighter. */
@@ -299,12 +344,23 @@ html[data-look="c"] .epoch-tape-fill {
   border-radius: 2px !important;
 }
 
+/* Epoch figures and the supply ring take the look's tiers, not the old chart inks. */
+html[data-look="c"] .epoch-slot {
+  color: var(--c-block-text);
+}
+html[data-look="c"] .epoch-left {
+  color: var(--c-net-text);
+}
+html[data-look="c"] .circ-ring-arc {
+  stroke: var(--c-box);
+}
+
 html[data-look="c"] .sheet-spin {
   display: none;
 }
 
 html[data-look="c"] ::selection {
-  background: #ffd23c;
+  background: var(--c-block);
   color: #0e0e0e;
 }
 

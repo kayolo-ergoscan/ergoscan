@@ -669,7 +669,7 @@ function ClaimStatus({
 }) {
   const renewed = claimWho(row).renewed;
   return (
-    <span className={clsx("leading-tight", renewed ? "text-[#7eb6ff]" : "text-[#5ee0a0]")}>
+    <span className={clsx("leading-tight", renewed ? "text-[var(--c-token-text)]" : "text-[var(--up)]")}>
       {renewed ? t("rent.status.renewed") : t("rent.status.collected")}
     </span>
   );
@@ -1239,9 +1239,9 @@ function RentRow({
           <span
             className={clsx(
               "leading-tight",
-              tone === "due" && "text-[#ff8a65]",
-              tone === "soon" && "text-[#f0c14a]",
-              tone === "later" && "text-[#5ee0a0]"
+              tone === "due" && "text-[var(--c-tx-text)]",
+              tone === "soon" && "text-[var(--c-block-text)]",
+              tone === "later" && "text-[var(--c-box-text)]"
             )}
             title={row.rentDue ? undefined : inBlocks}
           >

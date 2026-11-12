@@ -46,8 +46,8 @@ const DualLineChart = dynamic(() => import("@/components/DualLineChart"), {
   loading: () => <div className="h-[168px] w-full" />,
 });
 
-const VOL_LINE = "#8ec8ff";
-const SWAP_LINE = "#f472b6";
+const VOL_LINE = "#86a6f0";
+const SWAP_LINE = "#e799b7";
 const TAPE_PACK = 25;
 const ERG_ZERO = "0".repeat(64);
 
@@ -701,7 +701,7 @@ function TapeRow({
               className={clsx(
                 "font-medium lowercase leading-none",
                 buy && "text-[var(--up)]",
-                sell && "text-[#FF4D6D]",
+                sell && "text-[var(--down)]",
                 !buy && !sell && "text-[var(--muted)]"
               )}
             >

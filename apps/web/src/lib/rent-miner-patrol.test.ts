@@ -38,7 +38,7 @@ test("rentTone spreads unique rents across six inks", () => {
   assert.equal(rentTone("900", pack), 5);
   assert.equal(rentTone("0", pack), 0);
   assert.equal(rentToneInk("100", pack), "#c4b5fd");
-  assert.equal(rentToneInk("900", pack), "#f0c14a");
+  assert.equal(rentToneInk("900", pack), "#ebcb71");
   const six = ["10", "20", "30", "40", "50", "60"];
   assert.deepEqual(
     six.map((n) => rentTone(n, six)),
