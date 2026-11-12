@@ -7,6 +7,7 @@ import type pg from "pg";
 import { eip4DecimalsFromRegs, ergoTokenDecimals } from "@ergoscan/shared";
 import type { TokenUpsertRow } from "./batchSql.js";
 import { capStatements, releaseCapped } from "./db.js";
+import { slidePassFrom } from "./tokenPassWindow.js";
 
 const BATCH = 80;
 /** Several PK batches per tick; stop before the tip loop waits. */
@@ -249,8 +250,13 @@ export async function maybeBackfillTokenIssuance(pool: pg.Pool): Promise<void> {
       await setState(client, FROM_H_KEY, tip.rows[0]?.h || "0");
       await setState(client, CURSOR_KEY, "");
       console.log("[indexer] token issuance pass done");
-    } else if (empty && done && cursor) {
-      await setState(client, CURSOR_KEY, "");
+    } else if (empty && done) {
+      if (cursor) await setState(client, CURSOR_KEY, "");
+      const tip = await client.query<{ h: string }>(
+        `SELECT value AS h FROM indexer_state WHERE key = 'last_height'`
+      );
+      const next = slidePassFrom(fromH, Number(tip.rows[0]?.h));
+      if (next > fromH) await setState(client, FROM_H_KEY, String(next));
     }
 
     if (written > 0 || scanned > 0) {

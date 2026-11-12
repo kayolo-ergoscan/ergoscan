@@ -15,6 +15,7 @@ import {
   pickArtworkUrl,
 } from "@ergoscan/shared";
 import { capStatements, releaseCapped } from "./db.js";
+import { slidePassFrom } from "./tokenPassWindow.js";
 
 const BATCH = 40;
 const NAME_MAX = 64;
@@ -188,8 +189,13 @@ export async function maybeBackfillTokenNamesFromRegs(
         await setState(client, FROM_H_KEY, tip.rows[0]?.h || "0");
         await setState(client, CURSOR_KEY, "");
         console.log("[indexer] token meta r4 pass done");
-      } else if (cursor) {
-        await setState(client, CURSOR_KEY, "");
+      } else {
+        if (cursor) await setState(client, CURSOR_KEY, "");
+        const tip = await client.query<{ h: string }>(
+          `SELECT value AS h FROM indexer_state WHERE key = 'last_height'`
+        );
+        const next = slidePassFrom(fromH, Number(tip.rows[0]?.h));
+        if (next > fromH) await setState(client, FROM_H_KEY, String(next));
       }
       return;
     }
@@ -204,20 +210,26 @@ export async function maybeBackfillTokenNamesFromRegs(
       const name = pickTokenName(row.token_id, row.additional_registers);
       const art = pickArtUrl(mintById.get(row.token_id), row.additional_registers);
       const u = await client.query(
-        `UPDATE tokens
-            SET name = CASE
-                  WHEN $2::text IS NOT NULL AND (
-                    $4::boolean OR name IS NULL OR btrim(name) = ''
-                  ) THEN $2
-                  ELSE name
-                END,
-                artwork_url = CASE
-                  WHEN $3::text IS NOT NULL AND (artwork_url IS NULL OR artwork_url = '') THEN $3
-                  WHEN artwork_url IS NULL THEN ''
-                  ELSE artwork_url
-                END
-          WHERE token_id = $1
-            AND (name IS NULL OR btrim(name) = '' OR artwork_url IS NULL OR artwork_url = '' OR $4::boolean)`,
+        // Write only a real change (12 Nov 2026 audit: ~1.2 M no-op UPDATEs a day, one per rescan).
+        `UPDATE tokens t
+            SET name = v.name, artwork_url = v.art
+           FROM (
+             SELECT CASE
+                      WHEN $2::text IS NOT NULL AND (
+                        $4::boolean OR name IS NULL OR btrim(name) = ''
+                      ) THEN $2
+                      ELSE name
+                    END AS name,
+                    CASE
+                      WHEN $3::text IS NOT NULL AND (artwork_url IS NULL OR artwork_url = '') THEN $3
+                      WHEN artwork_url IS NULL THEN ''
+                      ELSE artwork_url
+                    END AS art
+               FROM tokens
+              WHERE token_id = $1
+           ) v
+          WHERE t.token_id = $1
+            AND (t.name IS DISTINCT FROM v.name OR t.artwork_url IS DISTINCT FROM v.art)`,
         [row.token_id, name, art, known]
       );
       if ((u.rowCount ?? 0) > 0) {
@@ -294,8 +306,13 @@ export async function maybeBackfillNftKindFromRegs(pool: pg.Pool): Promise<void>
         await setState(client, KIND_FROM, tip.rows[0]?.h || "0");
         await setState(client, KIND_CURSOR, "");
         console.log("[indexer] token nft_kind pass done");
-      } else if (cursor) {
-        await setState(client, KIND_CURSOR, "");
+      } else {
+        if (cursor) await setState(client, KIND_CURSOR, "");
+        const tip = await client.query<{ h: string }>(
+          `SELECT value AS h FROM indexer_state WHERE key = 'last_height'`
+        );
+        const next = slidePassFrom(fromH, Number(tip.rows[0]?.h));
+        if (next > fromH) await setState(client, KIND_FROM, String(next));
       }
       return;
     }
@@ -485,16 +502,22 @@ async function retryEmptyNames(pool: pg.Pool): Promise<boolean> {
       const name = pickTokenName(row.token_id, row.additional_registers);
       const art = artFromIssuanceRegs(row.additional_registers);
       const u = await client.query(
-        `UPDATE tokens
-            SET name = CASE
-                  WHEN $2::text IS NOT NULL AND (name IS NULL OR btrim(name) = '') THEN $2
-                  ELSE name
-                END,
-                artwork_url = CASE
-                  WHEN $3::text IS NOT NULL AND (artwork_url IS NULL OR artwork_url = '') THEN $3
-                  ELSE artwork_url
-                END
-          WHERE token_id = $1`,
+        `UPDATE tokens t
+            SET name = v.name, artwork_url = v.art
+           FROM (
+             SELECT CASE
+                      WHEN $2::text IS NOT NULL AND (name IS NULL OR btrim(name) = '') THEN $2
+                      ELSE name
+                    END AS name,
+                    CASE
+                      WHEN $3::text IS NOT NULL AND (artwork_url IS NULL OR artwork_url = '') THEN $3
+                      ELSE artwork_url
+                    END AS art
+               FROM tokens
+              WHERE token_id = $1
+           ) v
+          WHERE t.token_id = $1
+            AND (t.name IS DISTINCT FROM v.name OR t.artwork_url IS DISTINCT FROM v.art)`,
         [row.token_id, name, art]
       );
       if ((u.rowCount ?? 0) > 0) {
