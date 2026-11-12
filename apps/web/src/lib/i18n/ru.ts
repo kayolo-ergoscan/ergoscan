@@ -247,6 +247,7 @@ export const ru: Record<string, string> = {
   "home.epoch": "Эпоха",
   "home.versionNodes": "Версии нод",
   "home.versionPeers": "узлов",
+  "home.versionNewest": "новейшая",
   "home.versionOther": "старые",
   "home.nodeMode.full": "полные",
   "home.nodeMode.pruned": "урезанные",

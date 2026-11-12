@@ -2,8 +2,8 @@
 
 /**
  * Home «Version nodes»: which node versions and modes the peers of our node run.
- * One line like the epoch tile beside it: name, peer count and the newest version's share,
- * then a split bar (newest version first). Data: GET /v1/network/versions (node, cached 1 min).
+ * One line like the epoch tile beside it: name, peer count and how many already run the newest
+ * version, then a split bar of the most common versions. Data: GET /v1/network/versions (node, cached 1 min).
  */
 import { useEffect, useState, type CSSProperties } from "react";
 import clsx from "clsx";
@@ -57,14 +57,16 @@ export function HomeVersionNodes({ className, style }: { className?: string; sty
   }, []);
 
   const known = data ? data.versions.reduce((s, r) => s + r.n, 0) : 0;
-  const head = data?.versions.slice(0, SHOWN) ?? [];
+  // API order is newest first; the bar shows the most common versions.
+  const head = [...(data?.versions ?? [])].sort((a, b) => b.n - a.n).slice(0, SHOWN);
   const rest = known - head.reduce((s, r) => s + r.n, 0);
   const parts = [
     ...head.map((r, i) => ({ key: r.version, label: r.version, n: r.n, color: TONES[i] ?? OTHER })),
     ...(rest > 0 ? [{ key: "other", label: t("home.versionOther"), n: rest, color: OTHER }] : []),
   ];
   const share = (n: number) => (known > 0 ? Math.round((n / known) * 100) : 0);
-  const newest = head[0];
+  const newest = data?.versions[0];
+  const newestTone = parts.find((p) => p.key === newest?.version)?.color ?? OTHER;
   const modeText = (data?.modes ?? [])
     .map((m) => `${t(`home.nodeMode.${m.mode}`)} ${m.n.toLocaleString(loc)}`)
     .join(" · ");
@@ -85,7 +87,8 @@ export function HomeVersionNodes({ className, style }: { className?: string; sty
               <span className="font-medium opacity-70">{t("home.versionPeers")}</span>
             </span>
             <span className="inline-flex min-w-0 items-center gap-1.5 truncate font-semibold">
-              <span aria-hidden className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ background: parts[0]?.color }} />
+              <span aria-hidden className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ background: newestTone }} />
+              <span className="font-medium opacity-70">{t("home.versionNewest")}</span>
               {newest.version}
               <span className="font-medium opacity-70">{share(newest.n)}%</span>
             </span>

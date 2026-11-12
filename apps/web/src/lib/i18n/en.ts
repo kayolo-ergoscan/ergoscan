@@ -246,6 +246,7 @@ export const en: Record<string, string> = {
   "home.epoch": "Epoch",
   "home.versionNodes": "Version nodes",
   "home.versionPeers": "peers",
+  "home.versionNewest": "newest",
   "home.versionOther": "older",
   "home.nodeMode.full": "full",
   "home.nodeMode.pruned": "pruned",
