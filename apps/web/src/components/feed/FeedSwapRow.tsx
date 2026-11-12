@@ -265,7 +265,7 @@ export function FeedTraderRow({
       enterClass={enterClass}
       title={
         <Link prefetch={false} href={href} title={trader} className="feed-name font-mono tabular-nums hover:underline">
-          {shortId(trader, 6)}
+          {shortId(trader, 5)}
         </Link>
       }
       facts={deals != null ? <FeedCount k="feed.trades" n={deals} /> : undefined}
