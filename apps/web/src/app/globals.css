@@ -763,10 +763,6 @@ html[data-face="t2"] .font-mono {
   font-weight: 400;
   letter-spacing: normal;
 }
-.addr-lane-x .addr-act-chip .font-mono {
-  font-size: 11px;
-  font-weight: 400;
-}
 
 /* KPI stamp: rail (default: 36 + ink) · old (36, no ink) · corner (20) */
 .kpi-tile {
@@ -965,8 +961,14 @@ html .holders-mark svg.kpi-ico {
   .kpi-has-compact {
     cursor: pointer;
   }
+  /* The short form is what the eye gets; a screen reader still reads the exact figure. */
   .kpi-has-compact:not(.is-exact) .kpi-full {
-    display: none;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
   .kpi-has-compact:not(.is-exact) .kpi-compact {
     display: inline;
@@ -1042,6 +1044,9 @@ html .holders-mark svg.kpi-ico {
     gap: 6px;
     overflow-x: auto;
     overflow-y: hidden;
+    /* Room for the 44 px hit area of the 36 px chips; the rail itself does not move. */
+    padding-block: 4px;
+    margin-block: -4px;
     overscroll-behavior-x: contain;
     scroll-snap-type: x proximity;
     scrollbar-width: none;
@@ -1079,6 +1084,12 @@ html .holders-mark svg.kpi-ico {
     padding: 0 12px;
     background-color: var(--chip-bg, var(--module));
     scroll-snap-align: start;
+  }
+  /* Chips look 36 px; the hit area reaches 44 px, as with the search chips. */
+  .kpi-chip-rail > .kpi-tile::after {
+    content: "";
+    position: absolute;
+    inset: -4px 0;
   }
   .kpi-chip-rail > .kpi-chip-first {
     order: -1;
@@ -1866,26 +1877,6 @@ html[data-ink="day"] .token-tx-tape a[data-addr].is-twin {
 .addr-act-pair {
   overflow: visible;
 }
-.addr-act-chip::before {
-  content: "";
-  position: absolute;
-  inset-inline: 0;
-  top: 100%;
-  height: 10px;
-}
-.addr-act-chip::after {
-  content: "";
-  position: absolute;
-  top: 100%;
-  border: 6px solid transparent;
-  border-top-color: var(--module);
-}
-.addr-act-chip[data-align="left"]::after {
-  left: 14px;
-}
-.addr-act-chip[data-align="right"]::after {
-  right: 14px;
-}
 @media (min-width: 1024px) {
   .addr-lane.block-tx-pairs,
   .addr-head.block-tx-pairs {
@@ -2011,13 +2002,12 @@ html[data-ink="day"] .token-tx-tape a[data-addr].is-twin {
     right: 0;
     bottom: 0;
     z-index: 39;
-    height: calc(var(--tabbar) + 4.5rem);
+    /* Behind the tab bar as before; above it only a 24 px fade, so the lowest content stays readable. */
+    height: calc(var(--tabbar) + 1.5rem);
     background: linear-gradient(
       0deg,
       var(--bg) 0%,
-      color-mix(in srgb, var(--bg) 78%, transparent) 28%,
-      color-mix(in srgb, var(--bg) 42%, transparent) 54%,
-      color-mix(in srgb, var(--bg) 16%, transparent) 78%,
+      color-mix(in srgb, var(--bg) 50%, transparent) calc(100% - 1.5rem),
       transparent 100%
     );
   }
@@ -3141,7 +3131,7 @@ html[data-float="ada"] .explorer-dock {
   font-weight: 700;
   transition: color 600ms linear;
 }
-.price-tape-chg.is-up { color: #5ee0a0; }
+.price-tape-chg.is-up { color: var(--up); }
 .price-tape-chg.is-down { color: var(--down); }
 @keyframes price-tape {
   from { transform: translate3d(0, 0, 0); }
@@ -3790,7 +3780,7 @@ html[data-float="ada"] .explorer-dock {
   animation: oracle-speak 0.9s var(--ease) both;
 }
 .oracle-mark-speak.is-silent::after {
-  border-color: color-mix(in srgb, #ff4d6d 72%, transparent);
+  border-color: color-mix(in srgb, var(--down) 72%, transparent);
 }
 @keyframes oracle-speak {
   0%,
@@ -3837,7 +3827,7 @@ html[data-float="ada"] .explorer-dock {
   }
 }
 .oracle-bond-silent {
-  stroke: #ff4d6d;
+  stroke: var(--down);
   stroke-width: 1.25;
   opacity: 0.9;
 }
@@ -4053,41 +4043,6 @@ html[data-ink="day"] .mcap-vol {
 html[data-look="c"] .holders-mark {
   border-radius: 8px;
   background: color-mix(in srgb, var(--accent) 16%, transparent);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .rent-danger-run {
-    animation: none;
-  }
-}
-
-.rent-danger-well.is-loop {
-  -webkit-mask-image: linear-gradient(
-    180deg,
-    transparent,
-    #000 16px,
-    #000 calc(100% - 16px),
-    transparent
-  );
-  mask-image: linear-gradient(180deg, transparent, #000 16px, #000 calc(100% - 16px), transparent);
-}
-
-.rent-danger-run {
-  animation: rent-danger-reel var(--reel, 24s) linear infinite;
-}
-
-.rent-danger-well:hover .rent-danger-run,
-.rent-danger-well:focus-within .rent-danger-run {
-  animation-play-state: paused;
-}
-
-@keyframes rent-danger-reel {
-  from {
-    transform: translate3d(0, 0, 0);
-  }
-  to {
-    transform: translate3d(0, -50%, 0);
-  }
 }
 
 .holders-month {
@@ -4436,42 +4391,7 @@ html[data-ink="day"] .epoch-left {
   animation: cadence-ripple-flash 0.5s var(--ease) both;
 }
 
-.addr-stat-tip {
-  pointer-events: none;
-  position: fixed;
-  z-index: 60;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--module);
-  padding: 0.5rem 0.75rem;
-  visibility: hidden;
-  opacity: 0;
-  transform: translateY(-6px);
-  transition:
-    opacity 0.4s var(--ease),
-    transform 0.4s var(--ease),
-    visibility 0s linear 0.4s;
-}
-
-.addr-stat-tip.is-open {
-  visibility: visible;
-  opacity: 1;
-  transform: translateY(0);
-  transition:
-    opacity 0.4s var(--ease),
-    transform 0.4s var(--ease),
-    visibility 0s;
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .addr-stat-tip {
-    transform: none;
-    transition: opacity 0.2s var(--ease), visibility 0s linear 0.2s;
-  }
-  .addr-stat-tip.is-open {
-    transform: none;
-    transition: opacity 0.2s var(--ease), visibility 0s;
-  }
   .addr-token-fold,
   .addr-token-menu,
   .supply-tile-copy {
@@ -5059,14 +4979,14 @@ html[data-ink="day"] {
   background: var(--wash-faint);
   padding: 12px 14px;
 }
-.hdr-fact.is-violet { background: color-mix(in srgb, #c4b5fd 18%, transparent); }
-.hdr-fact.is-sky { background: color-mix(in srgb, #7eb6ff 18%, transparent); }
-.hdr-fact.is-gold { background: color-mix(in srgb, #f0c14a 16%, transparent); }
-.hdr-fact.is-teal { background: color-mix(in srgb, #2dd4bf 16%, transparent); }
-.hdr-fact.is-violet dt { color: #c4b5fd; }
-.hdr-fact.is-sky dt { color: #7eb6ff; }
-.hdr-fact.is-gold dt { color: #f0c14a; }
-.hdr-fact.is-teal dt { color: #2dd4bf; }
+.hdr-fact.is-violet { background: color-mix(in srgb, var(--k-nft, #c4b5fd) 18%, transparent); }
+.hdr-fact.is-sky { background: color-mix(in srgb, var(--c-token-text, #7eb6ff) 18%, transparent); }
+.hdr-fact.is-gold { background: color-mix(in srgb, var(--c-block, #f0c14a) 16%, transparent); }
+.hdr-fact.is-teal { background: color-mix(in srgb, var(--c-net, #2dd4bf) 16%, transparent); }
+.hdr-fact.is-violet dt { color: var(--k-nft, #c4b5fd); }
+.hdr-fact.is-sky dt { color: var(--c-token-text, #7eb6ff); }
+.hdr-fact.is-gold dt { color: var(--c-block, #f0c14a); }
+.hdr-fact.is-teal dt { color: var(--c-net, #2dd4bf); }
 .hdr-fact dt {
   margin: 0;
   font-size: 12px;
@@ -5172,13 +5092,13 @@ html[data-ink="day"] {
   line-height: 1.3;
   color: var(--muted);
 }
-.hdr-row.is-violet .hdr-k { color: #c4b5fd; }
-.hdr-row.is-sky .hdr-k { color: #7eb6ff; }
-.hdr-row.is-cyan .hdr-k { color: #3ca2ff; }
-.hdr-row.is-teal .hdr-k { color: #2dd4bf; }
-.hdr-row.is-green .hdr-k { color: #5ee0a0; }
-.hdr-row.is-gold .hdr-k { color: #f0c14a; }
-.hdr-row.is-coral .hdr-k { color: #ff8a65; }
+.hdr-row.is-violet .hdr-k { color: var(--k-nft, #c4b5fd); }
+.hdr-row.is-sky .hdr-k { color: var(--c-token-text, #7eb6ff); }
+.hdr-row.is-cyan .hdr-k { color: var(--c-token, #3ca2ff); }
+.hdr-row.is-teal .hdr-k { color: var(--c-net, #2dd4bf); }
+.hdr-row.is-green .hdr-k { color: var(--c-box, #5ee0a0); }
+.hdr-row.is-gold .hdr-k { color: var(--c-block, #f0c14a); }
+.hdr-row.is-coral .hdr-k { color: var(--k-rent, #ff8a65); }
 .hdr-hex,
 .hdr-num,
 .hdr-empty {
@@ -5399,12 +5319,12 @@ html[data-ink="day"] {
   text-transform: uppercase;
 }
 .box-io.is-in {
-  color: #5ee0a0;
-  background: color-mix(in srgb, #5ee0a0 16%, transparent);
+  color: var(--up);
+  background: color-mix(in srgb, var(--up) 16%, transparent);
 }
 .box-io.is-out {
-  color: #7eb6ff;
-  background: color-mix(in srgb, #7eb6ff 16%, transparent);
+  color: var(--c-token-text, #7eb6ff);
+  background: color-mix(in srgb, var(--c-token-text, #7eb6ff) 16%, transparent);
 }
 .box-io.is-idle {
   color: var(--muted);
@@ -5589,4 +5509,23 @@ html[data-ink="day"] .box-io.is-out {
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
   color: var(--muted-2);
+}
+
+/* Address title for long contract addresses: exactly two lines at any width,
+   the head cut at its end and the tail cut at its start (rtl clips the left side). */
+.addr-title-long {
+  display: block;
+  font-size: 15px;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+.addr-title-long > span {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.addr-title-long > .addr-title-tail {
+  direction: rtl;
+  text-align: left;
 }

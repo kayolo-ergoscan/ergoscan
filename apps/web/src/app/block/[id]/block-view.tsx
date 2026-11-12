@@ -1,5 +1,6 @@
 "use client";
 
+import { Tip } from "@/components/Tip";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
@@ -462,14 +463,15 @@ export function BlockView({
               <h1 className="mt-2 flex min-w-0 items-center gap-2 text-[17px] font-semibold leading-none tabular-nums tracking-tight">
                 <KpiNum>{head.height.toLocaleString(loc(locale))}</KpiNum>
                 {head.lithos ? (
-                  <Link
-                    prefetch={false}
-                    href="/lithos"
-                    title={t("block.chip.lithosHint")}
-                    className="chip-press shrink-0 rounded-full bg-[var(--wash-strong)] px-1.5 py-0.5 text-[10px] font-semibold leading-none tracking-tight text-[var(--text)]"
-                  >
-                    {t("block.chip.lithos")}
-                  </Link>
+                  <Tip content={t("block.chip.lithosHint")} peek>
+                    <Link
+                      prefetch={false}
+                      href="/lithos"
+                      className="chip-press shrink-0 rounded-full bg-[var(--wash-strong)] px-1.5 py-0.5 text-[10px] font-semibold leading-none tracking-tight text-[var(--text)]"
+                    >
+                      {t("block.chip.lithos")}
+                    </Link>
+                  </Tip>
                 ) : null}
               </h1>
               <p className="mt-2 flex min-w-0 items-center gap-1">
@@ -618,12 +620,11 @@ export function BlockView({
                 miner
               )}
             </p>
-            <p
-              className="mt-0.5 truncate text-[12px] leading-none text-[var(--muted-2)]"
-              title={t("block.cap.reward")}
-            >
-              {formatErgPrecise(rewardNano, locale)}
-            </p>
+            <Tip content={t("block.cap.reward")}>
+              <p className="mt-0.5 truncate text-[12px] leading-none text-[var(--muted-2)]">
+                {formatErgPrecise(rewardNano, locale)}
+              </p>
+            </Tip>
           </AddrFactCard>
 
           <AddrFactCard
@@ -773,11 +774,16 @@ function BlockSectionSheet({
   const bytes = hex ? hex.length / 2 : 0;
   return (
     <section className="hdr-doc" aria-label={title}>
-      <div className="hdr-sheet">
-        <p className="hdr-band">
-          {title}
-          {hex ? ` · ${countText(t, locale, "block.section.bytes", bytes, bytes.toLocaleString(locale === "ru" ? "ru-RU" : "en-US"))}` : ""}
-        </p>
+      <div className="feed hdr-feed">
+        <section className="feed-day">
+        <FeedPlate
+          tag={title}
+          count={
+            hex
+              ? countText(t, locale, "block.section.bytes", bytes, bytes.toLocaleString(locale === "ru" ? "ru-RU" : "en-US"))
+              : undefined
+          }
+        />
         {hex && part === "adproof" ? (
           <ProofPane hex={hex} copyLabel={t("tx.copy")} copiedLabel={t("tx.copied")} />
         ) : hex && part === "extension" && splitExtension(hex) ? (
@@ -792,6 +798,7 @@ function BlockSectionSheet({
             <span className="hdr-empty">{t("block.section.pending")}</span>
           </p>
         ) : null}
+        </section>
       </div>
     </section>
   );

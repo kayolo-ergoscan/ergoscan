@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Tip } from "./Tip";
 import Link from "next/link";
 import clsx from "clsx";
 
@@ -104,11 +105,11 @@ export function HopNav({
     );
   }
   return (
+    <Tip content={hint} side={dir === "back" ? "right" : "left"} tap={false}>
     <Link
       prefetch={false}
       href={href}
       data-dir={dir}
-      title={hint}
       aria-label={hint ?? label}
       onPointerDown={(e) => {
         if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
@@ -123,5 +124,6 @@ export function HopNav({
     >
       {mark}
     </Link>
+    </Tip>
   );
 }

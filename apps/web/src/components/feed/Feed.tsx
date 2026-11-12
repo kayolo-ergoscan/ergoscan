@@ -25,12 +25,15 @@ import {
   type ReactNode,
 } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import clsx from "clsx";
+import { Tip, TipFigure, TipHead } from "@/components/Tip";
 import { TokenLogo } from "@/components/TokenBadge";
 import { useI18n } from "@/lib/i18n/I18nProvider";
-import { formatDottedDate, formatH24, formatScaledAmount, formatScaledGlance, shortId } from "@/lib/format";
+import { formatDottedDate, formatH24, formatScaledAmount, formatScaledFixed, formatScaledGlance, shortId } from "@/lib/format";
 import { tokenDecimals, tokenSymbol } from "@/lib/token-meta";
 import { FeedGlyph, type FeedGlyphId } from "./FeedGlyph";
+import { useStuckPlate } from "@/components/StuckPin";
 
 export type FeedKind =
   | "transfer"
@@ -153,8 +156,10 @@ export function FeedPlate({
   end?: ReactNode;
   className?: string;
 }) {
+  const ref = useRef<HTMLElement>(null);
+  useStuckPlate(ref);
   return (
-    <header className={clsx("feed-plate", now && "is-now", className)}>
+    <header ref={ref} className={clsx("feed-plate", now && "is-now", className)}>
       <span className="feed-plate-tag" suppressHydrationWarning>
         {tag}
       </span>
@@ -263,7 +268,8 @@ export function FeedSort<K extends string>({
 }: {
   options: { key: K; label: string }[];
   active: K;
-  dir: "asc" | "desc";
+  /** Without a direction the chips are a filter: no arrow on the pressed one. */
+  dir?: "asc" | "desc";
   onSort: (key: K) => void;
   label: string;
   disabled?: boolean;
@@ -308,7 +314,7 @@ export function FeedSort<K extends string>({
             onClick={() => onSort(o.key)}
           >
             {o.label}
-            {on ? (
+            {on && dir ? (
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden>
                 <path
                   d={dir === "desc" ? "M12 5v14M6 13l6 6 6-6" : "M12 19V5M6 11l6-6 6 6"}
@@ -342,20 +348,66 @@ export function FeedTile({
   title?: string;
 }) {
   return (
-    <span
-      className={clsx("feed-tile", hollow && "is-hollow", children != null && "has-art")}
-      data-k={k}
-      title={title}
-      aria-hidden={title ? undefined : true}
-    >
-      {children ?? <FeedGlyph g={g ?? "none"} />}
-    </span>
+    <Tip content={title}>
+      <span
+        className={clsx("feed-tile", hollow && "is-hollow", children != null && "has-art")}
+        data-k={k}
+        role={title ? "img" : undefined}
+        aria-label={title || undefined}
+        aria-hidden={title ? undefined : true}
+      >
+        {children ?? <FeedGlyph g={g ?? "none"} />}
+      </span>
+    </Tip>
+  );
+}
+
+/** Below this the shell is the phone one: a row tap opens the item, the caret opens the detail. */
+const PHONE_LAYOUT = "(max-width: 1023px)";
+
+/** The page a row stands for, when the row names none: its title's own link. */
+function titleLink(li: HTMLElement | null): HTMLAnchorElement | null {
+  return li?.querySelector<HTMLAnchorElement>(".feed-title a[href]") ?? null;
+}
+
+function openKey(href: string): string {
+  if (href.startsWith("/tx/")) return "feed.open.tx";
+  if (href.startsWith("/block/")) return "feed.open.block";
+  if (href.startsWith("/address/")) return "feed.open.address";
+  if (href.startsWith("/token/")) return "feed.open.token";
+  if (href.startsWith("/box/")) return "feed.open.box";
+  if (href.startsWith("/defi/pool/")) return "feed.open.pool";
+  return "feed.open";
+}
+
+/** The detail's last line: one wide button to the item's own page. */
+function FeedOpen({ href }: { href: string }) {
+  const { t } = useI18n();
+  const label = (
+    <>
+      {t(openKey(href))}
+      <span aria-hidden> →</span>
+    </>
+  );
+  if (!href.startsWith("/")) {
+    return (
+      <a className="feed-open" href={href} target="_blank" rel="noopener noreferrer">
+        {label}
+      </a>
+    );
+  }
+  return (
+    <Link prefetch={false} className="feed-open" href={href}>
+      {label}
+    </Link>
   );
 }
 
 function isInteractive(e: MouseEvent): boolean {
   const el = e.target as HTMLElement;
   if (el.closest("a,button,input,select,label,[role='button']")) return true;
+  // A finger on a tip trigger (a meter, a kind tile) reads the tip; the row stays as it is.
+  if ((e.nativeEvent as PointerEvent).pointerType === "touch" && el.closest("[data-tip]")) return true;
   const sel = typeof window !== "undefined" ? window.getSelection() : null;
   return !!sel && sel.toString().length > 0;
 }
@@ -375,6 +427,7 @@ export function FeedRow({
   sub,
   subMinor = false,
   detail,
+  href,
   enterClass,
   onPointerEnter,
   className,
@@ -398,28 +451,46 @@ export function FeedRow({
   subMinor?: boolean;
   /** Built only when the row is opened. */
   detail?: () => ReactNode;
+  /** The item's own page, when it is not the title's link. */
+  href?: string;
   enterClass?: string;
   onPointerEnter?: () => void;
   className?: string;
   rowProps?: Record<string, string | undefined>;
 }) {
   const { t } = useI18n();
+  const router = useRouter();
+  const ref = useRef<HTMLLIElement>(null);
   const [open, setOpen] = useState(false);
+  const [goTo, setGoTo] = useState<string | null>(href ?? null);
   const canOpen = detail != null;
   const isRank = "rank" in lead;
   const leadText = isRank ? lead.rank : lead.text;
+  const toggle = () => {
+    if (!open) setGoTo(href ?? titleLink(ref.current)?.getAttribute("href") ?? null);
+    setOpen(!open);
+  };
+  const openItem = (): boolean => {
+    if (href) {
+      router.push(href);
+      return true;
+    }
+    const a = titleLink(ref.current);
+    if (!a) return false;
+    a.click();
+    return true;
+  };
   return (
     <li
-      className={clsx("feed-row", canOpen && "can-open", open && "is-open", enterClass, className)}
+      ref={ref}
+      className={clsx("feed-row", canOpen && "can-open", href && "has-href", open && "is-open", enterClass, className)}
       data-k={k}
-      onClick={
-        canOpen
-          ? (e) => {
-              if (isInteractive(e)) return;
-              setOpen((v) => !v);
-            }
-          : undefined
-      }
+      onClick={(e) => {
+        if (isInteractive(e)) return;
+        if (window.matchMedia(PHONE_LAYOUT).matches && openItem()) return;
+        if (canOpen) toggle();
+        else openItem();
+      }}
       onPointerEnter={onPointerEnter}
       {...rowProps}
     >
@@ -461,7 +532,7 @@ export function FeedRow({
           className="feed-caret"
           aria-expanded={open}
           aria-label={t("feed.details")}
-          onClick={() => setOpen((v) => !v)}
+          onClick={toggle}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
             <path d="m6 9 6 6 6-6" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
@@ -473,7 +544,10 @@ export function FeedRow({
       {open && detail ? (
         <>
           <span className="feed-trace" aria-hidden />
-          <div className="feed-detail">{detail()}</div>
+          <div className="feed-detail">
+            {detail()}
+            {goTo ? <FeedOpen href={goTo} /> : null}
+          </div>
         </>
       ) : null}
     </li>
@@ -531,6 +605,7 @@ export function FeedAmount({
   unit = "ERG",
   signed = false,
   glance = false,
+  cents = false,
   className,
 }: {
   raw: bigint | null | undefined;
@@ -538,6 +613,8 @@ export function FeedAmount({
   unit?: ReactNode;
   signed?: boolean;
   glance?: boolean;
+  /** A ranked balance column: every row whole and two decimals, so the column reads one way. */
+  cents?: boolean;
   className?: string;
 }) {
   const { locale } = useI18n();
@@ -545,21 +622,44 @@ export function FeedAmount({
   const abs = raw < 0n ? -raw : raw;
   const tag = feedLoc(locale);
   const exact = formatScaledAmount(abs, decimals, tag, decimals);
-  const text = glance ? formatScaledGlance(abs, decimals, tag).text : formatScaledAmount(abs, decimals, tag);
+  const hundredth = 10n ** BigInt(Math.max(0, decimals - 2));
+  const text = cents
+    ? abs > 0n && abs < hundredth
+      ? "<0.01"
+      : formatScaledFixed(abs, decimals, 2, tag)
+    : glance
+      ? formatScaledGlance(abs, decimals, tag).text
+      : formatScaledAmount(abs, decimals, tag);
   const sign = signed ? signOf(raw) : "";
+  const tone = signed ? (raw > 0n ? "var(--up)" : raw < 0n ? "var(--down)" : undefined) : undefined;
+  // The row shows a glance; the tip gives every digit. Nothing to add when they match.
   return (
-    <span
-      className={clsx(
-        "feed-amt tabular-nums",
-        signed && (raw > 0n ? "is-up" : raw < 0n ? "is-down" : "is-zero"),
-        className
-      )}
-      title={`${sign}${exact}${typeof unit === "string" ? ` ${unit}` : ""}`}
+    <Tip
+      tap={false}
+      content={
+        exact === text
+          ? null
+          : () => (
+              <TipFigure ink={tone}>
+                {sign}
+                {exact}
+                {typeof unit === "string" ? ` ${unit}` : ""}
+              </TipFigure>
+            )
+      }
     >
-      {sign}
-      {text}
-      {unit ? <span className="feed-unit">{unit}</span> : null}
-    </span>
+      <span
+        className={clsx(
+          "feed-amt tabular-nums",
+          signed && (raw > 0n ? "is-up" : raw < 0n ? "is-down" : "is-zero"),
+          className
+        )}
+      >
+        {sign}
+        {text}
+        {unit ? <span className="feed-unit">{unit}</span> : null}
+      </span>
+    </Tip>
   );
 }
 
@@ -584,12 +684,26 @@ export function FeedTokenChip({
   const glance = formatScaledGlance(abs, dec, feedLoc(locale));
   const sym = tokenSymbol(tid, meta?.name) || shortId(tid, 4);
   const sign = signed ? signOf(amt) : "";
+  const tone = signed ? (amt > 0n ? "var(--up)" : amt < 0n ? "var(--down)" : undefined) : undefined;
   return (
+    <Tip
+      tap={false}
+      content={() => (
+        <>
+          <TipHead chip={sym} ink="var(--c-token, #5b8dff)">
+            {meta?.name && meta.name !== sym ? meta.name : null}
+          </TipHead>
+          <TipFigure ink={tone}>
+            {sign}
+            {glance.exact}
+          </TipFigure>
+        </>
+      )}
+    >
     <Link
       prefetch={false}
       href={`/token/${tid}`}
       className={clsx("feed-chip", className)}
-      title={`${sign}${glance.exact} ${sym}`}
     >
       <TokenLogo tokenId={tid} artworkUrl={meta?.artworkUrl ?? null} size={16} />
       <span className={clsx("tabular-nums", signed && (amt > 0n ? "is-up" : amt < 0n ? "is-down" : undefined))}>
@@ -598,6 +712,7 @@ export function FeedTokenChip({
       </span>
       <span className="feed-chip-sym">{sym}</span>
     </Link>
+    </Tip>
   );
 }
 
@@ -631,24 +746,28 @@ export function FeedTokenChips({
         />
       ))}
       {rest > 0 ? (
-        <button
-          type="button"
-          className="feed-chip is-plain feed-more-wide tabular-nums"
-          title={tn("feed.moreTokens", rest)}
-          onClick={() => setOpen(true)}
-        >
-          +{rest}
-        </button>
+        <Tip content={tn("feed.moreTokens", rest)} tap={false}>
+          <button
+            type="button"
+            className="feed-chip is-plain feed-more-wide tabular-nums"
+            aria-label={tn("feed.moreTokens", rest)}
+            onClick={() => setOpen(true)}
+          >
+            +{rest}
+          </button>
+        </Tip>
       ) : null}
       {!open && tokens.length > 1 ? (
-        <button
-          type="button"
-          className="feed-chip is-plain feed-more-narrow tabular-nums"
-          title={tn("feed.moreTokens", tokens.length - 1)}
-          onClick={() => setOpen(true)}
-        >
-          +{tokens.length - 1}
-        </button>
+        <Tip content={tn("feed.moreTokens", tokens.length - 1)} tap={false}>
+          <button
+            type="button"
+            className="feed-chip is-plain feed-more-narrow tabular-nums"
+            aria-label={tn("feed.moreTokens", tokens.length - 1)}
+            onClick={() => setOpen(true)}
+          >
+            +{tokens.length - 1}
+          </button>
+        </Tip>
       ) : null}
     </span>
   );
@@ -657,9 +776,9 @@ export function FeedTokenChips({
 /** A plain chip: a count or a word, same shape as a token chip. */
 export function FeedChip({ children, title, className }: { children: ReactNode; title?: string; className?: string }) {
   return (
-    <span className={clsx("feed-chip is-plain", className)} title={title}>
-      {children}
-    </span>
+    <Tip content={title}>
+      <span className={clsx("feed-chip is-plain", className)}>{children}</span>
+    </Tip>
   );
 }
 
@@ -667,7 +786,8 @@ export function FeedChip({ children, title, className }: { children: ReactNode; 
 export function FeedMeter({ pct, label, title }: { pct: number; label: string; title?: string }) {
   const lit = !(pct > 0) ? 0 : Math.max(1, Math.min(10, Math.ceil(pct / 10)));
   return (
-    <span className="feed-meter" role="img" aria-label={title ?? label} title={title ?? label}>
+    <Tip content={title ?? label}>
+    <span className="feed-meter" role="img" aria-label={title ?? label}>
       <span className="feed-meter-steps" aria-hidden>
         {Array.from({ length: 10 }, (_, i) => (
           <span key={i} className={i < lit ? "is-lit" : undefined} />
@@ -677,6 +797,7 @@ export function FeedMeter({ pct, label, title }: { pct: number; label: string; t
         {label}
       </span>
     </span>
+    </Tip>
   );
 }
 

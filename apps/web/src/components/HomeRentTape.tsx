@@ -1,9 +1,13 @@
 "use client";
 
 /**
- * Home rent: crates ride a three-row snake. The miner stays on the last row and taps each box.
+ * Home rent: two tiles in one grid slot, one thought each.
+ * «Rent this epoch» keeps the crate yard and the miner, says how much and from how many
+ * boxes, and signs the address the miner is at. «Tokens at risk» lists tokens sitting in
+ * boxes that hold less ERG than the rent, one row per token, soonest first.
  */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { Tip, TipFigure, TipHead, TipNote } from "./Tip";
 import Link from "next/link";
 import clsx from "clsx";
 import { useReducedMotion } from "framer-motion";
@@ -12,14 +16,15 @@ import { ReelText } from "@/components/ReelText";
 import { RentBelt } from "@/components/RentBelt";
 import { TokenLogo } from "@/components/TokenBadge";
 import { listPip } from "@/lib/address-pips";
-import { formatErgFixed, formatErgPrecise, formatScaledGlance, formatUsd, shortId, toBigIntAmt } from "@/lib/format";
+import { formatErgFixed, formatScaledGlance, formatUsd, shortId } from "@/lib/format";
 import { rentYardDemoPack, RENT_DEMO_MS } from "@/lib/rent-miner-patrol";
 import { HOME, INK } from "@/lib/palette";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { countText } from "@/lib/i18n/messages";
-import { dangerHoldingUsd, type RentDangerRow } from "@/lib/rent-danger";
-import { resolveTokenMeta, tokenTickerInk } from "@/lib/token-meta";
+import { groupRentDanger, type RentDangerGroup, type RentDangerRow } from "@/lib/rent-danger";
+import { resolveTokenMeta } from "@/lib/token-meta";
 import {
+  headerEpochBlocksLeft,
   rentTapeClock,
   rentTapeTone,
   type RentTapeRow,
@@ -27,14 +32,24 @@ import {
 
 /** Home yard shows eight crates. The snapshot may carry more. */
 const HOME_YARD = 8;
+/** The clock counts two minutes a block. */
+const CLOCK_BLOCK_MS = 120_000;
+/** One token row. The desktop tile fits as many as its height allows. */
+const DANGER_ROW_PX = 26;
+/** Below the desktop grid the tile grows with its list, so cap it. */
+const DANGER_STACK_ROWS = 8;
 
-function boxesLabel(n: number, t: (k: string) => string, locale: string): string {
-  return countText(t, locale, "home.rentBoxes", n);
+type T = (k: string) => string;
+
+function clockText(blocks: number, t: T): string {
+  const clock = rentTapeClock(blocks);
+  if (clock.due) return t("home.rentDue");
+  return t(`rent.clock.${clock.unit}`).replace("{n}", String(clock.n));
 }
 
-function whenLabel(blocksUntilRent: number, t: (k: string) => string): string {
-  const clock = rentTapeClock(blocksUntilRent);
-  return clock.due ? t("home.rentDue") : clock.label;
+function whenText(blocks: number, t: T): string {
+  const clock = rentTapeClock(blocks);
+  return clock.due ? t("home.rentDue") : t("home.rentIn").replace("{t}", clockText(blocks, t));
 }
 
 function toneColor(blocksUntilRent: number): string | undefined {
@@ -44,9 +59,22 @@ function toneColor(blocksUntilRent: number): string | undefined {
   return undefined;
 }
 
+function countLabel(t: T, locale: string, key: string, n: number): string {
+  return countText(t, locale, key, n, n.toLocaleString(locale === "ru" ? "ru-RU" : "en-US"));
+}
+
+function usdText(usd: number): string {
+  if (usd >= 0.01) return formatUsd(usd);
+  if (usd > 0) return "<$0.01";
+  return "—";
+}
+
 export function HomeRentTape({
   rows,
   epochRentNano,
+  epochBoxes = null,
+  height = null,
+  avgBlockMs = null,
   danger = [],
   dangerReady = false,
   previewShare = false,
@@ -54,10 +82,47 @@ export function HomeRentTape({
 }: {
   rows: RentTapeRow[];
   epochRentNano?: string | null;
+  /** Boxes that turn four years old before this header epoch ends. */
+  epochBoxes?: number | null;
+  height?: number | null;
+  avgBlockMs?: number | null;
   danger?: RentDangerRow[];
   dangerReady?: boolean;
   previewShare?: boolean;
   enter?: number;
+}) {
+  return (
+    <section
+      className="home-tile-enter grid h-full min-h-0 min-w-0 grid-cols-1 gap-2 max-lg:order-4 sm:grid-cols-2 lg:h-full"
+      style={{ "--enter": enter } as CSSProperties}
+    >
+      <RentEpochTile
+        rows={rows}
+        epochRentNano={epochRentNano}
+        epochBoxes={epochBoxes}
+        height={height}
+        avgBlockMs={avgBlockMs}
+        previewShare={previewShare}
+      />
+      <DangerTile rows={danger} ready={dangerReady} />
+    </section>
+  );
+}
+
+function RentEpochTile({
+  rows,
+  epochRentNano,
+  epochBoxes,
+  height,
+  avgBlockMs,
+  previewShare,
+}: {
+  rows: RentTapeRow[];
+  epochRentNano?: string | null;
+  epochBoxes: number | null;
+  height: number | null;
+  avgBlockMs: number | null;
+  previewShare: boolean;
 }) {
   const t = useT();
   const { locale } = useI18n();
@@ -73,12 +138,17 @@ export function HomeRentTape({
     [base, previewShare, demoTick]
   );
   const rentLabel =
-    epochRentNano != null && /^\d+$/.test(epochRentNano)
-      ? formatErgPrecise(epochRentNano, loc)
-      : null;
+    epochRentNano != null && /^\d+$/.test(epochRentNano) ? formatErgFixed(epochRentNano, loc) : null;
   const byAddr = useMemo(() => new Map(pack.map((r) => [r.address, r])), [pack]);
-  const focus = hover ?? lead;
+  const focus = hover ?? lead ?? pack[0]?.address ?? null;
   const focusRow = focus ? byAddr.get(focus) : undefined;
+
+  let leftLabel: string | null = null;
+  if (height != null && height >= 0) {
+    const blockMs = avgBlockMs && avgBlockMs > 0 ? avgBlockMs : CLOCK_BLOCK_MS;
+    const left = Math.max(1, Math.round((headerEpochBlocksLeft(height) * blockMs) / CLOCK_BLOCK_MS));
+    leftLabel = t("home.rentEpochLeftShort").replace("{t}", clockText(left, t));
+  }
 
   useEffect(() => {
     if (!previewShare || reduce) return;
@@ -92,172 +162,204 @@ export function HomeRentTape({
   }, [previewShare, reduce]);
 
   return (
-    <section
-      className="home-tile-enter flex h-full min-h-0 min-w-0 flex-col max-lg:order-4 lg:h-full"
-      style={{ "--enter": enter } as CSSProperties}
-    >
-      <article className="mod flex h-full min-h-0 flex-col rounded-[20px] border border-[var(--border)] bg-[var(--module)]">
-        <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[20px] px-4 py-3 sm:px-5">
-          <div className="grid min-h-0 flex-1 grid-cols-1 gap-x-10 gap-y-6 sm:grid-cols-2">
-            <div className="flex min-h-0 min-w-0 flex-col">
-              <div className="flex min-h-[38px] shrink-0 items-start justify-between gap-3">
-                <h2 className="m-0 text-[13px] leading-none" style={{ color: HOME.forming }}>{t("rent.title")}</h2>
-                <div className="min-w-0 text-right">
-                  <p
-                    className={clsx(
-                      "m-0 text-[22px] font-semibold leading-none tabular-nums tracking-tight whitespace-nowrap",
-                      !rentLabel && "text-[var(--muted)]"
-                    )}
-                    style={rentLabel ? { color: INK.coral } : undefined}
-                  >
-                    <ReelText text={rentLabel ?? "—"} />
-                  </p>
-                  <p className="mt-1 m-0 text-[11px] leading-[1.15] text-[var(--muted-2)]">
-                    {t("home.rentEpochCollect")}
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-3 flex min-h-[200px] min-w-0 flex-1 flex-col">
-                <p
-                  className="mb-2 flex h-[18px] min-w-0 items-center justify-center text-center text-[13px] leading-[18px] text-[var(--muted-2)]"
-                  aria-live="polite"
-                >
-                  {pack.length === 0 ? (
-                    t("home.rentEmpty")
-                  ) : focusRow && focus ? (
-                    <KpiNum key={focus} className="min-w-0 max-w-full">
-                      <CaptionLine address={focus} row={focusRow} reduce={!!reduce} t={t} />
-                    </KpiNum>
-                  ) : null}
-                </p>
-                <div className="relative min-h-0 flex-1" aria-label={t("home.rentAisle")}>
-                  <RentBelt
-                    rows={pack}
-                    reduce={!!reduce}
-                    hover={hover}
-                    onHover={setHover}
-                    onLead={setLead}
-                    formatAmount={(nano) => formatErgFixed(nano, loc)}
-                  />
-                </div>
-              </div>
-            </div>
-
-            <DangerReel rows={danger} ready={dangerReady} locale={loc} reduce={!!reduce} t={t} />
-          </div>
-
-          <div className="mt-auto flex items-baseline justify-between gap-3 pt-3">
-            <Link prefetch={false} href="/rent" className="text-[13px] text-[var(--muted)] hover:text-[var(--text)]">
-              {t("home.viewAll")}
-            </Link>
-          </div>
+    <article className="mod flex h-full min-h-0 min-w-0 flex-col rounded-[20px] border border-[var(--border)] bg-[var(--module)]">
+      <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[20px] px-4 py-3">
+        <div className="flex min-h-[22px] shrink-0 items-center justify-between gap-3">
+          <h2 className="m-0 shrink-0 whitespace-nowrap text-[13px] leading-none" style={{ color: HOME.forming }}>
+            {t("home.rentEpochTitle")}
+          </h2>
+          {leftLabel ? (
+            <span className="min-w-0 truncate text-[12px] tabular-nums text-[var(--muted-2)]">{leftLabel}</span>
+          ) : null}
         </div>
-      </article>
-    </section>
+
+        <div className="mt-2.5 shrink-0">
+          <p className="m-0 flex flex-wrap items-baseline gap-x-1.5 gap-y-1 leading-none">
+            {rentLabel ? (
+              <span className="text-[15px] font-medium text-[var(--muted-2)]">{t("home.rentUpTo")}</span>
+            ) : null}
+            <span
+              className={clsx(
+                "whitespace-nowrap text-[26px] font-semibold tabular-nums tracking-tight lg:max-xl:text-[20px]",
+                !rentLabel && "text-[var(--muted)]"
+              )}
+              style={rentLabel ? { color: INK.coral } : undefined}
+            >
+              <ReelText text={rentLabel ?? "—"} />
+            </span>
+          </p>
+          {epochBoxes != null && epochBoxes > 0 ? (
+            <p className="m-0 mt-1.5 text-[12px] leading-[1.3] text-[var(--muted-2)]">
+              {t("home.rentEpochFrom").replace("{boxes}", countLabel(t, locale, "home.rentFromBoxes", epochBoxes))}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="mt-2 flex min-h-[176px] min-w-0 flex-1 flex-col sm:min-h-[120px]">
+          {pack.length === 0 ? (
+            <p className="m-0 flex flex-1 items-center justify-center text-[13px] text-[var(--muted-2)]">
+              {t("home.rentEmpty")}
+            </p>
+          ) : (
+            <div className="relative min-h-0 flex-1" aria-label={t("home.rentAisle")}>
+              <RentBelt
+                rows={pack}
+                reduce={!!reduce}
+                hover={hover}
+                onHover={setHover}
+                onLead={setLead}
+                formatAmount={(nano) => formatErgFixed(nano, loc)}
+              />
+            </div>
+          )}
+        </div>
+
+        {focus && focusRow ? (
+          <QueueLine key={focus} address={focus} row={focusRow} reduce={!!reduce} />
+        ) : null}
+
+        <div className="mt-2 flex shrink-0 items-baseline">
+          <Link prefetch={false} href="/rent" className="text-[13px] text-[var(--muted)] hover:text-[var(--text)]">
+            {t("home.rentAll")}
+          </Link>
+        </div>
+      </div>
+    </article>
   );
 }
 
-function DangerReel({
-  rows,
-  ready,
-  locale,
-  reduce,
-  t,
-}: {
-  rows: RentDangerRow[];
-  ready: boolean;
-  locale: string;
-  reduce: boolean;
-  t: (k: string) => string;
-}) {
-  const viewRef = useRef<HTMLDivElement>(null);
-  const copyRef = useRef<HTMLDivElement>(null);
-  const [loop, setLoop] = useState(false);
+function DangerTile({ rows, ready }: { rows: RentDangerRow[]; ready: boolean }) {
+  const t = useT();
+  const { locale } = useI18n();
+  const loc = locale === "ru" ? "ru-RU" : "en-US";
+  const groups = useMemo(() => groupRentDanger(rows), [rows]);
+  const total = useMemo(() => groups.reduce((sum, g) => sum + g.usd, 0), [groups]);
+  const listRef = useRef<HTMLDivElement>(null);
+  const [fit, setFit] = useState(DANGER_STACK_ROWS);
+  const hasRows = groups.length > 0;
 
   useLayoutEffect(() => {
-    const view = viewRef.current;
-    const copy = copyRef.current;
-    if (!view || !copy) return;
+    const el = listRef.current;
+    if (!el) return;
+    const wide = window.matchMedia("(min-width: 1024px)");
     const measure = () => {
-      setLoop(!reduce && rows.length > 1 && copy.offsetHeight > view.clientHeight + 4);
+      setFit(wide.matches ? Math.max(1, Math.floor(el.clientHeight / DANGER_ROW_PX)) : DANGER_STACK_ROWS);
     };
     measure();
     const ro = new ResizeObserver(measure);
-    ro.observe(view);
-    return () => ro.disconnect();
-  }, [reduce, rows]);
+    ro.observe(el);
+    wide.addEventListener("change", measure);
+    return () => {
+      ro.disconnect();
+      wide.removeEventListener("change", measure);
+    };
+  }, [hasRows]);
 
-  const reel = rows.length ? `${Math.max(16, rows.length * 1.9)}s` : undefined;
+  const boxes = rows.length;
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
-      <h2 className="m-0 shrink-0 text-[13px] leading-none" style={{ color: HOME.forming }}>
-        {t("rent.danger.title")}
-      </h2>
-      {rows.length === 0 ? (
-        ready ? (
-          <p className="mt-3 text-[13px] leading-snug text-[var(--muted)]">{t("home.rentDangerEmpty")}</p>
+    <article
+      className="mod flex h-full min-h-0 min-w-0 flex-col rounded-[20px] border border-[var(--border)] bg-[var(--module)]"
+      style={{ "--tag": "var(--c-token)" } as CSSProperties}
+    >
+      <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[20px] px-4 py-3">
+        <div className="flex min-h-[22px] shrink-0 items-center justify-between gap-3">
+          <h2 className="m-0 shrink-0 whitespace-nowrap text-[13px] leading-none" style={{ color: HOME.forming }}>
+            {t("home.dangerTitle")}
+          </h2>
+          <span className="min-w-0 truncate text-[12px] tabular-nums text-[var(--muted-2)]">
+            {t("home.dangerWindow")}
+          </span>
+        </div>
+
+        {groups.length === 0 ? (
+          ready ? (
+            <p className="m-0 mt-3 text-[13px] leading-snug text-[var(--muted)]">{t("home.rentDangerEmpty")}</p>
+          ) : (
+            <div className="min-h-[220px] flex-1" />
+          )
         ) : (
-          <div className="mt-3 h-[220px]" />
-        )
-      ) : (
-        <div
-          ref={viewRef}
-          className={clsx(
-            "rent-danger-well mt-3 h-[220px] overflow-hidden sm:h-auto sm:min-h-0 sm:flex-1",
-            loop && "is-loop"
-          )}
-          aria-label={t("rent.danger.title")}
-        >
-          <div
-            className={clsx(loop && "rent-danger-run")}
-            style={reel ? ({ "--reel": reel } as CSSProperties) : undefined}
-          >
-            <div ref={copyRef}>
-              {rows.map((row) => (
-                <DangerLine key={`${row.boxId}:${row.tokenId}`} row={row} locale={locale} />
+          <>
+            <div className="mt-2.5 shrink-0">
+              <p className="m-0 text-[26px] font-semibold leading-none tabular-nums tracking-tight text-[var(--text)] lg:max-xl:text-[20px]">
+                {total > 0 ? `≈ ${usdText(total)}` : countLabel(t, locale, "home.rentBoxes", boxes)}
+              </p>
+              <p className="m-0 mt-1.5 text-[12px] leading-[1.3] text-[var(--muted-2)]">
+                {t("home.dangerWhy").replace("{boxes}", countLabel(t, locale, "home.dangerInBoxes", boxes))}
+              </p>
+            </div>
+
+            <div className="mt-2 grid h-[18px] shrink-0 grid-cols-[minmax(0,1fr)_3.75rem_2.75rem] lg:max-xl:grid-cols-[minmax(0,1fr)_2.75rem] items-center gap-2 px-1 text-[11px] text-[var(--muted-2)]">
+              <span>{t("home.dangerColToken")}</span>
+              <span className="text-right lg:max-xl:hidden">≈ $</span>
+              <span className="text-right">{t("home.dangerColWhen")}</span>
+            </div>
+            <div
+              ref={listRef}
+              className="min-h-0 shrink-0 divide-y divide-[var(--border-soft)] overflow-hidden lg:flex-1"
+              aria-label={t("home.dangerTitle")}
+            >
+              {groups.slice(0, fit).map((g) => (
+                <DangerRow key={g.tokenId} group={g} loc={loc} locale={locale} t={t} />
               ))}
             </div>
-            {loop ? (
-              <div aria-hidden inert>
-                {rows.map((row) => (
-                  <DangerLine key={`copy:${row.boxId}:${row.tokenId}`} row={row} locale={locale} />
-                ))}
-              </div>
-            ) : null}
-          </div>
+          </>
+        )}
+
+        <div className="mt-auto flex shrink-0 items-baseline pt-2">
+          <Link
+            prefetch={false}
+            href="/rent#danger"
+            className="text-[13px] text-[var(--muted)] hover:text-[var(--text)]"
+          >
+            {boxes > 0
+              ? t("home.dangerAll").replace("{boxes}", countLabel(t, locale, "home.rentBoxes", boxes))
+              : t("home.rentAll")}
+          </Link>
         </div>
-      )}
-    </div>
+      </div>
+    </article>
   );
 }
 
-function DangerLine({ row, locale }: { row: RentDangerRow; locale: string }) {
-  const meta = resolveTokenMeta(row.tokenId, null, row.name);
-  const glance = formatScaledGlance(toBigIntAmt(row.amount), row.decimals ?? 0, locale);
-  const usd = dangerHoldingUsd(row);
+function DangerRow({ group, loc, locale, t }: { group: RentDangerGroup; loc: string; locale: string; t: T }) {
+  const meta = resolveTokenMeta(group.tokenId, group.name, group.name);
+  const glance = formatScaledGlance(group.amount, group.decimals ?? 0, loc);
+  const ink = toneColor(group.soonest);
   return (
+    <Tip
+      tap={false}
+      content={() => (
+        <>
+          <TipHead chip={meta.symbol} ink="var(--c-token, #5b8dff)">
+            {meta.name && meta.name !== meta.symbol ? meta.name : null}
+          </TipHead>
+          <TipFigure>{glance.exact}</TipFigure>
+          <TipNote>{countLabel(t, locale, "home.rentBoxes", group.boxes)}</TipNote>
+        </>
+      )}
+    >
     <Link
       prefetch={false}
-      href={`/token/${row.tokenId}`}
-      title={`${meta.symbol} · ${glance.exact}`}
-      className="grid h-8 grid-cols-[18px_minmax(0,1fr)_auto] items-center gap-2 rounded-[8px] px-1 hover:bg-[var(--wash)]"
+      href={`/token/${group.tokenId}`}
+      className="grid h-[26px] grid-cols-[minmax(0,1fr)_3.75rem_2.75rem] lg:max-xl:grid-cols-[minmax(0,1fr)_2.75rem] items-center gap-2 rounded-[6px] px-1 text-[13px] hover:bg-[var(--wash)]"
     >
-      <TokenLogo tokenId={row.tokenId} size={18} />
-      <span
-        className="min-w-0 truncate text-[13px] font-medium tracking-[-0.02em]"
-        style={{ color: tokenTickerInk(row.tokenId) }}
-      >
-        {meta.symbol}
+      <span className="flex min-w-0 items-center gap-1.5">
+        <TokenLogo tokenId={group.tokenId} size={16} />
+        <span className="min-w-0 truncate font-medium tracking-[-0.02em]">{meta.symbol}</span>
+        {group.boxes > 1 ? (
+          <span className="shrink-0 text-[11px] tabular-nums text-[var(--muted-2)]">×{group.boxes}</span>
+        ) : null}
       </span>
-      <span className="flex items-baseline gap-2.5 text-[13px] tabular-nums">
-        <span className="text-[var(--muted)]">{glance.text}</span>
-        <span className="font-semibold" style={{ color: usd > 0 ? "var(--down)" : "var(--muted)" }}>
-          {usd > 0 ? formatUsd(usd) : "—"}
-        </span>
+      <span className="text-right tabular-nums text-[var(--text)] lg:max-xl:hidden">{usdText(group.usd)}</span>
+      <span
+        className={clsx("whitespace-nowrap text-right tabular-nums", !ink && "text-[var(--muted)]")}
+        style={ink ? { color: ink } : undefined}
+      >
+        {group.soonest <= 0 ? t("home.dangerNow") : clockText(group.soonest, t)}
       </span>
     </Link>
+    </Tip>
   );
 }
 
@@ -284,40 +386,44 @@ function useTyped(text: string, reduce: boolean) {
   return text.slice(0, n);
 }
 
-function CaptionLine({
-  address,
-  row,
-  reduce,
-  t,
-}: {
-  address: string;
-  row: RentTapeRow;
-  reduce: boolean;
-  t: (k: string) => string;
-}) {
+/** The address the miner is at, signed: who, when, how many boxes, and the rent it floats. */
+function QueueLine({ address, row, reduce }: { address: string; row: RentTapeRow; reduce: boolean }) {
+  const t = useT();
   const { locale } = useI18n();
+  const loc = locale === "ru" ? "ru-RU" : "en-US";
   const meta = listPip(address, row.valueNano);
   const named = Boolean(meta.name);
-  const label = meta.name || shortId(address, 10);
+  const label = meta.name || shortId(address, 6);
   const typed = useTyped(label, reduce);
   const done = label.length > 0 && typed.length >= label.length;
   const ink = toneColor(row.blocksUntilRent);
+  const [feePre, feePost = ""] = t("home.rentFee").split("{n}");
   return (
-    <span className="inline-flex min-w-0 max-w-full items-baseline gap-1.5">
-      <span className={clsx("inline-flex min-w-0 items-baseline text-[var(--text)]", !named && "font-mono")}>
-        <span className="min-w-0 truncate">{typed}</span>
-        {done ? null : <span className="type-caret" />}
-      </span>
-      {done ? (
-        <>
-          <span className="shrink-0 text-[var(--muted-2)]">·</span>
-          <span className={clsx("shrink-0 tabular-nums", !ink && "text-[var(--muted)]")} style={ink ? { color: ink } : undefined}>
-            {whenLabel(row.blocksUntilRent, t)}
+    <div className="mt-2 shrink-0 text-[12px] leading-[1.35]" aria-live="polite" data-rent-caption>
+      <p className="m-0 flex min-w-0 items-baseline gap-1.5">
+        <span className="shrink-0 text-[var(--muted-2)]">{t("home.rentQueue")}</span>
+        <Link
+          prefetch={false}
+          href={`/address/${encodeURIComponent(address)}`}
+          className={clsx("inline-flex min-w-0 items-baseline", !named && "font-mono")}
+        >
+          <span className="min-w-0 truncate">{typed}</span>
+          {done ? null : <span className="type-caret" />}
+        </Link>
+      </p>
+      <KpiNum className="mt-0.5 min-w-0">
+        <span className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 tabular-nums text-[var(--muted)]">
+          <span style={ink ? { color: ink } : undefined}>{whenText(row.blocksUntilRent, t)}</span>
+          <span className="text-[var(--muted-2)]">·</span>
+          <span>{countLabel(t, locale, "home.rentBoxes", row.boxCount)}</span>
+          <span className="text-[var(--muted-2)]">·</span>
+          <span>
+            {feePre}
+            <span style={{ color: INK.coral }}>{formatErgFixed(row.rentNano, loc)}</span>
+            {feePost}
           </span>
-          <span className="shrink-0 text-[var(--muted-2)]">·</span>
-          <span className="shrink-0 tabular-nums">{boxesLabel(row.boxCount, t, locale)}</span>
-        </>
-      ) : null}
-    </span>
+        </span>
+      </KpiNum>
+    </div>
   );
 }

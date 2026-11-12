@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, type CSSProperties } from "react";
+import { useEffect } from "react";
 import { AddrFactCard } from "@/components/AddrFactCard";
 import { KpiMark } from "@/components/kpi-marks";
 import { Shell } from "@/components/Shell";
+import { Feed, FeedCount, FeedPlate, FeedRow, FeedSection, type FeedKind } from "@/components/feed/Feed";
+import type { FeedGlyphId } from "@/components/feed/FeedGlyph";
 import { INK } from "@/lib/palette";
 import { useT } from "@/lib/i18n/I18nProvider";
 import {
@@ -15,6 +17,13 @@ import {
   type NetworkKind,
 } from "@/lib/network-directory";
 import { useKeepFresh, usePageSync } from "@/lib/page-sync";
+
+/** Explorers are other sites; APIs and GraphQL are endpoints a program calls. */
+const KIND_TILE: Record<NetworkKind, [FeedKind, FeedGlyphId]> = {
+  explorers: ["bridge", "bridge"],
+  apis: ["contract", "contract"],
+  graphql: ["contract", "protocol"],
+};
 
 const KIND_TITLE: Record<NetworkKind, string> = {
   explorers: "network.explorers",
@@ -55,52 +64,52 @@ export function NetworkView() {
           </a>
         </AddrFactCard>
 
-        {NETWORK_KINDS.map((kind, i) => (
-          <section
-            key={kind}
-            className="home-tile-enter mod rounded-[20px] border border-[var(--border)] bg-[var(--module)] px-4 py-4"
-            style={enterAt(i + 1)}
-          >
-            <h2 className="text-[15px] font-semibold text-[var(--text)]">
-              {t(KIND_TITLE[kind])}
-            </h2>
-            <ul className="mt-3 flex flex-col gap-1">
-              {NETWORK_DIRECTORY[kind].map((row) => {
+        <Feed className="is-rank">
+          {NETWORK_KINDS.map((kind) => (
+            <FeedSection
+              key={kind}
+              label={t(KIND_TITLE[kind])}
+              plate={
+                <FeedPlate
+                  tag={t(KIND_TITLE[kind])}
+                  count={<FeedCount k="feed.links" n={NETWORK_DIRECTORY[kind].length} />}
+                />
+              }
+            >
+              {NETWORK_DIRECTORY[kind].map((row, i) => {
                 const host = hrefHost(row.href);
                 const path = hrefPath(row.href);
-                const op = t(NETWORK_OPS[row.op]);
+                const [k, g] = KIND_TILE[kind];
                 return (
-                  <li key={row.href}>
-                    <a
-                      href={row.href}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex min-w-0 items-baseline justify-between gap-3 rounded-[12px] px-2 py-2 text-[var(--text)] transition-colors duration-[400ms] hover:bg-[var(--wash-faint)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
-                    >
-                      <span className="min-w-0">
-                        <span className="block truncate font-mono text-[13px] tracking-tight">
-                          {host}
-                        </span>
-                        {path ? (
-                          <span className="mt-0.5 block truncate font-mono text-[11px] text-[var(--muted-2)]">
-                            {path}
-                          </span>
-                        ) : null}
-                      </span>
-                      <span className="shrink-0 text-[12px] text-[var(--muted)]">{op}</span>
-                    </a>
-                  </li>
+                  <FeedRow
+                    key={row.href}
+                    k={k}
+                    glyph={g}
+                    tileTitle={t(KIND_TITLE[kind])}
+                    lead={{ rank: String(i + 1) }}
+                    title={
+                      <a
+                        href={row.href}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="feed-name font-mono tabular-nums hover:underline"
+                      >
+                        {host}
+                      </a>
+                    }
+                    facts={
+                      <>
+                        <span className="feed-kind">{t(NETWORK_OPS[row.op])}</span>
+                        {path ? <span className="font-mono">{path}</span> : null}
+                      </>
+                    }
+                  />
                 );
               })}
-            </ul>
-          </section>
-        ))}
+            </FeedSection>
+          ))}
+        </Feed>
       </div>
     </Shell>
   );
 }
-
-function enterAt(i: number): CSSProperties {
-  return { "--enter": i } as CSSProperties;
-}
-

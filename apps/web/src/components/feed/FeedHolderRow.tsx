@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import clsx from "clsx";
+import { Tip, TipFigure } from "@/components/Tip";
 import { FavoriteHeart } from "@/components/FavoriteHeart";
 import { prefetchAddressPage } from "@/lib/address-page-cache";
 import { listPip, type ListPipId } from "@/lib/address-pips";
@@ -120,17 +121,19 @@ export function FeedHolderRow({
             )
           ) : null}
           {erg ? (
-            <span className="feed-wide" title={`${erg.exact} ERG`}>
-              <span className="tabular-nums">{erg.text}</span> ERG
-            </span>
+            <Tip content={erg.exact !== erg.text ? () => <TipFigure>{erg.exact} ERG</TipFigure> : null}>
+              <span className="feed-wide">
+                <span className="tabular-nums">{erg.text}</span> ERG
+              </span>
+            </Tip>
           ) : null}
         </>
       }
       chips={<FeedMeter pct={row.sharePct ?? 0} label={share} title={`${t("token.colShare")} ${share}`} />}
       value={
-        <span className="feed-amt tabular-nums" title={held.exact}>
-          {held.text}
-        </span>
+        <Tip tap={false} content={held.exact !== held.text ? () => <TipFigure>{held.exact}</TipFigure> : null}>
+          <span className="feed-amt tabular-nums">{held.text}</span>
+        </Tip>
       }
       detail={() => (
         <FeedFields>
@@ -285,7 +288,7 @@ export function FeedAddressRow({
         {(key === "first" ? created : active) ?? "—"}
       </span>
     ) : (
-      <FeedAmount raw={ergRaw} glance />
+      <FeedAmount raw={ergRaw} cents />
     );
   return (
     <FeedRow
@@ -338,9 +341,11 @@ export function FeedAddressRow({
             </span>
           ) : null}
           {key !== "erg" && ergRaw != null ? (
-            <span className="feed-wide" title={`${formatScaledAmount(ergRaw, 9, tag)} ERG`}>
-              <span className="tabular-nums">{formatScaledGlance(ergRaw, 9, tag).text}</span> ERG
-            </span>
+            <Tip content={() => <TipFigure>{formatScaledAmount(ergRaw, 9, tag)} ERG</TipFigure>}>
+              <span className="feed-wide">
+                <span className="tabular-nums">{formatScaledGlance(ergRaw, 9, tag).text}</span> ERG
+              </span>
+            </Tip>
           ) : null}
         </>
       }

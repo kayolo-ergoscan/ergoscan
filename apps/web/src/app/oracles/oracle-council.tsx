@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Tip, TipHash, TipHead } from "@/components/Tip";
 import Link from "next/link";
 import clsx from "clsx";
 import { motion, useReducedMotion } from "framer-motion";
@@ -318,14 +319,14 @@ export function OracleCouncil({
       ? walk[hop % walk.length]!
       : null;
   const spark = step ? gapEnds(pts[step.a] ?? pts[0]!, pts[step.b] ?? pts[0]!) : null;
-  const sparkInk = lens === "silent" ? "#ff4d6d" : "var(--up)";
+  const sparkInk = lens === "silent" ? "var(--down)" : "var(--up)";
 
   useEffect(() => {
     if (reduce || phase !== "idle" || walk.length < 1) return;
     const id = window.setInterval(() => setHop((n) => n + 1), HOP_MS);
     return () => window.clearInterval(id);
   }, [reduce, phase, walk.length]);
-  const flashStroke = lens === "silent" ? "#ff4d6d" : "var(--up)";
+  const flashStroke = lens === "silent" ? "var(--down)" : "var(--up)";
   const bindSilent = lens === "silent";
   const showLines =
     box.w > 0 &&
@@ -479,11 +480,21 @@ export function OracleCouncil({
               const href = op.address ? `/address/${op.address}` : `/box/${op.boxId}`;
               const ok = op.live === true;
               return (
+                <Tip
+                  key={op.id}
+                  tap={false}
+                  content={() => (
+                    <>
+                      <TipHead chip={ok ? liveLabel : staleLabel} ink={ok ? "var(--up)" : "var(--warning)"}>
+                        {name}
+                      </TipHead>
+                      <TipHash>{op.address || op.boxId}</TipHash>
+                    </>
+                  )}
+                >
                 <Link
                   prefetch={false}
-                  key={op.id}
                   href={href}
-                  title={`${name} · ${op.address || op.boxId}`}
                   aria-label={`${name}. ${ok ? liveLabel : staleLabel}`}
                   className="group flex min-w-0 flex-col items-center gap-1.5 rounded-lg px-0.5 py-0.5 outline-none transition-colors duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[var(--wash)] focus-visible:bg-[var(--wash)]"
                 >
@@ -513,6 +524,7 @@ export function OracleCouncil({
                     {name}
                   </span>
                 </Link>
+                </Tip>
               );
             })}
             {Array.from({ length: ghosts }, (_, i) => (
@@ -663,7 +675,7 @@ function LensChip({
         "disabled:pointer-events-none disabled:opacity-50",
         pressed
           ? tone === "silent"
-            ? "is-pressed bg-[var(--panel-hover)] text-[#FF4D6D]"
+            ? "is-pressed bg-[var(--panel-hover)] text-[var(--down)]"
             : "is-pressed bg-[var(--panel-hover)] text-[var(--text)]"
           : "text-[var(--muted)] hover:bg-[var(--wash)] hover:text-[var(--text)]"
       )}

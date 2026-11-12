@@ -1,5 +1,6 @@
 "use client";
 
+import { Tip, TipFigure } from "@/components/Tip";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
@@ -498,9 +499,11 @@ export function FeedTokenRow({
             <FeedCount k="feed.txCount" n={row.txCount ?? 0} className="feed-mid" />
           ) : null}
           {key !== "supply" && supply ? (
-            <span className="feed-wide" title={supply.exact}>
-              {t("feed.supply")} <span className="tabular-nums">{supply.text}</span>
-            </span>
+            <Tip content={supply.exact !== supply.text ? () => <TipFigure>{supply.exact}</TipFigure> : null}>
+              <span className="feed-wide">
+                {t("feed.supply")} <span className="tabular-nums">{supply.text}</span>
+              </span>
+            </Tip>
           ) : null}
           {key !== "last" ? (
             <span>
@@ -515,13 +518,14 @@ export function FeedTokenRow({
         </>
       }
       value={
-        <span
-          className="feed-amt tabular-nums"
-          title={key === "supply" ? supply?.exact : undefined}
-          suppressHydrationWarning
+        <Tip
+          tap={false}
+          content={key === "supply" && supply && supply.exact !== supply.text ? () => <TipFigure>{supply.exact}</TipFigure> : null}
         >
-          {value}
-        </span>
+          <span className="feed-amt tabular-nums" suppressHydrationWarning>
+            {value}
+          </span>
+        </Tip>
       }
       sub={t(`feed.sort.${key}`)}
       subMinor

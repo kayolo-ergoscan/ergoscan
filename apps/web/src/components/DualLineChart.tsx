@@ -8,6 +8,8 @@ import { CanvasRenderer } from "echarts/renderers";
 import { chartChrome } from "@/lib/chart-chrome";
 import { formatDottedDate, formatH24 } from "@/lib/format";
 import { neonLine } from "@/lib/chart-neon";
+import { TipHead, TipRow, TipRows, useFloatTip } from "@/components/Tip";
+import { pointRect } from "@/lib/tip-place";
 import { useInk } from "@/lib/use-ink";
 import {
   HOME_TX_CHART_BIN_MS,
@@ -32,8 +34,8 @@ echarts.use([
 export type { TxActivityPoint };
 
 /** AdaStat-like: soft sky + pink, no fill. Not brand cyan / violet-on-wash. */
-const TX = "#8ec8ff";
-const FEE = "#f472b6";
+const TX = "#86a6f0";
+const FEE = "#e799b7";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function tickStepDays(tMin: number, tMax: number): number {
@@ -184,7 +186,9 @@ export function DualLineChart({
   const hover = useRef(onHover);
   const labels = useRef({ nameTxs, nameFees });
   const loc = useRef(locale);
-  const quietMove = useRef<((ev: MouseEvent) => void) | null>(null);
+  const quietMove = useRef<((ev: PointerEvent) => void) | null>(null);
+  /** The shared tip at the hovered day; a tap on a phone shows it too. */
+  const lineTip = useFloatTip({ within: () => el.current });
   fmtTxs.current = formatTxs;
   fmtFees.current = formatFees;
   hover.current = onHover;
@@ -244,11 +248,18 @@ export function DualLineChart({
     chart.current = c;
     const ro = new ResizeObserver(() => c.resize());
     ro.observe(node);
-    const leave = () => hover.current?.(null);
-    node.addEventListener("mouseleave", leave);
+    const leave = (ev: PointerEvent) => {
+      if (ev.pointerType === "touch") return;
+      hover.current?.(null);
+      lineTip.hide();
+    };
+    node.addEventListener("pointerleave", leave);
     return () => {
-      node.removeEventListener("mouseleave", leave);
-      if (quietMove.current) node.removeEventListener("mousemove", quietMove.current);
+      node.removeEventListener("pointerleave", leave);
+      if (quietMove.current) {
+        node.removeEventListener("pointermove", quietMove.current);
+        node.removeEventListener("pointerdown", quietMove.current);
+      }
       ro.disconnect();
       c.dispose();
       chart.current = null;
@@ -312,7 +323,7 @@ export function DualLineChart({
         grid,
         tooltip: {
           trigger: "axis",
-          showContent: showTip,
+          showContent: false,
           axisPointer: {
             type: "line",
             lineStyle: {
@@ -321,42 +332,6 @@ export function DualLineChart({
               type: showTip ? ("dashed" as const) : ("solid" as const),
               opacity: showTip ? 1 : 0.55,
             },
-          },
-          backgroundColor: chrome.module,
-          borderColor: chrome.border,
-          borderWidth: showTip ? 1 : 0,
-          padding: showTip ? [8, 12] : 0,
-          textStyle: { color: chrome.text, fontSize: 12 },
-          formatter: (raw: unknown) => {
-            const rows = Array.isArray(raw) ? raw : [raw];
-            const first = rows[0] as { value?: [number, number] } | undefined;
-            const t = first?.value?.[0];
-            if (t == null) return "";
-            const y = (rows[0] as { value?: [number, number] })?.value?.[1] ?? 0;
-            const src =
-              seriesPts.find((p) => p.t === t) ??
-              seriesPts.reduce<(typeof seriesPts)[number] | null>((best, p) => {
-                if (!best) return p;
-                return Math.abs(p.t - t) < Math.abs(best.t - t) ? p : best;
-              }, null);
-            hover.current?.(src ?? { t, txs: showTxs ? y : 0, feesErg: showTxs ? 0 : y });
-            if (!showTip) return "";
-            const { nameTxs: nT, nameFees: nF } = labels.current;
-            const feeTxt =
-              src == null
-                ? "—"
-                : src.feesKnown === false
-                  ? "—"
-                  : fmtFees.current(src.feesErg);
-            const when =
-              windowMs > 0
-                ? formatActivityWindow(t, windowMs, loc.current)
-                : fmtTime(t, loc.current);
-            if (showTxs && showFees) {
-              return `${when}<br/>${nT}  ${fmtTxs.current(src?.txs ?? y)}<br/>${nF}  ${feeTxt}`;
-            }
-            if (showFees) return `${when}<br/>${nF}  ${feeTxt}`;
-            return `${when}<br/>${nT}  ${fmtTxs.current(src?.txs ?? y)}`;
           },
         },
         xAxis: {
@@ -388,6 +363,8 @@ export function DualLineChart({
             axisLabel: {
               color: chrome.muted,
               fontSize: 11,
+              // The padded max is not a round tick; its label sat on top of the next one (97.3 over 90.0).
+              showMaxLabel: false,
               formatter: (v: number) => yFmt(v),
             },
           },
@@ -404,6 +381,7 @@ export function DualLineChart({
             axisLabel: {
               color: chrome.muted,
               fontSize: 11,
+              showMaxLabel: false,
               formatter: (v: number) => fmtFees.current(v),
             },
           },
@@ -481,11 +459,13 @@ export function DualLineChart({
     );
     const node = el.current;
     if (node && quietMove.current) {
-      node.removeEventListener("mousemove", quietMove.current);
+      node.removeEventListener("pointermove", quietMove.current);
+      node.removeEventListener("pointerdown", quietMove.current);
       quietMove.current = null;
     }
-    if (node && !showTip) {
-      const onMove = (ev: MouseEvent) => {
+    if (node) {
+      const onMove = (ev: PointerEvent) => {
+        if (ev.type === "pointermove" && ev.pointerType === "touch") return;
         const rect = node.getBoundingClientRect();
         const raw = c.convertFromPixel({ gridIndex: 0 }, [ev.clientX - rect.left, ev.clientY - rect.top]);
         const t = Array.isArray(raw) ? raw[0] : null;
@@ -501,9 +481,47 @@ export function DualLineChart({
         }
         if (!best) return;
         hover.current?.(best);
+        if (!showTip) return;
+        // Anchor on the higher of the two dots, so the tip sits over both lines.
+        const feeOk = showFees && best.feesKnown !== false;
+        const ys: number[] = [];
+        if (showTxs) {
+          const px = c.convertToPixel({ xAxisIndex: 0, yAxisIndex: 0 }, [best.t, best.txs]);
+          if (Array.isArray(px)) ys.push(px[1]!);
+        }
+        if (feeOk) {
+          const px = c.convertToPixel({ xAxisIndex: 0, yAxisIndex: showTxs ? 1 : 0 }, [best.t, best.feesErg]);
+          if (Array.isArray(px)) ys.push(px[1]!);
+        }
+        const xs = c.convertToPixel({ xAxisIndex: 0, yAxisIndex: 0 }, [best.t, 0]);
+        const x = Array.isArray(xs) ? xs[0]! : ev.clientX - rect.left;
+        const y = ys.length ? Math.min(...ys) : ev.clientY - rect.top;
+        const { nameTxs: nT, nameFees: nF } = labels.current;
+        const when =
+          windowMs > 0 ? formatActivityWindow(best.t, windowMs, loc.current) : fmtTime(best.t, loc.current);
+        lineTip.show(
+          pointRect(rect.left + x, rect.top + y, 6),
+          <>
+            <TipHead mono quiet>{when}</TipHead>
+            <TipRows>
+              {showTxs ? (
+                <TipRow label={nT} dot={colorTxs}>
+                  {fmtTxs.current(best.txs)}
+                </TipRow>
+              ) : null}
+              {showFees ? (
+                <TipRow label={nF} dot={colorFees}>
+                  {feeOk ? fmtFees.current(best.feesErg) : "—"}
+                </TipRow>
+              ) : null}
+            </TipRows>
+          </>,
+          { tapped: ev.pointerType === "touch" }
+        );
       };
       quietMove.current = onMove;
-      node.addEventListener("mousemove", onMove);
+      node.addEventListener("pointermove", onMove);
+      node.addEventListener("pointerdown", onMove);
     }
   }, [shown, compact, colorTxs, colorFees, locale, binMs, skipBin, yRight, fillPlot, tipPulse, series, glow, showTip, ink]);
 

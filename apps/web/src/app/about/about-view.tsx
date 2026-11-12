@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, type CSSProperties } from "react";
+import { Tip } from "@/components/Tip";
 import { AddrFactCard } from "@/components/AddrFactCard";
 import { KpiMark } from "@/components/kpi-marks";
 import { Shell } from "@/components/Shell";
@@ -37,17 +38,17 @@ export function AboutView() {
           </p>
           <div className="mt-3 flex items-center gap-2">
             {ABOUT_LINKS.map((link) => (
+              <Tip key={link.id} content={t(link.labelKey)} side="bottom" tap={false}>
               <a
-                key={link.id}
                 href={link.href}
                 target="_blank"
                 rel="noreferrer"
                 aria-label={t(link.labelKey)}
-                title={t(link.labelKey)}
                 className="chip-press inline-flex h-8 w-8 items-center justify-center overflow-hidden rounded-[8px] text-[var(--muted)] transition-colors duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:text-[var(--text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
               >
                 {link.id === "github" ? <GithubMark /> : <XMark />}
               </a>
+              </Tip>
             ))}
           </div>
         </AddrFactCard>

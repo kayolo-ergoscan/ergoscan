@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { FeedPlate } from "@/components/feed/Feed";
 import { formatGroupedInt } from "@/lib/format";
 import type { BlockHeaderFields } from "@/lib/list-snapshots";
 
@@ -147,9 +148,10 @@ export function BlockHeaderSheet({
           <dd>{grouped(header.difficulty) || "—"}</dd>
         </div>
       </dl>
-      <div className="hdr-sheet">
-        <p className="hdr-band">{t("block.header.roots")}</p>
-        <div className="hdr-rows">
+      <div className="feed hdr-feed">
+        <section className="feed-day">
+          <FeedPlate tag={t("block.header.roots")} />
+          <div className="hdr-rows">
           {roots.map((row) => (
             <HexRow
               key={row.label}
@@ -161,9 +163,11 @@ export function BlockHeaderSheet({
               tone={row.tone}
             />
           ))}
-        </div>
-        <p className="hdr-band is-split">{t("block.header.pow")}</p>
-        <div className="hdr-rows">
+          </div>
+        </section>
+        <section className="feed-day">
+          <FeedPlate tag={t("block.header.pow")} />
+          <div className="hdr-rows">
           {proof.map((row) => (
             <HexRow
               key={row.label}
@@ -176,7 +180,8 @@ export function BlockHeaderSheet({
               tone={row.tone}
             />
           ))}
-        </div>
+          </div>
+        </section>
       </div>
     </section>
   );

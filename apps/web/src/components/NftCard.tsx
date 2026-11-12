@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import clsx from "clsx";
+import { useEffect, useRef, useState } from "react";
 import { KpiMark } from "@/components/kpi-marks";
 import { shortId } from "@/lib/format";
 import { tokenIdenticonSrc } from "@/lib/token-identicon";
@@ -28,7 +29,14 @@ export function NftThumb({
 }) {
   const { src, onError } = useMediaSrc(url, "image");
   const missing = !String(url || "").trim();
-  if (missing && tokenId) {
+  const art = useRef<HTMLImageElement>(null);
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    setReady(false);
+    const img = art.current;
+    if (img?.complete && img.naturalWidth > 0) setReady(true);
+  }, [src]);
+  if ((missing || !src) && tokenId) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
@@ -53,12 +61,15 @@ export function NftThumb({
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
+      ref={art}
       src={src}
       alt=""
       loading="lazy"
       decoding="async"
       referrerPolicy="no-referrer"
       className={className}
+      data-ready={ready ? "" : undefined}
+      onLoad={() => setReady(true)}
       onError={onError}
     />
   );

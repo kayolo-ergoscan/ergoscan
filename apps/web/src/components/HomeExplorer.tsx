@@ -37,6 +37,7 @@ import { SNAPSHOT_FETCH, snapshotPath } from "@/lib/keyed-enter";
 import { majorityColorInk, majorityTxInk } from "@/lib/block-ink";
 import {
   parseRentTape,
+  parseRentEpochBoxes,
   parseRentEpochNano,
   type RentTapeRow,
 } from "@ergoscan/shared";
@@ -44,6 +45,7 @@ import { HomeRentTape } from "@/components/HomeRentTape";
 import { parseRentDanger, type RentDangerRow } from "@/lib/rent-danger";
 import { HomeMempoolStage } from "@/components/HomeMempoolStage";
 import { CadenceYard, type CadenceYardBlock } from "@/components/CadenceYard";
+import { Tip, TipHead, TipInfo, TipNote, TipRow, TipRows } from "@/components/Tip";
 import { HomeVersionNodes } from "@/components/HomeVersionNodes";
 import { ERGO_MAX_BLOCK_SIZE } from "@/lib/ergo-emission";
 import { isSupplyDigit, zipSupplyGlyphs } from "@/lib/supply-flip";
@@ -95,6 +97,9 @@ type BlockRow = {
   color?: string | null;
   /** True when this block was mined with Lithos. Omitted until the snapshot says so. */
   lithos?: boolean;
+  /** Snapshot extras, read by the crate tip. A live seal has none. */
+  minerName?: string | null;
+  feeNano?: string | number | null;
 };
 
 function mergeBlockRow(prev: BlockRow[], row: BlockRow): BlockRow[] {
@@ -120,6 +125,8 @@ function mergeBlockRow(prev: BlockRow[], row: BlockRow): BlockRow[] {
       size: row.size > 0 ? row.size : old.size,
       color: row.color || old.color,
       lithos: row.lithos === true || (row.lithos == null && old.lithos === true),
+      minerName: row.minerName || old.minerName,
+      feeNano: row.feeNano || old.feeNano,
     };
     return next.sort((a, b) => b.height - a.height).slice(0, CADENCE + 1);
   }
@@ -134,8 +141,8 @@ function mergeBlockRows(prev: BlockRow[], incoming: readonly BlockRow[]): BlockR
 
 type TxActivityPoint = { t: number; txs: number; feesErg: number; feesKnown?: boolean };
 
-const TX_LINE = "#8ec8ff";
-const FEE_LINE = "#f472b6";
+const TX_LINE = "#86a6f0";
+const FEE_LINE = "#e799b7";
 
 function formatFeeAxis(v: number): string {
   if (!Number.isFinite(v) || v === 0) return "0";
@@ -166,6 +173,7 @@ export function HomeExplorer({
   initialChartError = false,
   initialRentTape = [],
   initialRentEpochNano = null,
+  initialRentEpochBoxes = null,
   initialRentDanger = null,
   previewShare = false,
 }: {
@@ -182,6 +190,8 @@ export function HomeExplorer({
   initialChartError?: boolean;
   initialRentTape?: RentTapeRow[];
   initialRentEpochNano?: string | null;
+  /** Boxes that turn four years old before this header epoch ends. */
+  initialRentEpochBoxes?: number | null;
   /** Tokens short on ERG, from the rent snapshot. Null until that field arrives. */
   initialRentDanger?: RentDangerRow[] | null;
   /** Local `/?preview=share` — keep fixture rows, don't overwrite from stage. */
@@ -217,6 +227,7 @@ export function HomeExplorer({
   const [poolHover, setPoolHover] = useState<{ label: string; pct: number } | null>(null);
   const [rentTape, setRentTape] = useState<RentTapeRow[]>(initialRentTape);
   const [rentEpochNano, setRentEpochNano] = useState<string | null>(initialRentEpochNano);
+  const [rentEpochBoxes, setRentEpochBoxes] = useState<number | null>(initialRentEpochBoxes);
   const [rentDanger, setRentDanger] = useState<RentDangerRow[]>(initialRentDanger ?? []);
   const [rentDangerReady, setRentDangerReady] = useState(initialRentDanger != null);
   const snapRetry = useRef(0);
@@ -282,6 +293,7 @@ export function HomeExplorer({
           change24h?: number | null;
           rentTape?: unknown;
           rentEpochNano?: unknown;
+          rentEpochBoxes?: unknown;
           rentDanger?: unknown;
         }>;
       })
@@ -431,6 +443,8 @@ export function HomeExplorer({
           if (tape) setRentTape(tape);
           const epochNano = parseRentEpochNano(j.rentEpochNano);
           if (epochNano != null) setRentEpochNano(epochNano);
+          const epochBoxes = parseRentEpochBoxes(j.rentEpochBoxes);
+          if (epochBoxes != null) setRentEpochBoxes(epochBoxes);
           const danger = parseRentDanger(j.rentDanger);
           setRentDanger(danger ?? []);
           setRentDangerReady(true);
@@ -612,7 +626,7 @@ export function HomeExplorer({
             </div>
             <KpiValue flush full muted={mcap == null}>
               {mcap != null ? (
-                <ReelText text={`${formatGroupedNumber(Math.round(mcap), 0, 0)} $`} />
+                <ReelText text={`$${formatGroupedNumber(Math.round(mcap), 0, 0)}`} />
               ) : (
                 mcapMiss
               )}
@@ -621,7 +635,7 @@ export function HomeExplorer({
               <TileName>{t("home.volume24h")}</TileName>
               <KpiValue flush full muted={vol24 == null}>
                 {vol24 != null ? (
-                  <ReelText text={`${formatGroupedNumber(Math.round(vol24), 0, 0)} $`} />
+                  <ReelText text={`$${formatGroupedNumber(Math.round(vol24), 0, 0)}`} />
                 ) : (
                   "—"
                 )}
@@ -632,13 +646,17 @@ export function HomeExplorer({
           <Link prefetch={false} href="/addresses" className={clsx(TILE, "kpi-tile--press relative")} style={enterAt(4)}>
             <HoldersMark />
             <TileFact hint={t("home.holdersHint")}>
-              <TileName className="pr-14">{t("home.holdersCount")}</TileName>
+              <TileName className="pr-14">
+                {t("home.holdersCount")} <TipInfo content={t("home.holdersHint")} label={t("home.holdersHint")} side="bottom" />
+              </TileName>
               <KpiValue flush muted={holderCount == null}>
                 <ReelText text={holderCount != null ? holderCount.toLocaleString(loc) : miss} />
               </KpiValue>
             </TileFact>
             <TileFact className="mt-auto" place="above" hint={t("home.scriptHint")}>
-              <TileName className="pr-14">{t("home.script")}</TileName>
+              <TileName className="pr-14">
+                {t("home.script")} <TipInfo content={t("home.scriptHint")} label={t("home.scriptHint")} />
+              </TileName>
               <KpiValue flush full muted={scriptCount == null}>
                 <ReelText
                   text={scriptCount != null ? scriptCount.toLocaleString(loc) : miss}
@@ -844,6 +862,9 @@ export function HomeExplorer({
         <HomeRentTape
           rows={rentTape}
           epochRentNano={rentEpochNano}
+          epochBoxes={rentEpochBoxes}
+          height={tipHeight}
+          avgBlockMs={avgBlockMs}
           danger={rentDanger}
           dangerReady={rentDangerReady}
           previewShare={previewShare}
@@ -878,18 +899,11 @@ function TileFact({
   place?: "above" | "below";
   children: ReactNode;
 }) {
+  // Inside a link tile: a tap opens the page, so the tip is for hover and keyboard.
   return (
-    <div className={clsx("group/hint relative", className)}>
-      {children}
-      <p
-        className={clsx(
-          "pointer-events-none absolute left-0 z-20 max-w-[15rem] rounded-[10px] border border-[var(--border)] bg-[var(--module)] px-2.5 py-1.5 text-[12px] leading-snug text-[var(--text)] opacity-0 shadow-[0_8px_24px_rgba(0,0,0,0.28)] transition-opacity duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] group-hover/hint:opacity-100",
-          place === "above" ? "bottom-full mb-1.5" : "top-full mt-1.5"
-        )}
-      >
-        {hint}
-      </p>
-    </div>
+    <Tip content={hint} side={place === "above" ? "top" : "bottom"} tap={false}>
+      <div className={clsx("relative", className)}>{children}</div>
+    </Tip>
   );
 }
 
@@ -925,7 +939,7 @@ function HomeActivityTile({
         <div className="relative mb-1 flex h-[22px] shrink-0 items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
             <h2 className="m-0 text-[13px] leading-none" style={{ color: HOME.forming }}>{title}</h2>
-            <Link prefetch={false} href={href} className="text-[13px] leading-none text-[var(--muted)] hover:text-[var(--text)]">
+            <Link prefetch={false} href={href} className="tap-44 text-[13px] leading-none text-[var(--muted)] hover:text-[var(--text)]">
               {viewAll}
             </Link>
           </div>
@@ -1179,15 +1193,16 @@ function EpochBar({
           {t("home.epoch")} <ReelText text={n.toLocaleString(loc)} />
         </p>
         <div className="flex min-w-0 items-center gap-3 text-[12px] leading-none tabular-nums">
-          <span className="epoch-slot inline-flex min-w-0 items-baseline gap-1 font-semibold">
+          <span className="epoch-slot inline-flex shrink-0 items-baseline gap-1 whitespace-nowrap font-semibold">
             <ReelText text={slot.toLocaleString(loc)} />
-            <span className="font-medium opacity-70">/ {ERGO_EPOCH_LEN.toLocaleString(loc)}</span>
+            {/* A phone keeps the slot and the %; the epoch length is the same every time. */}
+            <span className="font-medium opacity-70 max-sm:hidden">/ {ERGO_EPOCH_LEN.toLocaleString(loc)}</span>
           </span>
           <span className="epoch-slot inline-flex shrink-0 items-center gap-1 font-semibold">
             <EpochClock />
             <ReelText text={`${pct.toFixed(0)}%`} />
           </span>
-          <span className="epoch-left inline-flex shrink-0 items-center gap-1 font-medium">
+          <span className="epoch-left inline-flex shrink-0 items-center gap-1 whitespace-nowrap font-medium">
             <EpochFlag />
             <ReelText text={formatRemain(leftMs)} />
             <span className="font-normal opacity-80">{t("home.epochLeft")}</span>
@@ -1673,7 +1688,7 @@ function HomeMempoolTile({
             <FormingAge ts={formingSince} />
           </span>
         </div>
-        <Link prefetch={false} href="/mempool" className="text-[13px] leading-none text-[var(--muted)] hover:text-[var(--text)]">
+        <Link prefetch={false} href="/mempool" className="tap-44 text-[13px] leading-none text-[var(--muted)] hover:text-[var(--text)]">
           {all}
         </Link>
       </div>
@@ -1709,7 +1724,7 @@ function BlockCadence({
   grow: { n: number; total: number; ink: string } | null;
   onAssembleDone: () => void;
 }) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const reduce = useReducedMotion();
   const [hoverId, setHoverId] = useState<string | null>(null);
 
@@ -1754,8 +1769,12 @@ function BlockCadence({
     yard[yard.length - 1] ??
     null;
   const activeRow = active ? slots.find((b) => b.id === active.id) ?? null : null;
+  // The pour counter belongs to the new block only while it is in the yard (holding).
+  // Before its first ball lands, `last` is still the previous block and keeps its own count.
   const activeTxs =
-    active && grow && last && active.id === last.id && grow.total > 0 ? grow.n : (activeRow?.txCount ?? 0);
+    holding && active && grow && last && active.id === last.id && grow.total > 0
+      ? grow.n
+      : (activeRow?.txCount ?? 0);
 
   return (
     <section
@@ -1785,7 +1804,7 @@ function BlockCadence({
             </>
           ) : null}
         </div>
-        <Link prefetch={false} href="/blocks" className="shrink-0 text-[13px] leading-none text-[var(--muted)] hover:text-[var(--text)]">
+        <Link prefetch={false} href="/blocks" className="tap-44 shrink-0 text-[13px] leading-none text-[var(--muted)] hover:text-[var(--text)]">
           {all}
         </Link>
       </div>
@@ -1797,6 +1816,33 @@ function BlockCadence({
           colorsReady={inkReady}
           label={title}
           onHover={(id) => setHoverId((cur) => (cur === id ? cur : id))}
+          tip={(id) => {
+            const row = slots.find((b) => b.id === id);
+            if (!row) return null;
+            const txs =
+              grow && last && id === last.id && grow.total > 0 ? grow.n : row.txCount;
+            const feeRaw = row.feeNano != null ? String(row.feeNano) : "";
+            const fee = /^\d+$/.test(feeRaw) && feeRaw !== "0" ? feeRaw : null;
+            return (
+              <>
+                <TipHead chip={t("tip.block")} ink="var(--c-block, #ffd23c)" mono>
+                  {row.height.toLocaleString(loc)}
+                </TipHead>
+                <TipRows>
+                  <TipRow label={t("tip.txs")}>{txs != null ? txs.toLocaleString(loc) : "—"}</TipRow>
+                  {row.size > 0 ? <TipRow label={t("tip.size")}>{formatBytes(row.size)}</TipRow> : null}
+                  {fee ? <TipRow label={t("tip.fees")}>{formatErgPrecise(fee, locale)}</TipRow> : null}
+                  {row.minerName ? (
+                    <TipRow label={t("tip.miner")} text>
+                      {row.minerName}
+                    </TipRow>
+                  ) : null}
+                  <TipRow label={t("tip.time")}>{fmtCreated(row.timestamp, locale)}</TipRow>
+                </TipRows>
+                {row.lithos ? <TipNote>{t("block.chip.lithosHint")}</TipNote> : null}
+              </>
+            );
+          }}
         />
       </div>
       <div className="sr-only">

@@ -2118,14 +2118,14 @@ export function HeaderScout() {
       <canvas
         ref={ref}
         aria-hidden
-        className="pointer-events-none absolute inset-0 z-10 h-full w-full"
+        className="header-scout pointer-events-none absolute inset-0 z-10 h-full w-full"
       />
       <button
         ref={hitRef}
         type="button"
         tabIndex={-1}
         aria-label={t("scout.home")}
-        className="pointer-events-none fixed z-20 h-14 w-[52px] cursor-pointer rounded-full border-0 bg-transparent p-0 opacity-0 outline-none focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+        className="header-scout pointer-events-none fixed z-20 h-14 w-[52px] cursor-pointer rounded-full border-0 bg-transparent p-0 opacity-0 outline-none focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
         onPointerDown={(e) => {
           e.preventDefault();
           e.stopPropagation();

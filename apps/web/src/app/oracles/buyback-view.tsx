@@ -1,11 +1,27 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { Tip, TipInfo } from "@/components/Tip";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import clsx from "clsx";
 import { Shell } from "@/components/Shell";
-import { StuckPin } from "@/components/StuckPin";
+import {
+  Feed,
+  FeedAmount,
+  FeedChip,
+  FeedCount,
+  FeedDays,
+  FeedEmpty,
+  FeedField,
+  FeedFields,
+  FeedIdLine,
+  FeedPhrase,
+  FeedRow,
+  type FeedKind,
+  type FeedLead,
+} from "@/components/feed/Feed";
+import type { FeedGlyphId } from "@/components/feed/FeedGlyph";
 import { compactFigure, KpiGrid } from "@/components/KpiGrid";
 import { KpiMark } from "@/components/kpi-marks";
 import { RankWindow } from "@/components/RankWindow";
@@ -20,7 +36,7 @@ import {
   type BuybackMoveKind,
   type BuybackPack,
 } from "@/lib/buyback";
-import { formatErg, formatErgFixed, formatErgPrecise, formatRelAge, formatTokenAmount, shortId } from "@/lib/format";
+import { formatErg, formatErgFixed, formatErgPrecise, formatTokenAmount, formatTs, shortId, toEpochMs } from "@/lib/format";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { useKeepFresh, usePageSync } from "@/lib/page-sync";
 import { INK } from "@/lib/palette";
@@ -47,13 +63,6 @@ function MarkScroll({ tone }: { tone: string }) {
     </svg>
   );
 }
-
-const ACT_INK: Record<BuybackMoveKind, string> = {
-  topup: INK.gold,
-  swap: INK.cyan,
-  return: INK.teal,
-  open: INK.violet,
-};
 
 function loc(locale: string): string {
   return locale === "ru" ? "ru-RU" : "en-US";
@@ -91,11 +100,6 @@ function signedToken(raw: string, locale: string): string {
   return `${neg ? "−" : "+"}${body}`;
 }
 
-function whoLabel(address: string | null): string {
-  if (!address) return "";
-  return lookupAddress(address)?.name || shortId(address, 10);
-}
-
 export function BuybackView({ kind, initial }: { kind: BuybackKind; initial?: BuybackPack }) {
   const t = useT();
   const { locale } = useI18n();
@@ -103,7 +107,6 @@ export function BuybackView({ kind, initial }: { kind: BuybackKind; initial?: Bu
   const [pack, setPack] = useState(initial ?? emptyBuyback(kind));
   const [pending, setPending] = useState(false);
   const [offset, setOffset] = useState(0);
-  const [stuck, setStuck] = useState(false);
   const packRef = useRef(pack);
   packRef.current = pack;
   const skipMount = useRef(!!initial);
@@ -282,20 +285,20 @@ export function BuybackView({ kind, initial }: { kind: BuybackKind; initial?: Bu
               >
                 <div className="mb-2 min-w-0">
                   <div className="flex h-[22px] min-w-0 items-center gap-3">
-                    <h2
-                      className="m-0 truncate text-[17px] font-semibold leading-[1.15] tracking-tight"
-                      title={t("buyback.chartHint")}
-                    >
-                      {t("buyback.chartTitle")}
+                    <h2 className="m-0 flex min-w-0 items-center gap-1.5 text-[17px] font-semibold leading-[1.15] tracking-tight">
+                      <Tip content={t("buyback.chartHint")} tap={false}>
+                        <span className="truncate">{t("buyback.chartTitle")}</span>
+                      </Tip>
+                      <TipInfo content={t("buyback.chartHint")} label={t("buyback.chartHint")} />
                     </h2>
                   </div>
                   <div className="mt-2 flex items-center gap-3 text-[12px] text-[var(--muted)]">
                     <span className="inline-flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full" style={{ background: "#8ec8ff" }} />
+                      <span className="h-2 w-2 rounded-full" style={{ background: "#86a6f0" }} />
                       {t("buyback.chartErg")}
                     </span>
                     <span className="inline-flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full" style={{ background: "#f472b6" }} />
+                      <span className="h-2 w-2 rounded-full" style={{ background: "#e799b7" }} />
                       {fill(t("buyback.chartToken"), { sym })}
                     </span>
                   </div>
@@ -379,10 +382,12 @@ export function BuybackView({ kind, initial }: { kind: BuybackKind; initial?: Bu
                   {notes.length > 0 ? (
                     <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[12px] leading-snug">
                       {notes.map((note) => (
-                        <li key={note.key} className="min-w-0" title={note.hint}>
-                          <span className="text-[var(--muted-2)]">{note.label} </span>
-                          <span className="text-[var(--text)]">{note.value}</span>
-                        </li>
+                        <Tip key={note.key} content={note.hint}>
+                          <li className="min-w-0">
+                            <span className="text-[var(--muted-2)]">{note.label} </span>
+                            <span className="text-[var(--text)]">{note.value}</span>
+                          </li>
+                        </Tip>
                       ))}
                     </ul>
                   ) : null}
@@ -390,36 +395,21 @@ export function BuybackView({ kind, initial }: { kind: BuybackKind; initial?: Bu
               </section>
             </div>
 
-            <div className="addr-sheet mt-2">
-              <StuckPin onStuck={setStuck} />
-              <div className="addr-pan">
-                <div
-                  className={clsx(
-                    "addr-head addr-lane addr-lane-x buyback-lane text-[12px] font-medium",
-                    stuck && "is-stuck"
-                  )}
-                >
-                  <div>{t("buyback.colHeight")}</div>
-                  <div>{t("buyback.colWhen")}</div>
-                  <div>{t("buyback.colAction")}</div>
-                  <div className="buyback-num">{t("buyback.colErg")}</div>
-                  <div className="buyback-num">{fill(t("buyback.colToken"), { sym })}</div>
-                  <div className="buyback-num">{t("buyback.colErgLeft")}</div>
-                  <div className="buyback-num">{fill(t("buyback.colTokenLeft"), { sym })}</div>
-                  <div>{t("buyback.colTx")}</div>
-                  <div>{t("buyback.colWho")}</div>
-                </div>
-                <div
-                  className={clsx(
-                    "transition-opacity duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
-                    pending && "opacity-60"
-                  )}
-                >
-                  {rows.map((row) => (
-                    <BuybackRow key={`${row.tx}-${row.kind}`} row={row} locale={locale} t={t} />
-                  ))}
-                </div>
-              </div>
+            <div className="feed-sheet mt-2">
+              <Feed busy={pending}>
+                {!rows.length ? (
+                  <FeedEmpty k="oracle" title={t("buyback.empty")} />
+                ) : (
+                  <FeedDays
+                    items={rows}
+                    msOf={(row) => toEpochMs(row.ts)}
+                    countOf={(n) => <FeedCount k="feed.actions" n={n} />}
+                    render={(row, lead) => (
+                      <FeedBuybackRow key={`${row.tx}-${row.kind}`} row={row} lead={lead} sym={sym} />
+                    )}
+                  />
+                )}
+              </Feed>
               {pack.moves.length > 0 && (
                 <RankWindow
                   offset={offset}
@@ -444,78 +434,123 @@ export function BuybackView({ kind, initial }: { kind: BuybackKind; initial?: Bu
   );
 }
 
-function BuybackRow({
-  row,
-  locale,
-  t,
-}: {
-  row: BuybackMove;
-  locale: string;
-  t: (key: string) => string;
-}) {
-  const ink = ACT_INK[row.kind];
-  const name = whoLabel(row.who);
+const ACT_TILE: Record<BuybackMoveKind, [FeedKind, FeedGlyphId]> = {
+  topup: ["in", "in"],
+  swap: ["swap", "swap"],
+  return: ["reward", "reward"],
+  open: ["box", "box"],
+};
+
+function bigOf(raw: string): bigint | null {
+  try {
+    return BigInt(raw);
+  } catch {
+    return null;
+  }
+}
+
+/** One buyback move: the ERG change is the figure; the token change is a chip; what is left sits under it. */
+function FeedBuybackRow({ row, lead, sym }: { row: BuybackMove; lead: FeedLead; sym: string }) {
+  const t = useT();
+  const { locale } = useI18n();
+  const L = loc(locale);
+  const [k, g] = ACT_TILE[row.kind];
+  const act = t(`buyback.act.${row.kind}`);
+  const name = row.who ? lookupAddress(row.who)?.name ?? null : null;
+  const derg = bigOf(row.derg);
+  const dtok = bigOf(row.dtok);
+  const height = row.blockId ? (
+    <Link prefetch={false} href={`/block/${row.blockId}`} className="tabular-nums">
+      {row.height.toLocaleString(L)}
+    </Link>
+  ) : (
+    <span className="tabular-nums">{row.height.toLocaleString(L)}</span>
+  );
   return (
-    <div className="addr-lane addr-lane-x buyback-lane border-t border-[var(--border-soft)] text-[13px]">
-      <div className="tabular-nums">
-        {row.blockId ? (
-          <Link prefetch={false} href={`/block/${row.blockId}`} className="text-accent hover:underline">
-            #{row.height.toLocaleString(loc(locale))}
-          </Link>
-        ) : (
-          <span>#{row.height.toLocaleString(loc(locale))}</span>
-        )}
-      </div>
-      <div className="truncate text-[var(--muted)]">
-        {row.ts != null ? formatRelAge(row.ts, locale) : "—"}
-      </div>
-      <div className="truncate font-medium" style={{ color: ink }}>
-        {t(`buyback.act.${row.kind}`)}
-      </div>
-      <div
-        className={clsx(
-          "buyback-num truncate",
-          row.derg === "0"
-            ? "text-[var(--muted)]"
-            : row.derg.startsWith("-")
-              ? "text-[var(--down)]"
-              : "text-[var(--up)]"
-        )}
-      >
-        {signedErg(row.derg, locale)}
-      </div>
-      <div
-        className={clsx(
-          "buyback-num truncate",
-          row.dtok.startsWith("-") ? "text-[var(--down)]" : row.dtok === "0" ? "text-[var(--muted)]" : "text-[var(--up)]"
-        )}
-      >
-        {signedToken(row.dtok, locale)}
-      </div>
-      <div className="buyback-num truncate">{formatErgPrecise(row.erg, locale, false)}</div>
-      <div className="buyback-num truncate">{formatTokenAmount(row.token, 0, locale)}</div>
-      <div className="truncate">
-        <Link prefetch={false} href={`/tx/${row.tx}`} className="font-mono text-[12px] text-accent hover:underline">
-          {shortId(row.tx, 10)}
+    <FeedRow
+      k={k}
+      glyph={g}
+      tileTitle={act}
+      lead={lead}
+      leadSub={!lead.same ? height : undefined}
+      title={
+        <Link prefetch={false} href={`/tx/${row.tx}`} title={row.tx} className="feed-name font-semibold hover:underline">
+          {act}
         </Link>
-      </div>
-      <div className="min-w-0 truncate">
-        {row.who ? (
-          <Link
-            prefetch={false}
-            href={`/address/${row.who}`}
-            className={clsx(
-              "text-accent hover:underline",
-              !lookupAddress(row.who)?.name && "font-mono text-[12px]"
-            )}
-            title={row.who}
-          >
-            {name || shortId(row.who, 10)}
-          </Link>
-        ) : (
-          <span className="text-[var(--muted)]">—</span>
-        )}
-      </div>
-    </div>
+      }
+      facts={
+        <>
+          {row.who ? (
+            <Link
+              prefetch={false}
+              href={`/address/${row.who}`}
+              title={row.who}
+              className={clsx("feed-kind", !name && "font-mono tabular-nums")}
+            >
+              {name ?? shortId(row.who, 6)}
+            </Link>
+          ) : null}
+          <span className="feed-phone-only">{height}</span>
+          <span className="feed-mid font-mono tabular-nums" title={row.tx}>
+            {shortId(row.tx, 6)}
+          </span>
+          <span className="feed-wide">
+            <FeedPhrase
+              text={t("feed.left")}
+              value={`${formatTokenAmount(row.token, 0, locale)} ${sym}`}
+              slot="{v}"
+            />
+          </span>
+        </>
+      }
+      chips={
+        dtok != null && dtok !== 0n ? (
+          <FeedChip title={`${signedToken(row.dtok, locale)} ${sym}`}>
+            <span className={clsx("tabular-nums", dtok > 0n ? "is-up" : "is-down")}>
+              {signedToken(row.dtok, locale)}
+            </span>
+            <span className="feed-chip-sym">{sym}</span>
+          </FeedChip>
+        ) : null
+      }
+      value={<FeedAmount raw={derg} signed />}
+      sub={<FeedPhrase text={t("feed.left")} value={formatErgPrecise(row.erg, locale)} slot="{v}" />}
+      subMinor
+      detail={() => (
+        <FeedFields>
+          <FeedField label={t("buyback.colTx")} wide>
+            <FeedIdLine href={`/tx/${row.tx}`} id={row.tx} />
+          </FeedField>
+          {row.who ? (
+            <FeedField label={t("buyback.colWho")} wide>
+              <FeedIdLine href={`/address/${row.who}`} id={row.who} />
+            </FeedField>
+          ) : null}
+          <FeedField label={t("buyback.colHeight")}>
+            <span className="tabular-nums">
+              {height}
+              {row.ts != null ? (
+                <span className="text-[var(--muted-2)]" suppressHydrationWarning>
+                  {" · "}
+                  {formatTs(row.ts)}
+                </span>
+              ) : null}
+            </span>
+          </FeedField>
+          <FeedField label={t("buyback.colErg")}>
+            <span className="tabular-nums">{signedErg(row.derg, locale)}</span>
+          </FeedField>
+          <FeedField label={fill(t("buyback.colToken"), { sym })}>
+            <span className="tabular-nums">{signedToken(row.dtok, locale)}</span>
+          </FeedField>
+          <FeedField label={t("buyback.colErgLeft")}>
+            <span className="tabular-nums">{formatErgPrecise(row.erg, locale)}</span>
+          </FeedField>
+          <FeedField label={fill(t("buyback.colTokenLeft"), { sym })}>
+            <span className="tabular-nums">{formatTokenAmount(row.token, 0, locale)}</span>
+          </FeedField>
+        </FeedFields>
+      )}
+    />
   );
 }

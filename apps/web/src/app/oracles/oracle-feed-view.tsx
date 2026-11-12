@@ -10,12 +10,23 @@ import {
   oracleAgeBlocks,
 } from "@ergoscan/shared";
 import { Shell } from "@/components/Shell";
-import { StuckPin } from "@/components/StuckPin";
+import {
+  Feed,
+  FeedBoard,
+  FeedCount,
+  FeedEmpty,
+  FeedField,
+  FeedFields,
+  FeedIdLine,
+  FeedPhrase,
+  FeedPlate,
+  FeedRow,
+} from "@/components/feed/Feed";
 import { KpiGrid } from "@/components/KpiGrid";
 import { KpiMark } from "@/components/kpi-marks";
 import { RankWindow } from "@/components/RankWindow";
 import { lookupAddress } from "@/lib/address-book";
-import { formatErgPrecise, formatRelAge, formatUsd, shortId } from "@/lib/format";
+import { formatErgPrecise, formatRelAge, formatTs, formatUsd, shortId } from "@/lib/format";
 import {
   oracleErgLow,
   oracleOperatorMarkSrc,
@@ -27,7 +38,7 @@ import { sortSilentOldest, splitOracleLens } from "@/lib/oracle-scene";
 import { INK } from "@/lib/palette";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { countText } from "@/lib/i18n/messages";
-import { enteringIds, useEnterIds } from "@/lib/keyed-enter";
+import { ENTER_MS, enteringIds, useEnterIds } from "@/lib/keyed-enter";
 import { useKeepFresh, usePageSync } from "@/lib/page-sync";
 import {
   ORACLE_PACK,
@@ -82,11 +93,11 @@ export function OracleFeedView({
   const [rangeId, setRangeId] = useState<(typeof CHART_RANGES)[number]["id"]>("7d");
   const [offset, setOffset] = useState(0);
   const [tapeLens, setTapeLens] = useState<"live" | "silent">("live");
-  const [stuck, setStuck] = useState(false);
-  const [listReady, setListReady] = useState(false);
-  const enter = useEnterIds();
-  const packEnter = useEnterIds();
-  const opened = useRef(false);
+  const served = Boolean(initial?.operators.length);
+  const [listReady, setListReady] = useState(served);
+  const enter = useEnterIds(ENTER_MS, [], served);
+  const packEnter = useEnterIds(ENTER_MS, [], served);
+  const opened = useRef(served);
   const skipMount = useRef(!!initial);
   const packRef = useRef(pack);
   packRef.current = pack;
@@ -201,6 +212,18 @@ export function OracleFeedView({
       : ageBlocks === 0
         ? t("oracles.kpiUpdatedNow")
         : formatRelAge(0, locale, ageBlocks * ORACLE_BLOCK_MS);
+  const plate = (
+    <FeedPlate
+      tag={t("oracles.council")}
+      now
+      count={<FeedCount k="feed.oracles" n={tapeOps.length} />}
+      end={
+        <span className="feed-plate-live">
+          {tapeLens === "silent" ? t("oracles.councilStale") : t("oracles.councilLive")}
+        </span>
+      }
+    />
+  );
   const updatedSub =
     pack.height != null
       ? t("oracles.kpiUpdatedSub").replace("{h}", pack.height.toLocaleString(loc(locale)))
@@ -282,12 +305,12 @@ export function OracleFeedView({
                 </div>
                 <div className="mt-2 flex items-center gap-3 text-[12px] text-[var(--muted)]">
                   <span className="inline-flex items-center gap-1.5">
-                    <span className="h-2 w-2 rounded-full" style={{ background: "#8ec8ff" }} />
+                    <span className="h-2 w-2 rounded-full" style={{ background: "#86a6f0" }} />
                     {t("oracles.chartOracle")}
                   </span>
                   {def.market ? (
                     <span className="inline-flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full" style={{ background: "#f472b6" }} />
+                      <span className="h-2 w-2 rounded-full" style={{ background: "#e799b7" }} />
                       {t("oracles.chartMarket")}
                     </span>
                   ) : null}
@@ -364,79 +387,43 @@ export function OracleFeedView({
         </div>
 
         {listReady ? (
-        <div className="addr-sheet">
-          <StuckPin onStuck={setStuck} />
-          <div className="addr-pan">
-            <div
-              className={clsx(
-                "addr-head addr-lane addr-lane-x oracle-lane text-[12px] font-medium",
-                battle && "is-battle",
-                stuck && "is-stuck"
-              )}
-            >
-              <div className="oracle-col-name">{t("oracles.colName")}</div>
-              {battle ? (
-                <>
-                  <div className="oracle-col-crown">{t("oracles.colWinner")}</div>
-                  <div className="oracle-col-wins">{t("oracles.colWins")}</div>
-                  <div className="oracle-col-id">{t("oracles.colAddress")}</div>
-                  <div className="oracle-col-num">{t("oracles.colPrice")}</div>
-                  <div className="oracle-col-num">{t("oracles.colEpoch")}</div>
-                </>
+          <div className="feed-sheet mt-2">
+            <Feed className="is-rank" busy={pending} enterClass={packEnter.enterClass("pack")}>
+              {!rows.length ? (
+                <FeedEmpty k="oracle" title={t("oracles.emptyTape")} plate={plate} />
               ) : (
-              <div className="oracle-col-answer">
-                <span>{t("oracles.colAddress")}</span>
-                <span>{t("oracles.colPrice")}</span>
-              </div>
-              )}
-              <div className="oracle-col-num">{t("oracles.colWhen")}</div>
-              <div className="oracle-col-num">{t("oracles.colFeeder")}</div>
-              <div className="oracle-col-num">{t("oracles.colFee")}</div>
-            </div>
-            <div className={packEnter.enterClass("pack")}>
-              <div
-                className={clsx(
-                  "transition-opacity duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
-                  pending && "opacity-60"
-                )}
-              >
-                {!rows.length ? (
-                  <p className="px-3 py-4 text-[13px] text-[var(--muted)]">{t("oracles.emptyTape")}</p>
-                ) : (
-                  rows.map((row) => (
-                    <OracleTapeRow
+                <FeedBoard plate={plate}>
+                  {rows.map((row, i) => (
+                    <FeedOracleRow
                       key={row.id}
                       row={row}
+                      rank={offset + i + 1}
                       slug={slug}
-                      locale={locale}
                       tipHeight={tipH}
-                      ancient={t("oracles.whenAncient")}
                       battle={battle}
-                      wonLastLabel={t("oracles.wonLast")}
-                      enterClass={enter.enterClass(row.id) ?? ""}
+                      enterClass={enter.enterClass(row.id)}
                     />
-                  ))
-                )}
-              </div>
-            </div>
+                  ))}
+                </FeedBoard>
+              )}
+            </Feed>
+            {(tapeOps.length > 0 || offset > 0) && (
+              <RankWindow
+                offset={offset}
+                pageSize={ORACLE_PACK}
+                shown={rows.length}
+                total={tapeOps.length}
+                loc={loc(locale)}
+                ofLabel={t("addresses.packOf")}
+                prevLabel={t("addresses.packPrev")}
+                nextLabel={t("addresses.packNext")}
+                tapeLabel={t("oracles.packTape")}
+                hint={t("oracles.packHint")}
+                disabled={pending}
+                onOffset={setOffset}
+              />
+            )}
           </div>
-          {(tapeOps.length > 0 || offset > 0) && (
-            <RankWindow
-              offset={offset}
-              pageSize={ORACLE_PACK}
-              shown={rows.length}
-              total={tapeOps.length}
-              loc={loc(locale)}
-              ofLabel={t("addresses.packOf")}
-              prevLabel={t("addresses.packPrev")}
-              nextLabel={t("addresses.packNext")}
-              tapeLabel={t("oracles.packTape")}
-              hint={t("oracles.packHint")}
-              disabled={pending}
-              onOffset={setOffset}
-            />
-          )}
-        </div>
         ) : null}
       </div>
     </Shell>
@@ -445,11 +432,11 @@ export function OracleFeedView({
 
 function OracleWon({ label }: { label: string }) {
   return (
-    <span className="oracle-won inline-flex" style={{ color: INK.gold }} role="img" aria-label={label}>
+    <span className="oracle-won inline-flex" style={{ color: INK.gold }} role="img" aria-label={label} title={label}>
       <svg
         viewBox="0 0 24 24"
-        width="16"
-        height="16"
+        width="15"
+        height="15"
         aria-hidden
         fill="none"
         stroke="currentColor"
@@ -464,131 +451,152 @@ function OracleWon({ label }: { label: string }) {
   );
 }
 
-function OracleTapeRow({
+/**
+ * One operator: its avatar is the tile, its last price the figure, the ERG left on
+ * its address sits under it. Posting or silent leads the facts line.
+ */
+function FeedOracleRow({
   row,
+  rank,
   slug,
-  locale,
   tipHeight,
-  ancient,
   battle,
-  wonLastLabel,
   enterClass,
 }: {
   row: OracleOperator;
+  rank: number;
   slug: OracleFeedSlug;
-  locale: string;
   tipHeight: number | null;
-  ancient: string;
   battle: boolean;
-  wonLastLabel: string;
-  enterClass: string;
+  enterClass?: string;
 }) {
+  const t = useT();
+  const { locale } = useI18n();
+  const L = loc(locale);
   const seed = oracleOperatorSeed(row);
   const book = lookupAddress(row.address);
   const name = book?.name || oracleOperatorName(seed);
   const low = oracleErgLow(row.addressErgNano);
+  const live = row.live === true;
+  const href = row.address ? `/address/${row.address}` : `/box/${row.boxId}`;
+  const when = oracleWhenLabel({
+    tsMs: row.tsMs,
+    height: row.height,
+    tipHeight,
+    locale,
+    ancient: t("oracles.whenAncient"),
+  });
+  const balance = row.addressErgNano != null ? formatErgPrecise(row.addressErgNano, locale) : null;
+  const fee = row.feeNano != null ? formatErgPrecise(row.feeNano, locale) : null;
+  const epoch = battle ? row.postedEpoch : row.epoch;
   return (
-    <div
-      id={`oracle-op-${row.id}`}
-      className={clsx(
-        "addr-lane addr-lane-x oracle-lane border-t border-[var(--border-soft)] text-[13px]",
-        battle && "is-battle",
-        enterClass
-      )}
-    >
-      <div className="oracle-col-name flex min-w-0 items-center gap-1.5">
-        <span
-          className={clsx(
-            "size-1.5 shrink-0 rounded-full",
-            row.live === true ? "bg-[var(--up)] oracle-live-pip" : "bg-[var(--warning)]"
-          )}
-          aria-hidden
-        />
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={oracleOperatorMarkSrc(seed)} alt="" className="size-6 shrink-0 rounded-[5px]" />
-        {row.address ? (
-          <Link prefetch={false} href={`/address/${row.address}`} className="min-w-0 truncate text-accent hover:underline">
-            {name}
-          </Link>
-        ) : (
-          <Link prefetch={false} href={`/box/${row.boxId}`} className="min-w-0 truncate text-accent hover:underline">
-            {name}
-          </Link>
-        )}
-      </div>
-      {battle ? (
+    <FeedRow
+      k="oracle"
+      hollow={!live}
+      tile={
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={oracleOperatorMarkSrc(seed)} alt="" width={22} height={22} />
+      }
+      tileTitle={live ? t("oracles.councilLive") : t("oracles.councilStale")}
+      lead={{ rank: rank.toLocaleString(L) }}
+      enterClass={enterClass}
+      rowProps={{ id: `oracle-op-${row.id}` }}
+      title={
         <>
-          <div className="oracle-col-crown">
-            {row.wonLast ? <OracleWon label={wonLastLabel} /> : null}
-          </div>
-          <div
-            className="oracle-col-wins tabular-nums"
-            style={row.wins ? { color: INK.gold } : undefined}
-          >
-            <span className={row.wins ? undefined : "text-[var(--muted)]"}>
-              {(row.wins ?? 0).toLocaleString(loc(locale))}
-            </span>
-          </div>
-        </>
-      ) : null}
-      {battle ? (
-        <>
-          <div className="oracle-col-id">
-            {row.address ? (
-              <Link
-                prefetch={false}
-                href={`/address/${row.address}`}
-                className="min-w-0 truncate font-mono text-[12px] text-accent hover:underline"
-                title={row.address}
-              >
-                {shortId(row.address, 5)}
-              </Link>
-            ) : (
-              <span className="text-[var(--muted)]">—</span>
-            )}
-          </div>
-          <div className="oracle-col-num tabular-nums">{fmtQuote(slug, row.quote, locale)}</div>
-          <div className="oracle-col-num tabular-nums">
-            {row.postedEpoch != null ? String(row.postedEpoch) : "—"}
-          </div>
-        </>
-      ) : (
-      <div className="oracle-col-answer">
-        {row.address ? (
           <Link
             prefetch={false}
-            href={`/address/${row.address}`}
-            className="min-w-0 truncate font-mono text-[12px] text-accent hover:underline"
-            title={row.address}
+            href={href}
+            title={row.address ?? row.boxId}
+            className="feed-name font-semibold hover:underline"
           >
-            {shortId(row.address, 5)}
+            {name}
           </Link>
-        ) : (
-          <span className="text-[var(--muted)]">—</span>
-        )}
-        <span className="min-w-0 truncate tabular-nums">{fmtQuote(slug, row.quote, locale)}</span>
-      </div>
+          {battle && row.wonLast ? <OracleWon label={t("oracles.wonLast")} /> : null}
+        </>
+      }
+      facts={
+        <>
+          <span className={clsx("feed-kind", !live && "is-off")}>
+            {live ? <span className="feed-pip oracle-live-pip" aria-hidden /> : null}
+            {live ? t("feed.oracleLive") : t("feed.oracleSilent")}
+          </span>
+          <span suppressHydrationWarning>
+            <FeedPhrase text={t("feed.posted")} value={when} />
+          </span>
+          {row.address ? (
+            <span className="feed-narrow-off font-mono tabular-nums" title={row.address}>
+              {shortId(row.address, 6)}
+            </span>
+          ) : null}
+          {battle && row.wins ? <FeedCount k="feed.wins" n={row.wins} className="feed-mid feed-gold" /> : null}
+          {epoch != null ? (
+            <span className="feed-wide">
+              <FeedPhrase text={t("feed.epoch")} value={String(epoch)} slot="{n}" />
+            </span>
+          ) : null}
+          {fee ? (
+            <span className="feed-wide">
+              {t("feed.fee")} <span className="tabular-nums">{fee}</span>
+            </span>
+          ) : null}
+        </>
+      }
+      value={<span className="feed-amt tabular-nums">{fmtQuote(slug, row.quote, locale)}</span>}
+      sub={
+        balance ? (
+          <span className={clsx("tabular-nums", low && "oracle-erg-low")} title={t("oracles.colFeeder")}>
+            {balance}
+          </span>
+        ) : null
+      }
+      subMinor={!low}
+      detail={() => (
+        <FeedFields>
+          {row.address ? (
+            <FeedField label={t("detail.address")} wide>
+              <FeedIdLine href={`/address/${row.address}`} id={row.address} />
+            </FeedField>
+          ) : null}
+          <FeedField label={t("detail.box")} wide>
+            <FeedIdLine href={`/box/${row.boxId}`} id={row.boxId} />
+          </FeedField>
+          <FeedField label={t("oracles.colPrice")}>
+            <span className="tabular-nums">
+              {fmtQuote(slug, row.quote, locale)}
+              {epoch != null ? (
+                <span className="text-[var(--muted-2)]">
+                  {" · "}
+                  {t("oracles.colEpoch")} {epoch}
+                </span>
+              ) : null}
+            </span>
+          </FeedField>
+          <FeedField label={t("oracles.colWhen")}>
+            <span className="tabular-nums" suppressHydrationWarning>
+              {row.tsMs != null ? formatTs(row.tsMs) : when}
+              {row.height != null ? (
+                <span className="text-[var(--muted-2)]">
+                  {" · "}
+                  <Link prefetch={false} href={`/block/${row.height}`} className="hover:underline">
+                    {row.height.toLocaleString(L)}
+                  </Link>
+                </span>
+              ) : null}
+            </span>
+          </FeedField>
+          <FeedField label={t("oracles.colFeeder")}>
+            <span className={clsx("tabular-nums", low && "oracle-erg-low")}>{balance ?? "—"}</span>
+          </FeedField>
+          <FeedField label={t("oracles.colFee")}>
+            <span className="tabular-nums">{fee ?? "—"}</span>
+          </FeedField>
+          {battle ? (
+            <FeedField label={t("oracles.colWins")}>
+              <span className="tabular-nums">{(row.wins ?? 0).toLocaleString(L)}</span>
+            </FeedField>
+          ) : null}
+        </FeedFields>
       )}
-      <div className="oracle-col-num tabular-nums text-[var(--muted)]">
-        {oracleWhenLabel({
-          tsMs: row.tsMs,
-          height: row.height,
-          tipHeight,
-          locale,
-          ancient,
-        })}
-      </div>
-      <div
-        className={clsx(
-          "oracle-col-num tabular-nums",
-          low ? "oracle-erg-low" : row.addressErgNano != null && "text-[var(--up)]"
-        )}
-      >
-        {row.addressErgNano != null ? formatErgPrecise(row.addressErgNano, locale) : "—"}
-      </div>
-      <div className="oracle-col-num tabular-nums" style={{ color: INK.gold }}>
-        {row.feeNano != null ? formatErgPrecise(row.feeNano, locale) : "—"}
-      </div>
-    </div>
+    />
   );
 }

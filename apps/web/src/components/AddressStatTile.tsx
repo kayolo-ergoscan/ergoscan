@@ -1,13 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
-import { createPortal } from "react-dom";
+import { useState, type PointerEvent, type ReactNode } from "react";
 import { KpiTileRail } from "@/components/KpiGrid";
+import { TipHead, TipNote, useTip } from "@/components/Tip";
 import clsx from "clsx";
 import { HOME } from "@/lib/palette";
-
-const TIP_W = 220;
-const TIP_PAD = 8;
 
 export function AddressStatTile({
   label,
@@ -40,38 +37,19 @@ export function AddressStatTile({
   /** Shorter label for the phone chip rail, where the long one would not fit. */
   chipLabel?: string;
 }) {
-  const tileRef = useRef<HTMLElement>(null);
-  const [mounted, setMounted] = useState(false);
-  const [open, setOpen] = useState(false);
   const [armed, setArmed] = useState(false);
-  const [pos, setPos] = useState({ top: 0, left: 0 });
-
-  useEffect(() => setMounted(true), []);
-
-  const place = () => {
-    const el = tileRef.current;
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    const maxLeft = window.innerWidth - TIP_W - TIP_PAD;
-    const left = Math.max(TIP_PAD, Math.min(r.left + r.width / 2 - TIP_W / 2, maxLeft));
-    setPos({ top: r.bottom + 6, left });
-  };
-
-  useEffect(() => {
-    if (!open) return;
-    const onMove = () => place();
-    window.addEventListener("scroll", onMove, true);
-    window.addEventListener("resize", onMove);
-    return () => {
-      window.removeEventListener("scroll", onMove, true);
-      window.removeEventListener("resize", onMove);
-    };
-  }, [open]);
-
-  const show = () => {
-    place();
-    setOpen(true);
-  };
+  const tip = useTip(
+    () => (
+      <>
+        {/* The tile's label chip wears the address colour in the look; the tip's chip matches it. */}
+        <TipHead chip={label} ink={`var(--c-addr, ${ink})`} mono>
+          {detail}
+        </TipHead>
+        <TipNote>{hint}</TipNote>
+      </>
+    ),
+    { side: "bottom" }
+  );
 
   const arm = () => {
     if (!onSelect) return;
@@ -81,6 +59,7 @@ export function AddressStatTile({
   const disarm = () => setArmed(false);
 
   const onPointerDown = (e: PointerEvent<HTMLElement>) => {
+    tip.onPointerDown(e);
     if (!onSelect) return;
     if (e.button !== 0) return;
     arm();
@@ -92,7 +71,6 @@ export function AddressStatTile({
 
   return (
     <article
-      ref={tileRef}
       tabIndex={0}
       role={onSelect ? "button" : undefined}
       aria-pressed={onSelect ? selected : undefined}
@@ -108,14 +86,14 @@ export function AddressStatTile({
         ["--kpi-ink" as string]: ink,
         ...(enter != null ? { ["--enter" as string]: enter } : {}),
       }}
-      onMouseEnter={show}
-      onMouseLeave={() => {
-        setOpen(false);
+      onPointerEnter={tip.onPointerEnter}
+      onPointerLeave={(e) => {
+        tip.onPointerLeave(e);
         disarm();
       }}
-      onFocus={show}
-      onBlur={() => {
-        setOpen(false);
+      onFocus={tip.onFocus}
+      onBlur={(e) => {
+        tip.onBlur(e);
         disarm();
       }}
       onPointerDown={onPointerDown}
@@ -132,13 +110,14 @@ export function AddressStatTile({
       onKeyDown={
         onSelect
           ? (e) => {
+              tip.onKeyDown(e);
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
                 arm();
                 onSelect();
               }
             }
-          : undefined
+          : tip.onKeyDown
       }
       onKeyUp={onSelect ? disarm : undefined}
     >
@@ -161,23 +140,6 @@ export function AddressStatTile({
       <div className="kpi-tile-mark" style={{ color: ink }}>
         {mark}
       </div>
-      {mounted
-        ? createPortal(
-            <div
-              role="tooltip"
-              aria-hidden={!open}
-              className={clsx("addr-stat-tip", open && "is-open")}
-              style={{ top: pos.top, left: pos.left, width: TIP_W }}
-            >
-              <p className="text-[13px] font-medium tracking-tight">{label}</p>
-              {detail ? (
-                <p className="mt-0.5 text-[12px] tabular-nums text-[var(--muted)]">{detail}</p>
-              ) : null}
-              <p className="mt-0.5 text-[12px] leading-snug text-[var(--muted)]">{hint}</p>
-            </div>,
-            document.body
-          )
-        : null}
     </article>
   );
 }

@@ -27,27 +27,43 @@ export function orderByHolderRank<T extends { type: string; id: string }>(
   return hits.map((h) => (h.type === "token" ? sorted[i++]! : h));
 }
 
+/** Same-name hits plus their holder counts (for telling the names apart). */
+export async function rankTokenHits<T extends { type: string; id: string }>(
+  q: string,
+  hits: T[],
+  gateway: string,
+  signal?: AbortSignal
+): Promise<{ hits: T[]; holders: Record<string, number> }> {
+  const holders: Record<string, number> = {};
+  if (hits.filter((h) => h.type === "token").length < 2) return { hits, holders };
+  const query = q.trim();
+  if (query.length < 2) return { hits, holders };
+  try {
+    const r = await fetch(
+      `${gateway}/v1/tokens?q=${encodeURIComponent(query)}&sort=holders&dir=desc&limit=50`,
+      { signal, cache: "no-store", headers: { Accept: "application/json" } }
+    );
+    if (!r.ok) return { hits, holders };
+    const j = (await r.json()) as { items?: { tokenId?: unknown; holders?: unknown }[] };
+    const ids: string[] = [];
+    for (const it of Array.isArray(j.items) ? j.items : []) {
+      if (typeof it.tokenId !== "string") continue;
+      ids.push(it.tokenId);
+      if (typeof it.holders === "number" && Number.isFinite(it.holders) && it.holders >= 0) {
+        holders[it.tokenId] = it.holders;
+      }
+    }
+    return { hits: orderByHolderRank(hits, ids), holders };
+  } catch {
+    return { hits, holders };
+  }
+}
+
 export async function orderTokenHitsByHolders<T extends { type: string; id: string }>(
   q: string,
   hits: T[],
   gateway: string,
   signal?: AbortSignal
 ): Promise<T[]> {
-  if (hits.filter((h) => h.type === "token").length < 2) return hits;
-  const query = q.trim();
-  if (query.length < 2) return hits;
-  try {
-    const r = await fetch(
-      `${gateway}/v1/tokens?q=${encodeURIComponent(query)}&sort=holders&dir=desc&limit=50`,
-      { signal, cache: "no-store", headers: { Accept: "application/json" } }
-    );
-    if (!r.ok) return hits;
-    const j = (await r.json()) as { items?: { tokenId?: unknown }[] };
-    const ids = Array.isArray(j.items)
-      ? j.items.flatMap((it) => (typeof it.tokenId === "string" ? [it.tokenId] : []))
-      : [];
-    return orderByHolderRank(hits, ids);
-  } catch {
-    return hits;
-  }
+  return (await rankTokenHits(q, hits, gateway, signal)).hits;
 }

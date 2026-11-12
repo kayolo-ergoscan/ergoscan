@@ -168,6 +168,8 @@ const TX_PAGE = 25;
 const BOX_PAGE = 25;
 const TOKEN_PAGE = 25;
 const NFT_PAGE = 24;
+/** A key address is 51 characters; anything longer (P2S contracts) gets the two-line head…tail title. */
+const BARE_TITLE_MAX = 60;
 const ADDR_TABS = ["activity", "tokens", "nfts", "boxes"] as const;
 type AddrTab = (typeof ADDR_TABS)[number];
 
@@ -1049,6 +1051,8 @@ export function AddressView({
   const typeLabel = t(`address.type.${party.kind}`);
 
   const name = party.known ?? data?.name?.name ?? address;
+  /** Unnamed and longer than a key address (51): printed whole it stretched the whole tile row. */
+  const bareLong = !(party.known || data?.name) && address.length > BARE_TITLE_MAX;
   const tokensFirstWait =
     !tokensSettled && tokenRows.length === 0 && !tokensFailed;
   const nftsFirstWait =
@@ -1104,7 +1108,15 @@ export function AddressView({
                     !(party.known || data.name) && "font-mono"
                   )}
                 >
-                  <NameMarquee text={name} fade />
+                  {bareLong ? (
+                    // Contract addresses run to thousands of characters: two lines, head and tail.
+                    <span className="addr-title-long">
+                      <span className="addr-title-head">{address.slice(0, Math.ceil(address.length / 2))}</span>
+                      <span className="addr-title-tail">{address.slice(Math.ceil(address.length / 2))}</span>
+                    </span>
+                  ) : (
+                    <NameMarquee text={name} fade />
+                  )}
                 </h1>
                 <p className="mt-0.5 flex min-w-0 items-center gap-1">
                   <code className="min-w-0 truncate font-mono text-[12px] leading-[1.15] text-[var(--muted-2)]">
@@ -1432,13 +1444,14 @@ export function AddressView({
               ) : !nftTotal && !nfts.length ? (
                 <FavKayolo line={t("address.noNfts")} />
               ) : (
-                <div className="addr-sheet">
-                  <div
-                    className={clsx(
-                      "transition-opacity duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
-                      nftsLoading && nfts.length > 0 && "opacity-60"
-                    )}
-                  >
+                <div className="feed-sheet">
+                  <Feed busy={nftsLoading && nfts.length > 0}>
+                    <section className="feed-day feed-gallery">
+                    <FeedPlate
+                      tag={t("address.tab.nfts")}
+                      now
+                      count={<FeedCount k="feed.nfts" n={nftTotal > 0 ? nftTotal : nfts.length} />}
+                    />
                     <div className="addr-nft-grid">
                       {nfts.map((row) => (
                         <NftCard
@@ -1455,7 +1468,8 @@ export function AddressView({
                         />
                       ))}
                     </div>
-                  </div>
+                    </section>
+                  </Feed>
                   <RankWindow
                     offset={nftOffset}
                     pageSize={NFT_PAGE}

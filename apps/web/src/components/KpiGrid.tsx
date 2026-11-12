@@ -80,11 +80,9 @@ export function KpiNum({
   if (!compact) {
     return <span className={clsx("kpi-scale-up inline-block max-w-full", className)}>{splitUnit(children)}</span>;
   }
-  const full = typeof children === "string" ? children : undefined;
   return (
     <span
       className={clsx("kpi-scale-up kpi-has-compact inline-block max-w-full", exact && "is-exact", className)}
-      title={full}
       onClick={(e) => {
         if ((e.currentTarget as HTMLElement).closest("a")) return;
         setExact((v) => !v);

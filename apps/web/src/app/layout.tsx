@@ -18,6 +18,8 @@ import { INK_BOOT } from "@/lib/skin-ink";
 import "./globals.css";
 import "./looks.css";
 import "./feed.css";
+import "./phone-shell.css";
+import "./tip.css";
 
 /** T1 default — Plex Sans has Cyrillic and `tnum`. */
 const sans = IBM_Plex_Sans({
@@ -82,11 +84,13 @@ export const metadata: Metadata = {
     "DeFi",
   ],
   icons: {
+    // `?v=` busts the browsers' own favicon cache when the mark changes (bump it with the files).
+    // ICO says 32x32 so tabs pick the SVG, which follows the light/dark tab.
     icon: [
-      { url: "/favicon.ico", sizes: "16x16 32x32 48x48" },
-      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico?v=trata", sizes: "32x32" },
+      { url: "/favicon.svg?v=trata", type: "image/svg+xml" },
     ],
-    apple: { url: "/apple-touch-icon.png", sizes: "180x180" },
+    apple: { url: "/apple-touch-icon.png?v=trata", sizes: "180x180" },
   },
   openGraph: {
     type: "website",

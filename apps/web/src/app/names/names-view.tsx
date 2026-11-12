@@ -319,7 +319,7 @@ function NameFeedRow({
         {active ?? "—"}
       </span>
     ) : (
-      <FeedAmount raw={erg} glance />
+      <FeedAmount raw={erg} cents />
     );
   return (
     <FeedRow

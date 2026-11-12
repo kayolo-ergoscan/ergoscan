@@ -7,32 +7,23 @@ import { Shell } from "@/components/Shell";
 import { compactFigure, KpiGrid } from "@/components/KpiGrid";
 import { KpiMark } from "@/components/kpi-marks";
 import { TokenAvatar } from "@/components/TokenBadge";
-import { PrettyPrice } from "@/components/PrettyNum";
-import { ListWhen } from "@/components/ListWhen";
 import { RankWindow } from "@/components/RankWindow";
 import { INK } from "@/lib/palette";
 import { snapshotAgeUsd } from "@ergoscan/shared";
-import { formatGroupedNumber, formatRelAge, nanoErgToNumber, shortId } from "@/lib/format";
+import { formatGroupedNumber, nanoErgToNumber, shortId } from "@/lib/format";
 import { SIGRSV_ID, resolveTokenMeta, tokenTickerInk } from "@/lib/token-meta";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { useKeepFresh, usePageSync } from "@/lib/page-sync";
-import { SNAPSHOT_FETCH, enteringIds, useEnterIds } from "@/lib/keyed-enter";
+import { ENTER_MS, SNAPSHOT_FETCH, enteringIds, useEnterIds } from "@/lib/keyed-enter";
+import { Feed, FeedBoard, FeedCount, FeedEmpty, FeedPlate } from "@/components/feed/Feed";
+import { FeedSwapTape, FeedTraderRow, swapEventId } from "@/components/feed/FeedSwapRow";
 import { getGateway } from "@/lib/config";
-import type { AgeUsdBank, AgeUsdEvent, AgeUsdTrader } from "@/lib/list-snapshots";
+import type { AgeUsdBank } from "@/lib/list-snapshots";
 
 type TapeSort = "time" | "ticker" | "amount";
 type TapeDir = "asc" | "desc";
 
 const TAPE_PACK = 25;
-
-function tapeEventId(row: AgeUsdEvent): string {
-  return `${row.txId}:${row.side}:${row.tokenId}`;
-}
-
-function shortHash(id: string): string {
-  if (!id || id.length <= 10) return id;
-  return `${id.slice(0, 5)}..${id.slice(-5)}`;
-}
 
 const SIGUSD = "03faf2cb329f2e90d6d23b58d91bbb6c046aa143261cc21f52fbe2824bfcbf04";
 
@@ -45,10 +36,6 @@ function fmtTok(n: number | null | undefined, dec: number, _locale: string): str
   return formatGroupedNumber(n / 10 ** dec, dec, dec);
 }
 
-function fmtAmt(n: number, _locale: string): string {
-  if (!Number.isFinite(n)) return "—";
-  return formatGroupedNumber(n, 2, 2);
-}
 
 function fmtErgFull(n: number, _locale: string): string {
   if (!Number.isFinite(n)) return "—";
@@ -66,14 +53,18 @@ export function StableView({ initial }: { initial: AgeUsdBank | null }) {
   const [eventsOffset, setEventsOffset] = useState(0);
   const [tradersOffset, setTradersOffset] = useState(0);
   const [pending, setPending] = useState(false);
-  const eventsEnter = useEnterIds();
-  const eventsPack = useEnterIds();
-  const tradersEnter = useEnterIds();
-  const tradersPack = useEnterIds();
-  const [listReady, setListReady] = useState(false);
-  const opened = useRef(false);
-  const eventsPrev = useRef<{ id: string }[]>([]);
-  const tradersPrev = useRef<{ id: string }[]>([]);
+  // Rows the server already has go into the first HTML, with the same entry animation.
+  const seedEvents = (initial?.events ?? []).map((row) => swapEventId(row));
+  const seedTraders = (initial?.topTraders ?? []).map((row) => row.trader);
+  const seeded = seedEvents.length > 0 || seedTraders.length > 0;
+  const eventsEnter = useEnterIds(ENTER_MS, seedEvents);
+  const eventsPack = useEnterIds(ENTER_MS, seedEvents.length ? ["pack"] : []);
+  const tradersEnter = useEnterIds(ENTER_MS, seedTraders);
+  const tradersPack = useEnterIds(ENTER_MS, seedTraders.length ? ["pack"] : []);
+  const [listReady, setListReady] = useState(seeded);
+  const opened = useRef(seeded);
+  const eventsPrev = useRef<{ id: string }[]>(seedEvents.map((id) => ({ id })));
+  const tradersPrev = useRef<{ id: string }[]>(seedTraders.map((id) => ({ id })));
 
   const pull = useCallback(async (silent = false) => {
     try {
@@ -88,7 +79,7 @@ export function StableView({ initial }: { initial: AgeUsdBank | null }) {
       if (!r.ok) return;
       const next = (await r.json()) as AgeUsdBank;
       if (opened.current) {
-        const events = (next.events ?? []).map((row) => ({ id: tapeEventId(row) }));
+        const events = (next.events ?? []).map((row) => ({ id: swapEventId(row) }));
         const traders = (next.topTraders ?? []).map((row) => ({ id: row.trader }));
         const freshEvents = enteringIds(eventsPrev.current, events);
         const freshTraders = enteringIds(tradersPrev.current, traders);
@@ -132,7 +123,7 @@ export function StableView({ initial }: { initial: AgeUsdBank | null }) {
   useEffect(() => {
     if (opened.current) return;
     opened.current = true;
-    const events = (bank?.events ?? []).map((row) => ({ id: tapeEventId(row) }));
+    const events = (bank?.events ?? []).map((row) => ({ id: swapEventId(row) }));
     const traders = (bank?.topTraders ?? []).map((row) => ({ id: row.trader }));
     eventsPrev.current = events;
     tradersPrev.current = traders;
@@ -262,48 +253,34 @@ export function StableView({ initial }: { initial: AgeUsdBank | null }) {
         />
       </div>
 
-      <div className="grid min-w-0 items-start gap-2 lg:grid-cols-4">
-        <div className="min-w-0 lg:col-span-3">
+      <div className="grid min-w-0 items-start gap-2 xl:grid-cols-4">
+        <div className="min-w-0 xl:col-span-3">
           {!listReady ? null : !rows.length ? (
-            <p className="text-[var(--muted)]">{t("stable.emptyTape")}</p>
+            <Feed>
+              <FeedEmpty k="stable" title={t("stable.emptyTape")} />
+            </Feed>
           ) : (
-            <div className="addr-sheet">
-              <div className={eventsPack.enterClass("pack")}>
-              <div
-                className={clsx(
-                  "addr-pan transition-opacity duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
-                  pending && "opacity-60"
-                )}
-              >
-                <div className="addr-head addr-lane addr-lane-x block-lane text-[12px] font-medium">
-                  <div className="block-lane-pair">
-                    <SortCol label={t("defi.token")} k="ticker" sort={sort} dir={dir} align="left" onSort={onSort} />
-                    <div className="min-w-0 justify-end">{t("defi.side")}</div>
-                  </div>
-                  <div className="block-lane-pair">
-                    <div className="min-w-0">{t("defi.price")}</div>
-                    <SortCol label={t("defi.amount")} k="amount" sort={sort} dir={dir} align="right" onSort={onSort} />
-                  </div>
-                  <div className="block-lane-pair">
-                    <div className="min-w-0">{t("defi.paid")}</div>
-                    <SortCol label={t("defi.time")} k="time" sort={sort} dir={dir} align="right" onSort={onSort} />
-                  </div>
-                  <div className="block-lane-pair">
-                    <div className="min-w-0">{t("defi.trader")}</div>
-                    <div className="min-w-0 justify-end">{t("detail.tx")}</div>
-                  </div>
-                </div>
-                {rows.map((row) => (
-                  <BankRow
-                    key={tapeEventId(row)}
-                    row={row}
-                    locale={locale}
-                    t={t}
-                    enterClass={eventsEnter.enterClass(tapeEventId(row))}
-                  />
-                ))}
-              </div>
-              </div>
+            <div className="feed-sheet">
+              <Feed busy={pending} className={sort === "time" ? undefined : "is-rank"} enterClass={eventsPack.enterClass("pack")}>
+                <FeedSwapTape
+                  rows={rows}
+                  tag={t("stable.tape")}
+                  total={bank?.eventsCount ?? null}
+                  sort={sort}
+                  dir={dir}
+                  timeKey="time"
+                  sorts={[
+                    { key: "time", label: t("defi.time") },
+                    { key: "amount", label: t("defi.amount") },
+                    { key: "ticker", label: t("defi.token") },
+                  ]}
+                  onSort={onSort}
+                  pending={pending}
+                  offset={eventsOffset}
+                  bank
+                  enterClass={eventsEnter.enterClass}
+                />
+              </Feed>
               <RankWindow
                 offset={eventsOffset}
                 pageSize={TAPE_PACK}
@@ -321,32 +298,34 @@ export function StableView({ initial }: { initial: AgeUsdBank | null }) {
             </div>
           )}
         </div>
-        <div className="min-w-0 lg:col-span-1">
+        <div className="min-w-0 xl:col-span-1">
           {!listReady ? null : !topTraders.length ? (
-            <p className="text-[var(--muted)]">{t("stable.emptyTop")}</p>
+            <Feed>
+              <FeedEmpty k="addr" title={t("stable.emptyTop")} />
+            </Feed>
           ) : (
-            <div className="addr-sheet">
-              <div className={tradersPack.enterClass("pack")}>
-              <div
-                className={clsx(
-                  "addr-pan side-list transition-opacity duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
-                  pending && "opacity-60"
-                )}
-              >
-                <div className="addr-head flex h-[var(--addr-bar)] items-center text-[12px] font-medium">
-                  <div className="min-w-0 flex-1 px-3 text-[var(--muted)]">{t("defi.trader")}</div>
-                  <div className="shrink-0 px-3 text-right text-[var(--muted)]">{t("stable.topSum")}</div>
-                </div>
-                {topTraders.map((row) => (
-                  <TopTraderRow
-                    key={row.trader}
-                    row={row}
-                    locale={locale}
-                    enterClass={tradersEnter.enterClass(row.trader)}
-                  />
-                ))}
-              </div>
-              </div>
+            <div className="feed-sheet">
+              <Feed busy={pending} className="is-rank is-side" enterClass={tradersPack.enterClass("pack")}>
+                <FeedBoard
+                  plate={
+                    <FeedPlate
+                      tag={t("stable.topTraders")}
+                      count={bank?.tradersCount != null ? <FeedCount k="feed.traders" n={bank.tradersCount} /> : undefined}
+                    />
+                  }
+                >
+                  {topTraders.map((row, i) => (
+                    <FeedTraderRow
+                      key={row.trader}
+                      trader={row.trader}
+                      erg={row.erg}
+                      deals={row.deals}
+                      rank={tradersOffset + i + 1}
+                      enterClass={tradersEnter.enterClass(row.trader)}
+                    />
+                  ))}
+                </FeedBoard>
+              </Feed>
               <RankWindow
                 offset={tradersOffset}
                 pageSize={TAPE_PACK}
@@ -370,7 +349,7 @@ export function StableView({ initial }: { initial: AgeUsdBank | null }) {
 }
 
 function ratioInk(band: "below" | "in" | "above" | null | undefined): string {
-  if (band === "below") return "#FF4D6D";
+  if (band === "below") return "var(--down)";
   if (band === "in") return "var(--up)";
   if (band === "above") return INK.gold;
   return "var(--muted)";
@@ -576,191 +555,6 @@ function Fact({
           shown
         )}
       </dd>
-    </div>
-  );
-}
-
-function SortCol({
-  label,
-  k,
-  sort,
-  dir,
-  align,
-  onSort,
-}: {
-  label: string;
-  k: TapeSort;
-  sort: TapeSort;
-  dir: TapeDir;
-  align: "left" | "right";
-  onSort: (k: TapeSort) => void;
-}) {
-  const t = useT();
-  const on = sort === k;
-  const hint = on
-    ? `${label}, ${dir === "asc" ? t("addresses.sortAsc") : t("addresses.sortDesc")}`
-    : label;
-  return (
-    <div
-      className={clsx("flex h-full min-w-0 items-center", align === "right" && "justify-end")}
-      aria-sort={on ? (dir === "asc" ? "ascending" : "descending") : "none"}
-    >
-      <button
-        type="button"
-        onClick={() => onSort(k)}
-        aria-label={hint}
-        className={clsx(
-          "chip-press inline-flex shrink-0 items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[10px] px-2 py-1.5 text-[12px] font-medium leading-none transition-colors duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:text-[var(--text)]",
-          on ? "is-pressed bg-[var(--wash-strong)] text-[var(--text)]" : "text-[var(--muted)]"
-        )}
-      >
-        {label}
-        <span className="sort-mark" aria-hidden>
-          <span className={clsx("sort-caret sort-caret-up", on && dir === "asc" && "is-on")} />
-          <span className={clsx("sort-caret sort-caret-dn", on && dir === "desc" && "is-on")} />
-        </span>
-      </button>
-    </div>
-  );
-}
-
-function BankRow({
-  row,
-  locale,
-  t,
-  enterClass,
-}: {
-  row: AgeUsdEvent;
-  locale: string;
-  t: (k: string) => string;
-  enterClass?: string;
-}) {
-  const meta = row.tokenId ? resolveTokenMeta(row.tokenId, row.tokenName) : null;
-  const label = meta?.symbol || (row.tokenId ? shortId(row.tokenId, 4) : "—");
-  const sid = row.side.toLowerCase();
-  const kind = sid.startsWith("mint")
-    ? "mint"
-    : sid.startsWith("redeem")
-      ? "redeem"
-      : sid;
-  const sideKey = `defi.side.${kind}`;
-  const side = t(sideKey) !== sideKey ? t(sideKey) : row.side;
-  const mint = kind === "mint";
-  const redeem = kind === "redeem";
-  const price =
-    row.tokenAmount > 0 && row.baseAmount > 0 ? row.baseAmount / row.tokenAmount : null;
-  return (
-    <div
-      className={clsx(
-        "addr-lane addr-lane-x block-lane border-t border-[var(--border-soft)] py-2.5 text-[13px]",
-        enterClass
-      )}
-    >
-      <div className="block-lane-pair">
-        <div className="flex min-w-0 items-center px-3">
-          {row.tokenId ? (
-            <Link prefetch={false} href={`/token/${row.tokenId}`} className="flex min-w-0 items-center gap-2">
-              <TokenAvatar tokenId={row.tokenId} symbol={meta?.symbol} size={22} />
-              <span className="truncate font-semibold" style={{ color: tokenTickerInk(row.tokenId) }}>
-                {label}
-              </span>
-            </Link>
-          ) : (
-            <span className="text-[var(--muted)]">—</span>
-          )}
-        </div>
-        <div className="flex min-w-0 items-center justify-end px-3">
-          <div className="min-w-0 text-right">
-            <p
-              className={clsx(
-                "font-medium lowercase leading-none",
-                mint && "text-[var(--up)]",
-                redeem && "text-[#FF4D6D]",
-                !mint && !redeem && "text-[var(--muted)]"
-              )}
-            >
-              {side}
-            </p>
-            <p className="mt-0.5 text-[11px] leading-none text-[var(--muted)]">
-              {formatRelAge(row.time, locale)}
-            </p>
-          </div>
-        </div>
-      </div>
-      <div className="block-lane-pair">
-        <div className="min-w-0 px-3 tabular-nums">
-          <PrettyPrice n={price} />
-        </div>
-        <div className="min-w-0 px-3 text-right tabular-nums">{fmtAmt(row.tokenAmount, locale)}</div>
-      </div>
-      <div className="block-lane-pair">
-        <div className="min-w-0 px-3 tabular-nums text-[var(--up)]">
-          {row.baseAmount ? fmtErgFull(row.baseAmount, locale) : "—"}
-        </div>
-        <div className="min-w-0 px-3 text-right">
-          <ListWhen ts={row.time} locale={locale} />
-        </div>
-      </div>
-      <div className="block-lane-pair">
-        <div className="min-w-0 px-3">
-          {row.trader ? (
-            <Link
-              prefetch={false}
-              href={`/address/${encodeURIComponent(row.trader)}`}
-              className="block truncate whitespace-nowrap font-mono text-[12px] text-accent hover:underline"
-            >
-              {shortHash(row.trader)}
-            </Link>
-          ) : (
-            <span className="text-[var(--muted)]">—</span>
-          )}
-        </div>
-        <div className="min-w-0 px-3 text-right">
-          {row.txId ? (
-            <Link
-              prefetch={false}
-              href={`/tx/${row.txId}`}
-              className="inline-block whitespace-nowrap font-mono text-accent hover:underline"
-            >
-              {shortHash(row.txId)}
-            </Link>
-          ) : (
-            "—"
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function TopTraderRow({
-  row,
-  locale,
-  enterClass,
-}: {
-  row: AgeUsdTrader;
-  locale: string;
-  enterClass?: string;
-}) {
-  return (
-    <div
-      className={clsx(
-        "box-border flex h-[var(--addr-row)] min-h-[var(--addr-row)] max-h-[var(--addr-row)] items-center border-t border-[var(--border-soft)] text-[13px]",
-        enterClass
-      )}
-    >
-      <div className="min-w-0 flex-1 px-3">
-        <Link
-          prefetch={false}
-          href={`/address/${encodeURIComponent(row.trader)}`}
-          className="block truncate whitespace-nowrap font-mono text-[12px] text-accent hover:underline"
-        >
-          {shortHash(row.trader)}
-        </Link>
-      </div>
-      <div className="shrink-0 px-3 text-right tabular-nums text-[var(--up)]">
-        {fmtErgFull(row.erg, locale)}
-      </div>
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import clsx from "clsx";
+import { Tip } from "@/components/Tip";
 import type { ReactNode } from "react";
 import { TokenLogo } from "@/components/TokenBadge";
 import { PrettyUsd } from "@/components/PrettyNum";
@@ -107,6 +108,7 @@ export function FeedBoxRow({
       k={k}
       glyph={glyph}
       tileTitle={fee ? t("tx.minerFee") : t("detail.box")}
+      href={`/box/${boxId}`}
       lead={lead}
       enterClass={enterClass}
       title={title}
@@ -125,15 +127,17 @@ export function FeedBoxRow({
             </span>
           ) : null}
           {txId ? (
-            <span title={`${t("detail.tx")} ${txId}${index != null ? `:${index}` : ""}`}>
+            <span>
               {t("address.colTx")} <FeedIdLink href={`/tx/${txId}`} id={txId} />
               {index != null ? <span className="tabular-nums text-[var(--muted-2)]">:{index}</span> : null}
             </span>
           ) : null}
           {height != null ? (
-            <Link prefetch={false} href={`/block/${height}`} className="feed-mid tabular-nums hover:underline" title={t("address.colHeight")}>
-              {height.toLocaleString(tag)}
-            </Link>
+            <Tip content={t("address.colHeight")} tap={false}>
+              <Link prefetch={false} href={`/block/${height}`} className="feed-mid tabular-nums hover:underline">
+                {height.toLocaleString(tag)}
+              </Link>
+            </Tip>
           ) : null}
         </>
       }

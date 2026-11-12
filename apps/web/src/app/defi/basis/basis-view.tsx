@@ -1,16 +1,32 @@
 "use client";
 
+import { Tip } from "@/components/Tip";
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
-import clsx from "clsx";
 import { Shell } from "@/components/Shell";
 import { KpiGrid } from "@/components/KpiGrid";
 import { RankWindow } from "@/components/RankWindow";
+import {
+  Feed,
+  FeedAmount,
+  FeedBoard,
+  FeedCount,
+  FeedEmpty,
+  FeedField,
+  FeedFields,
+  FeedIdLine,
+  FeedIdLink,
+  FeedPhrase,
+  FeedPlate,
+  FeedRow,
+  FeedSort,
+  feedLoc,
+  type FeedKind,
+} from "@/components/feed/Feed";
 import { KpiMark } from "@/components/kpi-marks";
-import { TokenAvatar } from "@/components/TokenBadge";
 import { INK } from "@/lib/palette";
-import { describeRentErg, formatFactWhen, formatRelTime, relAgeTone, relAgeToneClass, shortId } from "@/lib/format";
-import { ERG_ZERO, resolveTokenMeta, tokenTickerInk } from "@/lib/token-meta";
+import { describeRentErg, formatRelTime, formatScaledAmount, formatScaledGlance, formatTs, shortId } from "@/lib/format";
+import { resolveTokenMeta } from "@/lib/token-meta";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { countText } from "@/lib/i18n/messages";
 import { useKeepFresh, usePageSync } from "@/lib/page-sync";
@@ -98,37 +114,150 @@ function rowErgNano(row: BasisReserve, prices: Record<string, number>): bigint |
   }
 }
 
-function SortHead({
-  label,
-  on,
-  dir,
-  align,
-  onClick,
+/** Status → the tile colour: claimable is green, an owner taking it back is a warning. */
+const STATUS_KIND: Record<BasisReserve["status"], FeedKind> = {
+  open: "defi",
+  quiet: "in",
+  refund: "rent",
+  refundReady: "rent",
+  noTracker: "quiet",
+};
+
+/** What the box holds, in its own smallest unit. */
+function lockedRaw(row: BasisReserve): bigint | null {
+  const text = row.kind === "erg" ? row.nano : row.collateral?.amount;
+  if (text == null) return null;
+  try {
+    return BigInt(text.split(".")[0] || "0");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * One lockbox: the key that owns it is the title, its status leads the facts. The figure
+ * is what is locked; a token box shows its ERG worth under it.
+ */
+function BasisRow({
+  row,
+  rank,
+  ergNano,
+  whenTs,
 }: {
-  label: string;
-  on: boolean;
-  dir: "asc" | "desc";
-  align?: "end";
-  onClick: () => void;
+  row: BasisReserve;
+  rank: number;
+  ergNano: bigint | null;
+  whenTs: number | null;
 }) {
+  const { t, locale } = useI18n();
+  const tag = feedLoc(locale);
+  const ticker = lockedTicker(row);
+  const tokenId = row.kind === "token" ? (row.collateral?.tokenId ?? null) : null;
+  const decimals = row.kind === "erg" ? 9 : (row.collateral?.decimals ?? 0);
+  const raw = lockedRaw(row);
+  const state = statusCopy(row, t, locale);
+  const created = whenTs != null ? formatRelTime(whenTs, locale) : null;
+  const boxHref = `/box/${row.boxId}`;
+  const trackerHref = row.trackerNft
+    ? row.trackerBoxId
+      ? `/box/${row.trackerBoxId}`
+      : `/token/${row.trackerNft}`
+    : null;
+  const worth = tokenId && ergNano != null ? formatScaledGlance(ergNano, 9, tag).text : null;
   return (
-    <div className={clsx("min-w-0", align === "end" && "is-end")}>
-      <button
-        type="button"
-        onClick={onClick}
-        aria-sort={on ? (dir === "asc" ? "ascending" : "descending") : "none"}
-        className={clsx(
-          "chip-press inline-flex max-w-full items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[10px] px-2 py-1.5 text-[12px] font-medium leading-none transition-colors duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:text-[var(--text)]",
-          on ? "is-pressed bg-[var(--wash-strong)] text-[var(--text)]" : "text-[var(--muted)]"
-        )}
-      >
-        {label}
-        <span className="sort-mark" aria-hidden>
-          <span className={clsx("sort-caret sort-caret-up", on && dir === "asc" && "is-on")} />
-          <span className={clsx("sort-caret sort-caret-dn", on && dir === "desc" && "is-on")} />
-        </span>
-      </button>
-    </div>
+    <FeedRow
+      k={STATUS_KIND[row.status]}
+      glyph="box"
+      tileTitle={state.hint}
+      lead={{ rank: rank.toLocaleString(tag) }}
+      title={
+        <Link
+          prefetch={false}
+          href={boxHref}
+          title={row.owner ?? row.boxId}
+          className="feed-name font-mono tabular-nums hover:underline"
+        >
+          {shortId(row.owner ?? row.boxId, 8)}
+        </Link>
+      }
+      facts={
+        <>
+          <Tip content={state.hint}>
+            <span className="feed-kind">{state.label}</span>
+          </Tip>
+          {created ? (
+            <span suppressHydrationWarning>
+              <FeedPhrase text={t("feed.created")} value={created} />
+            </span>
+          ) : null}
+          {row.creator ? (
+            <span className="feed-mid">
+              {t("basis.colCreator")} <FeedIdLink href={`/address/${row.creator}`} id={row.creator} />
+            </span>
+          ) : null}
+          {row.trackerNft && trackerHref ? (
+            <span className="feed-wide">
+              {t("basis.colTracker")} <FeedIdLink href={trackerHref} id={row.trackerNft} n={4} />
+            </span>
+          ) : null}
+        </>
+      }
+      value={<FeedAmount raw={raw} decimals={decimals} unit={ticker} glance />}
+      sub={worth ? <span className="tabular-nums">≈ {worth} ERG</span> : null}
+      subMinor
+      detail={() => (
+        <FeedFields>
+          <FeedField label={t("detail.box")} wide>
+            <FeedIdLine href={boxHref} id={row.boxId} />
+          </FeedField>
+          {row.owner ? (
+            <FeedField label={t("basis.colOwner")} wide>
+              <span className="break-all font-mono text-[12px]">{row.owner}</span>
+            </FeedField>
+          ) : null}
+          {row.creator ? (
+            <FeedField label={t("basis.colCreator")} wide>
+              <FeedIdLine href={`/address/${row.creator}`} id={row.creator} />
+            </FeedField>
+          ) : null}
+          {row.trackerNft && trackerHref ? (
+            <FeedField label={t("basis.colTracker")} wide>
+              <FeedIdLine href={trackerHref} id={row.trackerNft} />
+            </FeedField>
+          ) : null}
+          {tokenId ? (
+            <FeedField label={t("defi.token")} wide>
+              <FeedIdLine href={`/token/${tokenId}`} id={tokenId} />
+            </FeedField>
+          ) : null}
+          <FeedField label={t("basis.colLocked")}>
+            <span className="tabular-nums">
+              {raw != null ? `${formatScaledAmount(raw, decimals, tag, decimals)} ${ticker}` : "—"}
+              {worth ? <span className="text-[var(--muted-2)]"> · ≈ {worth} ERG</span> : null}
+            </span>
+          </FeedField>
+          <FeedField label={t("basis.colCreated")}>
+            <span className="tabular-nums" suppressHydrationWarning>
+              {whenTs != null ? formatTs(whenTs) : "—"}
+              {row.height != null ? (
+                <span className="text-[var(--muted-2)]">
+                  {" · "}
+                  <Link prefetch={false} href={`/block/${row.height}`} className="hover:underline">
+                    {row.height.toLocaleString(tag)}
+                  </Link>
+                </span>
+              ) : null}
+            </span>
+          </FeedField>
+          <FeedField label={t("basis.colStatus")} wide>
+            <span>
+              {state.label}
+              <span className="text-[var(--muted-2)]"> · {state.hint}</span>
+            </span>
+          </FeedField>
+        </FeedFields>
+      )}
+    />
   );
 }
 
@@ -392,138 +521,48 @@ export function BasisView({ initial }: { initial: BasisSnap | null }) {
         </div>
       </article>
       {!ready ? (
-        <p className="text-[13px] text-[var(--muted)]">{t("basis.unavailable")}</p>
+        <Feed>
+          <FeedEmpty k="defi" title={t("basis.unavailable")} />
+        </Feed>
       ) : !rows.length ? (
-        <p className="text-[13px] text-[var(--muted)]">{t("basis.empty")}</p>
+        <Feed>
+          <FeedEmpty k="defi" title={t("basis.empty")} />
+        </Feed>
       ) : (
-        <div className="addr-sheet">
-          <div className="addr-pan">
-            <div className="addr-head addr-lane addr-lane-x basis-tape text-[12px] font-medium">
-              <SortHead
-                label={t("basis.colLocked")}
-                on={sort === "amount"}
-                dir={dir}
-                onClick={() => toggleSort("amount")}
-              />
-              <span>{t("basis.colOwner")}</span>
-              <span>{t("basis.colCreator")}</span>
-              <span>{t("basis.colTracker")}</span>
-              <span className="is-end">{t("basis.colBlock")}</span>
-              <SortHead
-                label={t("basis.colCreated")}
-                on={sort === "created"}
-                dir={dir}
-                align="end"
-                onClick={() => toggleSort("created")}
-              />
-              <span className="is-end">{t("basis.colStatus")}</span>
-            </div>
-            {pageRows.map((row) => {
-              const ticker = lockedTicker(row);
-              const amount =
-                row.kind === "erg"
-                  ? fmtUnits(row.nano, 9, loc)
-                  : row.collateral
-                    ? fmtUnits(row.collateral.amount, row.collateral.decimals, loc)
-                    : "—";
-              const urgent = row.status === "refund" || row.status === "refundReady";
-              const tone =
-                row.status === "quiet"
-                  ? { color: "var(--up)", wash: "var(--up)" }
-                  : row.status === "open"
-                    ? { color: "var(--accent)", wash: "var(--accent)" }
-                    : urgent
-                      ? { color: INK.gold, wash: "#e0b15a" }
-                      : { color: INK.violet, wash: "#c4b5fd" };
-              const whenTs = row.createdAt ?? (row.height != null ? blockTs[row.height] : null);
-              const state = statusCopy(row, t, locale);
-              const trackerId = row.trackerNft;
-              return (
-                <div
+        <div className="feed-sheet">
+          <Feed className="is-rank">
+            <FeedBoard
+              plate={
+                <FeedPlate
+                  tag={t("basis.packTape")}
+                  now
+                  count={<FeedCount k="feed.lockboxes" n={rows.length} />}
+                  end={
+                    <FeedSort
+                      label={t("feed.sort.label")}
+                      options={[
+                        { key: "created", label: t("basis.colCreated") },
+                        { key: "amount", label: t("basis.colLocked") },
+                      ]}
+                      active={sort}
+                      dir={dir}
+                      onSort={toggleSort}
+                    />
+                  }
+                />
+              }
+            >
+              {pageRows.map((row, i) => (
+                <BasisRow
                   key={row.boxId}
-                  className="addr-lane addr-lane-x basis-tape border-t border-[var(--border-soft)] text-[13px]"
-                >
-                  <Link
-                    prefetch={false}
-                    href={`/box/${row.boxId}`}
-                    className="flex min-w-0 items-center gap-2.5 font-medium text-[var(--text)] hover:underline"
-                  >
-                    <TokenAvatar tokenId={row.collateral?.tokenId ?? ERG_ZERO} size={22} />
-                    <span className="min-w-0">
-                      <span className="block truncate tabular-nums">
-                        {amount}{" "}
-                        <span style={{ color: row.kind === "erg" ? INK.gold : tokenTickerInk(row.collateral?.tokenId) }}>
-                          {ticker}
-                        </span>
-                      </span>
-                    </span>
-                  </Link>
-                  <span
-                    className="truncate font-mono text-[12px]"
-                    style={{ color: INK.violet }}
-                    title={row.owner ?? undefined}
-                  >
-                    {row.owner ? shortId(row.owner, 4) : "—"}
-                  </span>
-                  {row.creator ? (
-                    <Link
-                      prefetch={false}
-                      href={`/address/${row.creator}`}
-                      className="truncate font-mono text-[12px] text-soft hover:underline"
-                      title={row.creator}
-                    >
-                      {shortId(row.creator, 4)}
-                    </Link>
-                  ) : (
-                    <span className="text-[12px] text-[var(--muted)]">—</span>
-                  )}
-                  {trackerId ? (
-                    <Link
-                      prefetch={false}
-                      href={row.trackerBoxId ? `/box/${row.trackerBoxId}` : `/token/${trackerId}`}
-                      className="truncate font-mono text-[12px] text-soft hover:underline"
-                      title={trackerId}
-                    >
-                      {shortId(trackerId, 4)}
-                    </Link>
-                  ) : (
-                    <span className="text-[12px] text-[var(--muted)]">—</span>
-                  )}
-                  {row.height != null ? (
-                    <Link
-                      prefetch={false}
-                      href={`/block/${row.height}`}
-                      className="is-end font-mono text-[12px] tabular-nums text-soft hover:underline"
-                    >
-                      #{row.height.toLocaleString(loc)}
-                    </Link>
-                  ) : (
-                    <span className="is-end text-[var(--muted)]">—</span>
-                  )}
-                  <div className="basis-when">
-                    <p className={clsx("whitespace-nowrap tabular-nums", relAgeToneClass(relAgeTone(whenTs)))}>
-                      {formatRelTime(whenTs, locale)}
-                    </p>
-                    <p className="mt-0.5 whitespace-nowrap text-[12px] tabular-nums text-[var(--muted-2)]">
-                      {formatFactWhen(whenTs, loc)}
-                    </p>
-                  </div>
-                  <span className="is-end">
-                    <span
-                      className="whitespace-nowrap rounded-full px-2.5 py-1 text-[12px]"
-                      style={{
-                        color: tone.color,
-                        background: `color-mix(in srgb, ${tone.wash} 16%, transparent)`,
-                      }}
-                      title={state.hint}
-                    >
-                      {state.label}
-                    </span>
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+                  row={row}
+                  rank={pageStart + i + 1}
+                  ergNano={rowErgNano(row, prices)}
+                  whenTs={row.createdAt ?? (row.height != null ? (blockTs[row.height] ?? null) : null)}
+                />
+              ))}
+            </FeedBoard>
+          </Feed>
           <RankWindow
             offset={pageStart}
             pageSize={PAGE}
