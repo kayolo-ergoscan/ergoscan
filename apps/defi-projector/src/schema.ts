@@ -75,9 +75,7 @@ export async function ensureProjectorSchema(db: Db): Promise<void> {
   await db.query(
     `CREATE INDEX IF NOT EXISTS defi_pool_tick_ts ON defi.pool_tick (ts_ms DESC)`
   );
-  await db.query(
-    `CREATE INDEX IF NOT EXISTS defi_pool_tick_pool_ts ON defi.pool_tick (pool_id, ts_ms DESC)`
-  );
+  // (pool_id, ts_ms DESC) repeated the primary key; dropped 12 Nov 2026 (deploy/sql/008).
 
   // Current pool totals for /defi/pool. Not a time series. Ranks upsert does not touch these.
   await db.query(`ALTER TABLE defi.pool_snap ADD COLUMN IF NOT EXISTS trades_n BIGINT`);
