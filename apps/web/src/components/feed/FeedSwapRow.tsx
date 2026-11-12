@@ -131,6 +131,7 @@ export function FeedSwapRow({
       glyph={glyph}
       tileTitle={word}
       lead={lead}
+      href={`/tx/${row.txId}`}
       enterClass={enterClass}
       title={
         <Link
