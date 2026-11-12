@@ -141,7 +141,7 @@ function FeeLevelRow({
       title={<span className="feed-name font-semibold">{t(`fees.${level}`)}</span>}
       facts={
         <>
-          <span className="feed-kind">{t(`feed.fees.basis.${level}`)}</span>
+          <span className="feed-kind feed-wrap">{t(`feed.fees.basis.${level}`)}</span>
           {known && rates.length ? (
             <span className="feed-mid tabular-nums">
               {countText(t, locale, "feed.fees.ahead", ahead, ahead.toLocaleString(tag))}

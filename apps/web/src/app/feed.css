@@ -1184,13 +1184,13 @@ button.feed-caret:hover {
     white-space: normal;
   }
 }
-/* Rent danger rows on a phone: the rank goes, the due phrase may take two lines. */
+/* On a phone a fact that is a phrase may take two lines; rent danger rows drop their rank. */
 @media (max-width: 639px) {
+  .feed-facts > .feed-wrap {
+    white-space: normal;
+  }
   .feed-row.is-danger .feed-facts > .feed-when {
     display: none;
-  }
-  .feed-row.is-danger .feed-facts > .feed-kind {
-    white-space: normal;
   }
 }
 

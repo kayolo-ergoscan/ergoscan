@@ -1383,7 +1383,18 @@ function partyList(list: string[] | undefined): string[] {
   return out;
 }
 
-function FeedParty({ list, many, manyHint }: { list: string[]; many: string; manyHint: string }) {
+function FeedParty({
+  list,
+  many,
+  manyHint,
+  chars = 6,
+}: {
+  list: string[];
+  many: string;
+  manyHint: string;
+  /** Ends kept of an unnamed address. */
+  chars?: number;
+}) {
   if (!list.length) return <span className="text-[var(--muted)]">—</span>;
   if (list.length > 1) {
     return (
@@ -1402,7 +1413,7 @@ function FeedParty({ list, many, manyHint }: { list: string[]; many: string; man
       title={head}
       className={clsx("feed-party hover:underline", !party.known && "font-mono tabular-nums")}
     >
-      {party.known || party.short || shortId(head, 6)}
+      {party.known || (chars === 6 ? party.short : null) || shortId(head, chars)}
     </Link>
   );
 }
@@ -1475,7 +1486,7 @@ function FeedTokenTxRow({
       title={
         trade ? (
           <span className="feed-route">
-            <FeedParty list={trader} many={many} manyHint={manyHint} />
+            <FeedParty list={trader} many={many} manyHint={manyHint} chars={5} />
             <span className="feed-side" data-k={side === "buy" ? "in" : "out"}>
               {t(side === "buy" ? "feed.buy" : "feed.sell")}
             </span>

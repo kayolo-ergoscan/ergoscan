@@ -227,7 +227,7 @@ function ApiUseCard({
         <p className="mt-3 text-[13px] text-[var(--muted)]">{t("status.api.empty")}</p>
       )}
       {hour?.paths.length ? (
-        <div className="feed-sheet -mx-4 mt-3">
+        <div className="relative -mx-4 mt-3 min-w-0">
           <Feed className="is-rank">
             <FeedSection
               plate={
@@ -299,7 +299,7 @@ function ServiceCard({
       </div>
 
       {slice.feeds?.length ? (
-        <div className="feed-sheet -mx-4 mt-3">
+        <div className="relative -mx-4 mt-3 min-w-0">
           <Feed className="is-rank">
             <FeedSection label={t(`status.service.${slice.id}`)}>
               {slice.feeds.map((feed, i) => (

@@ -259,7 +259,7 @@ export function FeedRentDangerRow({
       facts={
         <>
           {project ? <span>{project}</span> : null}
-          <Link prefetch={false} href={`/box/${row.boxId}`} title={status} className="feed-kind tabular-nums hover:underline">
+          <Link prefetch={false} href={`/box/${row.boxId}`} title={status} className="feed-kind feed-wrap tabular-nums hover:underline">
             {soon}
           </Link>
           <span className="feed-wide tabular-nums" title={formatScaledAmount(amount, dec, tag, dec)}>
