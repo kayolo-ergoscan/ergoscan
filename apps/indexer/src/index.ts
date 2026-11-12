@@ -2137,6 +2137,59 @@ async function maybeBackfillAddressTxCounts(pool: Pool): Promise<void> {
   })();
 }
 
+/**
+ * Node tip as seen by a light watcher (local /info every TIP_WATCH_MS). A new block cuts
+ * the idle wait between ticks and the maintenance passes after the tip short, so it is
+ * indexed in about TIP_WATCH_MS instead of POLL_MS plus whatever pass is running (seen
+ * 12 Nov 2026: up to 4.75 s). The passes just run again on the next tick.
+ */
+const TIP_WATCH_MS = Number(process.env.TIP_WATCH_MS || 300);
+let watchedTip = { height: 0, id: null as string | null };
+/** Tip the current tick works toward; set at the start of each loop(). */
+let tickTip = { height: 0, id: null as string | null };
+
+function startTipWatch(): void {
+  if (!(TIP_WATCH_MS > 0)) return;
+  let busy = false;
+  const t = setInterval(() => {
+    if (busy) return;
+    busy = true;
+    nodeInfo()
+      .then((info) => {
+        if (info.fullHeight > 0) watchedTip = { height: info.fullHeight, id: info.bestFullHeaderId };
+      })
+      .catch(() => {
+        /* node busy or down: the tick's own poll still runs */
+      })
+      .finally(() => {
+        busy = false;
+      });
+  }, TIP_WATCH_MS);
+  t.unref();
+}
+
+/** True when the node moved past the tip this tick started from (new block or reorg). */
+function newBlockSinceTick(): boolean {
+  if (watchedTip.height > tickTip.height) return true;
+  return (
+    watchedTip.height === tickTip.height &&
+    watchedTip.id != null &&
+    tickTip.id != null &&
+    watchedTip.id !== tickTip.id
+  );
+}
+
+/** Sleep up to `ms`, waking as soon as the watcher sees a new block. */
+async function idleUntilBlock(ms: number): Promise<void> {
+  const end = Date.now() + ms;
+  for (;;) {
+    if (newBlockSinceTick()) return;
+    const left = end - Date.now();
+    if (left <= 0) return;
+    await new Promise((r) => setTimeout(r, Math.min(100, left)));
+  }
+}
+
 let tokenStatsTicks = 0;
 let lastTokenStatsAt = 0;
 let lastListSnapAt = 0;
@@ -2613,6 +2666,7 @@ async function loop(pool: Pool): Promise<boolean> {
     console.warn("[indexer] no tip");
     return false;
   }
+  tickTip = { height: tip, id: info.bestFullHeaderId };
   const freeGb = freeDiskGb();
   const diskOk = freeGb >= MIN_DISK_FREE_GB;
   let last = Number((await getState(pool, "last_height")) || 0);
@@ -2969,6 +3023,8 @@ async function loop(pool: Pool): Promise<boolean> {
     }
   }
 
+  // A new block waits for nothing below: index it first, these passes run next tick.
+  if (newBlockSinceTick()) return true;
   // P2-9: name + artwork hydration (two passes: general + art-focused)
   try {
     await enrichTokenMeta(pool, 24);
@@ -2977,6 +3033,7 @@ async function loop(pool: Pool): Promise<boolean> {
     console.warn("[indexer] enrich tokens", String(e));
   }
 
+  if (newBlockSinceTick()) return true;
   // Names from issuance-box R4 already in PG. Not ENRICH, not node.
   try {
     await maybeBackfillTokenNamesFromRegs(pool);
@@ -2984,6 +3041,7 @@ async function loop(pool: Pool): Promise<boolean> {
     console.warn("[indexer] token names r4", String(e));
   }
 
+  if (newBlockSinceTick()) return true;
   // EIP-4 R7 → tokens.nft_kind. Same mint join. Not ENRICH, not node.
   try {
     await maybeBackfillNftKindFromRegs(pool);
@@ -2991,6 +3049,7 @@ async function loop(pool: Pool): Promise<boolean> {
     console.warn("[indexer] token nft_kind", String(e));
   }
 
+  if (newBlockSinceTick()) return true;
   // artwork_url '' → mint-output R9. Typed NFTs only. Not ENRICH, not node.
   try {
     await maybeBackfillMintArtwork(pool);
@@ -2998,6 +3057,7 @@ async function loop(pool: Pool): Promise<boolean> {
     console.warn("[indexer] token art mint", String(e));
   }
 
+  if (newBlockSinceTick()) return true;
   // Issuance box_id=token_id → emission + decimals. Overwrites first-seen lie.
   try {
     await maybeBackfillTokenIssuance(pool);
@@ -3005,6 +3065,7 @@ async function loop(pool: Pool): Promise<boolean> {
     console.warn("[indexer] token issuance", String(e));
   }
 
+  if (newBlockSinceTick()) return true;
   let metaRetry = false;
   try {
     metaRetry = await maybeRetryTokenMetaAfterRegs(pool);
@@ -3012,6 +3073,7 @@ async function loop(pool: Pool): Promise<boolean> {
     console.warn("[indexer] token meta retry", String(e));
   }
 
+  if (newBlockSinceTick()) return true;
   // Spend-side address_tx for heights the live writer never saw. After catalog seed.
   try {
     await maybeBackfillAddressTxSpends(pool);
@@ -3019,30 +3081,35 @@ async function loop(pool: Pool): Promise<boolean> {
     console.warn("[indexer] address_tx spend bf", String(e));
   }
 
+  if (newBlockSinceTick()) return true;
   try {
     await maybeBackfillBlockHeaders(pool);
   } catch (e) {
     console.warn("[indexer] block header", String(e));
   }
 
+  if (newBlockSinceTick()) return true;
   try {
     await maybeBackfillBlockSections(pool);
   } catch (e) {
     console.warn("[indexer] block section", String(e));
   }
 
+  if (newBlockSinceTick()) return true;
   try {
     await maybeBackfillInputProofs(pool);
   } catch (e) {
     console.warn("[indexer] input proof", String(e));
   }
 
+  if (newBlockSinceTick()) return true;
   try {
     await maybeWriteLithosFinds(pool);
   } catch (e) {
     console.warn("[indexer] lithos find", String(e));
   }
 
+  if (newBlockSinceTick()) return true;
   // Long P2S history: dedicated writer. Tip keeps ADDRESS_TX_LONG=0.
   if (longAddressTxSlotEnabled()) {
     try {
@@ -3061,6 +3128,7 @@ async function loop(pool: Pool): Promise<boolean> {
     }
   }
 
+  if (newBlockSinceTick()) return true;
   // additional_registers hole ~1.401M–1.854M. Node /blocks/{id} only. Not ENRICH.
   let regsBite = false;
   try {
@@ -3069,6 +3137,7 @@ async function loop(pool: Pool): Promise<boolean> {
     console.warn("[indexer] regs bf", String(e));
   }
 
+  if (newBlockSinceTick()) return true;
   let rentColBite = false;
   try {
     rentColBite = await maybeBackfillRentCollected(pool);
@@ -3076,6 +3145,7 @@ async function loop(pool: Pool): Promise<boolean> {
     console.warn("[indexer] rent collected", String(e));
   }
 
+  if (newBlockSinceTick()) return true;
   // output_index backfill is opt-in. The GROUP BY / COUNT on 2M+ NULL rows
   // blocked the tip loop for ~40 min and froze home/blocks/txs snapshots.
   if (REPAIR_OUTPUT_INDEX && tipLag <= 0) {
@@ -3185,6 +3255,7 @@ async function main() {
     await setState(pool, "repair_output_index_done", String(Date.now()));
   }
 
+  startTipWatch();
   for (;;) {
     let skipPoll = false;
     try {
@@ -3193,8 +3264,7 @@ async function main() {
       console.error("[indexer] tick error", e);
     }
     // After a regs bite the 2s POLL just idles the node pipeline.
-    const wait = skipPoll ? 50 : POLL_MS;
-    await new Promise((r) => setTimeout(r, wait));
+    await idleUntilBlock(skipPoll ? 50 : POLL_MS);
   }
 }
 
