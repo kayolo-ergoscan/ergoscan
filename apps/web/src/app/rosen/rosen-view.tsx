@@ -515,11 +515,10 @@ function FeedRosenRow({ row, lead, enterClass }: { row: RosenEventItem; lead: Fe
         fee != null ? (
           <>
             {t("feed.fee")}{" "}
-            <FeedAmount raw={fee} decimals={dec} unit={null} glance />
+            <FeedAmount raw={fee} decimals={dec} unit={token} glance />
           </>
         ) : null
       }
-      subMinor
       detail={() => (
         <FeedFields>
           <FeedField label={`${t("rosen.col.from")} · ${row.fromChainLabel}`} wide>

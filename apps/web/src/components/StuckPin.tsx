@@ -1,20 +1,19 @@
 "use client";
 
-import { useEffect, useRef, type RefObject } from "react";
+import { useEffect, type RefObject } from "react";
 
 /**
  * The one sticky-head mechanism.
  *
  * The pin is `--feed-pin` (feed.css): a registered length, so the CSS that
- * sticks a head and the check below read one number. On a desktop it is the
+ * sticks a plate and the check below read one number. On a desktop it is the
  * header's foot, on a phone the pill's foot.
  *
- * `StuckPin` is a 1px line above a list head; once it passes under the pin the
- * head is stuck and `onStuck(true)` fires. `useStuckPlate` hands a feed plate
- * to the same sensor: while its day card crosses the pin line the plate
- * carries `data-stuck` ("dock" when it can widen to the header, "free" when it
- * sits in a narrower column), the insets it widens by (`--dock-l`, `--dock-r`)
- * and how far through its day the reader is (`--seam-p`, 0–1).
+ * `useStuckPlate` seats a feed plate: while its day card crosses the pin line
+ * the plate carries `data-stuck` ("dock" when it can widen to the header,
+ * "free" when it sits in a narrower column), the insets it widens by
+ * (`--dock-l`, `--dock-r`) and how far through its day the reader is
+ * (`--seam-p`, 0–1).
  */
 
 const PHONE = "(max-width: 1023px)";
@@ -24,34 +23,6 @@ export function readPin(): number {
   if (Number.isFinite(own)) return own;
   const chrome = document.querySelector(".stage-col > header.sticky");
   return chrome instanceof HTMLElement ? chrome.getBoundingClientRect().bottom : 72;
-}
-
-export function StuckPin({
-  onStuck,
-  anchor,
-}: {
-  onStuck: (stuck: boolean) => void;
-  anchor?: RefObject<HTMLDivElement | null>;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  const report = useRef(onStuck);
-  report.current = onStuck;
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    if (anchor) anchor.current = el;
-    const obs = new IntersectionObserver(([entry]) => report.current(!!entry && !entry.isIntersecting), {
-      threshold: 1,
-      rootMargin: `-${readPin()}px 0px 0px 0px`,
-    });
-    obs.observe(el);
-    return () => {
-      obs.disconnect();
-      if (anchor && anchor.current === el) anchor.current = null;
-      report.current(false);
-    };
-  }, [anchor]);
-  return <div ref={ref} className="h-px w-full" aria-hidden />;
 }
 
 /* ── Plates: one observer for the page, a frame per scroll only while a card crosses the pin ── */

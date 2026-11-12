@@ -138,11 +138,7 @@ function FeeLevelRow({
       k={LEVEL_KIND[level]}
       glyph="fee"
       lead={{ rank: rank.toLocaleString(tag) }}
-      title={
-        <Link prefetch={false} href="/mempool" className="feed-name font-semibold hover:underline">
-          {t(`fees.${level}`)}
-        </Link>
-      }
+      title={<span className="feed-name font-semibold">{t(`fees.${level}`)}</span>}
       facts={
         <>
           <span className="feed-kind">{t(`feed.fees.basis.${level}`)}</span>
