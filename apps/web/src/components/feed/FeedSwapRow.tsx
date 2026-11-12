@@ -78,10 +78,10 @@ function cap(s: string): string {
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 }
 
-/** Fixed two decimals; above a million the figure goes compact. */
+/** Fixed two decimals; from ten thousand the figure goes compact (the traders column rule). */
 function amt(n: number): string {
   if (!Number.isFinite(n)) return "—";
-  return Math.abs(n) >= 1_000_000 ? formatCompact(n, 2) : formatGroupedNumber(n, 2, 2);
+  return Math.abs(n) >= 10_000 ? formatCompact(n, 2) : formatGroupedNumber(n, 2, 2);
 }
 
 function symOf(id: string | null | undefined, name: string | null | undefined): string {
@@ -256,7 +256,7 @@ export function FeedTraderRow({
   const { t, locale } = useI18n();
   const tag = feedLoc(locale);
   const href = `/address/${encodeURIComponent(trader)}`;
-  const figure = Number.isFinite(erg) ? (Math.abs(erg) >= 10_000 ? formatCompact(erg, 2) : formatGroupedNumber(erg, 2, 2)) : "—";
+  const figure = formatCompact(erg, 2);
   return (
     <FeedRow
       k="addr"

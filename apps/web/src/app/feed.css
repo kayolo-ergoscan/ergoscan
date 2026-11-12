@@ -1177,6 +1177,9 @@ button.feed-caret:hover {
   .feed-sub-opt {
     display: none;
   }
+  .feed-side {
+    padding-inline: 4px;
+  }
 }
 /* A route title («Ergo → Cardano») on a narrow phone wraps at its arrow rather than being cut. */
 @media (max-width: 639px) {
