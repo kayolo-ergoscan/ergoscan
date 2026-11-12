@@ -8,7 +8,8 @@
  *   node design/brand/shoot.mjs shots.json
  *
  * shots.json: [{ "url", "out", "w", "h", "dpr"?, "mobile"?, "ls"?: {k: v}, "wait"?: ms,
- *               "eval"?: "js run before the shot", "full"?: bool }]
+ *               "eval"?: "js run before the shot", "full"?: bool,
+ *               "net"?: { latency, downloadThroughput } (throttle before `eval`) }]
  */
 import { spawn } from "node:child_process";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -94,6 +95,11 @@ async function main() {
       }
       await send("Page.navigate", { url: s.url });
       await sleep(s.wait ?? 4000);
+      if (s.net) {
+        // Slow the network after the page is in, so a click shows the wait chrome.
+        await send("Network.enable");
+        await send("Network.emulateNetworkConditions", { offline: false, uploadThroughput: -1, ...s.net });
+      }
       if (s.eval) {
         await send("Runtime.evaluate", { expression: s.eval, awaitPromise: true });
         await sleep(s.after ?? 600);

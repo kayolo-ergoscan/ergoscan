@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Shell } from "@/components/Shell";
 import { useT } from "@/lib/i18n/I18nProvider";
+import { PixelMascot } from "@/components/PixelMascot";
 
 export function MissPanel({
   looked,
@@ -16,6 +17,7 @@ export function MissPanel({
     copy === "index" ? t("search.miss") : copy === "empty" ? t("search.empty") : t("notFound.body");
   return (
     <div className="max-w-lg">
+      <PixelMascot mood="sad" size={40} className="-ml-3" />
       <h1 className="text-[28px] font-semibold tracking-tight">{t("notFound.title")}</h1>
       {looked ? (
         <p className="mt-3 text-[14px] text-[var(--muted)]">

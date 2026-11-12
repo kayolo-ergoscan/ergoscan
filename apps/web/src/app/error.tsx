@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef } from "react";
 import { useT } from "@/lib/i18n/I18nProvider";
+import { PixelMascot } from "@/components/PixelMascot";
 
 /** One automatic retry per path. A second failure inside the window stays on this screen. */
 const retriedAt = new Map<string, number>();
@@ -30,6 +31,7 @@ export default function Error({
 
   return (
     <div className="max-w-lg">
+      <PixelMascot mood="sad" size={40} className="-ml-3" />
       <h1 className="text-[28px] font-semibold tracking-tight">{t("error.title")}</h1>
       <p className="mt-3 text-[14px] leading-relaxed text-[var(--muted)]">{t("error.body")}</p>
       {error.digest ? (

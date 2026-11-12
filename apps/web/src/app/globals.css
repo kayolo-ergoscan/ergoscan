@@ -5653,20 +5653,6 @@ html[data-ink="day"] {
   }
 }
 
-@keyframes route-nav-mark {
-  0%,
-  100% {
-    transform: scale(0.86);
-  }
-  50% {
-    transform: scale(1.12);
-  }
-}
-
-.route-nav-mark {
-  animation: route-nav-mark 1.6s var(--ease) infinite;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .tx-io-pulse {
     animation: none !important;

@@ -5,14 +5,14 @@ import { usePathname } from "next/navigation";
 import { addressIdOf, addressReturnGate, askWaitsForSlip, isAddressHome, rentScratch, SCOUT_CUES_EN, SCOUT_CUES_RU, scoutBeats, type ScoutBeat } from "@/lib/header-scout";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { lookupScoutRent } from "@/lib/scout-rent";
-import { drawWallE } from "./wall-e";
+import { drawPixel, pixelColor, pixelInkForPath, type PixelMood, type PixelPose } from "./pixel";
 
 /**
+ * «Пиксель» (components/pixel.ts), in the page's entity colour.
  * One pass on every page except home, at half the first speed.
- * Before a word the eye pair lifts off his head and floats above the letters,
- * widened. He drives under, the eyes drop back onto the same pixels, then he
- * turns to face the figure and works the pick. He parks past the longest
- * search word and stays there with wide eyes, looking.
+ * Before a word he ducks flat and looks up at the letters, slips under, pops
+ * back up, then turns to face the figure and knocks on it. He parks past the
+ * longest search word and stays there, blinking and looking around.
  *
  * Address pages are the door. A click turns him around: he climbs the gutter,
  * ducks before the search, slips under that word, then runs this same pass
@@ -25,7 +25,7 @@ import { drawWallE } from "./wall-e";
  */
 
 const SPEED = 140;
-const SCALE = 0.74;
+const SCALE = 0.86;
 const HOP = 9;
 const CROUCH = 3;
 const BYE_MS = 820;
@@ -141,11 +141,43 @@ function eyesUnderHeader(header: HTMLElement, px: number, py: number) {
   return false;
 }
 
-function blinkScale(now: number) {
-  const p = now % 5400;
-  if (p > 150) return 1;
-  const u = p / 150;
-  return 0.22 + Math.abs(u - 0.5) * 1.56;
+let inkAt = 0;
+let inkPath = "";
+let inkColor = "";
+
+/** Page entity colour, re-read once a second (the ink can change under him). */
+function scoutColor(now: number) {
+  const path = window.location.pathname;
+  if (path !== inkPath || now - inkAt > 1000) {
+    inkPath = path;
+    inkAt = now;
+    inkColor = pixelColor(pixelInkForPath(path));
+  }
+  return inkColor;
+}
+
+/** What his eyes do on each beat of the walk. */
+function scoutMood(beat: string | undefined): PixelMood {
+  if (!beat) return "idle";
+  if (beat === "ask" || beat === "fall" || beat === "drop" || beat === "note-drop") return "surprised";
+  if (beat === "read" || beat === "carve" || beat === "note-write" || beat === "write") return "work";
+  if (beat === "price" || beat === "mcap" || beat === "bye" || beat === "retreat") return "happy";
+  // An empty list on the address page: he goes over and peeks at it.
+  if (beat === "peek" || beat === "nest" || beat === "watch" || beat === "note-live") return "curious";
+  if (beat === "note-drive") return "look";
+  if (beat.startsWith("under") || beat.startsWith("squat") || beat === "duck" || beat === "slip") return "look";
+  return "idle";
+}
+
+/** «Пиксель» in the header. The mood follows the beat unless the caller names one; he blinks on his own. */
+function drawScout(ctx: CanvasRenderingContext2D, pose: Omit<PixelPose, "color" | "now">) {
+  const now = performance.now();
+  drawPixel(ctx, {
+    ...pose,
+    mood: pose.mood ?? scoutMood(ctx.canvas.dataset.scoutBeat),
+    color: scoutColor(now),
+    now,
+  });
 }
 
 type PerchPhase =
@@ -935,7 +967,7 @@ function runAddressPerch(
 
     const seek = phase === "nest";
     scoutPose = { x, y: floor, face: faceN > 0 ? 1 : -1, roll };
-    drawWallE(ctx, {
+    drawScout(ctx, {
       x: clamp(x, 12, w - 12),
       y: floor,
       head,
@@ -948,8 +980,8 @@ function runAddressPerch(
       eyeLift: seek ? eye * 2.2 : eye * 1.4,
       eyeScale:
         seek || phase === "carve" || phase === "watch" || phase === "note-write" || phase === "note-live"
-          ? (1 + eye * 0.34) * (phase === "watch" || phase === "note-live" ? blinkScale(now) : 1)
-          : (1 + eye * 0.2) * (phase === "home" ? blinkScale(now) : 1),
+          ? 1 + eye * 0.34
+          : 1 + eye * 0.2,
       pupil,
       pupilOrbit: orbit,
     });
@@ -1388,7 +1420,7 @@ function runHeaderPass(
       }
       if (emptyDrive) {
         scoutPose = { x: drive.x, y: drive.y, face: drive.face, roll: drive.roll };
-        drawWallE(ctx, {
+        drawScout(ctx, {
           x: clamp(drive.x, 16, vw - 16),
           y: drive.y,
           head,
@@ -1402,6 +1434,8 @@ function runHeaderPass(
           eyeScale,
           pupil,
           pupilOrbit: orbit,
+          // An empty address: he comes over for a curious look; writing the note is work.
+          mood: emptyDrive.mode === "write" ? "work" : emptyDrive.mode === "drop" ? "surprised" : "curious",
         });
       }
       raf = requestAnimationFrame(paint);
@@ -1974,7 +2008,7 @@ function runFavoritesErrand(canvas: HTMLCanvasElement, header: HTMLElement) {
     ctx.fill();
     ctx.restore();
     scoutPose = { x, y: floor, face, roll };
-    drawWallE(ctx, {
+    drawScout(ctx, {
       x: clamp(x, 16, w - 16),
       y: floor,
       head,
@@ -1988,6 +2022,7 @@ function runFavoritesErrand(canvas: HTMLCanvasElement, header: HTMLElement) {
       eyeScale,
       pupil,
       pupilOrbit: orbit,
+      mood: phase === "write" ? "work" : phase === "drop" ? "surprised" : phase === "retreat" ? "happy" : phase === "live" ? "curious" : "idle",
     });
     raf = requestAnimationFrame(paint);
   };
@@ -2144,7 +2179,7 @@ function draw(
   ctx.ellipse(x, floor + 1, 12 * (1 + air * 0.3), 2.1, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
-  drawWallE(ctx, {
+  drawScout(ctx, {
     x: clamp(x, 16, g.w - 16),
     y,
     head,
