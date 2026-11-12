@@ -39,8 +39,8 @@ const DualLineChart = dynamic(() => import("@/components/DualLineChart"), {
   loading: () => <div className="h-[168px] w-full" />,
 });
 
-const VOL_LINE = "#8ec8ff";
-const SWAP_LINE = "#f472b6";
+const VOL_LINE = "#86a6f0";
+const SWAP_LINE = "#e799b7";
 const TAPE_PACK = 25;
 
 type TapeSort = "time" | "ticker" | "amount";

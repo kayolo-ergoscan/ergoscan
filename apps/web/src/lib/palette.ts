@@ -1,12 +1,16 @@
-/** Miner-share donut slices — reused on the home dashboard. */
+/**
+ * Miner-share donut slices — reused on the home dashboard.
+ * Pages also print figures and marks in these inks inline, so they sit in the look's calm band
+ * (OKLCH C ≤ 0.12, ≥ 7:1 on the panel). Coral stays: looks.css keys its coral rule on this value.
+ */
 export const INK = {
-  cyan: "#3ca2ff",
-  green: "#5ee0a0",
-  gold: "#f0c14a",
+  cyan: "#6db0f4", // oklch(0.74 0.12 250)
+  green: "#84deaf", // oklch(0.83 0.11 160)
+  gold: "#ebcb71", // oklch(0.85 0.115 90), the look's block colour
   coral: "#ff8a65",
-  sky: "#7eb6ff",
+  sky: "#97c1f7", // oklch(0.80 0.09 255)
   violet: "#c4b5fd",
-  teal: "#2dd4bf",
+  teal: "#69d3c6", // oklch(0.80 0.10 185)
   /** Sequential gix — not height, not ERG. Unused elsewhere. */
   gix: "#e879f9",
 } as const;

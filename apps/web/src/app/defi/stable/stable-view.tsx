@@ -345,7 +345,7 @@ export function StableView({ initial }: { initial: AgeUsdBank | null }) {
 }
 
 function ratioInk(band: "below" | "in" | "above" | null | undefined): string {
-  if (band === "below") return "#FF4D6D";
+  if (band === "below") return "var(--down)";
   if (band === "in") return "var(--up)";
   if (band === "above") return INK.gold;
   return "var(--muted)";
