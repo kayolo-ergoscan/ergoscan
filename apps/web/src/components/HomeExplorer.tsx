@@ -134,8 +134,8 @@ function mergeBlockRows(prev: BlockRow[], incoming: readonly BlockRow[]): BlockR
 
 type TxActivityPoint = { t: number; txs: number; feesErg: number; feesKnown?: boolean };
 
-const TX_LINE = "#8ec8ff";
-const FEE_LINE = "#f472b6";
+const TX_LINE = "#86a6f0";
+const FEE_LINE = "#e799b7";
 
 function formatFeeAxis(v: number): string {
   if (!Number.isFinite(v) || v === 0) return "0";

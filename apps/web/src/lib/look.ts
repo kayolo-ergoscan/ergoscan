@@ -16,15 +16,19 @@ export function currentLook(): Look | null {
 
 type Family = "red" | "orange" | "yellow" | "green" | "teal" | "blue" | "violet" | "grey";
 
-/** Canvas inks by hue family of the source colour. */
+/**
+ * Canvas inks by hue family of the source colour: the look's mark tier (looks.css --c-*),
+ * one lightness band (OKLCH L 0.73–0.85, C ≤ 0.13) so crates, balls and chart lines stay
+ * apart by hue without glowing on the black panel.
+ */
 const FAMILY: Record<Family, string> = {
-  red: "#ff4f5e",
-  orange: "#ff6a2b",
-  yellow: "#ffd23c",
-  green: "#2fd27f",
-  teal: "#1ec8d8",
-  blue: "#4f86ff",
-  violet: "#ff7ab8",
+  red: "#f4918e", // --down
+  orange: "#ef945f", // --c-tx
+  yellow: "#ebcb71", // --c-block
+  green: "#71d29d", // --c-box
+  teal: "#63ccde", // --c-net
+  blue: "#86a6f0", // --c-token
+  violet: "#e799b7", // --c-addr: contracts are addresses in this look
   grey: "#8a8a8a",
 };
 
