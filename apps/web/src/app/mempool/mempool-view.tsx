@@ -14,6 +14,7 @@ import { RankWindow } from "@/components/RankWindow";
 import { Feed, FeedCount, FeedDays, FeedEmpty } from "@/components/feed/Feed";
 import { FeedTxRow } from "@/components/feed/FeedTxRow";
 import { useMempool } from "@/lib/useMempool";
+import { MempoolLiveWell } from "./MempoolLiveWell";
 import { formatBytes, formatErgPrecise, formatFeeRate, toBigIntAmt, toEpochMs } from "@/lib/format";
 import { ERGO_MAX_BLOCK_SIZE } from "@/lib/ergo-emission";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
@@ -172,6 +173,7 @@ export function MempoolView({
   return (
     <Shell>
       <KpiGrid items={kpis} dense className="mb-3 sm:grid-cols-4" />
+      <MempoolLiveWell lastSeal={lastSeal} />
 
       {!listReady ? null : !rows.length ? (
         <Feed>

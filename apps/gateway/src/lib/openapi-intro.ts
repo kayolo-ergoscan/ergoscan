@@ -5,7 +5,7 @@
  */
 export const OPENAPI_INFO_DESCRIPTION = [
   "# Introduction",
-  "Access ErgoScan data such as blocks, boxes, transactions, addresses, tokens, NFTs, Spectrum DEX, Rosen, oracles, storage rent and mempool.",
+  "Access ErgoScan data such as blocks, boxes, transactions, addresses, tokens, NFTs, ErgoDex, Rosen, oracles, storage rent and mempool.",
   "",
   "The explorer pages read this host. No signup. No key.",
   "",
