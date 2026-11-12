@@ -1,0 +1,103 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=block" rel="stylesheet">
+<style>
+:root{--page:#0e0e0e;--tile:#1a1a1a;--t2:#c6c6c6;--t3:#a3a3a3}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:#fff;font-family:'IBM Plex Sans';width:1600px;padding:34px 40px 30px}
+h1{font:600 32px 'IBM Plex Sans';margin:0 0 6px;letter-spacing:-.01em}
+.sub{color:var(--t2);font:400 17px/1.5 'IBM Plex Sans';margin-bottom:22px;max-width:1450px}
+.cols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}
+.col{display:flex;flex-direction:column;gap:14px}
+.hd{display:flex;align-items:baseline;gap:12px}
+.chip{font:600 18px 'IBM Plex Mono';color:#0e0e0e;background:#fff;border-radius:6px;padding:1px 9px}
+.nm{font:600 30px 'IBM Plex Sans';letter-spacing:-.01em}
+.idea{font:400 15.5px/1.5 'IBM Plex Sans';color:var(--t2);min-height:96px}
+.idea b{color:#fff;font-weight:600}
+.t{background:var(--tile);border-radius:16px;padding:16px 18px;position:relative}
+.cap{font:500 11px 'IBM Plex Mono';letter-spacing:.12em;text-transform:uppercase;color:var(--t3);margin-bottom:8px}
+.lab{font:600 13px 'IBM Plex Sans';color:#0e0e0e;border-radius:4px;padding:1px 7px;display:inline-block}
+.mono{font-family:'IBM Plex Mono'}
+.poses{display:flex;justify-content:space-between;align-items:flex-end}
+.frames{display:flex;gap:10px;align-items:flex-end}
+.fr{display:flex;flex-direction:column;align-items:center;gap:4px}
+.fr span{font:500 11px 'IBM Plex Mono';color:var(--t3)}
+.rec{margin-top:18px;background:#fff;color:#0e0e0e;border-radius:14px;padding:16px 22px;font:400 17px/1.5 'IBM Plex Sans'}
+.rec b{font-weight:700}
+</style></head><body>
+<script src="assets.js"></script><script src="common.js"></script><script src="brand.js"></script>
+<h1>Маскот: замена робота</h1>
+<div class="sub">Сейчас в шапке, на ленте блоков, в «Rent» и в CadenceYard рисуется робот, похожий на WALL-E (Pixar) — это риск по правам. Ниже три замены. Все — плоские фигуры из того же квадрата, что в логотипе: без роботов, без «бинокля»-глаз, без гусениц. Глаза — вертикальные черточки, как мигающий курсор в поиске.</div>
+<div class="cols" id="cols"></div>
+<div class="rec" id="rec"></div>
+<script>
+const {B,el,raw}=H;
+const M=B.mascots;
+const Y='#ffd23c',O='#ff6a2b',G='#2fd27f';
+const blocksTile=(onTop,label,newest=Y)=>{
+  const t=el('div',{class:'t',style:{height:'196px'}});
+  t.append(el('div',{style:{display:'flex',alignItems:'center',gap:'10px'}},el('span',{class:'lab',style:{background:Y}},'Live blocks'),el('span',{class:'mono',style:{font:"600 15px 'IBM Plex Mono'"}},'1,915,262'),el('span',{class:'mono',style:{fontSize:'13px',color:'#a3a3a3'}},'6 tx')));
+  const row=el('div',{style:{position:'absolute',left:'18px',right:'18px',bottom:'18px',display:'flex',gap:'10px',alignItems:'flex-end'}});
+  [6,18,5,1,5,3,4,16].forEach((n,i)=>{
+    const h=22+Math.round(Math.sqrt(n)*13);
+    const b=el('div',{style:{width:'44px',height:h+'px',background:i===0?newest:'#2c2c2c',position:'relative'}});
+    if(i===0&&onTop){const m=onTop();m.style.position='absolute';m.style.left='50%';m.style.bottom=h-6+'px';m.style.transform='translateX(-50%)';b.append(m);}
+    if(i===0&&!onTop){b.style.outline='3px solid #fff';b.style.outlineOffset='4px';b.append(el('div',{class:'mono',style:{position:'absolute',bottom:h+14+'px',left:'0',font:"600 15px 'IBM Plex Mono'",color:Y}},'+1'));}
+    row.append(b);
+  });
+  t.append(row);
+  if(label) t.append(el('div',{class:'mono',style:{position:'absolute',right:'18px',top:'18px',fontSize:'12px',color:'#a3a3a3'}},label));
+  return t;
+};
+const emptyTile=(art,title,sub)=>el('div',{class:'t',style:{height:'132px',display:'flex',alignItems:'center',gap:'18px'}},art,
+  el('div',{},el('div',{style:{font:"600 19px 'IBM Plex Sans'"}},title),el('div',{class:'mono',style:{fontSize:'13px',color:'#a3a3a3',marginTop:'4px'}},sub)));
+const framesTile=(frames,note)=>{
+  const t=el('div',{class:'t',style:{height:'150px'}},el('div',{class:'cap'},'загрузка · кадры цикла'));
+  const f=el('div',{class:'frames'});
+  frames.forEach(([svg,lab,px])=>f.append(el('div',{class:'fr'},raw(svg,px||64),el('span',{},lab))));
+  t.append(f);
+  if(note)t.append(el('div',{class:'mono',style:{position:'absolute',right:'16px',bottom:'14px',fontSize:'12px',color:'#a3a3a3'}},note));
+  return t;
+};
+const col=(k,name,idea,poses,live,empty,load)=>{
+  const c=el('div',{class:'col'});
+  c.append(el('div',{class:'hd'},el('span',{class:'chip'},k),el('span',{class:'nm'},name)));
+  c.append(el('div',{class:'idea',html:idea}));
+  c.append(el('div',{class:'t'},el('div',{class:'cap'},'позы'),poses));
+  c.append(el('div',{},el('div',{class:'cap',style:{marginTop:'4px'}},'лента блоков'),live));
+  c.append(el('div',{},el('div',{class:'cap',style:{marginTop:'4px'}},'пустое состояние'),empty));
+  c.append(load);
+  return c;
+};
+const P=(svg,px)=>raw(svg,px);
+const cols=document.getElementById('cols');
+
+// M1 crate
+cols.append(col('M1','«Ящик»','<b>Бокс eUTXO как персонаж.</b> Зелёный ящик с крышкой: крышка — его шляпа и инструмент. Носит блоки на крышке, заглядывает в пустые адреса, спит, когда данных нет. Тёплый и понятный новичку.',
+  el('div',{class:'poses'},P(M.crate.idle,84),P(M.crate.carry,84),P(M.crate.peek,84),P(M.crate.sleep,84),P(M.crate.hop,84)),
+  blocksTile(()=>P(M.crate.carry,64),'несёт новый блок','#3a3a3a'),
+  emptyTile(P(M.crate.peek,88),'No transactions yet','9hUhEk…59PKQ27 · 0 boxes'),
+  framesTile([[M.crate.idle,'0'],[M.crate.hop,'1'],[M.crate.idle,'2'],[M.crate.sleep,'нет сети']],'крышка подпрыгивает')));
+
+// M2 pixel
+const pc=M.pixelColors;
+cols.append(col('M2','«Пиксель»','<b>Сплошной квадрат из логотипа B — живой.</b> Без рта, без рук: только глаза-курсоры и прыжок со сжатием. Принимает цвет страницы: жёлтый на блоках, оранжевый на транзакциях, розовый на адресах. Рисуется на canvas в ~25 строк.',
+  el('div',{class:'poses'},P(M.pixel.idle,104),P(M.pixel.squash,104),P(M.pixel.stretch,104),P(M.pixel.blink,104),P(pc.addr.look,104)),
+  blocksTile(()=>P(pc.block.squash,92),'прыгает на новый блок','#3a3a3a'),
+  emptyTile(el('div',{style:{display:'flex',alignItems:'flex-end',gap:'2px'}},P(pc.addr.look,100),raw('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect x="8" y="16" width="28" height="28" stroke="#5a5a5a" stroke-width="3" fill="none"/></svg>',60)),'No transactions yet','смотрит в пустой бокс'),
+  framesTile([[pc.tx.squash,'0',84],[pc.tx.stretch,'1',84],[pc.tx.idle,'2',84],[pc.tx.squash,'3',84]],'прыжок 600 мс')));
+
+// M3 none
+const bS=(dx,dy,solid,out=true,acc=O)=>`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">${out?`<path fill="#fff" fill-rule="evenodd" d="M4 4h26v26H4zM9 9v16h16V9z"/>`:''}${solid?`<rect x="${20+dx}" y="${20+dy}" width="24" height="24" fill="${acc}"/>`:''}</svg>`;
+const ghost=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none"><path fill="#fff" fill-rule="evenodd" d="M20 20h24v24H20zM25 25v14h14V25z"/></svg>`;
+const liveNone=()=>{
+  const t=blocksTile(null,'новый блок «въезжает» слева');
+  const r=t.lastChild.previousSibling; return t;
+};
+cols.append(col('M3','Без маскота','<b>Персонажа нет — живёт сам знак.</b> Обозреватель — инструмент; характер дают цвет и движение данных. Новый блок въезжает в ленту и коротко вспыхивает, пустое состояние — пустой контур-бокс, лоадер — цикл «траты» из логотипа. Ноль лишней отрисовки.',
+  el('div',{class:'poses',style:{justifyContent:'flex-start',gap:'22px'}},raw(bS(0,0,true),72),raw(ghost,72),el('div',{class:'mono',style:{fontSize:'13px',color:'#a3a3a3',alignSelf:'center',lineHeight:'1.5'}},'знак · пустой бокс')),
+  blocksTile(null,'новый блок вспыхивает'),
+  emptyTile(raw(ghost,72),'No transactions yet','пустой бокс · 0 ERG'),
+  framesTile([[bS(0,0,true),'0',56],[bS(-8,-8,true),'1',56],[bS(-16,-16,true),'2',56],[bS(0,0,false),'3',56],[bS(0,0,true),'4',56]],'цикл «трата»')));
+
+document.getElementById('rec').innerHTML='<b>Предлагаю M2 «Пиксель».</b> Это кусок самого логотипа, а не новый персонаж: узнаётся сразу, простая геометрия без черт известных персонажей, меняет цвет вместе с сущностью страницы и стоит копейки по скорости. Если персонаж не нужен вовсе — M3: тогда робот просто исчезает, а лента блоков и пустые экраны живут за счёт знака.';
+</script></body></html>
