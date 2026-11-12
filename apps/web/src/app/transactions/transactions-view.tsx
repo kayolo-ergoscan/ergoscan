@@ -11,12 +11,11 @@ import {
 } from "@/components/kpi-marks";
 import { INK } from "@/lib/palette";
 import { RankWindow } from "@/components/RankWindow";
-import { TxLaneRow } from "@/components/TxLaneRow";
-import { FavoriteHeart } from "@/components/FavoriteHeart";
+import { Feed, FeedCount, FeedDays, FeedEmpty } from "@/components/feed/Feed";
+import { FeedTxRow } from "@/components/feed/FeedTxRow";
 import { getGateway } from "@/lib/config";
 import { fetchChainStats, type ChainStats } from "@/lib/chain-stats";
-import { formatCompact } from "@/lib/format";
-import clsx from "clsx";
+import { formatCompact, toEpochMs } from "@/lib/format";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { useChainTipRefresh, usePageSync } from "@/lib/page-sync";
 import { SNAPSHOT_FETCH, enteringIds, snapshotPath, useEnterIds, ENTER_MS } from "@/lib/keyed-enter";
@@ -55,7 +54,6 @@ export function TransactionsView({
   const [ready, setReady] = useState(initialItems.length > 0);
   const [err, setErr] = useState<string | null>(null);
   const [stats, setStats] = useState<ChainStats | null>(initialStats);
-  const [stuck, setStuck] = useState(false);
   // Rows the server already has go into the first HTML, with the same entry animation.
   const seedIds = initialItems.map((row) => row.id);
   const enter = useEnterIds(ENTER_MS, seedIds);
@@ -68,7 +66,6 @@ export function TransactionsView({
   nextCursorRef.current = nextCursor;
   const itemsRef = useRef(items);
   itemsRef.current = items;
-  const pinRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(
     (silent = false) => {
@@ -182,20 +179,6 @@ export function TransactionsView({
     });
   });
 
-  useEffect(() => {
-    const el = pinRef.current;
-    if (!el) return;
-    const chrome = document.querySelector(".stage-frame header.sticky");
-    const pin =
-      (chrome instanceof HTMLElement ? chrome.getBoundingClientRect().height : 64) + 8;
-    const obs = new IntersectionObserver(
-      ([entry]) => setStuck(!entry.isIntersecting),
-      { threshold: 1, rootMargin: `-${pin}px 0px 0px 0px` }
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [items.length]);
-
   const s24 = stats?.stats24h;
   const miss = t("home.unavailable");
   const txs24 = s24?.txs ?? stats?.txPerDay ?? null;
@@ -260,60 +243,36 @@ export function TransactionsView({
       )}
 
       {!listReady && !err ? null : !items.length && !err ? (
-        <p className="text-[var(--muted)]">{t("txs.empty")}</p>
+        <Feed>
+          <FeedEmpty k="transfer" title={t("txs.empty")} />
+        </Feed>
       ) : null}
 
       {listReady && items.length > 0 && (
-        <div className="addr-sheet">
-          <div ref={pinRef} className="h-px w-full" aria-hidden />
-          <div className={packEnter.enterClass("pack")}>
-            <div
-              className={clsx(
-                "addr-pan kpi-tape transition-opacity duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
-                pending && "opacity-60"
-              )}
-            >
-              <div
-                className={clsx(
-                  "addr-head addr-lane addr-lane-x block-tx-pairs text-[12px] font-medium",
-                  stuck && "is-stuck"
-                )}
-              >
-                <div className="block-lane-pair">
-                  <div className="min-w-0">{t("detail.tx")}</div>
-                  <div className="min-w-0 justify-end">{t("blocks.txIo")}</div>
-                </div>
-                <div className="block-lane-pair">
-                  <div className="min-w-0">{t("block.col.tokens")}</div>
-                  <div className="min-w-0 justify-end">{t("blocks.time")}</div>
-                </div>
-                <div className="block-lane-pair">
-                  <div className="min-w-0">{t("tx.fee")}</div>
-                  <div className="min-w-0 justify-end">{t("txs.outputSum")}</div>
-                </div>
-                <div className="block-lane-pair is-triple">
-                  <div className="min-w-0 tabular-nums">{t("blocks.txIndex")}</div>
-                  <div className="min-w-0 justify-center text-center">{t("blocks.size")}</div>
-                  <div className="min-w-0 justify-end">{t("blocks.height")}</div>
-                </div>
-              </div>
-              {items.map((row) => (
-                <TxLaneRow
+        <div className="feed-sheet">
+          <Feed busy={pending} enterClass={packEnter.enterClass("pack")}>
+            <FeedDays
+              items={items}
+              seconds
+              msOf={(row) => toEpochMs(row.timestamp)}
+              countOf={(n) => <FeedCount k="feed.txCount" n={n} />}
+              render={(row, lead) => (
+                <FeedTxRow
                   key={row.id}
                   row={row}
-                  index={row.index ?? 0}
-                  locale={locale}
-                  t={t}
+                  lead={lead}
                   showHeight
                   enterClass={enter.enterClass(row.id)}
-                  fav={favIds?.includes(row.id) ?? false}
-                  favReady={favReady}
-                  favTitle={favIds?.includes(row.id) ? t("favorites.remove") : t("favorites.add")}
-                  onToggleFav={() => toggleFav(row.id)}
+                  fav={{
+                    on: favIds?.includes(row.id) ?? false,
+                    ready: favReady,
+                    title: favIds?.includes(row.id) ? t("favorites.remove") : t("favorites.add"),
+                    toggle: () => toggleFav(row.id),
+                  }}
                 />
-              ))}
-            </div>
-          </div>
+              )}
+            />
+          </Feed>
           <RankWindow
             offset={page * TX_PACK}
             pageSize={TX_PACK}

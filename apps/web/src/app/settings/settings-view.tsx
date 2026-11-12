@@ -1,36 +1,20 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, type CSSProperties, type ReactNode } from "react";
 import clsx from "clsx";
 import { Shell } from "@/components/Shell";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { useKeepFresh, usePageSync } from "@/lib/page-sync";
-import {
-  INK_BG,
-  INK_EVENT,
-  SKIN_INKS,
-  applyInk,
-  parseSkinInk,
-  type SkinInk,
-} from "@/lib/skin-ink";
 
 export function SettingsView() {
   const t = useT();
   const { locale, setLocale, locales } = useI18n();
   const { markSynced } = usePageSync();
-  const [ink, setInk] = useState<SkinInk>("oled");
 
   useKeepFresh(() => markSynced());
   useEffect(() => {
     markSynced();
   }, [markSynced]);
-
-  useEffect(() => {
-    const sync = () => setInk(parseSkinInk(document.documentElement.dataset.ink));
-    sync();
-    window.addEventListener(INK_EVENT, sync);
-    return () => window.removeEventListener(INK_EVENT, sync);
-  }, []);
 
   return (
     <Shell>
@@ -46,18 +30,6 @@ export function SettingsView() {
               value={locale}
               options={locales.map((l) => ({ id: l.id, label: l.native, title: l.label }))}
               onChange={setLocale}
-            />
-          </TumblerRow>
-          <TumblerRow label={t("ink.switch")}>
-            <Tumbler
-              label={t("ink.switch")}
-              value={ink}
-              options={SKIN_INKS.map((id) => ({
-                id,
-                label: t(`ink.${id}`),
-                swatch: INK_BG[id],
-              }))}
-              onChange={(id) => applyInk(id)}
             />
           </TumblerRow>
         </section>

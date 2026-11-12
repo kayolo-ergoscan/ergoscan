@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import clsx from "clsx";
 import { Shell } from "@/components/Shell";
 import { KpiGrid } from "@/components/KpiGrid";
 import {
@@ -12,9 +11,10 @@ import {
 } from "@/components/kpi-marks";
 import { INK } from "@/lib/palette";
 import { RankWindow } from "@/components/RankWindow";
-import { TxLaneRow } from "@/components/TxLaneRow";
+import { Feed, FeedCount, FeedDays, FeedEmpty } from "@/components/feed/Feed";
+import { FeedTxRow } from "@/components/feed/FeedTxRow";
 import { useMempool } from "@/lib/useMempool";
-import { formatBytes, formatErgPrecise, formatFeeRate, toBigIntAmt } from "@/lib/format";
+import { formatBytes, formatErgPrecise, formatFeeRate, toBigIntAmt, toEpochMs } from "@/lib/format";
 import { ERGO_MAX_BLOCK_SIZE } from "@/lib/ergo-emission";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { ENTER_MS, enteringIds, useEnterIds } from "@/lib/keyed-enter";
@@ -56,8 +56,6 @@ export function MempoolView({
   const { locale } = useI18n();
   const { balls, fees } = useMempool(asBalls(initialBalls), initialP50);
   const [offset, setOffset] = useState(0);
-  const [stuck, setStuck] = useState(false);
-  const pinRef = useRef<HTMLDivElement>(null);
   const miss = t("home.unavailable");
 
   const rows = useMemo(
@@ -105,23 +103,6 @@ export function MempoolView({
     );
     prevIds.current = ids;
   }, [pageKey, enter.mark, packEnter.mark]);
-
-  useEffect(() => {
-    const el = pinRef.current;
-    if (!el || !page.length) {
-      setStuck(false);
-      return;
-    }
-    const chrome = document.querySelector(".stage-frame header.sticky");
-    const pin =
-      (chrome instanceof HTMLElement ? chrome.getBoundingClientRect().height : 64) + 8;
-    const obs = new IntersectionObserver(
-      ([entry]) => setStuck(!entry.isIntersecting),
-      { threshold: 1, rootMargin: `-${pin}px 0px 0px 0px` }
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [page.length]);
 
   const totalSize = balls.reduce((s, b) => s + (b.size ?? 0), 0);
   const totalFees = balls.reduce((s, b) => s + toBigIntAmt(b.fee), 0n);
@@ -171,52 +152,31 @@ export function MempoolView({
       <KpiGrid items={kpis} dense className="mb-3 sm:grid-cols-4" />
 
       {!listReady ? null : !rows.length ? (
-        <p className="text-[var(--muted)]">{t("mempool.empty")}</p>
+        <Feed>
+          <FeedEmpty k="transfer" title={t("mempool.empty")} />
+        </Feed>
       ) : null}
 
       {listReady && rows.length > 0 && (
-        <div className="addr-sheet">
-          <div ref={pinRef} className="h-px w-full" aria-hidden />
-          <div className={packEnter.enterClass("pack")}>
-            <div className="addr-pan kpi-tape">
-            <div
-              className={clsx(
-                "addr-head addr-lane addr-lane-x block-tx-pairs text-[12px] font-medium",
-                stuck && "is-stuck"
+        <div className="feed-sheet">
+          <Feed enterClass={packEnter.enterClass("pack")}>
+            <FeedDays
+              items={page}
+              seconds
+              msOf={(row) => toEpochMs(row.timestamp)}
+              pendingOf={() => true}
+              countOf={() => <FeedCount k="feed.txCount" n={total} />}
+              render={(row, lead) => (
+                <FeedTxRow
+                  key={row.id}
+                  row={row}
+                  lead={lead}
+                  queue={liveOffset + page.indexOf(row)}
+                  enterClass={enter.enterClass(row.id)}
+                />
               )}
-            >
-              <div className="block-lane-pair">
-                <div className="min-w-0">{t("detail.tx")}</div>
-                <div className="min-w-0 justify-end">{t("blocks.txIo")}</div>
-              </div>
-              <div className="block-lane-pair">
-                <div className="min-w-0">{t("block.col.tokens")}</div>
-                <div className="min-w-0 justify-end">{t("blocks.time")}</div>
-              </div>
-              <div className="block-lane-pair">
-                <div className="min-w-0">{t("tx.fee")}</div>
-                <div className="min-w-0 justify-end">{t("txs.outputSum")}</div>
-              </div>
-              <div className="block-lane-pair is-triple">
-                <div className="min-w-0 tabular-nums">{t("blocks.txIndex")}</div>
-                <div className="min-w-0 justify-center text-center">{t("blocks.size")}</div>
-                <div className="min-w-0 justify-end">{t("txs.mempool")}</div>
-              </div>
-            </div>
-            {page.map((row, i) => (
-              <TxLaneRow
-                key={row.id}
-                row={row}
-                index={liveOffset + i}
-                locale={locale}
-                t={t}
-                showHeight
-                hidePending
-                enterClass={enter.enterClass(row.id)}
-              />
-            ))}
-            </div>
-          </div>
+            />
+          </Feed>
           <RankWindow
             offset={liveOffset}
             pageSize={MEMPOOL_PACK}

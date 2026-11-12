@@ -13,6 +13,19 @@ import {
   KpiMarkWorkflow,
 } from "@/components/kpi-marks";
 import { RankWindow } from "@/components/RankWindow";
+import {
+  Feed,
+  FeedAmount,
+  FeedCount,
+  FeedDays,
+  FeedEmpty,
+  FeedField,
+  FeedFields,
+  FeedIdLine,
+  FeedMeter,
+  FeedRow,
+  type FeedLead,
+} from "@/components/feed/Feed";
 import { getGateway } from "@/lib/config";
 import { fetchChainStats, type ChainStats } from "@/lib/chain-stats";
 import {
@@ -22,6 +35,8 @@ import {
   formatErgPrecise,
   formatH24,
   formatRelTime,
+  formatScaledAmount,
+  formatStamp,
   shortId,
   toEpochMs,
   splitBlockOutput,
@@ -85,7 +100,6 @@ export function BlocksView({
   const [ready, setReady] = useState(initialItems.length > 0);
   const [err, setErr] = useState<string | null>(null);
   const [stats, setStats] = useState<ChainStats | null>(initialStats);
-  const [stuck, setStuck] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [prevBlockTs, setPrevBlockTs] = useState<number | null>(initialOlderTs);
   // Rows the server already has go into the first HTML, with the same entry animation.
@@ -100,7 +114,6 @@ export function BlocksView({
   nextCursorRef.current = nextCursor;
   const itemsRef = useRef(items);
   itemsRef.current = items;
-  const pinRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 1000);
@@ -220,20 +233,6 @@ export function BlocksView({
     });
   });
 
-  useEffect(() => {
-    const el = pinRef.current;
-    if (!el) return;
-    const chrome = document.querySelector(".stage-frame header.sticky");
-    const pin =
-      (chrome instanceof HTMLElement ? chrome.getBoundingClientRect().height : 64) + 8;
-    const obs = new IntersectionObserver(
-      ([entry]) => setStuck(!entry.isIntersecting),
-      { threshold: 1, rootMargin: `-${pin}px 0px 0px 0px` }
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [items.length]);
-
   const s24 = stats?.stats24h;
   const miss = t("home.unavailable");
   const tipHeight = stats?.height ?? (cursorRef.current == null ? items[0]?.height : null);
@@ -296,66 +295,53 @@ export function BlocksView({
       )}
 
       {!listReady && !err ? null : !items.length && !err ? (
-        <p className="text-[var(--muted)]">{t("blocks.empty")}</p>
+        <Feed>
+          <FeedEmpty k="block" title={t("blocks.empty")} />
+        </Feed>
       ) : null}
 
       {listReady && items.length > 0 && (
-        <div className="addr-sheet">
-          <div ref={pinRef} className="h-px w-full" aria-hidden />
-          <div className={packEnter.enterClass("pack")}>
-          <div
-            className={clsx(
-              "addr-pan transition-opacity duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
-              pending && "opacity-60"
-            )}
-          >
-            <div
-              className={clsx(
-                "addr-head addr-lane addr-lane-x block-lane blocks-tape text-[12px] font-medium",
-                stuck && "is-stuck"
-              )}
-            >
-              <div className="block-lane-pair">
-                <div className="min-w-0">{t("blocks.height")}</div>
-                <div className="lithos-col" />
-                <div className="min-w-0 justify-end">{t("blocks.txs")}</div>
-              </div>
-              <div className="block-lane-pair">
-                <div className="min-w-0">{t("blocks.interval")}</div>
-                <div className="min-w-0 justify-end">{t("blocks.blockTime")}</div>
-              </div>
-              <div className="block-lane-pair">
-                <div className="min-w-0">{t("blocks.miner")}</div>
-                <div className="min-w-0 justify-end">{t("blocks.transferred")}</div>
-              </div>
-              <div className="block-lane-pair">
-                <div className="min-w-0">{t("blocks.id")}</div>
-                <div className="min-w-0 justify-end">{t("blocks.size")}</div>
-              </div>
-            </div>
-            {items.map((row, i) => {
-              const olderTs =
-                items[i + 1]?.timestamp ?? (i === items.length - 1 ? prevBlockTs : null);
-              const delta = olderTs != null ? blockGapMs(row.timestamp, olderTs) : null;
-              return (
-                <BlockTapeRow
-                  key={row.id}
-                  row={row}
-                  locale={locale}
-                  miss={miss}
-                  t={t}
-                  now={now}
-                  intervalMs={delta != null && delta > 0 ? delta : null}
-                  enterClass={enter.enterClass(row.id)}
-                  fav={favIds?.includes(row.id) ?? false}
-                  favReady={favReady}
-                  favTitle={favIds?.includes(row.id) ? t("favorites.remove") : t("favorites.add")}
-                  onToggleFav={() => toggleFav(row.id)}
-                />
-              );
-            })}
-          </div>
-          </div>
+        <div className="feed-sheet">
+          <Feed busy={pending} enterClass={packEnter.enterClass("pack")}>
+            <FeedDays
+              items={items}
+              seconds
+              msOf={(row) => toEpochMs(row.timestamp)}
+              countOf={(n) => <FeedCount k="feed.blockCount" n={n} />}
+              totalOf={(day) =>
+                cursorRef.current == null && day[0] === items[0] && items[0]?.timestamp != null ? (
+                  <span className="feed-plate-live">
+                    {t("feed.lastBlock")}{" "}
+                    <span className="tabular-nums" suppressHydrationWarning>
+                      {formatRelTime(items[0].timestamp, now, locale)}
+                    </span>
+                  </span>
+                ) : undefined
+              }
+              render={(row, lead) => {
+                const i = items.indexOf(row);
+                const olderTs =
+                  items[i + 1]?.timestamp ?? (i === items.length - 1 ? prevBlockTs : null);
+                const delta = olderTs != null ? blockGapMs(row.timestamp, olderTs) : null;
+                return (
+                  <FeedBlockRow
+                    key={row.id}
+                    row={row}
+                    lead={lead}
+                    now={now}
+                    intervalMs={delta != null && delta > 0 ? delta : null}
+                    enterClass={enter.enterClass(row.id)}
+                    fav={{
+                      on: favIds?.includes(row.id) ?? false,
+                      ready: favReady,
+                      title: favIds?.includes(row.id) ? t("favorites.remove") : t("favorites.add"),
+                      toggle: () => toggleFav(row.id),
+                    }}
+                  />
+                );
+              }}
+            />
+          </Feed>
           <RankWindow
             offset={page * BLOCK_PACK}
             pageSize={BLOCK_PACK}
@@ -533,6 +519,136 @@ export function BlockTapeRow({
         </div>
       </div>
     </div>
+  );
+}
+
+/** One block on the feed: height, who found it, what it moved, how full it is. */
+function FeedBlockRow({
+  row,
+  lead,
+  now,
+  intervalMs,
+  enterClass,
+  fav,
+}: {
+  row: BlockListItem;
+  lead: FeedLead;
+  now: number;
+  intervalMs: number | null;
+  enterClass?: string;
+  fav: { on: boolean; ready: boolean; title: string; toggle: () => void };
+}) {
+  const { t, tn, locale } = useI18n();
+  const tag = loc(locale);
+  const minerAddr = row.minerAddress && row.minerAddress.length ? row.minerAddress : null;
+  const miner = minerAddr ? minerLabel(minerAddr, row.minerName) : null;
+  const rewardNano = minerEmissionAtHeight(row.height) + toBigIntAmt(row.feeNano);
+  const out = splitBlockOutput(row.valueNano, row.userValueNano);
+  const hasOut = hasAmt(row.userValueNano) || hasAmt(row.valueNano);
+  const pct = row.size > 0 ? Math.min(100, (row.size / ERGO_MAX_BLOCK_SIZE) * 100) : 0;
+  const pctText = sizePctLabel(pct, locale);
+  return (
+    <FeedRow
+      k="block"
+      glyph="block"
+      lead={lead}
+      enterClass={enterClass}
+      onPointerEnter={() => prefetchBlockCard(row.id)}
+      title={
+        <>
+          <Link
+            prefetch={false}
+            href={`/block/${row.id}`}
+            onFocus={() => prefetchBlockCard(row.id)}
+            className="feed-name font-mono tabular-nums hover:underline"
+          >
+            {row.height.toLocaleString(tag)}
+          </Link>
+          {row.lithos ? (
+            <Link prefetch={false} href="/lithos" title={t("block.chip.lithosHint")} className="chip-press inline-flex shrink-0">
+              <img src="/lithos-mark.png" alt="" width={16} height={16} className="h-4 w-4 object-contain" />
+            </Link>
+          ) : null}
+          <FavoriteHeart size="sm" on={fav.on} ready={fav.ready} title={fav.title} onToggle={fav.toggle} />
+        </>
+      }
+      facts={
+        <>
+          {row.txCount === 1 ? (
+            <span>{t("blocks.coinbaseOnly")}</span>
+          ) : row.txCount != null ? (
+            <FeedCount k="feed.txCount" n={row.txCount} />
+          ) : (
+            <span>—</span>
+          )}
+          {minerAddr ? (
+            <Link prefetch={false} href={`/address/${minerAddr}`} title={minerAddr} className="feed-party">
+              {miner}
+            </Link>
+          ) : null}
+          {intervalMs != null ? (
+            <span className="feed-mid tabular-nums" title={t("blocks.interval")}>
+              +{formatBlockTime(intervalMs)}
+            </span>
+          ) : null}
+          <span className="feed-wide font-mono tabular-nums">{shortId(row.id, 6)}</span>
+        </>
+      }
+      chips={<FeedMeter pct={pct} label={pctText} title={`${t("blocks.size")} ${formatBytes(row.size)} · ${pctText}`} />}
+      value={hasOut ? <FeedAmount raw={out.user} /> : <FeedAmount raw={null} />}
+      sub={
+        <>
+          {t("feed.reward")} <span className="tabular-nums">{formatScaledAmount(rewardNano, 9, tag)}</span>
+        </>
+      }
+      subMinor
+      detail={() => (
+        <FeedFields>
+          <FeedField label={t("detail.block")} wide>
+            <FeedIdLine href={`/block/${row.id}`} id={row.id} />
+          </FeedField>
+          <FeedField label={t("blocks.miner")} wide>
+            {minerAddr ? (
+              <span className="feed-id-line">
+                <Link prefetch={false} href={`/address/${minerAddr}`} className="feed-id font-mono hover:underline">
+                  {minerAddr}
+                </Link>
+                {miner && miner !== minerAddr ? <span className="text-[var(--muted-2)]">{miner}</span> : null}
+              </span>
+            ) : (
+              "—"
+            )}
+          </FeedField>
+          <FeedField label={t("address.colTime")}>
+            <span className="tabular-nums" suppressHydrationWarning>
+              {formatStamp(row.timestamp)} · {formatRelTime(row.timestamp, now, locale)}
+            </span>
+          </FeedField>
+          <FeedField label={t("blocks.interval")}>
+            <span className="tabular-nums">{intervalMs != null ? formatBlockTime(intervalMs) : "—"}</span>
+          </FeedField>
+          <FeedField label={t("feed.reward")}>
+            <span className="tabular-nums">{formatErgPrecise(rewardNano, locale)}</span>
+          </FeedField>
+          <FeedField label={t("blocks.transferred")}>
+            <span className="tabular-nums">
+              {hasOut ? formatErgPrecise(out.user, locale) : "—"}
+              {out.emission > 0n ? (
+                <span className="text-[var(--muted-2)]">
+                  {" "}
+                  · {formatErgPrecise(out.emission, locale)} {t("blocks.emission")}
+                </span>
+              ) : null}
+            </span>
+          </FeedField>
+          <FeedField label={t("blocks.size")}>
+            <span className="tabular-nums">
+              {tn("feed.bytes", row.size, row.size.toLocaleString(tag))} · {pctText}
+            </span>
+          </FeedField>
+        </FeedFields>
+      )}
+    />
   );
 }
 

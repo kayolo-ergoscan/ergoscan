@@ -11,7 +11,8 @@ import { HopNav } from "@/components/HopNav";
 import { SegBar, segItem } from "@/components/SegBar";
 import { BlockHeaderSheet } from "./block-header";
 import { TxBallPit } from "@/components/TxBallPit";
-import { TxLaneRow } from "@/components/TxLaneRow";
+import { Feed, FeedBoard, FeedCount, FeedEmpty, FeedPlate } from "@/components/feed/Feed";
+import { FeedTxRow } from "@/components/feed/FeedTxRow";
 import { BlockMarkMiner, BlockMarkOutput } from "@/components/block-marks";
 import { KpiMarkFees, KpiMarkPayload } from "@/components/kpi-marks";
 import { KpiNum } from "@/components/KpiGrid";
@@ -232,10 +233,8 @@ export function BlockView({
   const [offset, setOffset] = useState(0);
   const [pending, setPending] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [stuck, setStuck] = useState(false);
   const enter = useEnterIds(ENTER_MS, [], seeded);
   const packEnter = useEnterIds(ENTER_MS, seeded ? ["pack"] : []);
-  const pinRef = useRef<HTMLDivElement>(null);
   const offsetRef = useRef(0);
   const txsRef = useRef(txs);
   const headRef = useRef(head);
@@ -373,20 +372,6 @@ export function BlockView({
   useChainTipRefresh(!!head, () => {
     void loadRef.current(true, true);
   });
-
-  useLayoutEffect(() => {
-    const el = pinRef.current;
-    if (!el) return;
-    const chrome = document.querySelector(".stage-frame header.sticky");
-    const pin =
-      (chrome instanceof HTMLElement ? chrome.getBoundingClientRect().height : 64) + 8;
-    const obs = new IntersectionObserver(
-      ([entry]) => setStuck(!entry.isIntersecting),
-      { threshold: 1, rootMargin: `-${pin}px 0px 0px 0px` }
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [txs.length]);
 
   const dash = "—";
   const tipH = tip?.height ?? null;
@@ -697,54 +682,33 @@ export function BlockView({
       ) : (
         <>
           {!txReady && !err ? null : !txs.length && !err ? (
-            <p className="mt-6 text-[var(--muted)]">{t("block.noTxs")}</p>
+            <Feed className="mt-2">
+              <FeedEmpty k="block" title={t("block.noTxs")} />
+            </Feed>
           ) : null}
           {txs.length > 0 && (
             <div className="mt-2">
-              <div className="addr-sheet">
-                <div ref={pinRef} className="h-px w-full" aria-hidden />
-                <div className={packEnter.enterClass("pack")}>
-                  <div
-                    className={clsx(
-                      "addr-pan transition-opacity duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
-                      pending && "opacity-60"
-                    )}
+              <div className="feed-sheet">
+                <Feed busy={pending} className="is-index" enterClass={packEnter.enterClass("pack")}>
+                  <FeedBoard
+                    plate={
+                      <FeedPlate
+                        tag={t("block.tab.txs")}
+                        now
+                        count={<FeedCount k="feed.txCount" n={txTotal || txs.length} />}
+                      />
+                    }
                   >
-                    <div
-                      className={clsx(
-                        "addr-head addr-lane addr-lane-x block-tx-pairs text-[12px] font-medium",
-                        stuck && "is-stuck"
-                      )}
-                    >
-                      <div className="block-lane-pair">
-                        <div className="min-w-0">{t("detail.tx")}</div>
-                        <div className="min-w-0 justify-end">{t("blocks.txIo")}</div>
-                      </div>
-                      <div className="block-lane-pair">
-                        <div className="min-w-0">{t("block.col.tokens")}</div>
-                        <div className="min-w-0 justify-end">{t("blocks.time")}</div>
-                      </div>
-                      <div className="block-lane-pair">
-                        <div className="min-w-0">{t("tx.fee")}</div>
-                        <div className="min-w-0 justify-end">{t("txs.outputSum")}</div>
-                      </div>
-                      <div className="block-lane-pair">
-                        <div className="min-w-0 tabular-nums">{t("blocks.txIndex")}</div>
-                        <div className="min-w-0 justify-end">{t("blocks.size")}</div>
-                      </div>
-                    </div>
                     {txs.map((row, i) => (
-                      <TxLaneRow
+                      <FeedTxRow
                         key={row.id}
                         row={row}
-                        index={row.index ?? offset + i}
-                        locale={locale}
-                        t={t}
+                        lead={{ rank: String(row.index ?? offset + i) }}
                         enterClass={enter.enterClass(row.id)}
                       />
                     ))}
-                  </div>
-                </div>
+                  </FeedBoard>
+                </Feed>
                 <RankWindow
                   offset={offset}
                   pageSize={BLOCK_TX_PACK}

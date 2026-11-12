@@ -1,67 +1,31 @@
 /**
- * Design-direction preview (`?look=a|b|c|cm`, `?look=off`). Concepts only: the
- * page structure stays, the visual language changes. Each look pins its ink
- * (A is paper, B and C are dark) and maps canvas inks into its own palette.
- * `cm` is C with A's figures: `data-look="c"` plus `data-figs="mono"`.
+ * The site look: «Сигнал» (`data-look="c"`, set in the root layout) with every
+ * figure typed in mono (`data-figs="mono"`). Entity colours on black; canvas
+ * inks are mapped into the same palette here.
  */
 
-import type { SkinInk } from "./skin-ink";
+export type Look = "c";
 
-export const LOOKS = ["a", "b", "c"] as const;
-export type Look = (typeof LOOKS)[number];
-
-export const LOOK_STORAGE = "ergoscan.look";
-
-/** A — Ledger (paper). B — Blueprint (cyanotype). C — Signal (entity colours on black). */
-export const LOOK_INK: Record<Look, SkinInk> = { a: "day", b: "oled", c: "oled" };
-export const LOOK_BG: Record<Look, string> = { a: "#efebe2", b: "#174a9c", c: "#0e0e0e" };
-
-export function parseLook(v: string | null | undefined): Look | null {
-  return v === "a" || v === "b" || v === "c" ? v : null;
-}
+/** Canvas and theme-color under the look. */
+export const LOOK_BG = "#0e0e0e";
 
 export function currentLook(): Look | null {
   if (typeof document === "undefined") return null;
-  return parseLook(document.documentElement.dataset.look);
+  return document.documentElement.dataset.look === "c" ? "c" : null;
 }
-
-/** Inline head script, after the ink boot. */
-export const LOOK_BOOT = `(function(){try{var q=new URLSearchParams(location.search).get("look");if(q==="off"){localStorage.removeItem("${LOOK_STORAGE}");return;}var v=q||localStorage.getItem("${LOOK_STORAGE}");if(v!=="a"&&v!=="b"&&v!=="c"&&v!=="cm")return;if(q)localStorage.setItem("${LOOK_STORAGE}",v);var r=document.documentElement;if(v==="cm"){v="c";r.setAttribute("data-figs","mono");}var ink=${JSON.stringify(LOOK_INK)}[v];r.setAttribute("data-look",v);r.setAttribute("data-ink",ink);r.classList.toggle("dark",ink!=="day");r.style.colorScheme=ink==="day"?"light":"dark";var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute("content",${JSON.stringify(LOOK_BG)}[v]);}catch(e){}})();`;
 
 type Family = "red" | "orange" | "yellow" | "green" | "teal" | "blue" | "violet" | "grey";
 
-/** Canvas inks per look, by hue family of the source colour. */
-const FAMILY: Record<Look, Record<Family, string>> = {
-  a: {
-    red: "#e0402a",
-    orange: "#ee8a1a",
-    yellow: "#f2c200",
-    green: "#1d9a5b",
-    teal: "#0f8f8a",
-    blue: "#6fa8ef",
-    violet: "#2152d9",
-    grey: "#2a2721",
-  },
-  b: {
-    red: "#ff9d8c",
-    orange: "#ffb45e",
-    yellow: "#ffe066",
-    green: "#93f0c1",
-    teal: "#86e8e2",
-    blue: "#c4e2ff",
-    violet: "#ffffff",
-    grey: "#a7bde3",
-  },
-  c: {
-    red: "#ff4f5e",
-    orange: "#ff6a2b",
-    yellow: "#ffd23c",
-    green: "#2fd27f",
-    teal: "#1ec8d8",
-    blue: "#4f86ff",
-    violet: "#ff7ab8",
-    grey: "#8a8a8a",
-  },
+/** Canvas inks by hue family of the source colour. */
+const FAMILY: Record<Family, string> = {
+  red: "#ff4f5e",
+  orange: "#ff6a2b",
+  yellow: "#ffd23c",
+  green: "#2fd27f",
+  teal: "#1ec8d8",
+  blue: "#4f86ff",
+  violet: "#ff7ab8",
+  grey: "#8a8a8a",
 };
 
 function rgbOf(color: string): [number, number, number] | null {
@@ -98,24 +62,18 @@ function familyOf(rgb: [number, number, number]): Family {
 
 const memo = new Map<string, string>();
 
-/** Map a canvas ink into the active look's palette. No look: unchanged. */
+/** Map a canvas ink into the look's palette. No look on the page: unchanged. */
 export function lookInk(color: string): string {
-  const look = currentLook();
-  if (!look || !color) return color;
-  const key = `${look}|${color}`;
-  const hit = memo.get(key);
+  if (!currentLook() || !color) return color;
+  const hit = memo.get(color);
   if (hit) return hit;
   const rgb = rgbOf(color);
-  const out = rgb ? FAMILY[look][familyOf(rgb)] : color;
-  memo.set(key, out);
+  const out = rgb ? FAMILY[familyOf(rgb)] : color;
+  memo.set(color, out);
   return out;
 }
 
 /** Edge stroke for drawn crates and balls. Null keeps the component's own. */
 export function lookEdge(): string | null {
-  const look = currentLook();
-  if (look === "a") return "rgba(21,19,14,0.88)";
-  if (look === "b") return "rgba(255,255,255,0.95)";
-  if (look === "c") return "#0e0e0e";
-  return null;
+  return currentLook() ? "#0e0e0e" : null;
 }

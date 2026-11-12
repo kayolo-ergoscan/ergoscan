@@ -7,7 +7,23 @@ import { Shell } from "@/components/Shell";
 import { FavoriteHeart } from "@/components/FavoriteHeart";
 import { AddressPageSkeleton } from "@/components/AddressPageSkeleton";
 import { AddrFactCard } from "@/components/AddrFactCard";
-import { TokenHolderTapeHead, TokenHolderTapeRow } from "@/components/AddressTapeRow";
+import {
+  Feed,
+  FeedAmount,
+  FeedBoard,
+  FeedCount,
+  FeedDays,
+  FeedEmpty,
+  FeedField,
+  FeedFields,
+  FeedIdLine,
+  FeedPlate,
+  FeedRow,
+  FeedSkeleton,
+  FeedSort,
+  type FeedLead,
+} from "@/components/feed/Feed";
+import { FeedHolderRow } from "@/components/feed/FeedHolderRow";
 import { KpiNum, KpiTileRail } from "@/components/KpiGrid";
 import {
   KpiMarkBox,
@@ -28,9 +44,9 @@ import { addrTapeHasMore, holderKeysetCursor, txKeysetCursor } from "@/lib/rank-
 import { getGateway } from "@/lib/config";
 import {
   formatEmissionGlance,
-  formatFactWhen,
   formatRelTime,
-  formatScaledGlance,
+  formatScaledAmount,
+  formatStamp,
   shortId,
   toBigIntAmt,
   toEpochMs,
@@ -212,40 +228,6 @@ function orderHolders(rows: Holder[], dir: AmountDir, offset: number): Holder[] 
   return sorted.map((row, i) => ({ ...row, rank: offset + i + 1 }));
 }
 
-function SortMark({ on, dir }: { on: boolean; dir: AmountDir }) {
-  return (
-    <span className="sort-mark" aria-hidden>
-      <span className={clsx("sort-caret sort-caret-up", on && dir === "asc" && "is-on")} />
-      <span className={clsx("sort-caret sort-caret-dn", on && dir === "desc" && "is-on")} />
-    </span>
-  );
-}
-
-function AmountSort({
-  dir,
-  label,
-  onToggle,
-}: {
-  dir: AmountDir;
-  label: string;
-  onToggle: () => void;
-}) {
-  const t = useT();
-  const hint = `${label}, ${dir === "asc" ? t("addresses.sortAsc") : t("addresses.sortDesc")}`;
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      aria-label={hint}
-      aria-sort={dir === "asc" ? "ascending" : "descending"}
-      className="chip-press is-pressed inline-flex shrink-0 items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[10px] bg-[var(--wash-strong)] px-2 py-1.5 text-[12px] font-medium leading-none text-[var(--text)] transition-colors duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:text-[var(--text)]"
-    >
-      <SortMark on dir={dir} />
-      <span className="tabular-nums">{label}</span>
-    </button>
-  );
-}
-
 function descLabel(key: string): string {
   const words = key
     .replace(/[_-]+/g, " ")
@@ -371,7 +353,6 @@ export function TokenView({
   const [txHasMore, setTxHasMore] = useState(false);
   const [tab, setTab] = useState<Tab>("holders");
   const [err, setErr] = useState<string | null>(null);
-  const [stuck, setStuck] = useState(false);
   const catalogRef = useRef(catalog);
   catalogRef.current = catalog;
   const holdersRef = useRef(holders);
@@ -693,24 +674,6 @@ export function TokenView({
     setListReady(true);
   }, [tab, holders, holdersFailed, holdersPending, holdersSettled, listReady]);
 
-  useEffect(() => {
-    if (tab !== "holders" && tab !== "txs" && tab !== "swaps" && tab !== "mintburn") {
-      setStuck(false);
-      return;
-    }
-    const el = pinRef.current;
-    if (!el) return;
-    const chrome = document.querySelector(".stage-frame header.sticky");
-    const pin =
-      (chrome instanceof HTMLElement ? chrome.getBoundingClientRect().height : 64) + 8;
-    const obs = new IntersectionObserver(
-      ([entry]) => setStuck(!entry.isIntersecting),
-      { threshold: 1, rootMargin: `-${pin}px 0px 0px 0px` }
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [tab, holders?.holders.length, txs.length, holderOff, txOff]);
-
   const rawName = (data?.name ?? catalog?.name ?? "").trim();
   const named = rawName && !rawName.includes("\uFFFD") ? rawName : null;
   const meta = resolveTokenMeta(tokenId, named, named);
@@ -852,7 +815,7 @@ export function TokenView({
                   <span className="tabular-nums">{supplyGlance?.text ?? dash}</span>
                 </p>
               </AddrFactCard>
-              <SegBar cols={4} className="shrink-0">
+              <SegBar cols={4} className="tab-fit shrink-0">
                 {TOKEN_TABS.map((idTab) => (
                   <a
                     key={idTab}
@@ -961,57 +924,55 @@ export function TokenView({
 
           {tab === "holders" && (
             <div className="mt-2">
-              {holderRows.length === 0 && (!holdersSettled || holdersPending) ? null : holderRows.length === 0 ? (
-                <p className="text-[var(--muted)]">
-                  {holdersFailed ? t("token.holdersErr") : t("token.holdersEmpty")}
-                </p>
+              {holderRows.length === 0 && (!holdersSettled || holdersPending) ? (
+                <Feed>
+                  <FeedSkeleton />
+                </Feed>
+              ) : holderRows.length === 0 ? (
+                <Feed>
+                  <FeedEmpty k="addr" title={holdersFailed ? t("token.holdersErr") : t("token.holdersEmpty")} />
+                </Feed>
               ) : (
-              <div key={tab} className="addr-sheet">
+              <div key={tab} className="feed-sheet">
                 <div ref={pinRef} className="h-px w-full" aria-hidden />
-                <div
-                  className={clsx(
-                    "addr-pan kpi-tape transition-opacity duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
-                    holdersPending && "opacity-60"
-                  )}
-                >
-                  <TokenHolderTapeHead
-                    stuck={stuck}
-                    address={t("token.colAddress")}
-                    name={t("addresses.colName")}
-                    txs={t("addresses.colTxs")}
-                    tokens={t("addresses.colTokens")}
-                    share={
-                      <AmountSort
-                        dir={holderDir}
-                        label={t("token.colShare")}
-                        onToggle={() => {
-                          holderCursorStack.current = [];
-                          holderCursorRef.current = null;
-                          holderOffRef.current = 0;
-                          setHolderOff(0);
-                          setHolderDir((d) => (d === "desc" ? "asc" : "desc"));
-                        }}
+                <Feed busy={holdersPending} className="is-rank" enterClass={packEnter.enterClass("pack")}>
+                  <FeedBoard
+                    plate={
+                      <FeedPlate
+                        tag={t("token.tab.holders")}
+                        now
+                        count={holderTotal > 0 ? <FeedCount k="feed.holders" n={holderTotal} /> : undefined}
+                        end={
+                          <FeedSort
+                            label={t("feed.sort.label")}
+                            options={[{ key: "share", label: t("feed.sort.share") }]}
+                            active="share"
+                            dir={holderDir}
+                            disabled={holdersPending}
+                            onSort={() => {
+                              holderCursorStack.current = [];
+                              holderCursorRef.current = null;
+                              holderOffRef.current = 0;
+                              setHolderOff(0);
+                              setHolderDir((d) => (d === "desc" ? "asc" : "desc"));
+                            }}
+                          />
+                        }
                       />
                     }
-                    first={t("addresses.colFirst")}
-                    last={t("addresses.colLast")}
-                  />
-                  <div className={packEnter.enterClass("pack")}>
+                  >
                     {holderRows.map((h) => (
-                      <TokenHolderTapeRow
+                      <FeedHolderRow
                         key={h.address}
                         row={h}
-                        loc={locale}
-                        t={t}
+                        rank={h.rank}
                         decimals={decimals}
                         enterClass={holderEnter.enterClass(h.address)}
-                        fav={favSet.has(h.address)}
-                        favReady={favReady}
-                        onToggleFav={toggleFav}
+                        fav={{ on: favSet.has(h.address), ready: favReady, toggle: toggleFav }}
                       />
                     ))}
-                  </div>
-                </div>
+                  </FeedBoard>
+                </Feed>
                 {(holderRows.length > 0 || holderOff > 0 || holderTotal > 0) && (
                   <RankWindow
                     offset={holderOff}
@@ -1074,22 +1035,30 @@ export function TokenView({
 
           {(tab === "txs" || tab === "swaps" || tab === "mintburn") && (
             <div className="mt-2">
-              {!txSettled ? null : !txs.length ? (
-                <p className="text-[var(--muted)]">
-                  {txFailed && (txN ?? 0) > 0
-                    ? t("token.txsTapeOff")
-                    : txFailed
-                      ? t("token.txsWarm")
-                      : tab === "mintburn"
-                        ? t("token.noMintBurn")
-                        : tab === "swaps"
-                          ? t("token.noSwaps")
-                          : t("token.noTxs")}
-                </p>
+              {!txSettled ? (
+                <Feed>
+                  <FeedSkeleton />
+                </Feed>
+              ) : !txs.length ? (
+                <Feed>
+                  <FeedEmpty
+                    k={tab === "mintburn" ? "mint" : tab === "swaps" ? "swap" : "transfer"}
+                    title={
+                      txFailed && (txN ?? 0) > 0
+                        ? t("token.txsTapeOff")
+                        : txFailed
+                          ? t("token.txsWarm")
+                          : tab === "mintburn"
+                            ? t("token.noMintBurn")
+                            : tab === "swaps"
+                              ? t("token.noSwaps")
+                              : t("token.noTxs")
+                    }
+                  />
+                </Feed>
               ) : (
-              <div key={tab} className="addr-sheet">
+              <div key={tab} className="feed-sheet">
                 <div ref={pinRef} className="h-px w-full" aria-hidden />
-                <div className={txPackEnter.enterClass("pack")}>
                 <div
                   ref={twinRoot}
                   onPointerOver={(e) => {
@@ -1113,33 +1082,24 @@ export function TokenView({
                       ?.querySelectorAll(".is-twin")
                       .forEach((n) => n.classList.remove("is-twin"));
                   }}
-                  className={clsx(
-                    "addr-pan kpi-tape transition-opacity duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
-                    txPending && "opacity-60"
-                  )}
                 >
-                  <div
-                    className={clsx("addr-head addr-lane addr-lane-x token-tx-tape", stuck && "is-stuck")}
-                  >
-                    <div className="min-w-0">{t("address.colKind")}</div>
-                    <div className="min-w-0 justify-end tabular-nums">{t("token.colAmount")}</div>
-                    <div className="min-w-0">{t("token.colFrom")}</div>
-                    <div className="min-w-0">{t("token.colTo")}</div>
-                    <div className="min-w-0">{t("address.colTx")}</div>
-                    <div className="min-w-0">{t("address.colTime")}</div>
-                    <div className="min-w-0 justify-end tabular-nums">{t("address.colHeight")}</div>
-                  </div>
-                  {txs.map((tx) => (
-                    <TokenTxRowView
-                      key={tx.id}
-                      tx={tx}
-                      decimals={decimals}
-                      locale={locale}
-                      t={t}
-                      enterClass={txEnter.enterClass(tx.id)}
+                  <Feed busy={txPending} enterClass={txPackEnter.enterClass("pack")}>
+                    <FeedDays
+                      items={txs}
+                      seconds
+                      msOf={(tx) => toEpochMs(tx.timestamp)}
+                      countOf={(n) => <FeedCount k="feed.txCount" n={n} />}
+                      render={(tx, lead) => (
+                        <FeedTokenTxRow
+                          key={tx.id}
+                          tx={tx}
+                          lead={lead}
+                          decimals={decimals}
+                          enterClass={txEnter.enterClass(tx.id)}
+                        />
+                      )}
                     />
-                  ))}
-                </div>
+                  </Feed>
                 </div>
                 {(txs.length > 0 || txOff > 0) && (
                   <RankWindow
@@ -1377,140 +1337,6 @@ function NftInfoPanel({
   );
 }
 
-function TokenFigure({
-  raw,
-  decimals,
-  locale,
-  signed = false,
-  size = "md",
-  tone,
-}: {
-  raw: bigint;
-  decimals: number;
-  locale?: string;
-  signed?: boolean;
-  size?: "md" | "lg";
-  tone?: "up" | "down";
-}) {
-  const sign = signed ? (raw > 0n ? "+" : raw < 0n ? "−" : "") : "";
-  const glance = formatScaledGlance(raw < 0n ? -raw : raw, decimals, locale, 1_000_000_000n);
-  const core = glance.text;
-  const compact = /[A-Za-zА-Яа-я]/.test(core);
-  const dot = compact ? -1 : core.search(/[.,]/);
-  const intPart = dot === -1 ? core : core.slice(0, dot);
-  const frac = dot === -1 ? null : core.slice(dot);
-  return (
-    <span
-      className={clsx(
-        "inline-block whitespace-nowrap tabular-nums tracking-tight",
-        tone === "down" ? "text-[var(--down)]" : "text-[var(--up)]"
-      )}
-      title={glance.exact}
-    >
-      {sign}
-      <span className={size === "lg" ? "text-[28px] font-semibold leading-none" : "text-[15px] font-medium"}>
-        {intPart}
-        {frac}
-      </span>
-    </span>
-  );
-}
-
-function FlowMark({ kind }: { kind?: TokenTxKind }) {
-  const tone =
-    kind === "mint" ? "text-[var(--up)]" : kind === "burn" ? "text-[var(--down)]" : undefined;
-  const orange = kind === "swap";
-  const stroke = {
-    fill: "none" as const,
-    stroke: "currentColor",
-    strokeWidth: 2,
-    strokeLinecap: "round" as const,
-    strokeLinejoin: "round" as const,
-  };
-  return (
-    <span
-      className={clsx("flex h-7 w-7 shrink-0 items-center justify-center", tone)}
-      style={
-        kind === "swap"
-          ? { color: "#fb923c" }
-          : kind === "mint" || kind === "burn"
-            ? undefined
-            : { color: INK.violet }
-      }
-      aria-hidden
-    >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-        {kind === "mint" ? (
-          <>
-            <path d="M14 9.536V7a4 4 0 0 1 4-4h1.5a.5.5 0 0 1 .5.5V5a4 4 0 0 1-4 4 4 4 0 0 0-4 4c0 2 1 3 1 5a5 5 0 0 1-1 3" {...stroke} />
-            <path d="M4 9a5 5 0 0 1 8 4 5 5 0 0 1-8-4" {...stroke} />
-            <path d="M5 21h14" {...stroke} />
-          </>
-        ) : kind === "burn" ? (
-          <path d="M12 3q1 4 4 6.5t3 5.5a1 1 0 0 1-14 0 5 5 0 0 1 1-3 1 1 0 0 0 5 0c0-2-1.5-3-1.5-5q0-2 2.5-4" {...stroke} />
-        ) : orange ? (
-          <>
-            <path d="M14 4a1 1 0 0 1 1-1" {...stroke} />
-            <path d="M15 10a1 1 0 0 1-1-1" {...stroke} />
-            <path d="M21 4a1 1 0 0 0-1-1" {...stroke} />
-            <path d="M21 9a1 1 0 0 1-1 1" {...stroke} />
-            <path d="m3 7 3 3 3-3" {...stroke} />
-            <path d="M6 10V5a2 2 0 0 1 2-2h2" {...stroke} />
-            <rect x="3" y="14" width="7" height="7" rx="1" {...stroke} />
-          </>
-        ) : (
-          <>
-            <path d="m15.194 13.707 3.814 1.86-1.86 3.814" {...stroke} />
-            <path d="M16.47214 7.52786 A 5 10 0 1 0 13 21.79796" {...stroke} />
-            <path d="M21.79796 11 A 10 5 0 1 0 19 15.57071" {...stroke} />
-          </>
-        )}
-      </svg>
-    </span>
-  );
-}
-
-function PartyPeek({
-  addresses,
-  multipleLabel,
-  multipleHint,
-}: {
-  addresses: string[];
-  multipleLabel: string;
-  multipleHint: string;
-}) {
-  const uniq: string[] = [];
-  const seen = new Set<string>();
-  for (const raw of addresses) {
-    const address = raw.trim();
-    if (!address || seen.has(address) || isFeeAddress(address)) continue;
-    seen.add(address);
-    uniq.push(address);
-  }
-  if (!uniq.length) return <span className="text-[var(--muted)]">—</span>;
-  if (uniq.length > 1) {
-    return (
-      <span className="addr-multi truncate" title={multipleHint}>
-        {multipleLabel}
-      </span>
-    );
-  }
-  const head = uniq[0] ?? "";
-  const party = describeParty(head);
-  const label = party.known || party.short || shortId(head, 6);
-  return (
-    <Link
-      prefetch={false}
-      href={`/address/${encodeURIComponent(head)}`}
-      data-addr={head}
-      title={head}
-      className="addr-party min-w-0 truncate font-mono text-[13px] leading-none hover:underline"
-    >
-      {label}
-    </Link>
-  );
-}
-
 /** `0.00000151` with 8 decimals → raw 151, so the tx-tape formatter can trim zeros. */
 function scaledDecimalToRaw(text: string, decimals: number): bigint {
   const trimmed = text.trim();
@@ -1546,20 +1372,56 @@ function tokenTapeAmount(tx: TokenTxRow): {
   return { raw: vol, signed: false };
 }
 
-function TokenTxRowView({
+function partyList(list: string[] | undefined): string[] {
+  const out: string[] = [];
+  for (const raw of list ?? []) {
+    const a = typeof raw === "string" ? raw.trim() : "";
+    if (!a || out.includes(a) || isFeeAddress(a)) continue;
+    out.push(a);
+  }
+  return out;
+}
+
+function FeedParty({ list, many, manyHint }: { list: string[]; many: string; manyHint: string }) {
+  if (!list.length) return <span className="text-[var(--muted)]">—</span>;
+  if (list.length > 1) {
+    return (
+      <span className="feed-party-many" title={manyHint}>
+        {many}
+      </span>
+    );
+  }
+  const head = list[0] ?? "";
+  const party = describeParty(head);
+  return (
+    <Link
+      prefetch={false}
+      href={`/address/${encodeURIComponent(head)}`}
+      data-addr={head}
+      title={head}
+      className={clsx("feed-party hover:underline", !party.known && "font-mono tabular-nums")}
+    >
+      {party.known || party.short || shortId(head, 6)}
+    </Link>
+  );
+}
+
+/** One token tx on the feed: who to whom, how much of this token, mint and burn signed. */
+function FeedTokenTxRow({
   tx,
+  lead,
   decimals,
-  locale,
-  t,
   enterClass,
 }: {
   tx: TokenTxRow;
+  lead: FeedLead;
   decimals: number;
-  locale: string;
-  t: (k: string) => string;
   enterClass?: string;
 }) {
+  const { t, locale } = useI18n();
+  const tag = loc(locale);
   const amt = tokenTapeAmount(tx);
+  const raw = tx.kind === "swap" && tx.moved?.includes(".") ? scaledDecimalToRaw(tx.moved, decimals) : amt.raw;
   const kindLabel =
     tx.kind === "mint"
       ? t("tx.minted")
@@ -1568,80 +1430,73 @@ function TokenTxRowView({
         : tx.kind === "swap"
           ? t("token.kind.swap")
           : t("token.kind.transfer");
-  const ms = toEpochMs(tx.timestamp);
-  const from = Array.isArray(tx.from) ? tx.from.filter((a) => typeof a === "string" && a) : [];
-  const to = Array.isArray(tx.to) ? tx.to.filter((a) => typeof a === "string" && a) : [];
+  const from = partyList(tx.from);
+  const to = partyList(tx.to);
+  const many = t("address.multiple");
+  const manyHint = t("address.multipleHint");
+  const height =
+    tx.inclusionHeight != null ? (
+      <Link prefetch={false} href={`/block/${tx.inclusionHeight}`} className="tabular-nums">
+        {tx.inclusionHeight.toLocaleString(tag)}
+      </Link>
+    ) : null;
   return (
-    <div
-      className={clsx(
-        "addr-lane addr-lane-x token-tx-tape border-t border-[var(--border-soft)] py-2.5 text-[13px]",
-        enterClass
-      )}
-    >
-      <div className="flex min-w-0 items-center gap-2 px-3">
-        <FlowMark kind={tx.kind} />
-        <span className="truncate text-[var(--muted)]">{kindLabel}</span>
-      </div>
-      <div className="flex min-w-0 items-center justify-end px-3">
-        <TokenFigure
-          raw={
-            tx.kind === "swap" && tx.moved?.includes(".")
-              ? scaledDecimalToRaw(tx.moved, decimals)
-              : amt.raw
-          }
-          decimals={decimals}
-          locale={locale}
-          signed={amt.signed}
-          tone={amt.tone}
-        />
-      </div>
-      <div className="flex min-w-0 items-center px-3">
-        <PartyPeek
-          addresses={from}
-          multipleLabel={t("address.multiple")}
-          multipleHint={t("address.multipleHint")}
-        />
-      </div>
-      <div className="flex min-w-0 items-center px-3">
-        <PartyPeek
-          addresses={to}
-          multipleLabel={t("address.multiple")}
-          multipleHint={t("address.multipleHint")}
-        />
-      </div>
-      <div className="flex min-w-0 items-center gap-2 px-3">
-        <Link
-          prefetch={false}
-          href={`/tx/${tx.id}`}
-          className="min-w-0 truncate font-mono text-[12px] text-accent hover:underline"
-        >
-          {shortId(tx.id, 10)}
-        </Link>
-      </div>
-      <div className="flex min-w-0 items-center px-3">
-        <div className="min-w-0">
-          <p className="tabular-nums text-[var(--text)]">{formatRelTime(tx.timestamp, locale)}</p>
-          {ms != null && (
-            <p className="mt-0.5 text-[12px] tabular-nums text-[var(--muted-2)]">
-              {formatFactWhen(ms, locale)}
-            </p>
-          )}
-        </div>
-      </div>
-      <div className="flex min-w-0 items-center justify-end px-3">
-        {tx.inclusionHeight != null ? (
-          <Link
-            prefetch={false}
-            href={`/block/${tx.inclusionHeight}`}
-            className="tabular-nums text-accent hover:underline"
-          >
-            {tx.inclusionHeight.toLocaleString(loc(locale))}
+    <FeedRow
+      k={tx.kind}
+      glyph={tx.kind}
+      tileTitle={kindLabel}
+      lead={lead}
+      leadSub={!lead.same ? height : undefined}
+      enterClass={enterClass}
+      title={
+        <span className="feed-route">
+          <FeedParty list={from} many={many} manyHint={manyHint} />
+          <span className="feed-route-arrow" aria-hidden>
+            →
+          </span>
+          <FeedParty list={to} many={many} manyHint={manyHint} />
+        </span>
+      }
+      facts={
+        <>
+          <span className="feed-kind">{kindLabel}</span>
+          <Link prefetch={false} href={`/tx/${tx.id}`} title={tx.id} className="font-mono tabular-nums">
+            {shortId(tx.id, 8)}
           </Link>
-        ) : (
-          <span className="text-[var(--muted)]">—</span>
-        )}
-      </div>
-    </div>
+          {height ? <span className="feed-phone-only">{height}</span> : null}
+        </>
+      }
+      value={<FeedAmount raw={raw} decimals={decimals} unit={null} signed={amt.signed} glance />}
+      detail={() => (
+        <FeedFields>
+          <FeedField label={t("detail.tx")} wide>
+            <FeedIdLine href={`/tx/${tx.id}`} id={tx.id} />
+          </FeedField>
+          <FeedField label={t("token.colFrom")}>
+            <span className="feed-list">
+              {from.length ? from.map((a) => <FeedParty key={a} list={[a]} many={many} manyHint={manyHint} />) : "—"}
+            </span>
+          </FeedField>
+          <FeedField label={t("token.colTo")}>
+            <span className="feed-list">
+              {to.length ? to.map((a) => <FeedParty key={a} list={[a]} many={many} manyHint={manyHint} />) : "—"}
+            </span>
+          </FeedField>
+          <FeedField label={t("token.colAmount")}>
+            <span className="tabular-nums">
+              {amt.signed && raw > 0n ? "+" : amt.signed && raw < 0n ? "−" : ""}
+              {formatScaledAmount(raw < 0n ? -raw : raw, decimals, tag)}
+            </span>
+          </FeedField>
+          <FeedField label={t("address.colTime")}>
+            <span className="tabular-nums" suppressHydrationWarning>
+              {tx.timestamp != null ? formatStamp(tx.timestamp) : "—"}
+            </span>
+          </FeedField>
+          <FeedField label={t("detail.block")}>{height ?? "—"}</FeedField>
+        </FeedFields>
+      )}
+    />
   );
 }
 

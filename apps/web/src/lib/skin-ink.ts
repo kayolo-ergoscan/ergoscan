@@ -1,6 +1,6 @@
 /** Explorer inks: Paper / Epoch / Lykos. Same hue family as OLED A — not a white/black invert. */
 
-import { LOOK_INK, parseLook } from "./look";
+import { LOOK_BG, currentLook } from "./look";
 
 export const SKIN_INKS = ["day", "dim", "oled"] as const;
 export type SkinInk = (typeof SKIN_INKS)[number];
@@ -30,22 +30,25 @@ export function colorSchemeFor(ink: SkinInk): "light" | "dark" {
   return ink === "day" ? "light" : "dark";
 }
 
-/** Inline head script — paint the chosen ink before React. Keep in lockstep with applyInk. */
-export const INK_BOOT = `(function(){try{var q=new URLSearchParams(location.search).get("ink");var v=q||localStorage.getItem("${INK_STORAGE}")||"oled";if(v!=="day"&&v!=="dim"&&v!=="oled")v="oled";var r=document.documentElement;r.setAttribute("data-ink",v);r.classList.toggle("dark",v!=="day");r.style.colorScheme=v==="day"?"light":"dark";var bg={day:"${INK_BG.day}",dim:"${INK_BG.dim}",oled:"${INK_BG.oled}"}[v];var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute("content",bg);}catch(e){}})();`;
+/**
+ * Inline head script — paint the chosen ink before React. Keep in lockstep with applyInk.
+ * Under the site look (`data-look`) the ink is always OLED and the bar takes the look's black.
+ */
+export const INK_BOOT = `(function(){try{var r=document.documentElement;var look=r.hasAttribute("data-look");var q=new URLSearchParams(location.search).get("ink");var v=look?"oled":q||localStorage.getItem("${INK_STORAGE}")||"oled";if(v!=="day"&&v!=="dim"&&v!=="oled")v="oled";r.setAttribute("data-ink",v);r.classList.toggle("dark",v!=="day");r.style.colorScheme=v==="day"?"light":"dark";var bg=look?"${LOOK_BG}":{day:"${INK_BG.day}",dim:"${INK_BG.dim}",oled:"${INK_BG.oled}"}[v];var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute("content",bg);}catch(e){}})();`;
 
 export function applyInk(ink: SkinInk, persist = true): void {
   if (typeof document === "undefined") return;
   const root = document.documentElement;
-  const look = parseLook(root.dataset.look);
+  const look = currentLook();
   if (look) {
-    ink = LOOK_INK[look];
+    ink = "oled";
     persist = false;
   }
   root.dataset.ink = ink;
   root.classList.toggle("dark", ink !== "day");
   root.style.colorScheme = colorSchemeFor(ink);
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute("content", INK_BG[ink]);
+  if (meta) meta.setAttribute("content", look ? LOOK_BG : INK_BG[ink]);
   if (persist) {
     try {
       localStorage.setItem(INK_STORAGE, ink);

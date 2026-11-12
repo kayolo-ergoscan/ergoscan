@@ -14,11 +14,25 @@ import { CatalogSearchTile } from "@/components/CatalogSearchTile";
 import { FavoriteHeart } from "@/components/FavoriteHeart";
 import { INK } from "@/lib/palette";
 import { RankWindow } from "@/components/RankWindow";
+import {
+  Feed,
+  FeedBoard,
+  FeedCount,
+  FeedEmpty,
+  FeedField,
+  FeedFields,
+  FeedIdLine,
+  FeedPhrase,
+  FeedPlate,
+  FeedRow,
+  FeedSort,
+} from "@/components/feed/Feed";
 import { TokenLogo } from "@/components/TokenBadge";
 import { getGateway } from "@/lib/config";
 import {
   formatRelTime,
   formatScaledAmount,
+  formatScaledGlance,
   formatTs,
   shortId,
   toBigIntAmt,
@@ -37,6 +51,8 @@ import {
   type TokenCatalogKpis,
   type TokensPageData,
 } from "@/lib/list-snapshots";
+
+const TOKEN_SORTS: TokenListSort[] = ["holders", "supply", "txs", "last", "first", "name"];
 
 function loc(locale: string): string {
   return locale === "ru" ? "ru-RU" : "en-US";
@@ -60,71 +76,6 @@ function pathFor(
   return snapshotPath(`/v1/tokens?${params}`, height);
 }
 
-function SortMark({ on, dir }: { on: boolean; dir: TokenListDir }) {
-  return (
-    <span className="sort-mark" aria-hidden>
-      <span className={clsx("sort-caret sort-caret-up", on && dir === "asc" && "is-on")} />
-      <span className={clsx("sort-caret sort-caret-dn", on && dir === "desc" && "is-on")} />
-    </span>
-  );
-}
-
-function SortCol({
-  label,
-  k,
-  sort,
-  dir,
-  align,
-  onSort,
-  className,
-}: {
-  label: string;
-  k: TokenListSort;
-  sort: TokenListSort;
-  dir: TokenListDir;
-  align: "left" | "right";
-  onSort: (k: TokenListSort) => void;
-  className?: string;
-}) {
-  const t = useT();
-  const on = sort === k;
-  const hint = on
-    ? `${label}, ${dir === "asc" ? t("addresses.sortAsc") : t("addresses.sortDesc")}`
-    : label;
-  return (
-    <div
-      className={clsx(
-        "flex h-full min-w-0 items-center",
-        align === "right" && "justify-end",
-        className
-      )}
-      aria-sort={on ? (dir === "asc" ? "ascending" : "descending") : "none"}
-    >
-      <button
-        type="button"
-        onClick={() => onSort(k)}
-        aria-label={hint}
-        className={clsx(
-          "chip-press inline-flex shrink-0 items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[10px] px-2 py-1.5 text-[12px] font-medium leading-none transition-colors duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:text-[var(--text)]",
-          on ? "is-pressed bg-[var(--wash-strong)] text-[var(--text)]" : "text-[var(--muted)]"
-        )}
-      >
-        {align === "right" ? (
-          <>
-            <SortMark on={on} dir={dir} />
-            <span>{label}</span>
-          </>
-        ) : (
-          <>
-            <span>{label}</span>
-            <SortMark on={on} dir={dir} />
-          </>
-        )}
-      </button>
-    </div>
-  );
-}
-
 function fmtSupply(row: TokenListItem, locale: string, miss: string): string {
   if (row.emission == null || row.emission === "") return miss;
   try {
@@ -132,26 +83,6 @@ function fmtSupply(row: TokenListItem, locale: string, miss: string): string {
   } catch {
     return miss;
   }
-}
-
-function HeadLabel({ label, align }: { label: string; align: "left" | "right" }) {
-  return (
-    <div
-      className={clsx(
-        "flex h-full min-w-0 w-full items-center",
-        align === "right" && "justify-end"
-      )}
-    >
-      <span
-        className={clsx(
-          "whitespace-nowrap text-[12px] font-medium leading-none text-[var(--muted)]",
-          align === "right" ? "text-right" : "text-left"
-        )}
-      >
-        {label}
-      </span>
-    </div>
-  );
 }
 
 function tokenName(row: TokenListItem): string | null {
@@ -241,14 +172,12 @@ export function TokensView({ initial }: { initial: TokensPageData }) {
   const [pending, setPending] = useState(false);
   const [ready, setReady] = useState(initial.items.length > 0);
   const [err, setErr] = useState<string | null>(null);
-  const [stuck, setStuck] = useState(false);
   // Rows the server already has go into the first HTML, with the same entry animation.
   const seedIds = initial.items.map((row) => row.tokenId);
   const enter = useEnterIds(ENTER_MS, seedIds);
   const packEnter = useEnterIds(ENTER_MS, seedIds.length ? ["pack"] : []);
   const [listReady, setListReady] = useState(seedIds.length > 0);
   const opened = useRef(seedIds.length > 0);
-  const pinRef = useRef<HTMLDivElement>(null);
   const offsetRef = useRef(offset);
   offsetRef.current = offset;
   const sortRef = useRef(sort);
@@ -381,23 +310,6 @@ export function TokensView({ initial }: { initial: TokensPageData }) {
     }
   }, [q]);
 
-  useEffect(() => {
-    const el = pinRef.current;
-    if (!el || !items.length) {
-      setStuck(false);
-      return;
-    }
-    const chrome = document.querySelector(".stage-frame header.sticky");
-    const pin =
-      (chrome instanceof HTMLElement ? chrome.getBoundingClientRect().height : 64) + 8;
-    const obs = new IntersectionObserver(
-      ([entry]) => setStuck(!entry.isIntersecting),
-      { threshold: 1, rootMargin: `-${pin}px 0px 0px 0px` }
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [items.length]);
-
   const onSort = (key: TokenListSort) => {
     setOffset(0);
     if (sort === key) {
@@ -462,95 +374,50 @@ export function TokensView({ initial }: { initial: TokensPageData }) {
       )}
 
       {!listReady && !err ? null : !items.length && !err ? (
-        <p className="text-[var(--muted)]">
-          {q.trim() ? t("tokens.noMatch").replace("{q}", q.trim()) : t("tokens.empty")}
-        </p>
+        <Feed>
+          <FeedEmpty k="token" title={q.trim() ? t("tokens.noMatch").replace("{q}", q.trim()) : t("tokens.empty")} />
+        </Feed>
       ) : null}
 
       {listReady && items.length > 0 && (
-        <div className="addr-sheet">
-          <div ref={pinRef} className="h-px w-full" aria-hidden />
-          <div className={packEnter.enterClass("pack")}>
-          <div
-            className={clsx(
-              "addr-pan transition-opacity duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
-              pending && "opacity-60"
-            )}
-          >
-            <div
-              className={clsx(
-                "addr-head addr-lane addr-lane-x token-lane text-[12px] font-medium",
-                stuck && "is-stuck"
-              )}
+        <div className="feed-sheet">
+          <Feed busy={pending} className="is-rank" enterClass={packEnter.enterClass("pack")}>
+            <FeedBoard
+              plate={
+                <FeedPlate
+                  tag={t("nav.tokens")}
+                  now
+                  count={total != null ? <FeedCount k="feed.tokens" n={total} /> : undefined}
+                  end={
+                    <FeedSort
+                      label={t("feed.sort.label")}
+                      options={TOKEN_SORTS.map((key) => ({ key, label: t(`feed.sort.${key}`) }))}
+                      active={sort}
+                      dir={dir}
+                      onSort={onSort}
+                      disabled={pending}
+                    />
+                  }
+                />
+              }
             >
-              <div className="token-lane-name">
-                <div className="justify-center !px-2" aria-hidden="true" />
-                <SortCol label={t("tokens.colName")} k="name" sort={sort} dir={dir} align="left" onSort={onSort} />
-              </div>
-              <div className="token-lane-id min-w-0 grid">
-                <HeadLabel label={t("tokens.colId")} align="left" />
-                <SortCol
-                  label={t("tokens.colSupply")}
-                  k="supply"
+              {items.map((row, i) => (
+                <FeedTokenRow
+                  key={row.tokenId}
+                  row={row}
+                  rank={offset + i + 1}
                   sort={sort}
-                  dir={dir}
-                  align="right"
-                  onSort={onSort}
+                  enterClass={enter.enterClass(row.tokenId)}
+                  fav={{
+                    on: favIds?.includes(row.tokenId) ?? false,
+                    ready: favReady,
+                    title: favIds?.includes(row.tokenId) ? t("favorites.remove") : t("favorites.add"),
+                    toggle: () => toggleFav(row.tokenId),
+                  }}
                 />
-              </div>
-              <div className="token-lane-pair min-w-0 grid">
-                <SortCol
-                  label={t("tokens.colFirst")}
-                  k="first"
-                  sort={sort}
-                  dir={dir}
-                  align="left"
-                  onSort={onSort}
-                />
-                <SortCol
-                  label={t("tokens.colLast")}
-                  k="last"
-                  sort={sort}
-                  dir={dir}
-                  align="right"
-                  onSort={onSort}
-                />
-              </div>
-              <div className="token-lane-triple">
-                <SortCol
-                  label={t("tokens.colTxs")}
-                  k="txs"
-                  sort={sort}
-                  dir={dir}
-                  align="left"
-                  onSort={onSort}
-                />
-                <SortCol
-                  label={t("tokens.colHolders")}
-                  k="holders"
-                  sort={sort}
-                  dir={dir}
-                  align="right"
-                  onSort={onSort}
-                />
-              </div>
-            </div>
-            {items.map((row) => (
-              <TokenTapeRow
-                key={row.tokenId}
-                row={row}
-                locale={locale}
-                enterClass={enter.enterClass(row.tokenId)}
-                fav={favIds?.includes(row.tokenId) ?? false}
-                favReady={favReady}
-                favTitle={
-                  favIds?.includes(row.tokenId) ? t("favorites.remove") : t("favorites.add")
-                }
-                onToggleFav={() => toggleFav(row.tokenId)}
-              />
-            ))}
-          </div>
-          </div>
+              ))}
+            </FeedBoard>
+          </Feed>
           <RankWindow
             offset={offset}
             pageSize={TOKEN_PACK}
@@ -568,6 +435,143 @@ export function TokensView({ initial }: { initial: TokensPageData }) {
         </div>
       )}
     </Shell>
+  );
+}
+
+function relOrHeight(ts: number | null | undefined, height: number | null | undefined, locale: string): string {
+  if (ts != null) return formatRelTime(ts, locale);
+  if (height != null) return `#${height.toLocaleString(loc(locale))}`;
+  return "—";
+}
+
+/** One token on the ranked feed. The figure on the right is whatever the list is sorted by. */
+function FeedTokenRow({
+  row,
+  rank,
+  sort,
+  enterClass,
+  fav,
+}: {
+  row: TokenListItem;
+  rank: number;
+  sort: TokenListSort;
+  enterClass?: string;
+  fav: { on: boolean; ready: boolean; title: string; toggle: () => void };
+}) {
+  const { t, tn, locale } = useI18n();
+  const tag = loc(locale);
+  const name = tokenName(row);
+  const href = `/token/${row.tokenId}`;
+  const lastTs = row.lastTs ?? row.firstTs;
+  let supplyRaw: bigint | null = null;
+  try {
+    supplyRaw = row.emission == null || row.emission === "" ? null : toBigIntAmt(row.emission);
+  } catch {
+    supplyRaw = null;
+  }
+  const supply = supplyRaw == null ? null : formatScaledGlance(supplyRaw, row.decimals ?? 0, tag);
+  const holders = row.holders != null ? row.holders.toLocaleString(tag) : "—";
+  const txs = row.txCount != null ? row.txCount.toLocaleString(tag) : "—";
+  const created = relOrHeight(row.firstTs, row.firstHeight, locale);
+  const active = relOrHeight(lastTs, row.lastHeight, locale);
+  const key = sort === "name" ? "holders" : sort;
+  const value =
+    key === "supply" ? (supply?.text ?? "—") : key === "txs" ? txs : key === "first" ? created : key === "last" ? active : holders;
+  return (
+    <FeedRow
+      k="token"
+      tile={<TokenLogo tokenId={row.tokenId} artworkUrl={row.artworkUrl} size={22} />}
+      lead={{ rank: rank.toLocaleString(tag) }}
+      enterClass={enterClass}
+      onPointerEnter={() => prefetchTokenHolders(row.tokenId)}
+      title={
+        <>
+          <Link
+            prefetch={false}
+            href={href}
+            title={row.tokenId}
+            className={clsx("feed-name hover:underline", name ? "font-semibold" : "font-mono tabular-nums")}
+            onFocus={() => prefetchTokenHolders(row.tokenId)}
+          >
+            {name ?? shortId(row.tokenId, 8)}
+          </Link>
+          <FavoriteHeart size="sm" on={fav.on} ready={fav.ready} title={fav.title} onToggle={fav.toggle} />
+        </>
+      }
+      facts={
+        <>
+          <span className="font-mono tabular-nums">{shortId(row.tokenId, 6)}</span>
+          {key !== "holders" ? (
+            <FeedCount k="feed.holders" n={row.holders ?? 0} />
+          ) : null}
+          {key !== "txs" ? (
+            <FeedCount k="feed.txCount" n={row.txCount ?? 0} className="feed-mid" />
+          ) : null}
+          {key !== "supply" && supply ? (
+            <span className="feed-wide" title={supply.exact}>
+              {t("feed.supply")} <span className="tabular-nums">{supply.text}</span>
+            </span>
+          ) : null}
+          {key !== "last" ? (
+            <span>
+              <FeedPhrase text={t("feed.active")} value={active} />
+            </span>
+          ) : null}
+          {key !== "first" ? (
+            <span className="feed-wide">
+              <FeedPhrase text={t("feed.created")} value={created} />
+            </span>
+          ) : null}
+        </>
+      }
+      value={
+        <span
+          className="feed-amt tabular-nums"
+          title={key === "supply" ? supply?.exact : undefined}
+          suppressHydrationWarning
+        >
+          {value}
+        </span>
+      }
+      sub={t(`feed.sort.${key}`)}
+      subMinor
+      detail={() => (
+        <FeedFields>
+          <FeedField label={t("tokens.colPolicy")} wide>
+            <FeedIdLine href={href} id={row.tokenId} />
+          </FeedField>
+          <FeedField label={t("tokens.colSupply")}>
+            <span className="tabular-nums">{supplyRaw == null ? "—" : formatScaledAmount(supplyRaw, row.decimals ?? 0, tag)}</span>
+          </FeedField>
+          <FeedField label={t("token.decimals")}>
+            <span className="tabular-nums">{row.decimals ?? 0}</span>
+          </FeedField>
+          <FeedField label={t("tokens.colHolders")}>
+            <span className="tabular-nums">
+              {holders}
+              {row.unspentBoxes != null ? (
+                <span className="text-[var(--muted-2)]"> · {tn("feed.boxes", row.unspentBoxes, row.unspentBoxes.toLocaleString(tag))}</span>
+              ) : null}
+            </span>
+          </FeedField>
+          <FeedField label={t("feed.sort.txs")}>
+            <span className="tabular-nums">{txs}</span>
+          </FeedField>
+          <FeedField label={t("feed.sort.first")}>
+            <span className="tabular-nums" suppressHydrationWarning>
+              {row.firstTs != null ? formatTs(row.firstTs) : "—"}
+              {row.firstHeight != null ? <span className="text-[var(--muted-2)]"> · #{row.firstHeight.toLocaleString(tag)}</span> : null}
+            </span>
+          </FeedField>
+          <FeedField label={t("feed.sort.last")}>
+            <span className="tabular-nums" suppressHydrationWarning>
+              {lastTs != null ? formatTs(lastTs) : "—"}
+              {row.lastHeight != null ? <span className="text-[var(--muted-2)]"> · #{row.lastHeight.toLocaleString(tag)}</span> : null}
+            </span>
+          </FeedField>
+        </FeedFields>
+      )}
+    />
   );
 }
 

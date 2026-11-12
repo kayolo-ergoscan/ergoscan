@@ -15,9 +15,9 @@ import {
   SITE_URL,
 } from "@/lib/site-meta";
 import { INK_BOOT } from "@/lib/skin-ink";
-import { LOOK_BOOT } from "@/lib/look";
 import "./globals.css";
 import "./looks.css";
+import "./feed.css";
 
 /** T1 default — Plex Sans has Cyrillic and `tnum`. */
 const sans = IBM_Plex_Sans({
@@ -116,11 +116,11 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#eceaf0" },
-    { media: "(prefers-color-scheme: dark)", color: "#1c1b22" },
-    { color: "#1c1b22" },
+    { media: "(prefers-color-scheme: light)", color: "#0e0e0e" },
+    { media: "(prefers-color-scheme: dark)", color: "#0e0e0e" },
+    { color: "#0e0e0e" },
   ],
-  colorScheme: "dark light",
+  colorScheme: "dark",
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
@@ -136,14 +136,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       data-stamp="rail"
       data-float="ada"
       data-ink="oled"
+      data-look="c"
+      data-figs="mono"
       className={`dark ${sans.variable} ${faceT0.variable} ${faceT2.variable} ${mono.variable} ${faceT2Mono.variable}`}
     >
       <head>
         <Script id="ergoscan-ink" strategy="beforeInteractive">
           {INK_BOOT}
-        </Script>
-        <Script id="ergoscan-look" strategy="beforeInteractive">
-          {LOOK_BOOT}
         </Script>
       </head>
       <body className="antialiased">

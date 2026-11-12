@@ -1,9 +1,6 @@
 /*
- * Design-direction concepts — `?look=a|b|c` (`?look=off` clears).
- * Same pages, same layout, same data. Only the visual language changes.
- *   A  Ledger    — paper, ink, vermilion and cobalt. Rules, not cards.
- *   B  Blueprint — cyanotype field, white line work, drafting marks.
- *   C  Signal    — black panel, one flat colour per chain entity.
+ * The site look, «Сигнал» (`data-look="c"` on <html>, set in the root layout):
+ * black panel, one flat colour per chain entity, every figure in mono.
  * Tile labels: `HOME.forming` resolves to `var(--tile-label)`; the inline
  * style is also the hook (`[style*="tile-label"]`).
  */
@@ -20,445 +17,6 @@ html[data-look] .addr-head,
 html[data-look] .price-tape,
 html[data-look] .explorer-dock {
   transition: none;
-}
-
-/* ═════════════════════════ A · LEDGER ═════════════════════════ */
-
-html[data-look="a"][data-ink] {
-  --bg: #efebe2;
-  --module: #fffdf8;
-  --bg-elevated: #fffdf8;
-  --panel: #fffdf8;
-  --panel-hover: #f7f3ea;
-  --border: #d9d1c0;
-  --border-soft: #cddbec;
-  --text: #17150f;
-  --muted: #4d483e;
-  --muted-2: #655f52;
-  --link: #1d47d0;
-  --accent: #1d47d0;
-  --accent-rgb: 29 71 208;
-  --accent-soft: rgba(29, 71, 208, 0.12);
-  --brand: #1d47d0;
-  --brand-soft: rgba(29, 71, 208, 0.1);
-  --soft: #1d47d0;
-  --soft-rgb: 29 71 208;
-  --up: #0f7a3d;
-  --up-rgb: 15 122 61;
-  --down: #c4161c;
-  --down-rgb: 196 22 28;
-  --warning: #8a5a00;
-  --invert: #17150f;
-  --invert-fg: #fffdf8;
-  --module-rgb: 255 253 248;
-  --panel-rgb: 255 253 248;
-  --border-rgb: 23 21 15;
-  --wash-faint: rgba(23, 21, 15, 0.035);
-  --wash: rgba(23, 21, 15, 0.055);
-  --wash-mid: rgba(23, 21, 15, 0.09);
-  --wash-strong: rgba(23, 21, 15, 0.14);
-  --hair: rgba(23, 21, 15, 0.22);
-  --radius: 4px;
-  --radius-sm: 3px;
-  --float-shadow: none;
-  --float-shadow-hover: 0 0 0 1px #17150f;
-  --float-shadow-press: inset 0 0 0 1px #17150f;
-  --tile-label: #c02d17;
-  --vermilion: #c02d17;
-  --ledger-rule: #cddbec;
-  --font-sans: var(--font-face-t0);
-}
-
-html[data-look="a"] body {
-  font-family: var(--font-face-t0), ui-sans-serif, system-ui, sans-serif;
-  background: var(--bg);
-}
-
-/* Figures are typed, like an adding-machine tape. */
-html[data-look="a"] .tabular-nums {
-  font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
-  letter-spacing: -0.035em;
-}
-
-/* Sheets: paper on the desk, a ruled edge, no lift. */
-html[data-look="a"] .mod,
-html[data-look="a"] .kpi-tile,
-html[data-look="a"] .glass,
-html[data-look="a"] .glass-static,
-html[data-look="a"] .soft-table,
-html[data-look="a"] .supply-card,
-html[data-look="a"] .box-plate,
-html[data-look="a"] .addr-nft-card,
-html[data-look="a"] .addr-qr-tile,
-html[data-look="a"] .seg-paper {
-  border: 1px solid var(--border) !important;
-  border-radius: var(--radius) !important;
-  box-shadow: none !important;
-}
-html[data-look="a"] .mod > div {
-  border-radius: var(--radius);
-}
-
-@media (min-width: 1024px) {
-  html[data-look="a"] .nav-rail,
-  html[data-look="a"] .stage-col > header.sticky {
-    border: 1px solid var(--border) !important;
-    border-radius: var(--radius) !important;
-    box-shadow: none !important;
-  }
-}
-
-/* Labels: vermilion small capitals, the ledger's column heads. */
-html[data-look="a"] main [style*="tile-label"]:not([style*="background"]) {
-  font-size: 11px !important;
-  font-weight: 600;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-}
-
-/* KPI marks: a rubber stamp, not a tinted bubble. */
-html[data-look="a"] .kpi-tile-mark {
-  background: transparent !important;
-  box-shadow: inset 0 0 0 1.5px var(--vermilion);
-}
-html[data-look="a"] .kpi-tile-mark svg {
-  color: var(--vermilion) !important;
-}
-
-/* Header figures */
-html[data-look="a"] [data-scout="price"],
-html[data-look="a"] [data-scout="mcap"] {
-  color: var(--text) !important;
-  font-family: var(--font-mono), ui-monospace, monospace;
-}
-
-/* Brand: ERGO in vermilion, SCAN ME in ink. Corners in ink. */
-html[data-look="a"] .nav-scan-corner path {
-  stroke: var(--text);
-}
-html[data-look="a"] .nav-scan-word .nav-line > .nav-line:nth-child(2),
-html[data-look="a"] .nav-scan-word .nav-line > .nav-line:nth-child(3) {
-  color: var(--text) !important;
-}
-
-/* Nav: ink glyphs; the open page is printed in reverse. */
-html[data-look="a"] .nav-row .nav-glyph svg {
-  color: var(--text);
-}
-html[data-look="a"] .nav-row {
-  border-radius: 3px;
-}
-html[data-look="a"] .nav-row.is-pressed,
-html[data-look="a"] .nav-row[aria-current="page"] {
-  background: var(--text) !important;
-  color: var(--module) !important;
-  box-shadow: none !important;
-}
-html[data-look="a"] .nav-row[aria-current="page"] .nav-glyph svg {
-  color: var(--module);
-}
-html[data-look="a"] .nav-rule {
-  background: var(--border);
-}
-
-/* Column heads: a double rule, like the top of a ledger page. */
-html[data-look="a"] .addr-head,
-html[data-look="a"] .addr-head th {
-  background: var(--bg) !important;
-  border-radius: 0 !important;
-  box-shadow: none !important;
-  outline: none !important;
-}
-html[data-look="a"] .addr-head {
-  border-top: 3px double var(--text);
-  border-bottom: 1px solid var(--text);
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  font-size: 11px !important;
-}
-html[data-look="a"] .addr-head.is-stuck {
-  background: var(--bg) !important;
-}
-/* Rows: blue ledger rules. */
-html[data-look="a"] .addr-sheet .border-t,
-html[data-look="a"] .addr-sheet [class*="border-[var(--border-soft)]"] {
-  border-color: var(--ledger-rule) !important;
-}
-/* Red margin: the double line every ledger page carries. */
-html[data-look="a"] .addr-sheet {
-  background:
-    linear-gradient(var(--vermilion), var(--vermilion)) 0 0 / 1px 100% no-repeat,
-    linear-gradient(var(--vermilion), var(--vermilion)) 4px 0 / 1px 100% no-repeat;
-  padding-left: 9px;
-}
-
-/* Ticker tape: the one black band on the page. */
-html[data-look="a"] .price-tape {
-  background: #17150f;
-  border-radius: var(--radius);
-}
-html[data-look="a"] .explorer-dock {
-  box-shadow: none !important;
-}
-html[data-look="a"] .price-tape-chip,
-html[data-look="a"] .price-tape-px {
-  color: #fffdf8;
-}
-html[data-look="a"] .price-tape-sym {
-  color: #ffb199 !important;
-}
-html[data-look="a"] .price-tape-chg.is-up { color: #7fe0a6; }
-html[data-look="a"] .price-tape-chg.is-down { color: #ff9b8c; }
-html[data-look="a"] .price-tape-chip:hover { background: rgba(255, 253, 248, 0.08); }
-
-/* Fills and gauges in ink */
-html[data-look="a"] .epoch-tape {
-  background: var(--wash-mid) !important;
-  border-radius: 0 !important;
-}
-html[data-look="a"] .epoch-tape-fill {
-  background: var(--text) !important;
-  box-shadow: none !important;
-  border-radius: 0 !important;
-}
-
-html[data-look="a"] .sheet-spin img {
-  filter: brightness(0);
-  opacity: 0.07;
-}
-
-html[data-look="a"] ::selection {
-  background: #ffd9a8;
-  color: #17150f;
-}
-
-/* ═════════════════════════ B · BLUEPRINT ═════════════════════════ */
-
-html[data-look="b"][data-ink] {
-  --bg: #174a9c;
-  --module: #113d86;
-  --bg-elevated: #113d86;
-  --panel: #113d86;
-  --panel-hover: #0d3577;
-  --border: rgba(255, 255, 255, 0.34);
-  --border-soft: rgba(255, 255, 255, 0.26);
-  --text: #ffffff;
-  --muted: #d7e4fa;
-  --muted-2: #b9cff2;
-  --link: #ffe066;
-  --accent: #ffe066;
-  --accent-rgb: 255 224 102;
-  --accent-soft: rgba(255, 224, 102, 0.2);
-  --brand: #ffe066;
-  --brand-soft: rgba(255, 224, 102, 0.16);
-  --soft: #ffe066;
-  --soft-rgb: 255 224 102;
-  --up: #93f0c1;
-  --up-rgb: 147 240 193;
-  --down: #ffaa9c;
-  --down-rgb: 255 170 156;
-  --warning: #ffd08a;
-  --invert: #ffffff;
-  --invert-fg: #113d86;
-  --module-rgb: 17 61 134;
-  --panel-rgb: 17 61 134;
-  --border-rgb: 255 255 255;
-  --wash-faint: rgba(255, 255, 255, 0.05);
-  --wash: rgba(255, 255, 255, 0.08);
-  --wash-mid: rgba(255, 255, 255, 0.13);
-  --wash-strong: rgba(255, 255, 255, 0.2);
-  --hair: rgba(255, 255, 255, 0.4);
-  --scrim: rgba(6, 22, 52, 0.6);
-  --radius: 2px;
-  --radius-sm: 2px;
-  --float-shadow: none;
-  --float-shadow-hover: none;
-  --float-shadow-press: inset 0 0 0 1px rgba(255, 255, 255, 0.6);
-  --tile-label: #ffb59c;
-  --tick: rgba(255, 255, 255, 0.95);
-  --grid-minor: rgba(255, 255, 255, 0.055);
-  --grid-major: rgba(255, 255, 255, 0.11);
-  color-scheme: dark;
-}
-
-/* The drawing sheet: minor grid every 24px, major every 120px. */
-html[data-look="b"] body {
-  font-family: var(--font-face-t2), ui-sans-serif, system-ui, sans-serif;
-  background-color: var(--bg);
-  background-image:
-    linear-gradient(var(--grid-major) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid-major) 1px, transparent 1px),
-    linear-gradient(var(--grid-minor) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid-minor) 1px, transparent 1px);
-  background-size: 120px 120px, 120px 120px, 24px 24px, 24px 24px;
-  background-attachment: fixed;
-}
-
-html[data-look="b"] .tabular-nums {
-  font-family: var(--font-face-t2), ui-sans-serif, system-ui, sans-serif;
-}
-html[data-look="b"] .mono,
-html[data-look="b"] .font-mono {
-  font-family: var(--font-t2-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-
-/* Plates: a hairline frame plus registration ticks at each corner. */
-html[data-look="b"] .mod,
-html[data-look="b"] .kpi-tile,
-html[data-look="b"] .glass,
-html[data-look="b"] .glass-static,
-html[data-look="b"] .soft-table,
-html[data-look="b"] .supply-card,
-html[data-look="b"] .box-plate,
-html[data-look="b"] .seg-paper,
-html[data-look="b"] .addr-nft-card,
-html[data-look="b"] .addr-qr-tile {
-  border: 1px solid var(--border) !important;
-  border-radius: var(--radius) !important;
-  box-shadow: none !important;
-  background-color: var(--module) !important;
-  background-image:
-    linear-gradient(var(--tick), var(--tick)),
-    linear-gradient(var(--tick), var(--tick)),
-    linear-gradient(var(--tick), var(--tick)),
-    linear-gradient(var(--tick), var(--tick)),
-    linear-gradient(var(--tick), var(--tick)),
-    linear-gradient(var(--tick), var(--tick)),
-    linear-gradient(var(--tick), var(--tick)),
-    linear-gradient(var(--tick), var(--tick)) !important;
-  background-repeat: no-repeat !important;
-  background-position:
-    -1px -1px, -1px -1px,
-    calc(100% + 1px) -1px, calc(100% + 1px) -1px,
-    -1px calc(100% + 1px), -1px calc(100% + 1px),
-    calc(100% + 1px) calc(100% + 1px), calc(100% + 1px) calc(100% + 1px) !important;
-  background-size:
-    10px 2px, 2px 10px,
-    10px 2px, 2px 10px,
-    10px 2px, 2px 10px,
-    10px 2px, 2px 10px !important;
-  background-origin: border-box !important;
-}
-html[data-look="b"] .mod > div {
-  border-radius: var(--radius);
-}
-
-@media (min-width: 1024px) {
-  html[data-look="b"] .nav-rail,
-  html[data-look="b"] .stage-col > header.sticky {
-    border: 1px solid var(--border) !important;
-    border-radius: var(--radius) !important;
-    box-shadow: none !important;
-    background: var(--module) !important;
-  }
-}
-
-/* Labels: drawing annotations. */
-html[data-look="b"] main [style*="tile-label"]:not([style*="background"]) {
-  font-family: var(--font-t2-mono), ui-monospace, monospace;
-  font-size: 11px !important;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-html[data-look="b"] .kpi-tile-mark {
-  background: transparent !important;
-  border-radius: 0 !important;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55);
-}
-html[data-look="b"] .kpi-tile-mark svg {
-  color: #ffffff !important;
-}
-
-html[data-look="b"] [data-scout="price"],
-html[data-look="b"] [data-scout="mcap"] {
-  color: var(--accent) !important;
-}
-
-html[data-look="b"] .nav-scan-corner path {
-  stroke: #ffffff;
-}
-html[data-look="b"] .nav-scan-word .nav-line > .nav-line:nth-child(1) {
-  color: #ffffff !important;
-}
-html[data-look="b"] .nav-scan-word .nav-line > .nav-line:nth-child(2) {
-  color: var(--accent) !important;
-}
-html[data-look="b"] .nav-scan-word .nav-line > .nav-line:nth-child(3) {
-  color: #ffffff !important;
-}
-
-html[data-look="b"] .nav-row .nav-glyph svg {
-  color: #ffffff;
-}
-html[data-look="b"] .nav-row {
-  border-radius: 2px;
-}
-html[data-look="b"] .nav-row.is-pressed,
-html[data-look="b"] .nav-row[aria-current="page"] {
-  background: #ffffff !important;
-  color: #113d86 !important;
-  box-shadow: none !important;
-}
-html[data-look="b"] .nav-row[aria-current="page"] .nav-glyph svg {
-  color: #113d86;
-}
-html[data-look="b"] .nav-rule {
-  background: var(--border);
-}
-
-html[data-look="b"] .addr-head {
-  border: 1px solid var(--border);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-size: 11px !important;
-  font-family: var(--font-t2-mono), ui-monospace, monospace;
-}
-html[data-look="b"] .addr-head,
-html[data-look="b"] .addr-head th {
-  border-radius: var(--radius) !important;
-  box-shadow: none !important;
-  outline: none !important;
-}
-/* Rows: dashed construction lines. */
-html[data-look="b"] .addr-sheet .border-t {
-  border-top-style: dashed !important;
-  border-color: rgba(255, 255, 255, 0.3) !important;
-}
-
-html[data-look="b"] .price-tape {
-  background: var(--module);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-}
-html[data-look="b"] .explorer-dock {
-  box-shadow: none !important;
-}
-html[data-look="b"] .price-tape-sym {
-  color: #a9dcff !important;
-}
-html[data-look="b"] .price-tape-chg.is-up { color: var(--up); }
-
-html[data-look="b"] .epoch-tape {
-  background: transparent !important;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.5) !important;
-  border-radius: 0 !important;
-}
-html[data-look="b"] .epoch-tape-fill {
-  background: repeating-linear-gradient(-45deg, #ffffff 0 2px, transparent 2px 6px) !important;
-  box-shadow: none !important;
-  border-radius: 0 !important;
-}
-
-html[data-look="b"] .sheet-spin img {
-  filter: brightness(0) invert(1);
-  opacity: 0.16;
-}
-
-html[data-look="b"] ::selection {
-  background: #ffe066;
-  color: #113d86;
 }
 
 /* ═════════════════════════ C · SIGNAL ═════════════════════════ */
@@ -514,6 +72,28 @@ html[data-look="c"][data-ink] {
   --tag-ink: #f2f2f2;
   --mark: #e6e6e6;
   --tile-label: #ffffff;
+  /* Feed rows: one tile colour per kind of thing, black ink on every light tile. */
+  --k-transfer: var(--c-tx);
+  --k-token: var(--c-token);
+  --k-nft: #c08cff;
+  --k-defi: var(--c-net);
+  --k-oracle: #b9c4d0;
+  --k-bridge: #e6e6e6;
+  --k-reward: var(--c-block);
+  --k-rent: #ff8a65;
+  --k-contract: var(--c-addr);
+  --k-mixer: #8a8a8a;
+  --k-quiet: #2f2f2f;
+  --k-ink: #0e0e0e;
+  --k-quiet-ink: #ffffff;
+  --row-hover: #1f1f1f;
+  --row-open: #202020;
+  --detail-bg: #151515;
+  --chip-bg: #262626;
+  --chip-hover: #303030;
+  --plate-now: #ffffff;
+  --plate-now-ink: #0e0e0e;
+  --skel: #262626;
   color-scheme: dark;
 }
 
@@ -682,20 +262,6 @@ html[data-look="c"] main [style*="#ff8a65"]:not([style*="tile-label"]),
 html[data-look="c"] main [style*="255, 138, 101"] {
   color: var(--c-tx) !important;
 }
-html[data-look="a"] main [style*="#ff8a65"]:not([style*="tile-label"]),
-html[data-look="a"] main [style*="255, 138, 101"] {
-  color: var(--vermilion) !important;
-}
-html[data-look="b"] main [style*="#ff8a65"]:not([style*="tile-label"]),
-html[data-look="b"] main [style*="255, 138, 101"] {
-  color: #ffb59c !important;
-}
-html[data-look="a"] main [style*="background"][style*="tile-label"] {
-  background: var(--vermilion) !important;
-}
-html[data-look="b"] main [style*="background"][style*="tile-label"] {
-  background: var(--accent) !important;
-}
 
 /* Big figures, set heavier and tighter. */
 html[data-look="c"] .kpi-tile .font-semibold {
@@ -741,97 +307,13 @@ html[data-look="c"] ::selection {
   color: #0e0e0e;
 }
 
-/* ───────────────────── refinements (all looks) ───────────────────── */
+/* ───────────────────── refinements ───────────────────── */
 
 /* The header scout canvas carries the robot only. */
 html[data-look] .stage-col > header > canvas[aria-hidden] {
   display: none;
 }
 
-/* ── A ── */
-html[data-look="a"] .sheet-spin {
-  display: none;
-}
-html[data-look="a"] main [style*="#f0c14a"],
-html[data-look="a"] main [style*="240, 193, 74"] {
-  color: #8a5a00 !important;
-}
-html[data-look="a"] .block-size-track {
-  background: transparent;
-  border-radius: 0;
-  box-shadow: inset 0 0 0 1px var(--border);
-}
-html[data-look="a"] .block-size-liquid {
-  background: var(--accent);
-}
-html[data-look="a"] .block-size-waves {
-  display: none;
-}
-html[data-look="a"] .block-size-pct {
-  color: var(--text);
-  text-shadow: 0 0 3px var(--module), 0 0 2px var(--module);
-  font-family: var(--font-mono), ui-monospace, monospace;
-}
-html[data-look="a"] .seg-on,
-html[data-look="a"][data-float] .seg-on {
-  background: var(--text) !important;
-  color: var(--module) !important;
-  box-shadow: none !important;
-}
-/* Running head: the page name set like a newspaper section. */
-html[data-look="a"] [data-scout="title"] {
-  font-size: 15px !important;
-  letter-spacing: 0.16em !important;
-  text-transform: uppercase;
-}
-html[data-look="a"] .page-tail span[style] {
-  color: var(--text) !important;
-}
-html[data-look="a"] .page-tail span[style]:first-child {
-  color: var(--vermilion) !important;
-}
-
-/* ── B ── */
-/* The wordmark keeps its own face, so its letter fade still fits. */
-html[data-look="b"] .nav-scan {
-  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
-}
-html[data-look="b"] .font-sans {
-  font-family: var(--font-face-t2), ui-sans-serif, system-ui, sans-serif;
-}
-html[data-look="b"] .seg-on,
-html[data-look="b"][data-float] .seg-on {
-  background: #ffffff !important;
-  color: #113d86 !important;
-  box-shadow: none !important;
-}
-html[data-look="b"] .block-size-track {
-  background: transparent;
-  border-radius: 0;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.5);
-}
-html[data-look="b"] .block-size-liquid {
-  background: repeating-linear-gradient(-45deg, #ffffff 0 1.5px, transparent 1.5px 4.5px);
-}
-html[data-look="b"] .block-size-waves {
-  display: none;
-}
-html[data-look="b"] .block-size-pct {
-  text-shadow: 0 0 3px #113d86, 0 0 2px #113d86;
-  font-family: var(--font-t2-mono), ui-monospace, monospace;
-}
-html[data-look="b"] [data-scout="title"] {
-  font-family: var(--font-t2-mono), ui-monospace, monospace;
-  font-size: 15px !important;
-  font-weight: 500 !important;
-  letter-spacing: 0.12em !important;
-  text-transform: uppercase;
-}
-html[data-look="b"] .page-tail span[style] {
-  color: #ffffff !important;
-}
-
-/* ── C ── */
 html[data-look="c"] .seg-on,
 html[data-look="c"][data-float] .seg-on {
   background: #ffffff !important;
@@ -856,36 +338,7 @@ html[data-look="c"] .page-tail span[style]:nth-child(1) { color: var(--c-tx) !im
 html[data-look="c"] .page-tail span[style]:nth-child(2) { color: var(--c-block) !important; }
 html[data-look="c"] .page-tail span[style]:nth-child(3) { color: #ffffff !important; }
 
-/* Big typed figures stay inside phone tiles. */
-html[data-look="a"] .tabular-nums.font-semibold,
-html[data-look="a"] .font-semibold .tabular-nums,
-html[data-look="a"] .font-semibold.tabular-nums .kpi-scale-up {
-  letter-spacing: -0.065em;
-}
-
 /* Phone tab bar: the open tab is printed like the open nav row. */
-html[data-look="a"] .phone-tabbar a[aria-current="page"] {
-  background: var(--text);
-  color: var(--module) !important;
-  box-shadow: none !important;
-}
-html[data-look="a"] .phone-tabbar a[aria-current="page"] svg {
-  color: var(--module);
-}
-html[data-look="a"] .phone-tabbar svg {
-  color: var(--text);
-}
-html[data-look="b"] .phone-tabbar a[aria-current="page"] {
-  background: #ffffff;
-  color: #113d86 !important;
-  box-shadow: none !important;
-}
-html[data-look="b"] .phone-tabbar a[aria-current="page"] svg {
-  color: #113d86;
-}
-html[data-look="b"] .phone-tabbar svg {
-  color: #ffffff;
-}
 html[data-look="c"] .phone-tabbar a[aria-current="page"] {
   background: #ffffff;
   color: #0e0e0e !important;
@@ -898,37 +351,15 @@ html[data-look="c"] .phone-tabbar a[href="/transactions"] svg { color: var(--c-t
 html[data-look="c"] .phone-tabbar a[aria-current="page"] svg { color: #0e0e0e !important; }
 
 /* Market-cap rank chip */
-html[data-look="a"] .mcap-rank {
-  color: var(--vermilion);
-  background: transparent;
-  box-shadow: inset 0 0 0 1px var(--vermilion);
-  border-radius: 2px !important;
-  font-family: var(--font-mono), ui-monospace, monospace;
-}
-html[data-look="b"] .mcap-rank {
-  color: #ffffff;
-  background: transparent;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.7);
-  border-radius: 0 !important;
-}
 html[data-look="c"] .mcap-rank {
   color: #0e0e0e;
   background: #ffffff;
   border-radius: 4px !important;
 }
-html[data-look="a"] .mcap-vol { color: var(--accent); }
-html[data-look="b"] .mcap-vol { color: var(--accent); }
 html[data-look="c"] .mcap-vol { color: var(--c-token); }
 
-/* Typed figures are wider than the sans; give them room on a phone. */
-@media (max-width: 639px) {
-  html[data-look="a"] .home-kpi .kpi-scale-up {
-    font-size: 0.86em;
-  }
-}
-
-/* ── C + mono figures (?look=cm → data-look="c" + data-figs="mono") ── */
-/* Text stays in C's sans; every figure is typed in Plex Mono, A's adding-machine digits. */
+/* ── Mono figures (data-figs="mono") ── */
+/* Text stays in the sans; every figure is typed in Plex Mono, like an adding-machine tape. */
 html[data-look="c"][data-figs="mono"] {
   --chart-font: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
 }
@@ -977,50 +408,28 @@ html[data-look="c"] .addr-page h1.font-mono .name-marquee-inner {
 html[data-look="c"] .addr-page h1.font-mono .name-marquee-inner + .name-marquee-inner {
   display: none;
 }
-/* Address tabs size to their words, so «Активность» is not cut in Russian. */
-html[data-look="c"] .addr-seg.seg-paper {
+/* Address and token tabs size to their words, so «Активность» and «Transactions» are not cut. */
+html[data-look="c"] .addr-seg.seg-paper,
+html[data-look="c"] .tab-fit.seg-paper {
   grid-template-columns: auto auto auto auto;
 }
-html[data-look="c"] .addr-seg.seg-paper > :where(a, button) {
+html[data-look="c"] .addr-seg.seg-paper > :where(a, button),
+html[data-look="c"] .tab-fit.seg-paper > :where(a, button) {
   padding-left: 0.4rem;
   padding-right: 0.4rem;
+}
+/* Token tabs sit in a narrow card: when the words do not fit one line
+   («Выпуск / сжигание»), the last tab wraps to a full-width second line
+   instead of being cut. */
+html[data-look="c"] .tab-fit.seg-paper {
+  display: flex;
+  flex-wrap: wrap;
+}
+html[data-look="c"] .tab-fit.seg-paper > :where(a, button) {
+  flex: 1 1 auto;
+  white-space: nowrap;
 }
 /* The whole address is the title now; the short copy under it would repeat it. */
 html[data-look="c"] .addr-page h1.font-mono + p > code {
   display: none;
 }
-
-/* Activity proposals in C: direction is a solid signal tile, heads are tags. */
-html[data-look="c"] .act-dir {
-  border-radius: 4px;
-  background: #2f2f2f;
-  color: #ffffff;
-}
-html[data-look="c"] .act-dir.is-in { background: var(--up); color: #0e0e0e; }
-html[data-look="c"] .act-dir.is-out { background: var(--down); color: #0e0e0e; }
-html[data-look="c"] .act-dir.is-swap { background: var(--c-token); color: #0e0e0e; }
-html[data-look="c"] .act-chip {
-  border-radius: 4px;
-  background: #262626;
-}
-html[data-look="c"] .act-chip:hover { background: #303030; }
-html[data-look="c"] .act-day-tag {
-  padding: 3px 7px;
-  border-radius: 4px;
-  background: var(--tag);
-  color: var(--tag-ink);
-  font-size: 12px;
-  line-height: 1.1;
-}
-html[data-look="c"] .act-day:first-child .act-day-tag {
-  background: #ffffff;
-  color: #0e0e0e;
-}
-html[data-look="c"] .act-thead {
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-size: 11px;
-}
-html[data-look="c"] .act-tr:hover,
-html[data-look="c"] .act-tbody.is-open .act-tr { background: #202020; }
-html[data-look="c"] .act-detail { background: #151515; }

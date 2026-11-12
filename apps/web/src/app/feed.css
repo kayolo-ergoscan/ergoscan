@@ -1,0 +1,812 @@
+/*
+ * Feed: the one list system (components/feed/Feed.tsx).
+ * Layout only. Every colour is a token from looks.css; no hex here.
+ *
+ * Row grid: lead · tile · main · end (chips, value) · caret
+ *           detail spans main → caret under a trace that drops from the tile.
+ */
+
+.feed {
+  --k: var(--k-quiet);
+  --k-fg: var(--k-quiet-ink);
+  --feed-lead: 4.75rem;
+  --feed-pin: calc(var(--toolbar) + env(safe-area-inset-top, 0px) + 8px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: opacity 400ms var(--ease);
+}
+.feed[aria-busy="true"] {
+  opacity: 0.6;
+}
+.feed.is-rank {
+  --feed-lead: 2.75rem;
+}
+.feed.is-index {
+  --feed-lead: 3rem;
+}
+.feed.is-clock {
+  --feed-lead: 3.25rem;
+}
+
+/* Kinds → tile colour. Light tiles carry black ink, the quiet tile white. */
+[data-k] { --k-fg: var(--k-ink); }
+[data-k="transfer"] { --k: var(--k-transfer); }
+[data-k="token"] { --k: var(--k-token); }
+[data-k="nft"] { --k: var(--k-nft); }
+[data-k="defi"],
+[data-k="stable"] { --k: var(--k-defi); }
+[data-k="oracle"] { --k: var(--k-oracle); }
+[data-k="bridge"],
+[data-k="exchange"] { --k: var(--k-bridge); }
+[data-k="reward"],
+[data-k="block"] { --k: var(--k-reward); }
+[data-k="rent"] { --k: var(--k-rent); }
+[data-k="contract"],
+[data-k="addr"] { --k: var(--k-contract); }
+[data-k="mixer"] { --k: var(--k-mixer); }
+[data-k="in"],
+[data-k="mint"] { --k: var(--up); }
+[data-k="out"],
+[data-k="burn"] { --k: var(--down); }
+[data-k="swap"] { --k: var(--k-token); }
+[data-k="self"],
+[data-k="quiet"] { --k: var(--k-quiet); --k-fg: var(--k-quiet-ink); }
+
+.feed-sheet {
+  position: relative;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* The kind word in a row's facts takes its tile's colour. */
+.feed-kind {
+  color: var(--k);
+}
+[data-k="self"] .feed-kind,
+[data-k="quiet"] .feed-kind {
+  color: var(--muted-2);
+}
+
+/* ── card + plate ── */
+
+.feed-day {
+  border-radius: var(--radius);
+  background: var(--module);
+}
+.feed-plate {
+  position: sticky;
+  top: var(--feed-pin);
+  z-index: 12;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  min-height: 2.75rem;
+  padding: 6px 10px 6px 14px;
+  border-radius: var(--radius) var(--radius) 0 0;
+  background: var(--module);
+  box-shadow: 0 1px 0 var(--border-soft);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.feed-plate-tag {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: var(--tag);
+  color: var(--tag-ink);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+.feed-plate.is-now .feed-plate-tag {
+  background: var(--plate-now);
+  color: var(--plate-now-ink);
+}
+.feed-plate-date {
+  color: var(--text);
+}
+.feed-plate-count {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--muted-2);
+}
+.feed-plate-end {
+  display: flex;
+  min-width: 0;
+  margin-left: auto;
+  align-items: center;
+  gap: 10px;
+}
+.feed-plate-end .feed-amt {
+  font-size: 13px;
+}
+
+/* ── row ── */
+
+.feed-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.feed-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--feed-lead) 28px minmax(0, 1fr) auto 28px;
+  align-items: center;
+  column-gap: 12px;
+  min-height: 3.5rem;
+  padding: 7px 10px 7px 14px;
+  transition: background-color 160ms var(--ease);
+}
+.feed-row + .feed-row {
+  border-top: 1px solid var(--border-soft);
+}
+.feed-rows > .feed-row:last-child {
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+.feed-row.can-open {
+  cursor: pointer;
+}
+
+/* Lead: time or rank. A run of rows in the same second is bracketed, not repeated. */
+.feed-lead {
+  position: relative;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.feed-lead.is-rank {
+  align-items: flex-end;
+  color: var(--muted-2);
+}
+.feed-lead-sub {
+  font-size: 11px;
+  line-height: 1.1;
+}
+.feed-lead-sub a:hover {
+  text-decoration: underline;
+}
+.feed-lead.is-same {
+  color: transparent;
+}
+.feed-lead.has-more::after,
+.feed-lead.is-same::after {
+  content: "";
+  position: absolute;
+  left: 0.3em;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--hair);
+}
+.feed-lead.has-more:not(.is-same)::after {
+  top: calc(50% + 0.75em);
+  bottom: -8px;
+}
+.feed-lead.has-more.has-sub:not(.is-same)::after {
+  top: calc(50% + 1.6em);
+}
+.feed-lead.is-same.has-more::after {
+  top: -8px;
+  bottom: -8px;
+}
+.feed-lead.is-same:not(.has-more)::after {
+  top: -8px;
+  bottom: calc(50% - 1px);
+}
+.feed-lead.is-same:not(.has-more)::before {
+  content: "";
+  position: absolute;
+  left: 0.3em;
+  top: calc(50% - 1px);
+  width: 0.7em;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--hair);
+}
+
+/* Tile: the anchor. Solid in the kind's colour; hollow until it is in a block. */
+.feed-tile {
+  display: inline-flex;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: var(--k);
+  color: var(--k-fg);
+  transition: box-shadow 160ms var(--ease);
+}
+.feed-tile.is-hollow {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px var(--k);
+  color: var(--k);
+}
+.feed-tile.has-art {
+  overflow: hidden;
+  padding: 3px;
+}
+.feed-tile.has-art > * {
+  border-radius: 3px;
+}
+
+.feed-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+.feed-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+.feed-title > * {
+  min-width: 0;
+}
+.feed-title > .feed-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.feed-facts {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.25;
+  white-space: nowrap;
+  color: var(--muted-2);
+}
+.feed-facts > * {
+  flex: 0 0 auto;
+}
+.feed-facts > :last-child {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.feed-facts > * + *::before {
+  content: "·";
+  padding: 0 7px;
+  color: var(--muted-2);
+}
+.feed-facts > .feed-when {
+  display: none;
+}
+.feed-facts > .feed-when + *::before {
+  content: none;
+}
+/* Title words around a counterparty: "from", "+2". */
+.feed-lead-word,
+.feed-plus {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--muted-2);
+}
+.feed-party {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.feed-party-many {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+}
+/* from → to on one line; each side gives way before the arrow does. */
+.feed-route {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+.feed-route > * {
+  min-width: 0;
+}
+.feed-route-arrow {
+  flex: 0 0 auto;
+  color: var(--muted-2);
+}
+/* The same address on two visible rows lights up as a tag. */
+.feed a[data-addr].is-twin {
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--c-addr);
+  color: var(--k-ink) !important;
+  text-decoration: none;
+}
+.feed-plate-live {
+  font-size: 12px;
+  color: var(--muted-2);
+}
+.feed-facts a {
+  color: inherit;
+}
+.feed-facts a:hover {
+  text-decoration: underline;
+}
+
+.feed-end {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+}
+.feed-chips {
+  display: flex;
+  min-width: 0;
+  max-width: 26rem;
+  justify-content: flex-end;
+}
+.feed-value {
+  display: flex;
+  min-width: 9rem;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  text-align: right;
+}
+.feed-sub {
+  font-size: 12px;
+  color: var(--muted-2);
+  white-space: nowrap;
+}
+
+.feed-amt {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--text);
+}
+.feed-amt.is-up,
+.feed-chip .is-up {
+  color: var(--up);
+}
+.feed-amt.is-down,
+.feed-chip .is-down {
+  color: var(--down);
+}
+.feed-amt.is-zero,
+.feed-amt.is-none {
+  color: var(--muted);
+}
+.feed-unit {
+  margin-left: 0.3em;
+  font-size: 0.86em;
+  font-weight: 500;
+  opacity: 0.72;
+}
+
+/* Chips */
+.feed-chip-run {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+.feed-chip-run.is-open {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.feed-chip {
+  display: inline-flex;
+  min-width: 0;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 8px 0 4px;
+  border-radius: 4px;
+  background: var(--chip-bg);
+  font-size: 12px;
+  white-space: nowrap;
+  color: var(--text);
+  transition: background-color 160ms var(--ease);
+}
+.feed-chip.is-plain {
+  padding: 0 8px;
+  color: var(--muted);
+}
+a.feed-chip:hover,
+button.feed-chip:hover {
+  background: var(--chip-hover);
+}
+.feed-chip-sym {
+  min-width: 0;
+  max-width: 7rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.feed-more-narrow {
+  display: none;
+}
+
+/* Meter: ten steps, lit in the row's colour. */
+.feed-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 24px;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.feed-meter-steps {
+  display: inline-flex;
+  gap: 2px;
+}
+.feed-meter-steps > span {
+  width: 4px;
+  height: 12px;
+  border-radius: 1px;
+  background: var(--skel);
+}
+.feed-meter-steps > .is-lit {
+  background: var(--k);
+}
+.feed-meter-label {
+  min-width: 3.4em;
+  text-align: right;
+}
+
+/* Caret */
+.feed-caret {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  color: var(--muted-2);
+}
+button.feed-caret:hover {
+  background: var(--wash);
+  color: var(--text);
+}
+.feed-caret svg {
+  transition: transform 200ms var(--ease);
+}
+.feed-row.is-open .feed-caret svg {
+  transform: rotate(180deg);
+}
+
+/* Hover locks on: the tile gets a ring in its own colour, a ditto shows its time. */
+@media (hover: hover) {
+  .feed-row:hover {
+    background: var(--row-hover);
+  }
+  .feed-row:hover .feed-tile {
+    box-shadow: 0 0 0 2px var(--row-hover), 0 0 0 4px var(--k);
+  }
+  .feed-row:hover .feed-tile.is-hollow {
+    box-shadow: inset 0 0 0 2px var(--k), 0 0 0 2px var(--row-hover), 0 0 0 4px var(--k);
+  }
+  .feed-row:hover .feed-lead.is-same {
+    color: var(--muted);
+  }
+  .feed-row:hover .feed-lead.is-same::after,
+  .feed-row:hover .feed-lead.is-same::before {
+    opacity: 0;
+  }
+}
+
+/* Open: the row stays locked and a trace drops from the tile into the detail. */
+.feed-row.is-open {
+  background: var(--row-open);
+}
+.feed-row.is-open .feed-tile {
+  box-shadow: 0 0 0 2px var(--row-open), 0 0 0 4px var(--k);
+}
+.feed-row.is-open .feed-tile.is-hollow {
+  box-shadow: inset 0 0 0 2px var(--k), 0 0 0 2px var(--row-open), 0 0 0 4px var(--k);
+}
+.feed-trace {
+  grid-column: 2;
+  grid-row: 2;
+  justify-self: center;
+  align-self: stretch;
+  width: 2px;
+  margin: 8px 0 6px;
+  border-radius: 1px;
+  background: var(--k);
+}
+.feed-detail {
+  grid-column: 3 / -1;
+  grid-row: 2;
+  min-width: 0;
+  padding: 12px 0 8px;
+  cursor: auto;
+}
+.feed-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: 12px 28px;
+  font-size: 13px;
+}
+.feed-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+.feed-field.is-wide {
+  grid-column: 1 / -1;
+}
+.feed-field-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+}
+.feed-field-value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.feed-id-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+.feed-id {
+  word-break: break-all;
+}
+.feed-copy {
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--chip-bg);
+  font-size: 12px;
+  color: var(--muted);
+}
+.feed-copy:hover {
+  background: var(--chip-hover);
+  color: var(--text);
+}
+.feed-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+/* In the detail every chip shows, whatever the width. */
+.feed-detail .feed-chip-run {
+  flex-wrap: wrap;
+}
+.feed-detail .feed-chip-2 {
+  display: inline-flex;
+}
+.feed-detail .feed-more-narrow,
+.feed-detail .feed-more-wide {
+  display: none;
+}
+
+/* Sort chips on a ranked plate */
+.feed-sort {
+  display: flex;
+  min-width: 0;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.feed-sort::-webkit-scrollbar {
+  display: none;
+}
+.feed-sort-chip {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 9px;
+  border-radius: 4px;
+  background: var(--chip-bg);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  transition: background-color 160ms var(--ease), color 160ms var(--ease);
+}
+.feed-sort-chip:hover {
+  background: var(--chip-hover);
+  color: var(--text);
+}
+.feed-sort-chip[aria-pressed="true"] {
+  background: var(--plate-now);
+  color: var(--plate-now-ink);
+}
+
+/* Empty: a hollow tile where the first row would be. */
+.feed-empty {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 4.5rem;
+  padding: 14px;
+}
+.feed-empty-title {
+  font-size: 14px;
+  color: var(--text);
+}
+.feed-empty-hint {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--muted-2);
+}
+
+/* Loading: rows in the feed's shape, breathing in turn. */
+.feed-skel-bar {
+  display: block;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--skel);
+  animation: feed-breathe 1.6s var(--ease) infinite;
+  animation-delay: calc(var(--i, 0) * 90ms);
+}
+.feed-skel-bar.is-tag { width: 4.5rem; height: 18px; }
+.feed-skel-bar.is-date { width: 6rem; }
+.feed-skel-bar.is-lead { width: 3.5rem; align-self: center; }
+.feed-skel-bar.is-title { width: min(16rem, 70%); height: 12px; }
+.feed-skel-bar.is-facts { width: min(24rem, 90%); }
+.feed-skel-bar.is-value { width: 6rem; height: 12px; }
+.feed-tile.is-skel {
+  background: var(--skel);
+  animation: feed-breathe 1.6s var(--ease) infinite;
+  animation-delay: calc(var(--i, 0) * 90ms);
+}
+.feed-row.is-skel {
+  cursor: default;
+}
+@keyframes feed-breathe {
+  50% {
+    opacity: 0.45;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .feed-skel-bar,
+  .feed-tile.is-skel {
+    animation: none;
+  }
+  .feed-row,
+  .feed-tile,
+  .feed-caret svg {
+    transition: none;
+  }
+}
+
+/* Wide facts drop first. */
+@media (max-width: 1279px) {
+  .feed-facts > .feed-wide {
+    display: none;
+  }
+}
+
+@media (max-width: 1023px) {
+  .feed {
+    --feed-pin: calc(var(--toolbar) + 8px);
+    --feed-lead: 4.25rem;
+  }
+  .feed.is-rank {
+    --feed-lead: 2.5rem;
+  }
+  .feed-chip-2,
+  .feed-more-wide {
+    display: none;
+  }
+  .feed-more-narrow {
+    display: inline-flex;
+  }
+  .feed-chip-run.is-open .feed-chip-2 {
+    display: inline-flex;
+  }
+  .feed-facts > .feed-mid {
+    display: none;
+  }
+  .feed-value {
+    min-width: 7rem;
+  }
+}
+
+/* Phone: tile · main · end. The lead joins the facts, value sits over the chips. */
+@media (max-width: 639px) {
+  .feed-plate {
+    gap: 8px;
+    padding: 6px 12px;
+  }
+  .feed-plate-count {
+    display: none;
+  }
+  .feed-plate:has(.feed-sort) .feed-plate-tag {
+    display: none;
+  }
+  .feed-plate:has(.feed-sort) .feed-plate-end {
+    margin-left: 0;
+  }
+  .feed-row {
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    column-gap: 10px;
+    min-height: 3.5rem;
+    padding: 8px 12px;
+  }
+  .feed-lead,
+  .feed-caret {
+    display: none;
+  }
+  .feed-facts > .feed-when {
+    display: inline;
+  }
+  .feed-facts > .feed-when + *::before {
+    content: "·";
+  }
+  .feed-facts > .feed-narrow-off,
+  .feed-kind-head {
+    display: none;
+  }
+  /* Facts wrap instead of being cut. Every fact carries its dot, the line
+     is shifted one dot-width left and that strip is clipped, so no wrapped
+     line starts with a dot. */
+  .feed-facts {
+    flex-wrap: wrap;
+    row-gap: 2px;
+    margin-left: -15px;
+    clip-path: inset(-2px -2px -2px 15px);
+  }
+  .feed-facts > * {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .feed-facts > *::before,
+  .feed-facts > .feed-when + *::before {
+    content: "·";
+    display: inline-block;
+    width: 15px;
+    padding: 0;
+    text-align: center;
+  }
+  .feed-end {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+  }
+  .feed-end > .feed-value {
+    order: -1;
+    min-width: 0;
+  }
+  .feed-chips {
+    max-width: 10.5rem;
+  }
+  .feed-trace {
+    grid-column: 1;
+  }
+  .feed-detail {
+    grid-column: 2 / -1;
+  }
+  .feed-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .feed-amt {
+    font-size: 13px;
+  }
+  .feed-sub.is-minor {
+    display: none;
+  }
+}
+@media (min-width: 640px) {
+  .feed-facts > .feed-phone-only {
+    display: none;
+  }
+}

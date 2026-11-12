@@ -18,11 +18,11 @@ import {
   KpiMarkFootprints,
   KpiMarkScrollText,
   KpiMarkWalletMinimal,
-  KpiMarkWorkflow,
 } from "@/components/kpi-marks";
 import { KpiNum } from "@/components/KpiGrid";
 import { NftCard } from "@/components/NftCard";
-import { ActivityFeed, ActivityTable, useActVariant } from "@/components/AddressActivityAlt";
+import { Feed, FeedEmpty, FeedSkeleton } from "@/components/feed/Feed";
+import { ActivityFeed } from "@/components/feed/FeedActivity";
 import {
   peekAddressPageCache,
   putAddressPageCache,
@@ -34,20 +34,17 @@ import { getGateway, getWsUrl } from "@/lib/config";
 import { TokenLogo } from "@/components/TokenBadge";
 import {
   formatErgPrecise,
-  formatFactWhen,
   formatGroupedNumber,
   formatRelTime,
   formatScaledGlance,
   formatTs,
   nanoToUsd,
-  relAgeTone,
-  relAgeToneClass,
   shortId,
   toBigIntAmt,
   laterEpochMs,
   toEpochMs,
 } from "@/lib/format";
-import { describeParty, isFeeAddress, isP2pkAddress } from "@/lib/address-labels";
+import { describeParty, isP2pkAddress } from "@/lib/address-labels";
 import { suggestNameUrl } from "@/lib/address-book";
 import type { AddressRegistryName } from "@/lib/list-snapshots";
 import { useFavorite } from "@/lib/favorites";
@@ -271,13 +268,6 @@ function loc(locale: string): string {
   return locale === "ru" ? "ru-RU" : "en-US";
 }
 
-function signedErg(nano: bigint, locale?: string): string {
-  const body = formatErgPrecise(nano < 0n ? -nano : nano, locale);
-  if (nano > 0n) return `+${body}`;
-  if (nano < 0n) return `−${body}`;
-  return body;
-}
-
 function signedTokenGlance(
   raw: bigint,
   decimals: number,
@@ -314,7 +304,6 @@ export function AddressView({
   const [tokenOffset, setTokenOffset] = useState(0);
   const [listsPending, setListsPending] = useState(() => !tapeComplete(initial));
   const [stuck, setStuck] = useState(false);
-  const actView = useActVariant();
   const txEnter = useEnterIds();
   const packEnter = useEnterIds();
   const [listReady, setListReady] = useState(false);
@@ -1336,83 +1325,31 @@ export function AddressView({
 
           {tab === "activity" && (
             <div className="addr-facts-body mt-2">
-              {activityFirstWait ? null : err && !tapeRows.length && txPage === 0 ? (
-                <p className="text-[var(--muted)]">{addrFailCopy(err, t)}</p>
+              {activityFirstWait ? (
+                <Feed>
+                  <FeedSkeleton />
+                </Feed>
+              ) : err && !tapeRows.length && txPage === 0 ? (
+                <Feed>
+                  <FeedEmpty k="quiet" title={addrFailCopy(err, t)} />
+                </Feed>
               ) : !tapeRows.length && txPage === 0 ? (
-                <FavKayolo line={t("address.noTxs")} />
+                <Feed>
+                  <FeedEmpty k="addr" title={t("address.noTxs")} />
+                </Feed>
               ) : null}
               {listReady && (tapeRows.length > 0 || txPage > 0) && (
-                <div className="addr-sheet">
+                <div className="feed-sheet">
                   <div ref={pinRef} className="h-px w-full" aria-hidden />
-                  <div className={packEnter.enterClass("pack")}>
-                  {actView ? (
-                    <div
-                      className={clsx(
-                        "act-pan transition-opacity duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
-                        listsPending && "opacity-60"
-                      )}
-                    >
-                      {actView === "a" ? (
-                        <ActivityFeed
-                          rows={tapeRows}
-                          flows={flows}
-                          tokenMeta={tokenMeta}
-                          self={address}
-                          enterClass={txEnter.enterClass}
-                        />
-                      ) : (
-                        <ActivityTable
-                          rows={tapeRows}
-                          flows={flows}
-                          tokenMeta={tokenMeta}
-                          self={address}
-                          enterClass={txEnter.enterClass}
-                        />
-                      )}
-                    </div>
-                  ) : (
-                  <div
-                    className={clsx(
-                      "addr-pan transition-opacity duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
-                      listsPending && "opacity-60"
-                    )}
-                  >
-                    <div
-                      className={clsx("addr-head addr-lane addr-lane-x addr-history", stuck && "is-stuck")}
-                    >
-                      <div className="block-lane-pair">
-                        <span>{t("address.colKind")}</span>
-                        <span className="justify-end tabular-nums">{t("address.colAmount")}</span>
-                      </div>
-                      <div className="min-w-0 justify-end">{t("tx.tab.tokens")}</div>
-                      <div className="block-lane-pair">
-                        <span>{t("address.colFrom")}</span>
-                        <span className="justify-end">{t("address.colTo")}</span>
-                      </div>
-                      <div className="addr-tail">
-                        <span>{t("address.colTx")}</span>
-                        <div className="addr-when-pair">
-                          <span className="justify-end">{t("tx.fee")}</span>
-                          <span className="justify-end tabular-nums">{t("address.colHeight")}</span>
-                          <span className="justify-end">{t("address.colTime")}</span>
-                        </div>
-                      </div>
-                    </div>
-                    {tapeRows.map((tx) => (
-                      <HistoryRow
-                        key={String(tx.id)}
-                        tx={tx}
-                        flow={flows[String(tx.id)]}
-                        locale={locale}
-                        t={t}
-                        tokenMeta={tokenMeta}
-                        selfAddress={address}
-                        enterClass={txEnter.enterClass(String(tx.id))}
-                      />
-                    ))}
-                  </div>
-                  )}
-                  </div>
+                  <Feed busy={listsPending} enterClass={packEnter.enterClass("pack")}>
+                    <ActivityFeed
+                      rows={tapeRows}
+                      flows={flows}
+                      tokenMeta={tokenMeta}
+                      self={address}
+                      enterClass={txEnter.enterClass}
+                    />
+                  </Feed>
                   <RankWindow
                     offset={txPage * TX_PAGE}
                     pageSize={TX_PAGE}
@@ -1871,212 +1808,6 @@ function TokenFlowPeek({
   );
 }
 
-function AddrParty({
-  side,
-  kind,
-  addresses,
-  selfAddress,
-  thisLabel,
-  multipleLabel,
-  multipleHint,
-}: {
-  side: "from" | "to";
-  kind: AddrFlowKind | null;
-  addresses: string[];
-  selfAddress: string;
-  thisLabel: string;
-  multipleLabel: string;
-  multipleHint: string;
-}) {
-  const t = useT();
-  const others: string[] = [];
-  const seen = new Set<string>();
-  let hasSelf = false;
-  for (const raw of addresses) {
-    const address = raw.trim();
-    if (!address || seen.has(address)) continue;
-    seen.add(address);
-    if (address === selfAddress) hasSelf = true;
-    else others.push(address);
-  }
-  const mine =
-    (side === "from" && kind === "sent") ||
-    (side === "to" && kind === "received") ||
-    (others.length === 0 && hasSelf);
-  if (mine) return <span className="addr-this truncate">{thisLabel}</span>;
-  if (others.length > 1) {
-    return (
-      <span className="addr-multi truncate" title={multipleHint}>
-        {multipleLabel}
-      </span>
-    );
-  }
-  if (others.length === 1) {
-    const head = others[0] ?? "";
-    const party = describeParty(head);
-    const name = isFeeAddress(head) ? t("tx.minerFee") : party.known;
-    const label = name || party.short || shortId(head, 6);
-    return (
-      <Link
-        prefetch={false}
-        href={`/address/${encodeURIComponent(head)}`}
-        data-addr={head}
-        title={head}
-        className={clsx(
-          "addr-party min-w-0 max-w-full text-[13px] leading-none hover:underline",
-          name ? "block w-full" : "truncate font-mono",
-          side === "to" && "text-right"
-        )}
-      >
-        {name ? <NameMarquee text={name} className={side === "to" ? "text-right" : undefined} /> : label}
-      </Link>
-    );
-  }
-  return <span className="text-[var(--muted)]">—</span>;
-}
-
-function HistoryRow({
-  tx,
-  flow,
-  locale,
-  t,
-  tokenMeta,
-  selfAddress,
-  enterClass,
-}: {
-  tx: TxRow;
-  flow: AddrFlow | null | undefined;
-  locale: string;
-  t: (k: string) => string;
-  tokenMeta: Map<string, TokenRow>;
-  selfAddress: string;
-  enterClass?: string;
-}) {
-  const kindLabel: Record<AddrFlowKind, string> = {
-    sent: t("address.sent"),
-    received: t("address.received"),
-    intra: t("address.intra"),
-  };
-  const tokenLines = flow
-    ? [...flow.tokens.entries()].filter(([, n]) => n !== 0n)
-    : [];
-  const ms = toEpochMs(tx.timestamp);
-  const amountTone =
-    flow == null
-      ? undefined
-      : flow.erg > 0n
-        ? "up"
-        : flow.erg < 0n
-          ? "down"
-          : undefined;
-
-  return (
-    <div
-      className={clsx(
-        "addr-lane addr-lane-x addr-history border-t border-[var(--border-soft)] py-2.5 text-[13px]",
-        enterClass
-      )}
-    >
-      <div className="block-lane-pair">
-        <div className="flex min-w-0 items-center gap-2 px-3">
-          <FlowMark kind={flow?.kind} />
-          <span className="truncate text-[var(--muted)]">
-            {flow ? kindLabel[flow.kind] : t("detail.tx")}
-          </span>
-        </div>
-        <div className="whitespace-nowrap px-3 text-right">
-          {flow ? (
-            <ErgFigure nano={flow.erg} locale={locale} signed tone={amountTone} size="sm" />
-          ) : (
-            "—"
-          )}
-        </div>
-      </div>
-      <div className="addr-token-cell flex min-w-0 items-center justify-end px-3">
-        <TokenFlowPeek
-          lines={tokenLines}
-          tokenMeta={tokenMeta}
-          locale={locale}
-          moreLabel={t("address.more")}
-        />
-      </div>
-      <div className="block-lane-pair">
-        <div className="flex min-w-0 items-center px-3">
-          <AddrParty
-            side="from"
-            kind={flow?.kind ?? null}
-            addresses={flow?.from ?? []}
-            selfAddress={selfAddress}
-            thisLabel={t("address.thisAddress")}
-            multipleLabel={t("address.multiple")}
-            multipleHint={t("address.multipleHint")}
-          />
-        </div>
-        <div className="flex min-w-0 items-center justify-end px-3">
-          <AddrParty
-            side="to"
-            kind={flow?.kind ?? null}
-            addresses={flow?.to ?? []}
-            selfAddress={selfAddress}
-            thisLabel={t("address.thisAddress")}
-            multipleLabel={t("address.multiple")}
-            multipleHint={t("address.multipleHint")}
-          />
-        </div>
-      </div>
-      <div className="addr-tail">
-        <div className="flex min-w-0 items-center px-3">
-          <Link
-            prefetch={false}
-            href={`/tx/${tx.id}`}
-            className="addr-tx-mark"
-            title={String(tx.id)}
-            aria-label={tx.mempool ? `${String(tx.id)} ${t("address.pending")}` : String(tx.id)}
-          >
-            <KpiMarkWorkflow className="!h-[18px] !w-[18px]" />
-          </Link>
-        </div>
-        <div className="addr-when-pair">
-          <div className="px-3 text-right">
-            {tx.fee == null || tx.fee === "" ? (
-              <span className="text-[var(--muted)]">—</span>
-            ) : (
-              <ErgFigure nano={toBigIntAmt(tx.fee)} locale={locale} size="sm" />
-            )}
-          </div>
-          <div className="px-3 text-right">
-            {tx.mempool ? (
-              <span className="addr-pending-mark" title={t("address.inMempool")}>
-                {t("address.inMempool")}
-              </span>
-            ) : tx.inclusionHeight != null ? (
-              <Link
-                prefetch={false}
-                href={`/block/${tx.inclusionHeight}`}
-                className="tabular-nums text-accent hover:underline"
-              >
-                {tx.inclusionHeight.toLocaleString(loc(locale))}
-              </Link>
-            ) : (
-              <span className="text-[var(--muted)]">—</span>
-            )}
-          </div>
-          <div className="px-3 text-right">
-            <p className={clsx("whitespace-nowrap tabular-nums", relAgeToneClass(relAgeTone(tx.timestamp)))}>
-              {formatRelTime(tx.timestamp, locale)}
-            </p>
-            {ms != null && (
-              <p className="mt-0.5 whitespace-nowrap text-[12px] tabular-nums text-[var(--muted-2)]">
-                {formatFactWhen(ms, locale)}
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function BoxHistoryRow({
   box,
   locale,
@@ -2306,88 +2037,6 @@ function ErgFigure({
       >
         ERG
       </span>
-    </span>
-  );
-}
-
-function FlowMark({ kind }: { kind?: AddrFlowKind }) {
-  const tone =
-    kind === "received"
-      ? "text-[var(--up)]"
-      : kind === "sent" || kind === "intra"
-        ? "text-[var(--down)]"
-        : "text-[var(--muted)]";
-  return (
-    <span className={clsx("flex h-[18px] w-[18px] shrink-0 items-center justify-center", tone)} aria-hidden>
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-        {kind === "sent" ? (
-          <>
-            <path
-              d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"
-              stroke="currentColor"
-              strokeWidth="1.65"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <path
-              d="M16 17l5-5-5-5M21 12H9"
-              stroke="currentColor"
-              strokeWidth="1.65"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </>
-        ) : kind === "received" ? (
-          <>
-            <path
-              d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"
-              stroke="currentColor"
-              strokeWidth="1.65"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <path
-              d="M10 17l5-5-5-5M15 12H3"
-              stroke="currentColor"
-              strokeWidth="1.65"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </>
-        ) : kind === "intra" ? (
-          <>
-            <path
-              d="M8 5H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h3"
-              stroke="currentColor"
-              strokeWidth="1.65"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <path
-              d="M16 5h3a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-3"
-              stroke="currentColor"
-              strokeWidth="1.65"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <path
-              d="M9 9h6.5M13.3 6.7 15.5 9l-2.2 2.3M15 15H8.5M10.7 12.7 8.5 15l2.2 2.3"
-              stroke="currentColor"
-              strokeWidth="1.65"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </>
-        ) : (
-          <path
-            d="M4 12h6M8 9l-3 3 3 3M20 12h-6M16 9l3 3-3 3"
-            stroke="currentColor"
-            strokeWidth="1.65"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        )}
-      </svg>
     </span>
   );
 }
