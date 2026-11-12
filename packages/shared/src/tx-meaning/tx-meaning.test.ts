@@ -11,6 +11,7 @@ import {
   formatAmount,
   meaningPage,
   meaningRow,
+  meaningOwnerRow,
   meaningView,
   sayHow,
   isFoldedAction,
@@ -397,6 +398,49 @@ describe("tx meaning: words and numbers", () => {
     assert.equal(meaningView(inn, inn.actor!).title.ru, "Получено из Cardano");
     const post = classifyTxMeaning(txOf(byId("9a430ec5")), ctxOf(byId("9a430ec5")));
     assert.equal(meaningView(post, post.actor!).title.ru, "Цена отправлена");
+  });
+
+  it("address rows: the owner is not named again; the other side gets a direction", () => {
+    const full = (p: string) => classifyTxMeaning(txOf(byId(p)), ctxOf(byId(p)));
+    const send = full("ed512b15");
+    const out = meaningOwnerRow(compactMeaning(send), send.actor!, "ru");
+    assert.equal(out.word, "Отправлено");
+    assert.equal(out.who, null);
+    assert.equal(out.to?.name, "KuCoin");
+    assert.equal(out.from, null);
+    const inn = meaningOwnerRow(compactMeaning(send), send.counterparty!, "en");
+    assert.equal(inn.word, "Received");
+    assert.equal(inn.from?.addr, send.actor);
+    assert.equal(inn.who, null);
+    assert.equal(inn.to, null);
+
+    // The swap's actor: «Обмен · ErgoDex», the extra payment stays a note.
+    const swap = full("a323e730");
+    const me = meaningOwnerRow(compactMeaning(swap), swap.actor!, "ru");
+    assert.equal(me.word, "Обмен");
+    assert.equal(me.where, "ErgoDex");
+    assert.equal(me.who, null);
+    assert.ok(me.notes.some((n) => n.startsWith("ещё 1.77 ERG → 9gvv")));
+    // The one paid by that swap sees «Получено» from the trader, without «ещё … → him».
+    const fee = swap.extra[0]!.to;
+    const paid = meaningOwnerRow(compactMeaning(swap), fee, "ru", "1771972931");
+    assert.equal(paid.word, "Получено");
+    assert.equal(paid.from?.addr, swap.actor);
+    assert.ok(!paid.notes.some((n) => n.includes("9gvv")));
+    // The pool contract sees the swap and who traded.
+    const pool = meaningOwnerRow(compactMeaning(swap), "5vSUZRZbdVpoolcontract", "ru", "4953777490");
+    assert.equal(pool.word, "Обмен");
+    assert.equal(pool.who?.addr, swap.actor);
+    assert.equal(pool.from, null);
+
+    // A miner paid by a pool: «Выплата от пула ← Hero Miners».
+    const pay = full("d0f6f6f5");
+    const miner = meaningOwnerRow(compactMeaning(pay), "9giHM5F93ZHVsomeminer", "ru", "553782771");
+    assert.equal(miner.word, "Выплата от пула");
+    assert.equal(miner.from?.name, "Hero Miners");
+    // An unknown contract keeps «Вызов контракта».
+    const unk = full("67ff4af6");
+    assert.equal(meaningOwnerRow(compactMeaning(unk), unk.actor ?? "x", "ru").word, "Вызов контракта");
   });
 });
 

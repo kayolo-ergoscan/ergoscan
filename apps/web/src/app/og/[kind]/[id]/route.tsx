@@ -38,6 +38,8 @@ import { SITE_OG_CAPTION, SITE_OG_HEADING, SITE_URL } from "@/lib/site-meta";
 import { tokenSymbol } from "@/lib/token-meta";
 import { groupParties, markFeeOutputIndexes, type TxIo } from "@/lib/tx-flow";
 import { toBigIntAmt } from "@/lib/format";
+import { parseFullMeaning } from "@/lib/tx-meaning-row";
+import { assetLabel, formatAmount, meaningPage, type MeaningAssetLike, type TxMeaning } from "@ergoscan/shared";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -74,7 +76,104 @@ async function chipsFor(
   return { chips, more: Math.max(0, list.length - shown.length) };
 }
 
-async function txCard(tx: TxPageSnapshot) {
+type OgLang = "en" | "ru";
+
+const OG_WORDS = {
+  block: { en: "Block", ru: "Блок" },
+  status: { en: "Status", ru: "Статус" },
+  pending: { en: "pending", ru: "в мемпуле" },
+  time: { en: "Time · UTC", ru: "Время · UTC" },
+  fee: { en: "Network fee", ru: "Комиссия сети" },
+  boxes: { en: "Boxes in → out", ru: "Боксы вх → вых" },
+  for: { en: "for", ru: "за" },
+} as const;
+
+/** The phrase as the card fonts can draw it (no emoji), cut to three lines or so. */
+function ogPhrase(s: string, max = 150): string {
+  const clean = s
+    .replace(/[^\p{Script=Latin}\p{Script=Cyrillic}\p{Script=Greek}\p{N}\p{P}\p{Zs}$+<=>^`|~→−]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return clean.length > max ? `${clean.slice(0, max - 1).trimEnd()}…` : clean;
+}
+
+function ogAsset(a: MeaningAssetLike): { value: string; unit: string } {
+  const dec = a.token ? (a.decimals ?? 0) : 9;
+  return { value: formatAmount(a.amount, dec), unit: ogText(assetLabel(a), 14) || "?" };
+}
+
+/**
+ * A tx with a meaning: the action (and protocol) on the plate, the phrase as the headline, then
+ * what the actor got (or gave) as the big figure and what it paid for it. RU or EN by `lang`.
+ */
+async function meaningCard(tx: TxPageSnapshot, m: TxMeaning, lang: OgLang) {
+  const page = meaningPage(m, lang, { feeNano: tx.fee != null ? String(tx.fee) : null });
+  const r = page.row;
+  const plate = r.where ? `${r.word} · ${r.where}` : r.word;
+  const big = r.big ? ogAsset(r.big) : null;
+  const paid = r.big && r.gave.length && r.big !== r.gave[0] ? ogAsset(r.gave[0]!) : null;
+  const logo = r.big?.token ? await tokenLogoData(r.big.token) : null;
+  const ts = tx.timestamp ?? null;
+  const day = ogDate(ts);
+  const nIn = tx.inputCount ?? (tx.inputs ?? []).length;
+  const nOut = tx.outputCount ?? (tx.outputs ?? []).length;
+  const w = (k: keyof typeof OG_WORDS) => OG_WORDS[k][lang];
+  const tiles: OgTile[] = [
+    tx.inclusionHeight != null
+      ? { label: w("block"), value: tx.inclusionHeight.toLocaleString("en-US"), color: OG.block }
+      : { label: w("status"), value: w("pending"), color: OG.tx },
+    { label: day ? `${day} · UTC` : w("time"), value: ogClock(ts) ?? "—" },
+    { label: w("fee"), value: ogNumber(nanoToErg(tx.fee ?? 0), 6), unit: "ERG" },
+    { label: w("boxes"), value: `${nIn} → ${nOut}` },
+  ];
+  const phrase = ogPhrase(page.phrase);
+  return (
+    <OgFrame plate={ogText(plate, 40) ?? plate} plateColor={OG.tx} id={ogShort(tx.id, 8)} tiles={tiles}>
+      <div
+        style={{
+          display: "flex",
+          fontSize: phrase.length > 90 ? 34 : 40,
+          lineHeight: 1.3,
+          color: OG.text,
+          fontWeight: 600,
+          maxHeight: 160,
+          overflow: "hidden",
+        }}
+      >
+        {phrase}
+      </div>
+      {big ? (
+        <>
+          <Gap h={26} />
+          <div style={{ display: "flex", alignItems: "center" }}>
+            {r.big?.token ? (
+              logo ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={logo} width={72} height={72} style={{ borderRadius: 999, marginRight: 22 }} alt="" />
+              ) : (
+                <div style={{ display: "flex", width: 72, height: 72, borderRadius: 999, background: OG.token, marginRight: 22 }} />
+              )
+            ) : null}
+            <BigFigure value={big.value} unit={big.unit} size={84} unitColor={r.big?.token ? OG.token : OG.muted} />
+            {paid ? (
+              <div style={{ display: "flex", alignItems: "baseline", marginLeft: 30, fontSize: 34, color: OG.muted }}>
+                {w("for")}
+                <div style={{ display: "flex", marginLeft: 12, fontFamily: "Plex Mono", fontWeight: 600, color: OG.soft }}>
+                  {paid.value}
+                </div>
+                <div style={{ display: "flex", marginLeft: 10 }}>{paid.unit}</div>
+              </div>
+            ) : null}
+          </div>
+        </>
+      ) : null}
+    </OgFrame>
+  );
+}
+
+async function txCard(tx: TxPageSnapshot, lang: OgLang = "en") {
+  const meaning = parseFullMeaning(tx.meaning);
+  if (meaning) return meaningCard(tx, meaning, lang);
   const ins = (tx.inputs ?? []) as TxIo[];
   const outs = (tx.outputs ?? []) as TxIo[];
   const feeIdx = markFeeOutputIndexes(outs, toBigIntAmt(tx.fee));
@@ -303,7 +402,7 @@ async function tokenCard(tokenId: string) {
 }
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ kind: string; id: string }> }
 ): Promise<Response> {
   const { kind, id: raw } = await params;
@@ -317,7 +416,9 @@ export async function GET(
     } else if (kind === "tx" && HEX64.test(id.toLowerCase())) {
       const tx = await fetchTransaction(id.toLowerCase());
       if (tx) {
-        card = await txCard(tx);
+        // The site's public language is English; ?lang=ru draws the Russian card.
+        const lang: OgLang = new URL(req.url).searchParams.get("lang") === "ru" ? "ru" : "en";
+        card = await txCard(tx, lang);
         // A confirmed tx never changes; a mempool one may confirm any second.
         maxAge = tx.confirmed ? 86_400 : 60;
       }

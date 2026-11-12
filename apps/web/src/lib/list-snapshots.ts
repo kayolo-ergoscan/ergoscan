@@ -1202,6 +1202,9 @@ export type BoxSnapshot = {
   address?: string | null;
   transactionId?: string | null;
   spentTransactionId?: string | null;
+  /** Additive: list-form meaning of the creating / spending tx (absent when the gateway has none). */
+  creationMeaning?: unknown;
+  spentMeaning?: unknown;
   index?: number | null;
   gix?: number | null;
   source?: string;

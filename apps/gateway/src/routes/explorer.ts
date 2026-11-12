@@ -896,7 +896,7 @@ const OPENAPI_SPEC = {
     "/v1/boxes/{id}": {
       get: {
         summary:
-          "Box from the index (mempool RAM if unconfirmed). creationHeight is the declared rent clock; settlementHeight and blockId are creating-tx inclusion (null in mempool). Additive registersTyped plus ergoTreeConstants / ergoTreeScript / ergoTreeTemplateHash (SHA-256 of template bytes; decode on this GET only). Additive gix: our sequential index or null. Not official explorer globalIndex. Unspent/tx byGlobalIndex streams are live. Exact byErgoTree uses the script index. Template hash uses packed.box_template. Both limit ≤ 100, offset ≤ 500, 4s.",
+          "Box from the index (mempool RAM if unconfirmed). creationHeight is the declared rent clock; settlementHeight and blockId are creating-tx inclusion (null in mempool). Additive registersTyped plus ergoTreeConstants / ergoTreeScript / ergoTreeTemplateHash (SHA-256 of template bytes; decode on this GET only). Additive gix: our sequential index or null. Not official explorer globalIndex. Unspent/tx byGlobalIndex streams are live. Exact byErgoTree uses the script index. Template hash uses packed.box_template. Both limit ≤ 100, offset ≤ 500, 4s. Additive creationMeaning / spentMeaning: list-form meaning of the creating / spending tx (same as a tx list row; absent when not known).",
       },
     },
     "/v1/addresses/{address}/rent-due": {

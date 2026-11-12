@@ -2,16 +2,26 @@
 
 /**
  * Address activity as a day feed. Same data the page already loads: the tx
- * row (height, time, fee, size) and the per-tx flow (net ERG, net tokens,
- * from/to). No extra requests.
+ * row (height, time, fee, size), its `meaning` and the per-tx flow (net ERG,
+ * net tokens, from/to). No extra requests.
+ *
+ * With a meaning the row says what happened from the owner's seat (shared
+ * meaningOwnerRow): «Отправлено → KuCoin», «Получено ← Gate.io», «Обмен ·
+ * ErgoDex»; the figures are the owner's own (the activity flow), the fee only
+ * when he paid it; an order and its fill point at each other. Without a
+ * meaning the row is the old one.
  */
 
+import { useMemo, type ReactNode } from "react";
 import Link from "next/link";
 import clsx from "clsx";
+import { meaningOwnerRow, type CompactMeaning, type MeaningParty } from "@ergoscan/shared";
 import { Tip } from "@/components/Tip";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { describeParty } from "@/lib/address-labels";
+import { linkOrders, type OrderLink } from "@/lib/address-orders";
 import type { AddrFlow } from "@/lib/tx-flow";
+import { meaningTile, parseMeaning } from "@/lib/tx-meaning-row";
 import { formatScaledAmount, formatStamp, shortId, toBigIntAmt, toEpochMs } from "@/lib/format";
 import {
   FeedAmount,
@@ -27,6 +37,7 @@ import {
   type FeedTokenMeta,
 } from "./Feed";
 import type { FeedGlyphId } from "./FeedGlyph";
+import { MeaningPartyLink, MeaningPhraseField, MeaningTitle, meaningLang } from "./FeedMeaning";
 
 export type ActTx = {
   id: string;
@@ -36,6 +47,8 @@ export type ActTx = {
   size?: number | null;
   fee?: number | string | null;
   mempool?: boolean;
+  /** The gateway's list-form meaning; anything else is dropped. */
+  meaning?: unknown;
 };
 
 type Move = "in" | "out" | "self" | "swap" | "none";
@@ -53,6 +66,7 @@ type Model = {
   fee: bigint | null;
   from: string[];
   to: string[];
+  meaning: CompactMeaning | undefined;
 };
 
 /** ERG leg big enough to call a mixed-sign tx a swap (box minimum + fee stay below). */
@@ -79,7 +93,7 @@ function uniqOthers(list: string[], self: string): string[] {
 function modelOf(tx: ActTx, flow: AddrFlow | null | undefined, self: string): Model {
   const id = String(tx.id);
   const fee = tx.fee == null || tx.fee === "" ? null : toBigIntAmt(tx.fee);
-  const base = { tx, id, ms: toEpochMs(tx.timestamp), fee };
+  const base = { tx, id, ms: toEpochMs(tx.timestamp), fee, meaning: parseMeaning(tx.meaning) };
   if (!flow) {
     return { ...base, move: "none", erg: null, tokens: [], party: null, others: [], paidFee: false, from: [], to: [] };
   }
@@ -189,7 +203,15 @@ export function ActivityFeed({
   self: string;
   enterClass?: (id: string) => string | undefined;
 }) {
-  const models = rows.map((tx) => modelOf(tx, flows[String(tx.id)], self));
+  const models = useMemo(() => rows.map((tx) => modelOf(tx, flows[String(tx.id)], self)), [rows, flows, self]);
+  const links = useMemo(
+    () =>
+      linkOrders(
+        models.map((m) => ({ id: m.id, height: m.tx.inclusionHeight, meaning: m.meaning, from: m.from, to: m.to })),
+        self
+      ),
+    [models, self]
+  );
   return (
     <FeedDays
       items={models}
@@ -208,8 +230,213 @@ export function ActivityFeed({
         }
         return known ? <FeedAmount raw={net} signed /> : undefined;
       }}
-      render={(m, lead) => (
-        <ActivityRow key={m.id} m={m} lead={lead} self={self} tokenMeta={tokenMeta} enterClass={enterClass?.(m.id)} />
+      render={(m, lead) =>
+        m.meaning ? (
+          <OwnerMeaningRow
+            key={m.id}
+            m={m}
+            meaning={m.meaning}
+            link={links.get(m.id)}
+            lead={lead}
+            self={self}
+            tokenMeta={tokenMeta}
+            enterClass={enterClass?.(m.id)}
+          />
+        ) : (
+          <ActivityRow key={m.id} m={m} lead={lead} self={self} tokenMeta={tokenMeta} enterClass={enterClass?.(m.id)} />
+        )
+      }
+    />
+  );
+}
+
+/** The fields both row looks share in the detail: tx, block, time, fee, size, from, to, tokens. */
+function ActivityFields({
+  m,
+  self,
+  tokenMeta,
+  feePaid,
+  height,
+}: {
+  m: Model;
+  self: string;
+  tokenMeta: ReadonlyMap<string, FeedTokenMeta>;
+  feePaid: bigint | null;
+  height: ReactNode;
+}) {
+  const { t, tn, locale } = useI18n();
+  const tag = feedLoc(locale);
+  return (
+    <>
+      <FeedField label={t("detail.tx")} wide>
+        <FeedIdLine href={`/tx/${m.id}`} id={m.id} />
+      </FeedField>
+      <FeedField label={t("address.colHeight")}>
+        {m.tx.mempool ? (
+          <span>{t("address.inMempool")}</span>
+        ) : (
+          <span className="tabular-nums">
+            {height ?? "—"}
+            {m.tx.numConfirmations != null ? (
+              <span className="text-[var(--muted-2)]">
+                {" · "}
+                {tn("address.act.confirmations", m.tx.numConfirmations, m.tx.numConfirmations.toLocaleString(tag))}
+              </span>
+            ) : null}
+          </span>
+        )}
+      </FeedField>
+      <FeedField label={t("address.colTime")}>
+        <span className="tabular-nums" suppressHydrationWarning>
+          {m.ms != null ? formatStamp(m.ms) : "—"}
+        </span>
+      </FeedField>
+      {feePaid != null ? (
+        <FeedField label={t("tx.fee")}>
+          <span className="tabular-nums">{formatScaledAmount(feePaid, 9, tag, 9)} ERG</span>
+        </FeedField>
+      ) : null}
+      {m.tx.size != null ? (
+        <FeedField label={t("address.act.size")}>
+          <span className="tabular-nums">{tn("feed.bytes", m.tx.size, m.tx.size.toLocaleString(tag))}</span>
+        </FeedField>
+      ) : null}
+      <FeedField label={t("address.colFrom")}>
+        <PartyList list={m.from} self={self} />
+      </FeedField>
+      <FeedField label={t("address.colTo")}>
+        <PartyList list={m.to} self={self} />
+      </FeedField>
+      {m.tokens.length > 0 ? (
+        <FeedField label={t("tx.tab.tokens")} wide>
+          <FeedTokenChips tokens={m.tokens} meta={(tid) => tokenMeta.get(tid.toLowerCase())} max={m.tokens.length} />
+        </FeedField>
+      ) : null}
+    </>
+  );
+}
+
+/** «→ KuCoin» / «← Gate.io» / «9fYV…reou» (a pool sees the trader): the other side, from the owner's seat. */
+function OwnerParty({ dir, p }: { dir: "to" | "from" | null; p: MeaningParty }) {
+  return (
+    <span className="mx-route">
+      {dir ? (
+        <span className="mx-arrow mx-dir" aria-hidden>
+          {dir === "to" ? "→" : "←"}
+        </span>
+      ) : null}
+      <MeaningPartyLink p={p} />
+    </span>
+  );
+}
+
+/** «исполнена в том же блоке» on an order, «по заявке 037f…3d1c» on its fill: links to the other tx. */
+function OrderNote({ link }: { link: OrderLink }) {
+  const { t, locale } = useI18n();
+  const text =
+    link.side === "fill"
+      ? t("address.act.byOrder").replace("{id}", shortId(link.other, 4))
+      : link.kind === "cancelled"
+        ? t("address.act.cancelled")
+        : link.sameBlock
+          ? t("address.act.filledSameBlock")
+          : t("address.act.filledAt").replace(
+              "{h}",
+              link.otherHeight != null ? link.otherHeight.toLocaleString(feedLoc(locale)) : "—"
+            );
+  return (
+    <Link prefetch={false} href={`/tx/${link.other}`} title={link.other} className="mx-note mx-order">
+      {text}
+    </Link>
+  );
+}
+
+/** «по заявке» is said by the link when the order is on the page. */
+const BY_ORDER = new Set(["по заявке", "by order"]);
+
+function OwnerMeaningRow({
+  m,
+  meaning,
+  link,
+  lead,
+  self,
+  tokenMeta,
+  enterClass,
+}: {
+  m: Model;
+  meaning: CompactMeaning;
+  link: OrderLink | undefined;
+  lead: Parameters<typeof FeedRow>[0]["lead"];
+  self: string;
+  tokenMeta: ReadonlyMap<string, FeedTokenMeta>;
+  enterClass?: string;
+}) {
+  const { t, locale } = useI18n();
+  const tag = feedLoc(locale);
+  const lang = meaningLang(locale);
+  const r = useMemo(() => meaningOwnerRow(meaning, self, lang, m.erg), [meaning, self, lang, m.erg]);
+  const [k, g0] = meaningTile(meaning);
+  // A plain transfer shows its direction for the owner, in the transfer colour.
+  const g: FeedGlyphId =
+    meaning.action === "send" || meaning.action === "multisend" ? (r.view.role === "actor" ? "out" : "in") : g0;
+  // The fee is the owner's only when he paid it (the meaning says who did; an executor may have).
+  const payer = meaning.feePayer !== undefined ? meaning.feePayer : (meaning.actor ?? null);
+  const feePaid = payer === self && m.fee != null && m.fee > 0n ? m.fee : null;
+  // His figure without the fee, which sits under it: «−0.001 ERG / комиссия 0.011». The day total keeps the net.
+  const net = m.erg == null ? null : feePaid != null ? m.erg + feePaid : m.erg;
+  const value = net === 0n ? null : net;
+  const height =
+    m.tx.inclusionHeight != null ? (
+      <Link prefetch={false} href={`/block/${m.tx.inclusionHeight}`} className="tabular-nums">
+        {m.tx.inclusionHeight.toLocaleString(tag)}
+      </Link>
+    ) : null;
+  const notes = link?.side === "fill" ? r.notes.filter((n) => !BY_ORDER.has(n)) : r.notes;
+  const party = r.to ? <OwnerParty dir="to" p={r.to} /> : r.from ? <OwnerParty dir="from" p={r.from} /> : r.who ? <OwnerParty dir={null} p={r.who} /> : null;
+  return (
+    <FeedRow
+      k={k}
+      glyph={g}
+      hollow={!!m.tx.mempool}
+      tileTitle={r.where ? `${r.word} · ${r.where}` : r.word}
+      lead={lead}
+      enterClass={enterClass}
+      className={r.quiet ? "mx-row is-quiet" : "mx-row"}
+      title={<MeaningTitle r={r} href={`/tx/${m.id}`} title={m.id} />}
+      facts={
+        <>
+          {r.where ? <span className="feed-phone-only mx-where-fact">{r.where}</span> : null}
+          {party}
+          {notes.map((n, i) => (
+            <span key={`n${i}`} className="mx-note">
+              {n}
+            </span>
+          ))}
+          {link ? <OrderNote link={link} /> : null}
+          {r.guess ? <span className="mx-guess">{r.guess}</span> : null}
+          <Link prefetch={false} href={`/tx/${m.id}`} title={m.id} className="feed-narrow-off font-mono tabular-nums">
+            {shortId(m.id, 4)}
+          </Link>
+        </>
+      }
+      chips={
+        m.tokens.length ? (
+          <FeedTokenChips tokens={m.tokens} meta={(tid) => tokenMeta.get(tid.toLowerCase())} />
+        ) : null
+      }
+      value={<FeedAmount raw={value} signed />}
+      sub={
+        feePaid != null ? (
+          <span className="tabular-nums">
+            {t("address.act.fee")} {formatScaledAmount(feePaid, 9, tag)}
+          </span>
+        ) : undefined
+      }
+      detail={() => (
+        <FeedFields>
+          <MeaningPhraseField m={meaning} />
+          <ActivityFields m={m} self={self} tokenMeta={tokenMeta} feePaid={feePaid} height={height} />
+        </FeedFields>
       )}
     />
   );
@@ -228,7 +455,7 @@ function ActivityRow({
   tokenMeta: ReadonlyMap<string, FeedTokenMeta>;
   enterClass?: string;
 }) {
-  const { t, tn, locale } = useI18n();
+  const { t, locale } = useI18n();
   const tag = feedLoc(locale);
   const [k, g] = MOVE_TILE[m.move];
   const feePaid = m.paidFee && m.fee != null && m.fee > 0n ? m.fee : null;
@@ -269,50 +496,7 @@ function ActivityRow({
       value={<FeedAmount raw={m.erg} signed />}
       detail={() => (
         <FeedFields>
-          <FeedField label={t("detail.tx")} wide>
-            <FeedIdLine href={`/tx/${m.id}`} id={m.id} />
-          </FeedField>
-          <FeedField label={t("address.colHeight")}>
-            {m.tx.mempool ? (
-              <span>{t("address.inMempool")}</span>
-            ) : (
-              <span className="tabular-nums">
-                {height ?? "—"}
-                {m.tx.numConfirmations != null ? (
-                  <span className="text-[var(--muted-2)]">
-                    {" · "}
-                    {tn("address.act.confirmations", m.tx.numConfirmations, m.tx.numConfirmations.toLocaleString(tag))}
-                  </span>
-                ) : null}
-              </span>
-            )}
-          </FeedField>
-          <FeedField label={t("address.colTime")}>
-            <span className="tabular-nums" suppressHydrationWarning>
-              {m.ms != null ? formatStamp(m.ms) : "—"}
-            </span>
-          </FeedField>
-          {feePaid != null ? (
-            <FeedField label={t("tx.fee")}>
-              <span className="tabular-nums">{formatScaledAmount(feePaid, 9, tag, 9)} ERG</span>
-            </FeedField>
-          ) : null}
-          {m.tx.size != null ? (
-            <FeedField label={t("address.act.size")}>
-              <span className="tabular-nums">{tn("feed.bytes", m.tx.size, m.tx.size.toLocaleString(tag))}</span>
-            </FeedField>
-          ) : null}
-          <FeedField label={t("address.colFrom")}>
-            <PartyList list={m.from} self={self} />
-          </FeedField>
-          <FeedField label={t("address.colTo")}>
-            <PartyList list={m.to} self={self} />
-          </FeedField>
-          {m.tokens.length > 0 ? (
-            <FeedField label={t("tx.tab.tokens")} wide>
-              <FeedTokenChips tokens={m.tokens} meta={(tid) => tokenMeta.get(tid.toLowerCase())} max={m.tokens.length} />
-            </FeedField>
-          ) : null}
+          <ActivityFields m={m} self={self} tokenMeta={tokenMeta} feePaid={feePaid} height={height} />
         </FeedFields>
       )}
     />
