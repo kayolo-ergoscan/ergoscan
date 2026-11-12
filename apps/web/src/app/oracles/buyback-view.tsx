@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import clsx from "clsx";
 import { Shell } from "@/components/Shell";
 import { StuckPin } from "@/components/StuckPin";
 import { KpiGrid } from "@/components/KpiGrid";
+import { KpiMark } from "@/components/kpi-marks";
 import { RankWindow } from "@/components/RankWindow";
 import { lookupAddress } from "@/lib/address-book";
 import {
@@ -35,75 +36,6 @@ const stroke = {
   strokeLinecap: "round" as const,
   strokeLinejoin: "round" as const,
 };
-
-function Mark({ tone, children }: { tone: string; children: ReactNode }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden className="h-9 w-9" style={{ color: tone }}>
-      {children}
-    </svg>
-  );
-}
-
-function MarkWallet({ tone }: { tone: string }) {
-  return (
-    <Mark tone={tone}>
-      <path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1" {...stroke} />
-      <path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4" {...stroke} />
-    </Mark>
-  );
-}
-
-function MarkGem({ tone }: { tone: string }) {
-  return (
-    <Mark tone={tone}>
-      <path d="M10.5 3 8 9l4 13 4-13-2.5-6" {...stroke} />
-      <path d="M17 3a2 2 0 0 1 1.6.8l3 4a2 2 0 0 1 .013 2.382l-7.99 10.986a2 2 0 0 1-3.247 0l-7.99-10.986A2 2 0 0 1 2.4 7.8l2.998-3.997A2 2 0 0 1 7 3z" {...stroke} />
-      <path d="M2 9h20" {...stroke} />
-    </Mark>
-  );
-}
-
-function MarkSwap({ tone }: { tone: string }) {
-  return (
-    <Mark tone={tone}>
-      <path d="M8 3 4 7l4 4" {...stroke} />
-      <path d="M4 7h16" {...stroke} />
-      <path d="m16 21 4-4-4-4" {...stroke} />
-      <path d="M20 17H4" {...stroke} />
-    </Mark>
-  );
-}
-
-function MarkPlus({ tone }: { tone: string }) {
-  return (
-    <Mark tone={tone}>
-      <circle cx="12" cy="12" r="10" {...stroke} />
-      <path d="M8 12h8" {...stroke} />
-      <path d="M12 8v8" {...stroke} />
-    </Mark>
-  );
-}
-
-function MarkReturn({ tone }: { tone: string }) {
-  return (
-    <Mark tone={tone}>
-      <path d="M9 14 4 9l5-5" {...stroke} />
-      <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11" {...stroke} />
-    </Mark>
-  );
-}
-
-function MarkScale({ tone }: { tone: string }) {
-  return (
-    <Mark tone={tone}>
-      <path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z" {...stroke} />
-      <path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z" {...stroke} />
-      <path d="M7 21h10" {...stroke} />
-      <path d="M12 3v18" {...stroke} />
-      <path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2" {...stroke} />
-    </Mark>
-  );
-}
 
 function MarkScroll({ tone }: { tone: string }) {
   return (
@@ -287,7 +219,7 @@ export function BuybackView({ kind, initial }: { kind: BuybackKind; initial?: Bu
                   sub: pack.box
                     ? fill(t("buyback.kpiErgSub"), { h: pack.box.height.toLocaleString(L) })
                     : "—",
-                  mark: <MarkWallet tone={INK.gold} />,
+                  mark: <KpiMark id="erg" tone={INK.gold} />,
                   ink: INK.gold,
                   enter: 0,
                 },
@@ -296,7 +228,7 @@ export function BuybackView({ kind, initial }: { kind: BuybackKind; initial?: Bu
                   value: pack.box ? formatTokenAmount(pack.box.token, 0, locale) : "—",
                   unavailable: !pack.box,
                   sub: fill(t("buyback.kpiTokenSub"), { bought }),
-                  mark: <MarkGem tone={INK.cyan} />,
+                  mark: <KpiMark id="token" tone={INK.cyan} />,
                   ink: INK.cyan,
                   enter: 1,
                 },
@@ -306,7 +238,7 @@ export function BuybackView({ kind, initial }: { kind: BuybackKind; initial?: Bu
                   sub: fill(t("buyback.kpiSwapsSub"), {
                     erg: formatErgPrecise(pack.totals.ergOut, locale),
                   }),
-                  mark: <MarkSwap tone={INK.sky} />,
+                  mark: <KpiMark id="swap" tone={INK.sky} />,
                   ink: INK.sky,
                   enter: 2,
                 },
@@ -316,7 +248,7 @@ export function BuybackView({ kind, initial }: { kind: BuybackKind; initial?: Bu
                   sub: fill(t("buyback.kpiTopSub"), {
                     erg: formatErgFixed(pack.totals.ergIn, locale),
                   }),
-                  mark: <MarkPlus tone={INK.violet} />,
+                  mark: <KpiMark id="top-up" tone={INK.violet} />,
                   ink: INK.violet,
                   enter: 3,
                 },
@@ -324,7 +256,7 @@ export function BuybackView({ kind, initial }: { kind: BuybackKind; initial?: Bu
                   label: t("buyback.kpiBack"),
                   value: pack.totals.returns.toLocaleString(L),
                   sub: backSub,
-                  mark: <MarkReturn tone={pack.giveback === "blocked" ? INK.coral : INK.teal} />,
+                  mark: <KpiMark id="returned" tone={pack.giveback === "blocked" ? INK.coral : INK.teal} />,
                   ink: pack.giveback === "blocked" ? INK.coral : INK.teal,
                   enter: 4,
                 },
@@ -335,7 +267,7 @@ export function BuybackView({ kind, initial }: { kind: BuybackKind; initial?: Bu
                   sub: canBuy
                     ? fill(t("buyback.kpiPriceSub"), { n: canBuy })
                     : fill(t("buyback.kpiPriceSubEmpty"), { sym }),
-                  mark: <MarkScale tone={INK.green} />,
+                  mark: <KpiMark id="price" tone={INK.green} />,
                   ink: INK.green,
                   enter: 5,
                 },

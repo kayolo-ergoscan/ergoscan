@@ -12,13 +12,7 @@ import {
 import { Shell } from "@/components/Shell";
 import { StuckPin } from "@/components/StuckPin";
 import { KpiGrid } from "@/components/KpiGrid";
-import {
-  KpiMarkBell,
-  KpiMarkMetronome,
-  KpiMarkQuote,
-  KpiMarkScale,
-  KpiMarkUserGroup,
-} from "@/components/kpi-marks";
+import { KpiMark } from "@/components/kpi-marks";
 import { RankWindow } from "@/components/RankWindow";
 import { lookupAddress } from "@/lib/address-book";
 import { formatErgPrecise, formatRelAge, formatUsd, shortId } from "@/lib/format";
@@ -228,7 +222,7 @@ export function OracleFeedView({
                       ? "oracles.kpiPairSubXau"
                       : "oracles.kpiPairSub"
                 ),
-                mark: <KpiMarkScale tone={INK.cyan} />,
+                mark: <KpiMark id="oracle" tone={INK.cyan} />,
                 ink: INK.cyan,
                 enter: 0,
               },
@@ -237,7 +231,7 @@ export function OracleFeedView({
                 value: answer,
                 unavailable: pack.quote == null,
                 sub: t(slug === "xau-erg" ? "oracles.kpiAnswerSubXau" : "oracles.kpiAnswerSub"),
-                mark: <KpiMarkQuote tone={INK.gold} />,
+                mark: <KpiMark id="price" tone={INK.gold} />,
                 ink: INK.gold,
                 enter: 1,
               },
@@ -246,7 +240,7 @@ export function OracleFeedView({
                 value: updated,
                 unavailable: pack.height == null,
                 sub: updatedSub,
-                mark: <KpiMarkBell tone={INK.sky} />,
+                mark: <KpiMark id="time" tone={INK.sky} />,
                 ink: INK.sky,
                 enter: 2,
               },
@@ -254,7 +248,7 @@ export function OracleFeedView({
                 label: t("oracles.kpiBeat"),
                 value: t("oracles.kpiBeatVal").replace("{n}", String(def.epochLength)),
                 sub: t("oracles.kpiBeatSub").replace("{m}", String(def.epochLength * 2)),
-                mark: <KpiMarkMetronome tone={INK.violet} />,
+                mark: <KpiMark id="interval" tone={INK.violet} />,
                 ink: INK.violet,
                 enter: 3,
               },
@@ -264,7 +258,7 @@ export function OracleFeedView({
                 unavailable: !pack.operators.length,
                 sub: oracleSub,
                 pulse: oracleShort,
-                mark: <KpiMarkUserGroup tone={INK.teal} />,
+                mark: <KpiMark id="node" tone={INK.teal} />,
                 ink: INK.teal,
                 enter: 4,
               },

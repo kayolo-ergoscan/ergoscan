@@ -18,16 +18,7 @@ import { StuckPin } from "@/components/StuckPin";
 import { AddressPageSkeleton } from "@/components/AddressPageSkeleton";
 import { AddrFactCard } from "@/components/AddrFactCard";
 import { EvidenceBadge } from "@/components/EvidenceBadge";
-import {
-  KpiMarkBadgePercent,
-  KpiMarkCalendar,
-  KpiMarkCalendarRange,
-  KpiMarkCheckCheck,
-  KpiMarkClock,
-  KpiMarkListEnd,
-  KpiMarkReceipt,
-  KpiMarkUsers,
-} from "@/components/kpi-marks";
+import { KpiMark } from "@/components/kpi-marks";
 import { KpiNum } from "@/components/KpiGrid";
 import { RankWindow } from "@/components/RankWindow";
 import { TokenLogo } from "@/components/TokenBadge";
@@ -360,7 +351,7 @@ export function RentView({
               enter={1}
               label={t("rent.card.dueNow")}
               ink={INK.teal}
-              mark={<KpiMarkListEnd className="h-9 w-9" />}
+              mark={<KpiMark id="rent" />}
               window={data.due}
               covered={windowCovered(data.due, data.dueHeight, indexFloor)}
               minHeight={indexFloor}
@@ -371,7 +362,7 @@ export function RentView({
               enter={2}
               label={t("rent.card.soon24")}
               ink={INK.coral}
-              mark={<KpiMarkClock className="h-9 w-9" />}
+              mark={<KpiMark id="due-day" />}
               window={data.next24h}
               covered={windowCovered(data.next24h, data.dueHeight, indexFloor)}
               minHeight={indexFloor}
@@ -382,7 +373,7 @@ export function RentView({
               enter={3}
               label={t("rent.card.soon7")}
               ink={INK.gold}
-              mark={<KpiMarkCalendar className="h-9 w-9" />}
+              mark={<KpiMark id="due-week" />}
               window={data.next7d}
               covered={windowCovered(data.next7d, data.dueHeight, indexFloor)}
               minHeight={indexFloor}
@@ -393,7 +384,7 @@ export function RentView({
               enter={4}
               label={t("rent.card.soon30")}
               ink={INK.sky}
-              mark={<KpiMarkCalendarRange className="h-9 w-9" />}
+              mark={<KpiMark id="due-month" />}
               window={data.next30d}
               covered={windowCovered(data.next30d, data.dueHeight, indexFloor)}
               minHeight={indexFloor}
@@ -898,7 +889,7 @@ function HistoryKpis({
         enter={1}
         label={t("rent.card.collected")}
         ink={INK.green}
-        mark={<KpiMarkCheckCheck className="h-9 w-9" />}
+        mark={<KpiMark id="collected" />}
       >
         <div className="mt-0.5 leading-[1.15]">
           <KpiNum className="tabular-nums">
@@ -913,7 +904,7 @@ function HistoryKpis({
         enter={2}
         label={t("rent.kpi.claims")}
         ink={INK.coral}
-        mark={<KpiMarkReceipt className="h-9 w-9" />}
+        mark={<KpiMark id="claim" />}
       >
         <div className="mt-0.5 leading-[1.15]">
           <KpiNum className="tabular-nums">
@@ -928,7 +919,7 @@ function HistoryKpis({
         enter={3}
         label={t("rent.kpi.claimers")}
         ink={INK.teal}
-        mark={<KpiMarkUsers className="h-9 w-9" />}
+        mark={<KpiMark id="miner" />}
       >
         <div className="mt-0.5 leading-[1.15]">
           <KpiNum className="tabular-nums">{claimers > 0 ? claimers.toLocaleString(loc(locale)) : "—"}</KpiNum>
@@ -941,7 +932,7 @@ function HistoryKpis({
         enter={4}
         label={t("rent.kpi.lead")}
         ink={INK.gold}
-        mark={<KpiMarkBadgePercent className="h-9 w-9" />}
+        mark={<KpiMark id="leader" />}
       >
         <div className="mt-0.5 leading-[1.15]">
           <KpiNum className="tabular-nums">{lead?.value ?? "—"}</KpiNum>

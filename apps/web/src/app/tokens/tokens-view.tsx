@@ -5,11 +5,7 @@ import Link from "next/link";
 import clsx from "clsx";
 import { Shell } from "@/components/Shell";
 import { KpiGrid } from "@/components/KpiGrid";
-import {
-  KpiMarkCoins,
-  KpiMarkUsers,
-  KpiMarkWorkflow,
-} from "@/components/kpi-marks";
+import { KpiMark } from "@/components/kpi-marks";
 import { CatalogSearchTile } from "@/components/CatalogSearchTile";
 import { FavoriteHeart } from "@/components/FavoriteHeart";
 import { INK } from "@/lib/palette";
@@ -317,7 +313,7 @@ export function TokensView({ initial }: { initial: TokensPageData }) {
       value: kpis.tokenCount != null ? kpis.tokenCount.toLocaleString(loc(locale)) : miss,
       unavailable: kpis.tokenCount == null,
       sub: t("tokens.kpiTokens"),
-      mark: <KpiMarkCoins tone={INK.gold} />,
+      mark: <KpiMark id="token" tone={INK.gold} />,
       ink: INK.gold,
       enter: 1,
     },
@@ -326,7 +322,7 @@ export function TokensView({ initial }: { initial: TokensPageData }) {
       value: kpis.holderCount != null ? kpis.holderCount.toLocaleString(loc(locale)) : miss,
       unavailable: kpis.holderCount == null,
       sub: t("tokens.kpiTotal"),
-      mark: <KpiMarkUsers tone={INK.violet} />,
+      mark: <KpiMark id="holders" tone={INK.violet} />,
       ink: INK.violet,
       enter: 2,
     },
@@ -335,7 +331,7 @@ export function TokensView({ initial }: { initial: TokensPageData }) {
       value: kpis.txCount != null ? kpis.txCount.toLocaleString(loc(locale)) : miss,
       unavailable: kpis.txCount == null,
       sub: t("tokens.kpiTotal"),
-      mark: <KpiMarkWorkflow tone={INK.cyan} />,
+      mark: <KpiMark id="tx" tone={INK.cyan} />,
       ink: INK.cyan,
       enter: 3,
     },

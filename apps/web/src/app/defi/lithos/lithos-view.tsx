@@ -6,12 +6,7 @@ import dynamic from "next/dynamic";
 import clsx from "clsx";
 import { Shell } from "@/components/Shell";
 import { KpiGrid } from "@/components/KpiGrid";
-import {
-  KpiMarkHandshake,
-  KpiMarkScrollText,
-  KpiMarkTrendingUp,
-  KpiMarkVault,
-} from "@/components/kpi-marks";
+import { KpiMark } from "@/components/kpi-marks";
 import { TokenAvatar } from "@/components/TokenBadge";
 import { PrettyPrice } from "@/components/PrettyNum";
 import { ListWhen } from "@/components/ListWhen";
@@ -257,7 +252,7 @@ export function LithosView({
       value: tvl != null && tvl > 0 ? fmtErgFull(tvl) : miss,
       unavailable: tvl == null || tvl <= 0,
       sub: t("lithos.tvlSub"),
-      mark: <KpiMarkVault tone={INK.gold} />,
+      mark: <KpiMark id="pool" tone={INK.gold} />,
       ink: INK.gold,
       enter: 0,
     },
@@ -266,7 +261,7 @@ export function LithosView({
       value: vol != null && vol > 0 ? fmtErgFull(vol) : miss,
       unavailable: vol == null || vol <= 0,
       sub: t("lithos.volumeSub"),
-      mark: <KpiMarkTrendingUp tone={INK.cyan} />,
+      mark: <KpiMark id="volume" tone={INK.cyan} />,
       ink: INK.cyan,
       enter: 1,
     },
@@ -276,7 +271,7 @@ export function LithosView({
         snap?.tradersCount != null ? snap.tradersCount.toLocaleString(loc(locale)) : miss,
       unavailable: snap?.tradersCount == null,
       sub: t("lithos.tradersSub"),
-      mark: <KpiMarkHandshake tone={INK.violet} />,
+      mark: <KpiMark id="trader" tone={INK.violet} />,
       ink: INK.violet,
       enter: 2,
     },
@@ -286,7 +281,7 @@ export function LithosView({
         snap?.tradesCount != null ? snap.tradesCount.toLocaleString(loc(locale)) : miss,
       unavailable: snap?.tradesCount == null,
       sub: t("lithos.tradesSub"),
-      mark: <KpiMarkScrollText tone={INK.gold} />,
+      mark: <KpiMark id="swap" tone={INK.gold} />,
       ink: INK.gold,
       enter: 3,
     },

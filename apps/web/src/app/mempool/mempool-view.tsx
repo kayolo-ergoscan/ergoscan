@@ -3,12 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Shell } from "@/components/Shell";
 import { KpiGrid } from "@/components/KpiGrid";
-import {
-  KpiMarkBatteryMedium,
-  KpiMarkChartColumn,
-  KpiMarkListEnd,
-  KpiMarkReceiptText,
-} from "@/components/kpi-marks";
+import { KpiMark } from "@/components/kpi-marks";
 import { INK } from "@/lib/palette";
 import { RankWindow } from "@/components/RankWindow";
 import { Feed, FeedCount, FeedDays, FeedEmpty } from "@/components/feed/Feed";
@@ -137,7 +132,7 @@ export function MempoolView({
             .replace("{h}", lastSeal.height.toLocaleString(loc(locale)))
             .replace("{n}", lastSeal.took.toLocaleString(loc(locale)))
         : t("mempool.kpiWaitSub"),
-      mark: <KpiMarkListEnd tone={INK.cyan} />,
+      mark: <KpiMark id="mempool" tone={INK.cyan} />,
       ink: INK.cyan,
       enter: 0,
     },
@@ -146,7 +141,7 @@ export function MempoolView({
       value: fill != null ? `${Math.round(fill)}%` : miss,
       unavailable: fill == null,
       sub: totalSize > 0 ? formatBytes(totalSize) : t("mempool.kpiLoadSub"),
-      mark: <KpiMarkBatteryMedium tone={INK.gold} />,
+      mark: <KpiMark id="load" tone={INK.gold} />,
       ink: INK.gold,
       enter: 1,
     },
@@ -154,7 +149,7 @@ export function MempoolView({
       label: t("mempool.kpiFees"),
       value: formatErgPrecise(totalFees, locale),
       sub: t("mempool.kpiFeesSub"),
-      mark: <KpiMarkReceiptText tone={INK.gold} />,
+      mark: <KpiMark id="fee" tone={INK.gold} />,
       ink: INK.gold,
       enter: 2,
     },
@@ -163,7 +158,7 @@ export function MempoolView({
       value: p50 != null ? formatFeeRate(p50) : miss,
       unavailable: p50 == null,
       sub: etaDue ? t("mempool.kpiEtaDue") : eta != null ? t("mempool.kpiEta").replace("{n}", eta) : t("fees.kpiEta"),
-      mark: <KpiMarkChartColumn tone={INK.teal} />,
+      mark: <KpiMark id="fee-rate" tone={INK.teal} />,
       ink: INK.teal,
       enter: 3,
     },

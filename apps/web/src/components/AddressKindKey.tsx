@@ -1,11 +1,5 @@
 import { AddressStatTile } from "@/components/AddressStatTile";
-import {
-  KpiMarkCpu,
-  KpiMarkFileCode,
-  KpiMarkLibrary,
-  KpiMarkPickaxe,
-  KpiMarkStore,
-} from "@/components/kpi-marks";
+import { KpiMark } from "@/components/kpi-marks";
 import { LIST_ENTITY_INK, mergeKinds, type ListEntityId } from "@/lib/address-pips";
 import { INK } from "@/lib/palette";
 import type { ReactNode } from "react";
@@ -13,10 +7,10 @@ import type { ReactNode } from "react";
 const ALL_INK = INK.cyan;
 
 const KIND_MARK: Record<ListEntityId, ReactNode> = {
-  protocol: <KpiMarkCpu className="h-9 w-9 shrink-0" />,
-  exchange: <KpiMarkStore className="h-9 w-9 shrink-0" />,
-  pool: <KpiMarkPickaxe className="h-9 w-9 shrink-0" />,
-  contract: <KpiMarkFileCode className="h-9 w-9 shrink-0" />,
+  protocol: <KpiMark id="protocol" />,
+  exchange: <KpiMark id="exchange" />,
+  pool: <KpiMark id="miner" />,
+  contract: <KpiMark id="contract" />,
 };
 
 /** Phone 2-col: Scripts sits beside Overlord. sm+ keeps All → … → Scripts. */
@@ -62,7 +56,7 @@ export function AddressKindKey({
         hint={t("addresses.allHint")}
         ink={ALL_INK}
         loc={loc}
-        mark={<KpiMarkLibrary className="h-9 w-9 shrink-0" />}
+        mark={<KpiMark id="address" />}
         selected={allSelected}
         onSelect={onAll}
       />

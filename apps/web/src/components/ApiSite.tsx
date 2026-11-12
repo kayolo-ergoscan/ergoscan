@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
 import { AddrFactCard } from "@/components/AddrFactCard";
+import { KpiMark } from "@/components/kpi-marks";
 import { INK } from "@/lib/palette";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { useKeepFresh, usePageSync } from "@/lib/page-sync";
@@ -360,7 +361,7 @@ export function ApiSite() {
 
   return (
     <div className="flex flex-col gap-2">
-      <AddrFactCard className="min-h-0 h-auto" enter={0} label="Ergo mainnet" ink={INK.cyan} mark={<ApiMark />}>
+      <AddrFactCard className="min-h-0 h-auto" enter={0} label="Ergo mainnet" ink={INK.cyan} mark={<KpiMark id="api" />}>
         <h1 className="mt-0.5 text-[17px] font-semibold leading-none tracking-tight">API</h1>
         <p className="mt-1.5 max-w-3xl text-[12px] leading-snug text-[var(--muted-2)]">
           {loc === "ru"
@@ -524,23 +525,3 @@ function Method({ method }: { method: Method }) {
   );
 }
 
-function ApiMark() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden className="h-10 w-10">
-      <path
-        d="M8.2 6.4 4.6 12l3.6 5.6"
-        stroke="currentColor"
-        strokeWidth="1.65"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M15.8 6.4 19.4 12l-3.6 5.6"
-        stroke="currentColor"
-        strokeWidth="1.65"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}

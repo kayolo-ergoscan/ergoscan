@@ -7,12 +7,7 @@ import { Shell } from "@/components/Shell";
 import { StuckPin } from "@/components/StuckPin";
 import { KpiNum, KpiTileRail } from "@/components/KpiGrid";
 import { RankWindow } from "@/components/RankWindow";
-import {
-  KpiMarkCoins,
-  KpiMarkHolders,
-  KpiMarkLocked,
-  KpiMarkSquareStack,
-} from "@/components/kpi-marks";
+import { KpiMark } from "@/components/kpi-marks";
 import { useT, useI18n } from "@/lib/i18n/I18nProvider";
 import { getGateway } from "@/lib/config";
 import {
@@ -240,7 +235,7 @@ export function LithosProtocolView({ initial }: { initial: LithosProtocolSnap | 
             sub={t("lithosP.blocksSub")}
             ink={INK.violet}
             enter={0}
-            mark={<KpiMarkSquareStack tone={INK.violet} />}
+            mark={<KpiMark id="block" tone={INK.violet} />}
           />
           <LithosKpi
             label={t("lithosP.finders")}
@@ -248,7 +243,7 @@ export function LithosProtocolView({ initial }: { initial: LithosProtocolSnap | 
             sub={t("lithosP.findersSub")}
             ink={INK.cyan}
             enter={1}
-            mark={<KpiMarkHolders tone={INK.cyan} />}
+            mark={<KpiMark id="miner" tone={INK.cyan} />}
           />
           <LithosKpi
             label={t("lithosP.finderLit")}
@@ -256,7 +251,7 @@ export function LithosProtocolView({ initial }: { initial: LithosProtocolSnap | 
             sub={t("lithosP.finderLitSub")}
             ink={INK.gold}
             enter={2}
-            mark={<KpiMarkCoins tone={INK.gold} />}
+            mark={<KpiMark id="token" tone={INK.gold} />}
           />
           <LithosKpi
             label={t("lithosP.holding")}
@@ -264,7 +259,7 @@ export function LithosProtocolView({ initial }: { initial: LithosProtocolSnap | 
             sub={t("lithosP.holdingSub")}
             ink={INK.teal}
             enter={3}
-            mark={<KpiMarkLocked tone={INK.teal} />}
+            mark={<KpiMark id="locked" tone={INK.teal} />}
           />
         </div>
         <div className="relative min-w-0">

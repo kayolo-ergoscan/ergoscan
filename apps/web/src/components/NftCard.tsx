@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import clsx from "clsx";
-import { KpiMarkNft } from "@/components/kpi-marks";
+import { KpiMark } from "@/components/kpi-marks";
 import { shortId } from "@/lib/format";
 import { tokenIdenticonSrc } from "@/lib/token-identicon";
 import { useMediaSrc } from "@/lib/use-media-src";
@@ -46,7 +46,7 @@ export function NftThumb({
           className
         )}
       >
-        <KpiMarkNft className="h-10 w-10" />
+        <KpiMark id="nft" className="h-10 w-10" />
       </span>
     );
   }

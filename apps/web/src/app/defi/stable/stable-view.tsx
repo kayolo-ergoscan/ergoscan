@@ -5,7 +5,7 @@ import Link from "next/link";
 import clsx from "clsx";
 import { Shell } from "@/components/Shell";
 import { KpiGrid } from "@/components/KpiGrid";
-import { KpiMarkScrollText, KpiMarkVault } from "@/components/kpi-marks";
+import { KpiMark } from "@/components/kpi-marks";
 import { TokenAvatar } from "@/components/TokenBadge";
 import { PrettyPrice } from "@/components/PrettyNum";
 import { ListWhen } from "@/components/ListWhen";
@@ -170,7 +170,7 @@ export function StableView({ initial }: { initial: AgeUsdBank | null }) {
       value: reserve != null ? fmtErgFull(reserve, locale) : miss,
       unavailable: reserve == null,
       sub: t("stable.reserveSub"),
-      mark: <KpiMarkVault tone={INK.gold} />,
+      mark: <KpiMark id="vault" tone={INK.gold} />,
       ink: INK.gold,
       enter: 0,
     },
@@ -198,7 +198,7 @@ export function StableView({ initial }: { initial: AgeUsdBank | null }) {
         bank?.eventsCount != null ? bank.eventsCount.toLocaleString(loc(locale)) : miss,
       unavailable: bank?.eventsCount == null,
       sub: t("stable.eventsSub"),
-      mark: <KpiMarkScrollText tone={INK.gold} />,
+      mark: <KpiMark id="mint" tone={INK.gold} />,
       ink: INK.gold,
       enter: 3,
     },

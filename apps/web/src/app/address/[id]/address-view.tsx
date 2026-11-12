@@ -11,13 +11,7 @@ import { AddressQr } from "@/components/AddressQr";
 import { FavKayolo } from "@/components/FavKayolo";
 import { ScanWait, useScanWait } from "@/components/ScanWait";
 import { FavoriteHeart } from "@/components/FavoriteHeart";
-import {
-  KpiMarkBox,
-  KpiMarkBubbles,
-  KpiMarkFootprints,
-  KpiMarkScrollText,
-  KpiMarkWalletMinimal,
-} from "@/components/kpi-marks";
+import { KpiMark } from "@/components/kpi-marks";
 import { KpiNum } from "@/components/KpiGrid";
 import { NftCard } from "@/components/NftCard";
 import {
@@ -1181,7 +1175,7 @@ export function AddressView({
               beacon={Boolean(rentTone) && tileLanded}
               label={t("address.card.balance")}
               ink={INK.cyan}
-              mark={<KpiMarkWalletMinimal className="h-9 w-9" />}
+              mark={<KpiMark id="wallet" />}
               end={
                 <AddressQr
                   embed
@@ -1224,7 +1218,7 @@ export function AddressView({
               enter={2}
               label={t("address.boxes")}
               ink={INK.sky}
-              mark={<KpiMarkBox className="h-9 w-9" />}
+              mark={<KpiMark id="box" />}
             >
               <p className="mt-0.5 text-[22px] font-semibold leading-[1.15] tabular-nums tracking-tight">
                 <KpiNum>
@@ -1243,7 +1237,7 @@ export function AddressView({
               enter={3}
               label={t("address.tokens")}
               ink={INK.gold}
-              mark={<KpiMarkBubbles className="h-9 w-9" />}
+              mark={<KpiMark id="token" />}
             >
               <p
                 className={clsx(
@@ -1263,7 +1257,7 @@ export function AddressView({
               enter={4}
               label={t("address.txs")}
               ink={INK.cyan}
-              mark={<KpiMarkScrollText className="h-9 w-9" />}
+              mark={<KpiMark id="tx" />}
             >
               <p className="mt-0.5 text-[22px] font-semibold leading-[1.15] tabular-nums tracking-tight">
                 <KpiNum>{txCount.toLocaleString(loc(locale))}</KpiNum>
@@ -1278,7 +1272,7 @@ export function AddressView({
               enter={5}
               label={t("address.card.activity")}
               ink={INK.teal}
-              mark={<KpiMarkFootprints className="h-9 w-9" />}
+              mark={<KpiMark id="activity" />}
             >
               <p className="mt-0.5 text-[22px] font-semibold leading-[1.15] tabular-nums tracking-tight">
                 <KpiNum>{lastTs != null ? formatRelTime(lastTs, locale) : "—"}</KpiNum>

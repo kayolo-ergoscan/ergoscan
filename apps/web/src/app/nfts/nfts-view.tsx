@@ -7,12 +7,7 @@ import { Shell } from "@/components/Shell";
 import { KpiNum } from "@/components/KpiGrid";
 import { CatalogSearchTile } from "@/components/CatalogSearchTile";
 import { NftCard, NftGroupCard } from "@/components/NftCard";
-import {
-  KpiMarkCaseSensitive,
-  KpiMarkFingerprint,
-  KpiMarkGroup,
-  KpiMarkPalette,
-} from "@/components/kpi-marks";
+import { KpiMark } from "@/components/kpi-marks";
 import { RankWindow } from "@/components/RankWindow";
 import { SegBar, segItem } from "@/components/SegBar";
 import { getGateway } from "@/lib/config";
@@ -371,7 +366,7 @@ export function NftsView({ initial }: { initial: NftHomeSnap }) {
           miss={previewing}
           sub={t("nfts.kpiIndexedSub")}
           ink={INK.gold}
-          mark={<KpiMarkFingerprint className="h-9 w-9" />}
+          mark={<KpiMark id="nft" />}
           selected={tab === "catalog" && !kind}
           onSelect={() => onKind("")}
         />
@@ -382,7 +377,7 @@ export function NftsView({ initial }: { initial: NftHomeSnap }) {
           miss={previewing}
           sub={t("nfts.kpiNamedSub")}
           ink={INK.violet}
-          mark={<KpiMarkCaseSensitive className="h-9 w-9" />}
+          mark={<KpiMark id="name" />}
         />
         <CatalogSearchTile
           enter={2}
@@ -399,7 +394,7 @@ export function NftsView({ initial }: { initial: NftHomeSnap }) {
           miss={previewing}
           sub={t("nfts.kpiArtSub")}
           ink={INK.cyan}
-          mark={<KpiMarkPalette className="h-9 w-9" />}
+          mark={<KpiMark id="picture" />}
         />
         <NftMini
           enter={4}
@@ -408,7 +403,7 @@ export function NftsView({ initial }: { initial: NftHomeSnap }) {
           miss={previewing}
           sub={t("nfts.kpiSeriesSub")}
           ink={INK.gold}
-          mark={<KpiMarkGroup className="h-9 w-9" />}
+          mark={<KpiMark id="collection" />}
           selected={tab === "series"}
           onSelect={() => onTab("series")}
         />

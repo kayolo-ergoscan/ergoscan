@@ -3,6 +3,7 @@
 import { useEffect, type CSSProperties } from "react";
 import Link from "next/link";
 import { AddrFactCard } from "@/components/AddrFactCard";
+import { KpiMark } from "@/components/kpi-marks";
 import { EvidenceBadge } from "@/components/EvidenceBadge";
 import { IndexScopeChip } from "@/components/IndexScopeChip";
 import { Shell } from "@/components/Shell";
@@ -40,7 +41,7 @@ export function LearnView() {
           enter={0}
           label={t("learn.eyebrow")}
           ink={INK.cyan}
-          mark={<LearnMark />}
+          mark={<KpiMark id="guide" />}
         >
           <h1 className="mt-0.5 text-[17px] font-semibold leading-none tracking-tight">
             {t("learn.title")}
@@ -159,15 +160,3 @@ function enterAt(i: number): CSSProperties {
   return { "--enter": i } as CSSProperties;
 }
 
-function LearnMark() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden className="h-10 w-10">
-      <path
-        d="M4 6.5c2.6-.9 5.2-.5 8 1.2v10c-2.8-1.7-5.4-2.1-8-1.2v-10Zm16 0c-2.6-.9-5.2-.5-8 1.2v10c2.8-1.7 5.4-2.1 8-1.2v-10Z"
-        stroke="currentColor"
-        strokeWidth="1.55"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}

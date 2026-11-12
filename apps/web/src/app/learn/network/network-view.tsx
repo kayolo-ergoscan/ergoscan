@@ -2,6 +2,7 @@
 
 import { useEffect, type CSSProperties } from "react";
 import { AddrFactCard } from "@/components/AddrFactCard";
+import { KpiMark } from "@/components/kpi-marks";
 import { Shell } from "@/components/Shell";
 import { INK } from "@/lib/palette";
 import { useT } from "@/lib/i18n/I18nProvider";
@@ -38,7 +39,7 @@ export function NetworkView() {
           enter={0}
           label={t("network.eyebrow")}
           ink={INK.cyan}
-          mark={<GlobeMark />}
+          mark={<KpiMark id="network" />}
         >
           <h1 className="mt-0.5 text-[17px] font-semibold leading-none tracking-tight">
             {t("network.title")}
@@ -103,16 +104,3 @@ function enterAt(i: number): CSSProperties {
   return { "--enter": i } as CSSProperties;
 }
 
-function GlobeMark() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden className="h-10 w-10">
-      <circle cx="12" cy="12" r="9.2" stroke="currentColor" strokeWidth="1.55" />
-      <path
-        d="M12 2.8a15 15 0 0 0 0 18.4A15 15 0 0 0 12 2.8Z"
-        stroke="currentColor"
-        strokeWidth="1.55"
-      />
-      <path d="M3 12h18" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" />
-    </svg>
-  );
-}

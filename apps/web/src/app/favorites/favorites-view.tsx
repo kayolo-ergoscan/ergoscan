@@ -3,13 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import clsx from "clsx";
 import { KpiNum, KpiTileRail } from "@/components/KpiGrid";
-import {
-  KpiMarkCoins,
-  KpiMarkSquareStack,
-  KpiMarkUsers,
-  KpiMarkVault,
-  KpiMarkWorkflow,
-} from "@/components/kpi-marks";
+import { KpiMark } from "@/components/kpi-marks";
 import { Shell } from "@/components/Shell";
 import { FavKayolo } from "@/components/FavKayolo";
 import { FeedBlockRow } from "@/app/blocks/blocks-view";
@@ -397,11 +391,11 @@ export function FavoritesView() {
   }, [ids, kind]);
 
   const tiles: { id: FavoriteKind; label: string; ink: string; mark: ReactNode }[] = [
-    { id: "addresses", label: t("addresses.title"), ink: INK.violet, mark: <KpiMarkUsers tone={INK.violet} /> },
-    { id: "tokens", label: t("tokens.title"), ink: INK.gold, mark: <KpiMarkCoins tone={INK.gold} /> },
-    { id: "blocks", label: t("blocks.title"), ink: INK.green, mark: <KpiMarkSquareStack tone={INK.green} /> },
-    { id: "transactions", label: t("txs.title"), ink: INK.cyan, mark: <KpiMarkWorkflow tone={INK.cyan} /> },
-    { id: "pools", label: t("defi.pools"), ink: INK.gold, mark: <KpiMarkVault tone={INK.gold} /> },
+    { id: "addresses", label: t("addresses.title"), ink: INK.violet, mark: <KpiMark id="address" tone={INK.violet} /> },
+    { id: "tokens", label: t("tokens.title"), ink: INK.gold, mark: <KpiMark id="token" tone={INK.gold} /> },
+    { id: "blocks", label: t("blocks.title"), ink: INK.green, mark: <KpiMark id="block" tone={INK.green} /> },
+    { id: "transactions", label: t("txs.title"), ink: INK.cyan, mark: <KpiMark id="tx" tone={INK.cyan} /> },
+    { id: "pools", label: t("defi.pools"), ink: INK.gold, mark: <KpiMark id="pool" tone={INK.gold} /> },
   ];
 
   /** Every row here is saved; its heart removes it. */

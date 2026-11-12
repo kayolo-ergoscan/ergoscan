@@ -7,12 +7,7 @@ import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import { Shell } from "@/components/Shell";
 import { KpiGrid } from "@/components/KpiGrid";
-import {
-  KpiMarkHandshake,
-  KpiMarkScrollText,
-  KpiMarkTrendingUp,
-  KpiMarkVault,
-} from "@/components/kpi-marks";
+import { KpiMark } from "@/components/kpi-marks";
 import { TokenAvatar } from "@/components/TokenBadge";
 import { PrettyPrice } from "@/components/PrettyNum";
 import { ListWhen } from "@/components/ListWhen";
@@ -288,7 +283,7 @@ export function SpectrumView({
       value: tvl != null && tvl > 0 ? fmtErgFull(tvl) : miss,
       unavailable: tvl == null || tvl <= 0,
       sub: t("spectrum.tvlSub"),
-      mark: <KpiMarkVault tone={INK.gold} />,
+      mark: <KpiMark id="pool" tone={INK.gold} />,
       ink: INK.gold,
       enter: 0,
     },
@@ -297,7 +292,7 @@ export function SpectrumView({
       value: vol != null && vol > 0 ? fmtErgFull(vol) : miss,
       unavailable: vol == null || vol <= 0,
       sub: t("spectrum.volumeSub"),
-      mark: <KpiMarkTrendingUp tone={INK.cyan} />,
+      mark: <KpiMark id="volume" tone={INK.cyan} />,
       ink: INK.cyan,
       enter: 1,
     },
@@ -307,7 +302,7 @@ export function SpectrumView({
         snap?.tradersCount != null ? snap.tradersCount.toLocaleString(loc(locale)) : miss,
       unavailable: snap?.tradersCount == null,
       sub: t("spectrum.tradersSub"),
-      mark: <KpiMarkHandshake tone={INK.violet} />,
+      mark: <KpiMark id="trader" tone={INK.violet} />,
       ink: INK.violet,
       enter: 2,
     },
@@ -317,7 +312,7 @@ export function SpectrumView({
         snap?.tradesCount != null ? snap.tradesCount.toLocaleString(loc(locale)) : miss,
       unavailable: snap?.tradesCount == null,
       sub: t("spectrum.tradesSub"),
-      mark: <KpiMarkScrollText tone={INK.gold} />,
+      mark: <KpiMark id="swap" tone={INK.gold} />,
       ink: INK.gold,
       enter: 3,
     },
