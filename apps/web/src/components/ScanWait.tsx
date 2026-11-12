@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import clsx from "clsx";
+import { BrandMark } from "./BrandMark";
 
 /** Same delay as menu hops: bar at once, pulsing mark after this. */
 export const SCAN_WAIT_SLOW_MS = 500;
@@ -46,14 +47,7 @@ export function ScanWait({
           className="pointer-events-none fixed inset-0 z-[70] grid place-items-center bg-black/25"
           aria-hidden
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/ergoscan-mark.svg"
-            alt=""
-            width={64}
-            height={64}
-            className="route-nav-mark h-16 w-16"
-          />
+          <BrandMark size={64} className="route-nav-mark h-16 w-16" />
         </div>
       ) : null}
     </>

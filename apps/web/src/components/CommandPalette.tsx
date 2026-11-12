@@ -208,7 +208,7 @@ function hitCaption(h: Hit): string {
 }
 
 function TypeGlyph({ type }: { type: string }) {
-  const cls = "h-3.5 w-3.5 shrink-0 text-accent";
+  const cls = "ico-line h-3.5 w-3.5 shrink-0";
   if (type === "block") return <IconBlocks className={cls} />;
   if (type === "tx") return <IconTxs className={cls} />;
   if (type === "address") return <IconHolders className={cls} />;

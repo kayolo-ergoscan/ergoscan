@@ -1,0 +1,61 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>favicon in a tab</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0; padding: 28px; font: 13px system-ui, "IBM Plex Sans", sans-serif; background: #f1f1f4; color: #202124; }
+  .dark-only { display: none; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #111114; color: #e8eaed; }
+    .dark-only { display: block; }
+    .light-only { display: none; }
+  }
+  .cap { margin: 0 0 10px; font-weight: 600; letter-spacing: .02em; opacity: .7; }
+  .strip { width: 640px; border-radius: 10px 10px 0 0; padding: 8px 8px 0; display: flex; gap: 2px; }
+  .tab { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; width: 200px; border-radius: 8px 8px 0 0; white-space: nowrap; overflow: hidden; }
+  .tab img { width: 16px; height: 16px; flex: none; }
+  .dot { width: 16px; height: 16px; border-radius: 50%; flex: none; }
+  .url { width: 640px; height: 36px; display: flex; align-items: center; padding: 0 14px; box-sizing: border-box; }
+  .dark .strip { background: #202124; color: #e8eaed; }
+  .dark .tab.on, .dark .url { background: #35363a; color: #e8eaed; }
+  .dark .dot { background: #5f6368; }
+  .light .strip { background: #dee1e6; color: #202124; }
+  .light .tab.on, .light .url { background: #fff; color: #5f6368; }
+  .light .dot { background: #9aa0a6; }
+  .row { display: flex; gap: 28px; align-items: flex-end; margin-top: 26px; }
+  .row figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .row figcaption { opacity: .65; font-size: 12px; }
+  .ios { border-radius: 22.37%; }
+  .mask { border-radius: 50%; }
+</style>
+</head>
+<body>
+  <div class="dark-only dark">
+    <p class="cap">Dark browser · favicon.svg follows the theme</p>
+    <div class="strip">
+      <div class="tab on"><img src="http://127.0.0.1:4441/favicon.svg" alt="" />Tx fab5371d… · ErgoScan</div>
+      <div class="tab"><img src="http://127.0.0.1:4441/favicon.ico" alt="" />Block 1,915,260 · ErgoScan</div>
+      <div class="tab"><span class="dot"></span>Inbox (3)</div>
+    </div>
+    <div class="url">ergoscan.me/tx/fab5371d6786d6467499fb98c093c1cee89ed8d48b04bc1df5f1e1695a4f6ee0</div>
+  </div>
+  <div class="light-only light">
+    <p class="cap">Light browser · favicon.svg follows the theme</p>
+    <div class="strip">
+      <div class="tab on"><img src="http://127.0.0.1:4441/favicon.svg" alt="" />Tx fab5371d… · ErgoScan</div>
+      <div class="tab"><img src="http://127.0.0.1:4441/favicon.ico" alt="" />Block 1,915,260 · ErgoScan</div>
+      <div class="tab"><span class="dot"></span>Inbox (3)</div>
+    </div>
+    <div class="url">ergoscan.me/tx/fab5371d6786d6467499fb98c093c1cee89ed8d48b04bc1df5f1e1695a4f6ee0</div>
+  </div>
+  <div class="row">
+    <figure><img src="http://127.0.0.1:4441/favicon.ico" width="16" height="16" alt="" /><figcaption>ico 16</figcaption></figure>
+    <figure><img src="http://127.0.0.1:4441/icon.png" width="32" height="32" alt="" /><figcaption>png 32</figcaption></figure>
+    <figure><img class="ios" src="http://127.0.0.1:4441/apple-touch-icon.png" width="90" height="90" alt="" /><figcaption>apple-touch 180</figcaption></figure>
+    <figure><img class="ios" src="http://127.0.0.1:4441/icon-512.png" width="120" height="120" alt="" /><figcaption>icon 512</figcaption></figure>
+    <figure><img class="mask" src="http://127.0.0.1:4441/icon-512-maskable.png" width="120" height="120" alt="" /><figcaption>maskable, circle crop</figcaption></figure>
+  </div>
+</body>
+</html>

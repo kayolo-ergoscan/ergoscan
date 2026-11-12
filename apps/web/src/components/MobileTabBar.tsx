@@ -6,7 +6,7 @@ import clsx from "clsx";
 import { useT } from "@/lib/i18n/I18nProvider";
 import { explorerHref, useSiteHost } from "@/lib/site-host";
 import { MOBILE_TABS, moreActive, pathActive } from "@/lib/mobile-tab";
-import { NavIcon, type NavIconId } from "./nav-icons";
+import { IconMore, NavIcon, type NavIconId } from "./nav-icons";
 
 const TAB_ICON: Record<string, NavIconId> = {
   "/": "home",
@@ -44,7 +44,7 @@ export function MobileTabBar({
           );
           const inner = (
             <>
-              <NavIcon id={TAB_ICON[item.href] ?? "home"} className="size-[22px] text-accent" />
+              <NavIcon id={TAB_ICON[item.href] ?? "home"} className="ico-line size-[22px]" />
               <span>{t(item.key)}</span>
             </>
           );
@@ -66,7 +66,7 @@ export function MobileTabBar({
                 active ? "is-pressed text-[var(--text)]" : "text-[var(--muted)]"
               )}
             >
-              <NavIcon id={TAB_ICON[item.href] ?? "home"} className="size-[22px] text-accent" />
+              <NavIcon id={TAB_ICON[item.href] ?? "home"} className="ico-line size-[22px]" />
               <span>{t(item.key)}</span>
             </Link>
           );
@@ -81,22 +81,11 @@ export function MobileTabBar({
             moreOn ? "is-pressed text-[var(--text)]" : "text-[var(--muted)]"
           )}
         >
-          <MoreGlyph />
+          <IconMore className="ico-line size-[22px]" />
           <span>{t("nav.more")}</span>
         </button>
       </div>
     </nav>
     </>
-  );
-}
-
-function MoreGlyph() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden className="text-accent">
-      <circle cx="7" cy="7" r="1.7" fill="currentColor" />
-      <circle cx="17" cy="7" r="1.7" fill="currentColor" />
-      <circle cx="7" cy="17" r="1.7" fill="currentColor" />
-      <circle cx="17" cy="17" r="1.7" fill="currentColor" />
-    </svg>
   );
 }
