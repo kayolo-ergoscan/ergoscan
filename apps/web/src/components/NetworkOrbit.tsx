@@ -10,7 +10,7 @@ import clsx from "clsx";
 import { getGateway } from "@/lib/config";
 import { loadGlobeMap, makePlaceholderMap } from "@/lib/earth-texture";
 import { enteringIds, useEnterIds } from "@/lib/keyed-enter";
-import { INK } from "@/lib/palette";
+import { HOME, INK } from "@/lib/palette";
 import { ReelText } from "@/components/ReelText";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
@@ -523,7 +523,7 @@ export function NetworkOrbit({ enter = 0 }: { enter?: number }) {
       <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[20px] px-4 py-3 sm:px-5">
       <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[auto_minmax(0,1fr)_auto] gap-x-4 gap-y-3 sm:grid-cols-[minmax(0,1fr)_11rem] sm:grid-rows-[auto_minmax(0,1fr)]">
         <div className="flex h-[22px] shrink-0 items-center justify-between gap-3 sm:col-span-2 sm:row-start-1">
-          <h2 className="m-0 text-[13px] leading-none" style={{ color: INK.coral }}>{t("home.network")}</h2>
+          <h2 className="m-0 text-[13px] leading-none" style={{ color: HOME.forming }}>{t("home.network")}</h2>
           <p
             className={clsx(
               "m-0 text-[22px] font-semibold leading-none tabular-nums tracking-tight",

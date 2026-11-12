@@ -15,7 +15,9 @@ import {
   SITE_URL,
 } from "@/lib/site-meta";
 import { INK_BOOT } from "@/lib/skin-ink";
+import { LOOK_BOOT } from "@/lib/look";
 import "./globals.css";
+import "./looks.css";
 
 /** T1 default — Plex Sans has Cyrillic and `tnum`. */
 const sans = IBM_Plex_Sans({
@@ -133,6 +135,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <head>
         <Script id="ergoscan-ink" strategy="beforeInteractive">
           {INK_BOOT}
+        </Script>
+        <Script id="ergoscan-look" strategy="beforeInteractive">
+          {LOOK_BOOT}
         </Script>
       </head>
       <body className="antialiased">

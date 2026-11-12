@@ -4,6 +4,7 @@ import { useEffect, useRef, type MouseEvent as ReactMouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import { rentToneInk } from "@/lib/rent-miner-patrol";
 import { drawWallE } from "./wall-e";
+import { lookEdge, lookInk } from "@/lib/look";
 import type { RentTapeRow } from "@ergoscan/shared";
 
 /**
@@ -219,7 +220,7 @@ export function RentBelt({
       for (const item of order) {
         const checking = mode === "check" && item.row.address === struck;
         const lid = checking ? lidOpen(hopT) : 0;
-        const ink = rentToneInk(item.row.rentNano, nanos);
+        const ink = lookInk(rentToneInk(item.row.rentNano, nanos));
         drawDock(ctx, item.slot.x, item.slot.y, item.slot.depth);
         drawCrate(ctx, item.slot.x, item.slot.y, ink, item.row.boxCount, item.slot.depth, 0, lid);
         drawn.push({ address: item.row.address, x: item.slot.x, y: item.slot.y - 10 });
@@ -331,7 +332,7 @@ function drawCrate(
   ctx.scale(1 + hop * 0.04, 1 - hop * 0.06);
   ctx.lineJoin = "round";
   ctx.lineWidth = 1.25;
-  ctx.strokeStyle = "rgba(255,255,255,0.75)";
+  ctx.strokeStyle = lookEdge() ?? "rgba(255,255,255,0.75)";
   ctx.fillStyle = ink;
   ctx.beginPath();
   ctx.moveTo(2, 8);
@@ -406,9 +407,12 @@ function drawPurse(
   if (wide > 78) ctx.scale(78 / wide, 78 / wide);
   ctx.lineJoin = "round";
   ctx.lineWidth = 3;
-  ctx.strokeStyle = "rgba(16,12,10,0.5)";
-  ctx.strokeText(label, 0, 0);
-  ctx.fillStyle = "#ff8a65";
+  // A look prints the figure flat; the dark halo is for the default ink only.
+  if (!lookEdge()) {
+    ctx.strokeStyle = "rgba(16,12,10,0.5)";
+    ctx.strokeText(label, 0, 0);
+  }
+  ctx.fillStyle = lookInk("#ff8a65");
   ctx.fillText(label, 0, 0);
   ctx.restore();
 }

@@ -3,6 +3,7 @@
 import { useEffect, useRef, type MouseEvent as ReactMouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import { drawWallE } from "./wall-e";
+import { lookEdge, lookInk } from "@/lib/look";
 
 /**
  * Live-block tape drawn on a canvas, same family as the rent yard.
@@ -358,6 +359,8 @@ function drawBlock(
   fallPx: number,
   growing: boolean
 ) {
+  ink = lookInk(ink);
+  const edge = lookEdge();
   const lift = hop * 10 + fallPx;
   const air = Math.min(1, lift / 22);
   const hw = 33;
@@ -375,7 +378,7 @@ function drawBlock(
   const bot = -3;
   ctx.lineJoin = "round";
   ctx.lineWidth = 1.15;
-  ctx.strokeStyle = "rgba(255,255,255,0.72)";
+  ctx.strokeStyle = edge ?? "rgba(255,255,255,0.72)";
   ctx.fillStyle = ink;
   ctx.beginPath();
   ctx.moveTo(-hw, bot - depth * 0.25);
@@ -406,12 +409,12 @@ function drawBlock(
   ctx.fill();
   ctx.stroke();
   if (growing) {
-    ctx.strokeStyle = "rgba(255,255,255,0.95)";
+    ctx.strokeStyle = edge ?? "rgba(255,255,255,0.95)";
     ctx.lineWidth = 1.6;
     ctx.stroke();
   }
   ctx.globalAlpha = 0.55;
-  ctx.strokeStyle = "rgba(255,255,255,0.8)";
+  ctx.strokeStyle = edge ?? "rgba(255,255,255,0.8)";
   ctx.lineWidth = 1;
   ctx.beginPath();
   const slats = Math.max(1, Math.min(4, Math.round(body / 12)));

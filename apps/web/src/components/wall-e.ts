@@ -1,3 +1,5 @@
+import { currentLook } from "@/lib/look";
+
 /** Same WALL-E as the live-block tape. Defaults match that drawing. */
 
 function drawEyes(
@@ -61,6 +63,7 @@ export type WallPose = {
 };
 
 export function drawWallE(ctx: CanvasRenderingContext2D, pose: WallPose) {
+  if (currentLook()) return;
   const face = pose.face ?? -1;
   const scale = pose.scale ?? 0.82;
   const eyeLift = pose.eyeLift ?? 0;

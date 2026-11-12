@@ -49,6 +49,7 @@ export const HOME = {
   epoch: INK.cyan,
   txs: INK.cyan,
   fees: INK.violet,
-  forming: INK.coral,
+  /** Tile labels. A token, so a look can restyle every label at once. */
+  forming: "var(--tile-label, #ff8a65)",
   hashrate: "#82a0ff",
 } as const;

@@ -9,6 +9,7 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { formatErgPrecise, shortId } from "@/lib/format";
+import { lookEdge, lookInk } from "@/lib/look";
 import { txChipCaption } from "@/lib/tx-lock";
 import { usePageSync, useStreamMempool } from "@/lib/page-sync";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
@@ -221,7 +222,7 @@ function paintBallShadow(
   ry: number,
   alpha: number
 ) {
-  if (alpha <= 0.01) return;
+  if (alpha <= 0.01 || lookEdge()) return;
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.fillStyle = "#000";
@@ -245,11 +246,18 @@ function paintSphere(
   ctx.save();
   ctx.translate(x, y);
   ctx.globalAlpha = alpha;
-  const g = ctx.createRadialGradient(-r * 0.2, -r * 0.22, r * 0.2, 0, r * 0.05, r);
-  g.addColorStop(0, shadeHex(color, 0.16, 255));
-  g.addColorStop(0.62, color);
-  g.addColorStop(1, shadeHex(color, 0.22, 16));
-  ctx.fillStyle = g;
+  const edge = lookEdge();
+  if (edge) {
+    // A look paints flat ink with its own edge, no lit sphere.
+    ctx.fillStyle = lookInk(color);
+    rim = edge;
+  } else {
+    const g = ctx.createRadialGradient(-r * 0.2, -r * 0.22, r * 0.2, 0, r * 0.05, r);
+    g.addColorStop(0, shadeHex(color, 0.16, 255));
+    g.addColorStop(0.62, color);
+    g.addColorStop(1, shadeHex(color, 0.22, 16));
+    ctx.fillStyle = g;
+  }
   if (kind === "hex") hexPath(ctx, 0, 0, r);
   else {
     ctx.beginPath();
@@ -289,7 +297,7 @@ function paintIdleBall(ctx: CanvasRenderingContext2D, b: WellBody, r: number, ho
   if (b.more) {
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.fillStyle = parcelInk(b.color);
+    ctx.fillStyle = parcelInk(lookInk(b.color));
     ctx.font = `600 ${Math.max(8, Math.round(r * 0.85))}px ui-sans-serif, system-ui, sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
@@ -1126,7 +1134,7 @@ export function TxBallPit({
                             <p className="mt-1.5 flex items-center gap-1.5 text-[12px] leading-none text-[var(--muted)]">
                               <span
                                 className="inline-block h-1.5 w-1.5 shrink-0 rounded-full"
-                                style={{ background: wellTip.color }}
+                                style={{ background: lookInk(wellTip.color) }}
                               />
                               {wellTip.cat}
                             </p>

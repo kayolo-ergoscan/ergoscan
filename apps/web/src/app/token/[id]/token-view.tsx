@@ -37,7 +37,7 @@ import {
 } from "@/lib/format";
 import { tokenDescLines } from "@/lib/token-desc";
 import { resolveTokenMeta, tokenTickerInk } from "@/lib/token-meta";
-import { INK } from "@/lib/palette";
+import { HOME, INK } from "@/lib/palette";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { setHashTab } from "@/lib/hash-tab";
 import { useKeepFresh, usePageSync } from "@/lib/page-sync";
@@ -315,7 +315,7 @@ function DescCard({
       <div className="kpi-tile-body flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <p
           className="relative z-[1] shrink-0 truncate bg-[var(--module)] pb-1 pr-10 text-[13px] leading-[1.15]"
-          style={{ color: INK.coral }}
+          style={{ color: HOME.forming }}
         >
           {label}
         </p>

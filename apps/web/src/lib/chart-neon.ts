@@ -1,4 +1,5 @@
 import type { EChartsCoreOption } from "echarts/core";
+import { currentLook, lookInk } from "./look";
 
 type Series = NonNullable<EChartsCoreOption["series"]>;
 type LineOpt = Extract<Series extends readonly (infer U)[] ? U : Series, { type?: "line" }>;
@@ -82,7 +83,8 @@ export function neonLine(opts: {
   const width = opts.width ?? 2;
   const washTop = opts.wash ?? 0;
   const scatter = opts.scatter ?? 0;
-  const ink = punch(opts.color, day ? 0.15 : 0.62);
+  const look = currentLook();
+  const ink = look ? lookInk(opts.color) : punch(opts.color, day ? 0.15 : 0.62);
   const shared = {
     type: "line" as const,
     yAxisIndex,
@@ -96,6 +98,27 @@ export function neonLine(opts: {
   };
   const quiet = { name: "", silent: true as const, tooltip: { show: false } };
   const layers: LineOpt[] = [];
+  if (look) {
+    // A look draws one flat stroke over a light wash. No halo, no bloom.
+    if (washTop > 0) {
+      layers.push({
+        ...shared,
+        ...quiet,
+        z: 1,
+        lineStyle: { width: 0, color: "transparent" },
+        areaStyle: { origin: "start", color: wash(ink, washTop * 0.5), opacity: 1 },
+      });
+    }
+    layers.push({
+      ...shared,
+      name: opts.name,
+      z: 4,
+      lineStyle: { width: width + 0.25, color: ink, cap: "round", join: "round" },
+      itemStyle: { color: ink },
+      emphasis: { disabled: true },
+    });
+    return layers;
+  }
   if (washTop > 0) {
     layers.push({
       ...shared,

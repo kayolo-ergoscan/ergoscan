@@ -1,5 +1,7 @@
 /** Explorer inks: Paper / Epoch / Lykos. Same hue family as OLED A — not a white/black invert. */
 
+import { LOOK_INK, parseLook } from "./look";
+
 export const SKIN_INKS = ["day", "dim", "oled"] as const;
 export type SkinInk = (typeof SKIN_INKS)[number];
 
@@ -34,6 +36,11 @@ export const INK_BOOT = `(function(){try{var q=new URLSearchParams(location.sear
 export function applyInk(ink: SkinInk, persist = true): void {
   if (typeof document === "undefined") return;
   const root = document.documentElement;
+  const look = parseLook(root.dataset.look);
+  if (look) {
+    ink = LOOK_INK[look];
+    persist = false;
+  }
   root.dataset.ink = ink;
   root.classList.toggle("dark", ink !== "day");
   root.style.colorScheme = colorSchemeFor(ink);

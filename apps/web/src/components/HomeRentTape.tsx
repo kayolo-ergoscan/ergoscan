@@ -14,7 +14,7 @@ import { TokenLogo } from "@/components/TokenBadge";
 import { listPip } from "@/lib/address-pips";
 import { formatErgFixed, formatErgPrecise, formatScaledGlance, formatUsd, shortId, toBigIntAmt } from "@/lib/format";
 import { rentYardDemoPack, RENT_DEMO_MS } from "@/lib/rent-miner-patrol";
-import { INK } from "@/lib/palette";
+import { HOME, INK } from "@/lib/palette";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { dangerHoldingUsd, type RentDangerRow } from "@/lib/rent-danger";
 import { resolveTokenMeta, tokenTickerInk } from "@/lib/token-meta";
@@ -101,7 +101,7 @@ export function HomeRentTape({
           <div className="grid min-h-0 flex-1 grid-cols-1 gap-x-10 gap-y-6 sm:grid-cols-2">
             <div className="flex min-h-0 min-w-0 flex-col">
               <div className="flex min-h-[38px] shrink-0 items-start justify-between gap-3">
-                <h2 className="m-0 text-[13px] leading-none" style={{ color: INK.coral }}>{t("rent.title")}</h2>
+                <h2 className="m-0 text-[13px] leading-none" style={{ color: HOME.forming }}>{t("rent.title")}</h2>
                 <div className="min-w-0 text-right">
                   <p
                     className={clsx(
@@ -192,7 +192,7 @@ function DangerReel({
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
-      <h2 className="m-0 shrink-0 text-[13px] leading-none" style={{ color: INK.coral }}>
+      <h2 className="m-0 shrink-0 text-[13px] leading-none" style={{ color: HOME.forming }}>
         {t("rent.danger.title")}
       </h2>
       {rows.length === 0 ? (

@@ -7,6 +7,7 @@ import { TooltipComponent } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
 import { chartChrome } from "@/lib/chart-chrome";
 import { DONUT_SLICES } from "@/lib/palette";
+import { lookInk } from "@/lib/look";
 import { useInk } from "@/lib/use-ink";
 
 echarts.use([PieChart, TooltipComponent, CanvasRenderer]);
@@ -143,7 +144,7 @@ export function DonutChart({
                 color: (() => {
                   const fallback = DONUT_SLICES[i % DONUT_SLICES.length];
                   const raw = d.color ?? fallback;
-                  return raw.startsWith("rgba(255") ? chrome.hair : raw;
+                  return raw.startsWith("rgba(255") ? chrome.hair : lookInk(raw);
                 })(),
               },
             })),
