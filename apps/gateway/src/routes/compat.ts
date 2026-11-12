@@ -274,7 +274,7 @@ function streamBoxJson(b: GixStreamBox) {
   };
 }
 
-/** Official TransactionInfo for a stream tx. Inputs keep the box shape (input order is not stored). */
+/** Official TransactionInfo for a stream tx. Input order comes from the node; data inputs are not in streams. */
 function streamTxJson(t: GixStreamTx, tip: number | null) {
   const io = (b: GixStreamBox) => ({
     boxId: b.boxId,
@@ -900,7 +900,9 @@ export function registerCompatRoutes(app: Express, deps: CompatDeps): void {
       if (idx) {
         cacheNoStore(res);
         // Inputs were created in other txs: their block and height, not this tx's.
-        const inHeads = await getTxHeadsChecked(idx.inputs.map((b) => b.creationTxId));
+        const inHeads = await getTxHeadsChecked(
+          [...idx.inputs, ...idx.dataInputs].map((b) => b.creationTxId)
+        );
         if (!inHeads) {
           res.status(503).json({ error: "stale", stale: true });
           return;
@@ -920,6 +922,7 @@ export function registerCompatRoutes(app: Express, deps: CompatDeps): void {
             size: idx.size,
             tip: tipNow(),
             inputs: idx.inputs.map(inputBox),
+            dataInputs: idx.dataInputs.map(inputBox),
             outputs: idx.outputs.map((b) => indexedBox(b, idx.blockId, idx.inclusionHeight)),
           })
         );

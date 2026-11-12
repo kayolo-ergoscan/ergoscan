@@ -839,6 +839,7 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
 
     const inputs = idx.inputs.map((b, i) => mapIdxIo({ ...b, index: i }, i));
     const outputs = idx.outputs.map((b, i) => mapIdxIo(b, i));
+    const dataInputs = idx.dataInputs.map((b, i) => mapIdxIo({ ...b, index: i }, i));
     const raw = rawFromMapped(id, idx.size, inputs, outputs);
     const ball = txToBall(raw);
     const height = idx.inclusionHeight;
@@ -850,7 +851,7 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
     const shaped = shapeFromIo(idx.indexInBlock === 0, inputs, outputs);
     await stampTemplateHashes([...inputs, ...outputs]);
     const tokenMeta = await tokenMetaForIo(inputs, outputs);
-    const lock = lockFromIo(inputs, outputs);
+    const lock = lockFromIo(inputs, outputs, dataInputs);
     const rent =
       height != null ? (await rentTapeMarks([id], height, height)).get(id) ?? null : null;
     const category = rent?.category ?? shaped.category;
@@ -879,7 +880,8 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
       },
       inputs,
       outputs,
-      dataInputs: [],
+      dataInputs,
+      ioOrder: idx.ioOrder,
       indexInBlock: idx.indexInBlock,
       gix: idx.gix,
       prevId: idx.prevId,

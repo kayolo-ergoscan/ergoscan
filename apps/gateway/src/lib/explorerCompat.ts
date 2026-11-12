@@ -349,6 +349,7 @@ export function mapExplorerTx(row: {
   gix?: number | null;
   inputs?: ExplorerBoxInput[];
   outputs?: ExplorerBoxInput[];
+  dataInputs?: ExplorerBoxInput[];
   size?: number | null;
   tip?: number | null;
 }): ExplorerTx {
@@ -365,7 +366,7 @@ export function mapExplorerTx(row: {
         ? Math.trunc(row.gix)
         : null,
     inputs: (row.inputs ?? []).map(mapExplorerBox),
-    dataInputs: [],
+    dataInputs: (row.dataInputs ?? []).map(mapExplorerBox),
     outputs: (row.outputs ?? []).map(mapExplorerBox),
     size: row.size ?? null,
   };

@@ -41,6 +41,7 @@ import { ADDR_TOKEN_TAPE, sortAddrTokenTape, type AddrTokenTapeRow } from "./add
 import { encodeHolderCursor, type HolderCursor } from "./holder-cursor.js";
 import { leanTokenHolderAddresses } from "./token-holder-activity.js";
 import { flowParties, netTokenParties, zipTokenLegs } from "./flow-parties.js";
+import { nodeTxIo, nodeTxIoMany, orderByBoxIds, pickByBoxIds } from "./nodeTxIo.js";
 import {
   addressListWhere,
   type AddressBand,
@@ -878,6 +879,10 @@ export type IdxTxDetail = {
   nextId: string | null;
   inputs: IdxBoxRow[];
   outputs: IdxBoxRow[];
+  /** Data inputs in tx order (boxes from Postgres, ids and order from the node). */
+  dataInputs: IdxBoxRow[];
+  /** "node": input order and data inputs come from the node; "index": node did not answer (box_id order, no data inputs). */
+  ioOrder: "node" | "index";
   assetsComplete: boolean;
 };
 
@@ -922,6 +927,8 @@ export async function getTxById(txId: string): Promise<IdxTxDetail | null> {
   const indexInBlock = t.index_in_block != null ? Number(t.index_in_block) : NaN;
   const heightOk = Number.isFinite(height);
   const indexOk = Number.isFinite(indexInBlock);
+  // Input order and data inputs are not stored (DB must not grow): ask the node alongside the SQL.
+  const ioP = nodeTxIo(txId);
 
   const [outRows, inRows, neighbors] = await Promise.all([
     qSlow<BoxSqlRow>(
@@ -957,9 +964,21 @@ export async function getTxById(txId: string): Promise<IdxTxDetail | null> {
 
   const outs = outRows ?? [];
   const ins = inRows ?? [];
+  const io = await ioP;
+  const dataIds = io?.dataInputs ?? [];
+  const dataRows = dataIds.length
+    ? (await qSlow<BoxSqlRow>(
+        packed
+          ? `${PACKED_BOX_IO_SQL} WHERE b.box_id IN (SELECT decode(lower(x), 'hex') FROM unnest($1::text[]) AS x)`
+          : `${BOX_IO_SQL} WHERE box_id = ANY($1::text[])`,
+        [[...new Set(dataIds)]],
+        4000
+      )) ?? []
+    : [];
   const assetResult = await assetsForBoxesChecked([
     ...outs.map((r) => r.box_id),
     ...ins.map((r) => r.box_id),
+    ...dataRows.map((r) => r.box_id),
   ]);
   const wantIn = t.input_count != null ? Number(t.input_count) : NaN;
   const wantOut = t.output_count != null ? Number(t.output_count) : NaN;
@@ -967,7 +986,14 @@ export async function getTxById(txId: string): Promise<IdxTxDetail | null> {
   const size = t.size != null ? Number(t.size) : null;
   const hop = neighbors?.[0];
   const outputs = outs.map((r) => boxSqlToRow(r, assetResult.assets));
-  const inputs = ins.map((r) => boxSqlToRow(r, assetResult.assets));
+  const inputs = orderByBoxIds(
+    ins.map((r) => boxSqlToRow(r, assetResult.assets)),
+    io?.inputs
+  );
+  const dataInputs = pickByBoxIds(
+    dataRows.map((r) => boxSqlToRow(r, assetResult.assets)),
+    dataIds
+  );
   const paid = minerFeeFromOutputs(outputs);
   const fee =
     paid > 0 ? String(Math.trunc(paid)) : t.fee;
@@ -987,6 +1013,8 @@ export async function getTxById(txId: string): Promise<IdxTxDetail | null> {
     nextId: hop?.next_id ?? null,
     inputs,
     outputs,
+    dataInputs,
+    ioOrder: io ? "node" : "index",
     assetsComplete: assetResult.complete,
   };
 }
@@ -1326,6 +1354,8 @@ async function streamTxsWithIo(heads: StreamTxHeadRow[]): Promise<GixStreamTx[] 
   const gixByTx = packedReadEnabled()
     ? `IN (SELECT decode(lower(x), 'hex') FROM unnest($1::text[]) AS x WHERE x ~ '^[0-9a-fA-F]{64}$')`
     : `= ANY($1::text[])`;
+  // Input order is not stored; the node gives it (a few calls at a time, cached).
+  const ioP = nodeTxIoMany(ids);
   const [outRows, inRows] = await Promise.all([
     qSlow<BoxGixSqlRow>(
       `${gixFrom}
@@ -1362,6 +1392,7 @@ async function streamTxsWithIo(heads: StreamTxHeadRow[]): Promise<GixStreamTx[] 
     list.push(boxGixToRow(r, assetResult.assets));
     insByTx.set(r.spent_tx_id, list);
   }
+  const ioByTx = await ioP;
   return heads.map((t) => {
     const height = t.height != null ? Number(t.height) : NaN;
     const ts = t.timestamp_ms != null ? Number(t.timestamp_ms) : NaN;
@@ -1375,7 +1406,7 @@ async function streamTxsWithIo(heads: StreamTxHeadRow[]): Promise<GixStreamTx[] 
       size: Number.isFinite(size) ? size : null,
       indexInBlock: Number.isFinite(indexInBlock) ? indexInBlock : null,
       gix: parseGix(t.gix),
-      inputs: insByTx.get(t.id) ?? [],
+      inputs: orderByBoxIds(insByTx.get(t.id) ?? [], ioByTx.get(t.id.toLowerCase())?.inputs),
       outputs: outsByTx.get(t.id) ?? [],
     };
   });
