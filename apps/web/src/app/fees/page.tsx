@@ -4,8 +4,11 @@ import { useMemo } from "react";
 import Link from "next/link";
 import { Shell } from "@/components/Shell";
 import { KpiGrid } from "@/components/KpiGrid";
+import { KpiMark } from "@/components/kpi-marks";
 import { useMempool } from "@/lib/useMempool";
+import { formatEtaLeft, useNextBlockLeft } from "@/lib/block-eta";
 import { formatFeeRate, formatScaledAmount } from "@/lib/format";
+import { INK } from "@/lib/palette";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { countText } from "@/lib/i18n/messages";
 import {
@@ -21,13 +24,6 @@ import {
   type FeedKind,
 } from "@/components/feed/Feed";
 
-function formatEta(sec: number | undefined): string {
-  if (sec == null || !Number.isFinite(sec)) return "—";
-  const s = Math.max(0, Math.floor(sec));
-  if (s < 60) return `${s}s`;
-  return `${Math.floor(s / 60)}m ${s % 60}s`;
-}
-
 export default function FeesPage() {
   const t = useT();
   const { fees, balls } = useMempool();
@@ -38,11 +34,35 @@ export default function FeesPage() {
     [balls]
   );
 
+  // Counts down every second; past the average interval the block is due («any moment», not «0s»).
+  const etaLeft = useNextBlockLeft(fees?.eta);
+  const etaText = etaLeft == null ? "—" : formatEtaLeft(etaLeft) ?? t("fees.etaDue");
+
   const kpis = [
-    { label: t("fees.kpiTxs"), value: balls.length.toLocaleString(), enter: 0 },
-    { label: t("fees.kpiP50"), value: fees ? formatFeeRate(fees.p50) : "—", enter: 1 },
-    { label: t("fees.kpiP90"), value: fees ? formatFeeRate(fees.p90) : "—", enter: 2 },
-    { label: t("fees.kpiEta"), value: formatEta(fees?.eta?.nextEtaSec), enter: 3 },
+    {
+      label: t("fees.kpiTxs"),
+      value: balls.length.toLocaleString(),
+      mark: <KpiMark id="mempool" tone={INK.cyan} />,
+      enter: 0,
+    },
+    {
+      label: t("fees.kpiP50"),
+      value: fees ? formatFeeRate(fees.p50) : "—",
+      mark: <KpiMark id="fee-rate" tone={INK.teal} />,
+      enter: 1,
+    },
+    {
+      label: t("fees.kpiP90"),
+      value: fees ? formatFeeRate(fees.p90) : "—",
+      mark: <KpiMark id="fee-rate" tone={INK.teal} />,
+      enter: 2,
+    },
+    {
+      label: t("fees.kpiEta"),
+      value: etaText,
+      mark: <KpiMark id="interval" tone={INK.teal} />,
+      enter: 3,
+    },
   ];
 
   return (
@@ -90,7 +110,7 @@ export default function FeesPage() {
         </p>
         <div className="flex h-40 items-end gap-1">
           {(fees?.buckets ?? []).map((b, i) => (
-            <div key={i} className="flex flex-1 flex-col items-center gap-1">
+            <div key={i} className="flex h-full flex-1 flex-col items-center justify-end">
               <div
                 className="w-full rounded-t bg-accent/80"
                 style={{ height: `${(b.count / max) * 100}%`, minHeight: b.count ? 4 : 0 }}

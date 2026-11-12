@@ -1,14 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { formatEtaLeft, useNextBlockLeft } from "@/lib/block-eta";
 import { Shell } from "@/components/Shell";
 import { KpiGrid } from "@/components/KpiGrid";
-import {
-  KpiMarkBatteryMedium,
-  KpiMarkChartColumn,
-  KpiMarkListEnd,
-  KpiMarkReceiptText,
-} from "@/components/kpi-marks";
+import { KpiMark } from "@/components/kpi-marks";
 import { INK } from "@/lib/palette";
 import { RankWindow } from "@/components/RankWindow";
 import { Feed, FeedCount, FeedDays, FeedEmpty } from "@/components/feed/Feed";
@@ -37,13 +33,6 @@ function asBalls(rows: MempoolBall[]): BallProps[] {
 function loadPct(size: number): number | null {
   if (size <= 0) return 0;
   return Math.min(100, (size / ERGO_MAX_BLOCK_SIZE) * 100);
-}
-
-function formatEta(sec: number | undefined): string | null {
-  if (sec == null || !Number.isFinite(sec)) return null;
-  const s = Math.max(0, Math.floor(sec));
-  if (s < 60) return `${s}s`;
-  return `${Math.floor(s / 60)}m ${s % 60}s`;
 }
 
 export function MempoolView({
@@ -116,17 +105,8 @@ export function MempoolView({
   const fill = loadPct(totalSize);
   const p50 = fees?.p50 ?? initialP50;
   // Count down every second from the last block; past the average interval the block is due.
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(id);
-  }, []);
-  const etaInfo = fees?.eta;
-  const etaLeft =
-    etaInfo && etaInfo.lastBlockTs > 0 && etaInfo.avgIntervalMs > 0
-      ? Math.max(0, (etaInfo.lastBlockTs + etaInfo.avgIntervalMs - now) / 1000)
-      : etaInfo?.nextEtaSec;
-  const eta = etaLeft != null && etaLeft < 1 ? null : formatEta(etaLeft);
+  const etaLeft = useNextBlockLeft(fees?.eta);
+  const eta = formatEtaLeft(etaLeft);
   const etaDue = etaLeft != null && etaLeft < 1;
 
   const kpis = [
@@ -138,7 +118,7 @@ export function MempoolView({
             .replace("{h}", lastSeal.height.toLocaleString(loc(locale)))
             .replace("{n}", lastSeal.took.toLocaleString(loc(locale)))
         : t("mempool.kpiWaitSub"),
-      mark: <KpiMarkListEnd tone={INK.cyan} />,
+      mark: <KpiMark id="mempool" tone={INK.cyan} />,
       ink: INK.cyan,
       enter: 0,
     },
@@ -147,7 +127,7 @@ export function MempoolView({
       value: fill != null ? `${Math.round(fill)}%` : miss,
       unavailable: fill == null,
       sub: totalSize > 0 ? formatBytes(totalSize) : t("mempool.kpiLoadSub"),
-      mark: <KpiMarkBatteryMedium tone={INK.gold} />,
+      mark: <KpiMark id="load" tone={INK.gold} />,
       ink: INK.gold,
       enter: 1,
     },
@@ -155,7 +135,7 @@ export function MempoolView({
       label: t("mempool.kpiFees"),
       value: formatErgPrecise(totalFees, locale),
       sub: t("mempool.kpiFeesSub"),
-      mark: <KpiMarkReceiptText tone={INK.gold} />,
+      mark: <KpiMark id="fee" tone={INK.gold} />,
       ink: INK.gold,
       enter: 2,
     },
@@ -164,7 +144,7 @@ export function MempoolView({
       value: p50 != null ? formatFeeRate(p50) : miss,
       unavailable: p50 == null,
       sub: etaDue ? t("mempool.kpiEtaDue") : eta != null ? t("mempool.kpiEta").replace("{n}", eta) : t("fees.kpiEta"),
-      mark: <KpiMarkChartColumn tone={INK.teal} />,
+      mark: <KpiMark id="fee-rate" tone={INK.teal} />,
       ink: INK.teal,
       enter: 3,
     },

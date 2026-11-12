@@ -2,7 +2,7 @@
 
 import clsx from "clsx";
 import type { ReactNode } from "react";
-import { KpiTileRail } from "@/components/KpiGrid";
+import { KpiLabelMark, KpiTileRail } from "@/components/KpiGrid";
 import { HOME } from "@/lib/palette";
 import { usePaperPress } from "@/lib/use-paper-press";
 
@@ -104,9 +104,12 @@ export function AddrFactCard({
             : "relative z-[1] flex min-h-0 flex-1 flex-col"
         )}
       >
-        <p className="truncate text-[13px] leading-[1.15]" style={{ color: HOME.forming }}>
-          {label}
-        </p>
+        <div className="kpi-label-row">
+          {aside ? null : <KpiLabelMark mark={mark} color={ink} />}
+          <p className="truncate text-[13px] leading-[1.15]" style={{ color: HOME.forming }}>
+            {label}
+          </p>
+        </div>
         {children}
       </div>
       {aside ? (

@@ -21,12 +21,7 @@ import {
 } from "@/components/feed/Feed";
 import { Shell } from "@/components/Shell";
 import { KpiNum } from "@/components/KpiGrid";
-import {
-  KpiMarkBadgeCheck,
-  KpiMarkPackage,
-  KpiMarkPlug2,
-  KpiMarkRoute,
-} from "@/components/kpi-marks";
+import { KpiMark } from "@/components/kpi-marks";
 import { RankWindow } from "@/components/RankWindow";
 import { getGateway } from "@/lib/config";
 import { formatScaledAmount, formatTs, shortId, toEpochMs } from "@/lib/format";
@@ -240,7 +235,7 @@ export function RosenView({
           enter={0}
           label={t("rosen.card.bridge")}
           ink={INK.cyan}
-          mark={<KpiMarkPlug2 className="h-9 w-9" />}
+          mark={<KpiMark id="bridge" />}
           selected={status === ""}
           onSelect={() => onFilter("")}
         >
@@ -260,7 +255,7 @@ export function RosenView({
           miss={kpiMiss(shownHealth?.completed)}
           sub={kpiSub(t("rosen.kpiDoneSub"))}
           ink={INK.green}
-          mark={<KpiMarkBadgeCheck className="h-9 w-9" />}
+          mark={<KpiMark id="done" />}
           selected={status === "completed"}
           onSelect={() => onFilter("completed")}
         />
@@ -271,7 +266,7 @@ export function RosenView({
           miss={kpiMiss(shownHealth?.processing)}
           sub={kpiSub(t("rosen.kpiLiveSub"))}
           ink={INK.gold}
-          mark={<KpiMarkPackage className="h-9 w-9" />}
+          mark={<KpiMark id="transit" />}
           selected={status === "processing"}
           onSelect={() => onFilter("processing")}
         />
@@ -282,7 +277,7 @@ export function RosenView({
           miss={kpiMiss(shownHealth?.routes)}
           sub={kpiSub(t("rosen.kpiRoutesSub"))}
           ink={INK.violet}
-          mark={<KpiMarkRoute className="h-9 w-9" />}
+          mark={<KpiMark id="route" />}
         />
       </div>
 

@@ -1,11 +1,5 @@
 import { AddressStatTile } from "@/components/AddressStatTile";
-import {
-  KpiMarkCpu,
-  KpiMarkFileCode,
-  KpiMarkLibrary,
-  KpiMarkPickaxe,
-  KpiMarkStore,
-} from "@/components/kpi-marks";
+import { KpiMark } from "@/components/kpi-marks";
 import { LIST_ENTITY_INK, mergeKinds, type ListEntityId } from "@/lib/address-pips";
 import { INK } from "@/lib/palette";
 import type { ReactNode } from "react";
@@ -13,18 +7,16 @@ import type { ReactNode } from "react";
 const ALL_INK = INK.cyan;
 
 const KIND_MARK: Record<ListEntityId, ReactNode> = {
-  protocol: <KpiMarkCpu className="h-9 w-9 shrink-0" />,
-  exchange: <KpiMarkStore className="h-9 w-9 shrink-0" />,
-  pool: <KpiMarkPickaxe className="h-9 w-9 shrink-0" />,
-  contract: <KpiMarkFileCode className="h-9 w-9 shrink-0" />,
+  protocol: <KpiMark id="protocol" />,
+  exchange: <KpiMark id="exchange" />,
+  pool: <KpiMark id="miner" />,
+  contract: <KpiMark id="contract" />,
 };
 
-/** Phone 2-col: Scripts sits beside Overlord. sm+ keeps All → … → Scripts. */
-const KIND_PHONE_ORDER: Record<ListEntityId, string> = {
-  contract: "max-sm:order-6",
-  protocol: "max-sm:order-8",
-  exchange: "max-sm:order-9",
-  pool: "max-sm:order-10",
+/** Phone chip names where the tile name is too long for a chip. */
+const KIND_CHIP: Partial<Record<ListEntityId, string>> = {
+  pool: "addresses.chip.pool",
+  contract: "addresses.chip.contract",
 };
 
 export function AddressKindKey({
@@ -54,7 +46,7 @@ export function AddressKindKey({
     <>
       <AddressStatTile
         enter={enterFrom}
-        className="max-sm:order-7"
+        className="kpi-chip-first"
         label={t("addresses.tileAll")}
         n={allN}
         caption={t("addresses.allCaption")}
@@ -62,7 +54,7 @@ export function AddressKindKey({
         hint={t("addresses.allHint")}
         ink={ALL_INK}
         loc={loc}
-        mark={<KpiMarkLibrary className="h-9 w-9 shrink-0" />}
+        mark={<KpiMark id="address" />}
         selected={allSelected}
         onSelect={onAll}
       />
@@ -70,8 +62,8 @@ export function AddressKindKey({
         <AddressStatTile
           key={b.id}
           enter={enterFrom + 1 + i}
-          className={KIND_PHONE_ORDER[b.id]}
           label={t(`addresses.pip.${b.id}`)}
+          chipLabel={KIND_CHIP[b.id] ? t(KIND_CHIP[b.id]!) : undefined}
           n={b.n}
           caption={t(`addresses.kind.${b.id}Range`)}
           detail={t(`addresses.kind.${b.id}RangeFull`)}

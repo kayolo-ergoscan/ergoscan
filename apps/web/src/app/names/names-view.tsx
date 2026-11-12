@@ -7,6 +7,7 @@ import { Shell } from "@/components/Shell";
 import { AddressStatTile } from "@/components/AddressStatTile";
 import { BookKindMark, type BookTileId } from "@/components/BookKindMark";
 import { FavoriteHeart } from "@/components/FavoriteHeart";
+import { KpiChipRail } from "@/components/KpiGrid";
 import { RankWindow } from "@/components/RankWindow";
 import {
   Feed,
@@ -183,12 +184,13 @@ export function NamesView() {
 
   return (
     <Shell>
-      <div className="addr-drop grid grid-cols-2 items-stretch gap-2 sm:grid-cols-3 lg:grid-cols-6">
+      <KpiChipRail className="addr-drop grid grid-cols-2 items-stretch gap-2 sm:grid-cols-3 lg:grid-cols-6">
         {TILES.map((id, i) => (
           <AddressStatTile
             key={id}
             enter={i}
             label={tileLabel(id, t)}
+            chipLabel={id === "pool" ? t("addresses.chip.pool") : undefined}
             n={counts[id]}
             caption={t(`names.tile.${id}Caption`)}
             detail={t(`names.tile.${id}Detail`)}
@@ -200,7 +202,7 @@ export function NamesView() {
             onSelect={() => onKind(id)}
           />
         ))}
-      </div>
+      </KpiChipRail>
 
       {!listReady ? null : rows.length === 0 ? (
         <Feed>

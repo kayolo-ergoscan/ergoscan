@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import clsx from "clsx";
 import { AddrFactCard } from "@/components/AddrFactCard";
+import { KpiMark } from "@/components/kpi-marks";
 import { EvidenceBadge } from "@/components/EvidenceBadge";
 import { Shell } from "@/components/Shell";
 import { publicGatewayHref } from "@/lib/config";
@@ -101,7 +102,7 @@ export function StatusView({
           enter={0}
           label={t("status.eyebrow")}
           ink={board.state === "operational" ? INK.green : INK.gold}
-          mark={<StatusMark />}
+          mark={<KpiMark id="status" />}
         >
           <div className="mt-0.5 flex flex-wrap items-center gap-2">
             <h1 className="text-[17px] font-semibold leading-none tracking-tight">
@@ -482,25 +483,3 @@ function StatePill({ state }: { state: TrustBoard["state"] }) {
   );
 }
 
-function StatusMark() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden className="h-10 w-10">
-      <path
-        d="M4.5 16.5h3l2-7 3 9 2.1-5h4.9"
-        stroke="currentColor"
-        strokeWidth="1.65"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <rect
-        x="2.75"
-        y="4.75"
-        width="18.5"
-        height="14.5"
-        rx="4"
-        stroke="currentColor"
-        strokeWidth="1.5"
-      />
-    </svg>
-  );
-}

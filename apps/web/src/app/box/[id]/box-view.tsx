@@ -12,8 +12,7 @@ import {
 import { Shell } from "@/components/Shell";
 import { AddrFactCard } from "@/components/AddrFactCard";
 import { SegBar, segItem } from "@/components/SegBar";
-import { IconBlocks, IconRent, IconRentSoon } from "@/components/nav-icons";
-import { KpiMarkBox, KpiMarkWalletMinimal } from "@/components/kpi-marks";
+import { KpiMark } from "@/components/kpi-marks";
 import { KpiNum } from "@/components/KpiGrid";
 import { Feed, FeedBoard, FeedCount, FeedEmpty, FeedPlate } from "@/components/feed/Feed";
 import { FeedHoldingRow } from "@/components/feed/FeedBoxRow";
@@ -279,7 +278,7 @@ export function BoxView({
                 enter={0}
                 label={t("detail.box")}
                 ink={INK.violet}
-                mark={<KpiMarkBox className="h-8 w-8" />}
+                mark={<KpiMark id="box" />}
               >
                 <h1 className="mt-0.5 flex min-w-0 items-center gap-1">
                   <code className="min-w-0 truncate font-mono text-[17px] font-semibold leading-none tracking-tight">
@@ -331,7 +330,7 @@ export function BoxView({
               enter={2}
               label={t("box.creationHeight")}
               ink={heightSplit ? INK.gold : aligned ? INK.teal : INK.sky}
-              mark={<IconBlocks className="h-8 w-8" />}
+              mark={<KpiMark id="height" />}
             >
               <p className="mt-0.5 truncate text-[17px] font-semibold leading-none tabular-nums tracking-tight">
                 {creation != null ? (
@@ -363,7 +362,7 @@ export function BoxView({
               enter={1}
               label={t("box.card.value")}
               ink={INK.cyan}
-              mark={<KpiMarkWalletMinimal className="h-8 w-8" />}
+              mark={<KpiMark id="erg" />}
             >
               <div className="mt-0.5">
                 <KpiNum>
@@ -384,7 +383,7 @@ export function BoxView({
               enter={3}
               label={spent ? t("box.spent") : t("box.untilRent")}
               ink={lifeInk}
-              mark={<IconRentSoon className="h-8 w-8" />}
+              mark={<KpiMark id="due-day" />}
             >
               <p className="mt-0.5 truncate text-[17px] font-semibold leading-none tabular-nums tracking-tight">
                 {spent && spentHeight != null ? (
@@ -424,7 +423,7 @@ export function BoxView({
               enter={4}
               label={t("box.tab.rent")}
               ink={lifeInk}
-              mark={<IconRent className="h-8 w-8" />}
+              mark={<KpiMark id="rent" />}
             >
               {rent ? (
                 <>

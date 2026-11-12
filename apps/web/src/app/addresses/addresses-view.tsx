@@ -6,6 +6,7 @@ import { AddressKindKey } from "@/components/AddressKindKey";
 import { Feed, FeedBoard, FeedCount, FeedEmpty, FeedPlate, FeedSort } from "@/components/feed/Feed";
 import { FeedAddressRow } from "@/components/feed/FeedHolderRow";
 import { HolderBandStrip } from "@/components/HolderBandStrip";
+import { KpiChipRail } from "@/components/KpiGrid";
 import { RankWindow } from "@/components/RankWindow";
 import { getGateway } from "@/lib/config";
 import { useFavoriteAddresses } from "@/lib/favorites";
@@ -403,7 +404,7 @@ export function AddressesView({ initial }: { initial: AddressesPageData }) {
 
   return (
     <Shell>
-      <div className="addr-drop grid grid-cols-2 items-stretch gap-2 sm:grid-cols-5">
+      <KpiChipRail className="addr-drop grid grid-cols-2 items-stretch gap-2 sm:grid-cols-5">
         <HolderBandStrip
           raw={bands?.all}
           t={t}
@@ -423,7 +424,7 @@ export function AddressesView({ initial }: { initial: AddressesPageData }) {
           onSelect={onKind}
           enterFrom={HOLDER_BAND_IDS.length}
         />
-      </div>
+      </KpiChipRail>
 
       {err && (
         <p className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-amber-200">

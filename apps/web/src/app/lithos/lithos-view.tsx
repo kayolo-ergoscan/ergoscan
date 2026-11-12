@@ -17,14 +17,9 @@ import {
   FeedRow,
   type FeedLead,
 } from "@/components/feed/Feed";
-import { KpiNum, KpiTileRail } from "@/components/KpiGrid";
+import { compactFigure, KpiLabelMark, KpiNum, KpiTileRail } from "@/components/KpiGrid";
 import { RankWindow } from "@/components/RankWindow";
-import {
-  KpiMarkCoins,
-  KpiMarkHolders,
-  KpiMarkLocked,
-  KpiMarkSquareStack,
-} from "@/components/kpi-marks";
+import { KpiMark } from "@/components/kpi-marks";
 import { useT, useI18n } from "@/lib/i18n/I18nProvider";
 import { getGateway } from "@/lib/config";
 import { formatTokenAmount, formatTs, shortId, toEpochMs } from "@/lib/format";
@@ -85,9 +80,12 @@ function LithosKpi({
   ink,
   enter,
   mark,
+  compact,
 }: {
   label: string;
   value: string;
+  /** Phone short form for big figures. */
+  compact?: string;
   sub: string;
   ink: string;
   enter: number;
@@ -101,13 +99,16 @@ function LithosKpi({
       <KpiTileRail />
       <div className="kpi-tile-row flex w-full min-w-0 flex-1 justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <p className="text-[13px] leading-[1.15]" style={{ color: HOME.forming }}>
-            {label}
+          <div className="kpi-label-row">
+            <KpiLabelMark mark={mark} />
+            <p className="text-[13px] leading-[1.15]" style={{ color: HOME.forming }}>
+              {label}
+            </p>
+          </div>
+          <p className="kpi-value mt-0.5 truncate text-[17px] font-semibold leading-[1.15] tabular-nums tracking-tight">
+            <KpiNum compact={compact}>{value}</KpiNum>
           </p>
-          <p className="mt-0.5 truncate text-[17px] font-semibold leading-[1.15] tabular-nums tracking-tight">
-            <KpiNum>{value}</KpiNum>
-          </p>
-          <p className="mt-0.5 truncate text-[12px] leading-[1.15] text-[var(--muted-2)]">{sub}</p>
+          <p className="kpi-sub mt-0.5 truncate text-[12px] leading-[1.15] text-[var(--muted-2)]">{sub}</p>
         </div>
         <div className="kpi-tile-mark">{mark}</div>
       </div>
@@ -332,10 +333,11 @@ export function LithosProtocolView({ initial }: { initial: LithosProtocolSnap | 
           <LithosKpi
             label={t("lithosP.blocks")}
             value={snap ? snap.finds.toLocaleString(L) : miss}
+            compact={snap ? compactFigure(snap.finds) : undefined}
             sub={t("lithosP.blocksSub")}
             ink={INK.violet}
             enter={0}
-            mark={<KpiMarkSquareStack tone={INK.violet} />}
+            mark={<KpiMark id="block" tone={INK.violet} />}
           />
           <LithosKpi
             label={t("lithosP.finders")}
@@ -343,23 +345,25 @@ export function LithosProtocolView({ initial }: { initial: LithosProtocolSnap | 
             sub={t("lithosP.findersSub")}
             ink={INK.cyan}
             enter={1}
-            mark={<KpiMarkHolders tone={INK.cyan} />}
+            mark={<KpiMark id="miner" tone={INK.cyan} />}
           />
           <LithosKpi
             label={t("lithosP.finderLit")}
             value={snap ? lit(snap.finderLit, locale) : miss}
+            compact={snap ? compactFigure(Number(snap.finderLit) / 1e9) : undefined}
             sub={t("lithosP.finderLitSub")}
             ink={INK.gold}
             enter={2}
-            mark={<KpiMarkCoins tone={INK.gold} />}
+            mark={<KpiMark id="token" tone={INK.gold} />}
           />
           <LithosKpi
             label={t("lithosP.holding")}
             value={snap ? lit(snap.holdingLit, locale) : miss}
+            compact={snap ? compactFigure(Number(snap.holdingLit) / 1e9) : undefined}
             sub={t("lithosP.holdingSub")}
             ink={INK.teal}
             enter={3}
-            mark={<KpiMarkLocked tone={INK.teal} />}
+            mark={<KpiMark id="locked" tone={INK.teal} />}
           />
         </div>
         <div className="relative min-w-0">

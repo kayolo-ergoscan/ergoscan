@@ -7,13 +7,7 @@ import { CATEGORY_COLORS } from "@ergoscan/shared";
 import { Shell } from "@/components/Shell";
 import { FavoriteHeart } from "@/components/FavoriteHeart";
 import { AddrFactCard } from "@/components/AddrFactCard";
-import {
-  KpiMarkAmount,
-  KpiMarkClock,
-  KpiMarkFees,
-  KpiMarkPayload,
-  KpiMarkSquareStack,
-} from "@/components/kpi-marks";
+import { KpiMark } from "@/components/kpi-marks";
 import { KpiNum } from "@/components/KpiGrid";
 import { SegBar, segItem } from "@/components/SegBar";
 import { TxBallPit, type TxBallSeed } from "@/components/TxBallPit";
@@ -458,7 +452,7 @@ export function TxView({
               enter={1}
               label={t("tx.card.amount")}
               ink={INK.cyan}
-              mark={<KpiMarkAmount className="h-10 w-10" />}
+              mark={<KpiMark id="erg" />}
             >
               <div className="mt-2">
                 <KpiNum>
@@ -485,7 +479,7 @@ export function TxView({
               enter={2}
               label={t("tx.fee")}
               ink={INK.gold}
-              mark={<KpiMarkFees className="h-9 w-9" />}
+              mark={<KpiMark id="fee" />}
             >
               <p className="mt-0.5 truncate text-[17px] font-semibold leading-none tabular-nums tracking-tight">
                 <KpiNum>
@@ -502,7 +496,7 @@ export function TxView({
               enter={3}
               label={t("block.card.size")}
               ink={INK.green}
-              mark={<KpiMarkPayload className="h-9 w-9" />}
+              mark={<KpiMark id="size" />}
             >
               <p className="mt-0.5 truncate text-[17px] font-semibold leading-none tabular-nums tracking-tight">
                 <KpiNum>{data.size ? formatBytes(data.size) : dash}</KpiNum>
@@ -518,7 +512,7 @@ export function TxView({
               enter={4}
               label={t("detail.block")}
               ink={INK.sky}
-              mark={<KpiMarkSquareStack className="h-9 w-9" />}
+              mark={<KpiMark id="block" />}
             >
               <p className="mt-0.5 truncate text-[17px] font-semibold leading-none tabular-nums tracking-tight">
                 {data.confirmed && height != null ? (
@@ -550,7 +544,7 @@ export function TxView({
               enter={5}
               label={t("block.card.time")}
               ink={INK.teal}
-              mark={<KpiMarkClock className="h-9 w-9" />}
+              mark={<KpiMark id="time" />}
             >
               <p className="mt-0.5 truncate text-[17px] font-semibold leading-none tabular-nums tracking-tight">
                 <KpiNum>
