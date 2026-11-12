@@ -1,0 +1,30 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body><pre id="out"></pre>
+<script src="assets.js"></script><script src="common.js"></script>
+<script>
+// Rasterise favicons / app icons for each direction; dump-dom reads the data URLs from #out.
+const {B,url}=H;
+const DIRS={a:'a-ramka',b:'b-trata',c:'c-stupeni'};
+const jobs=[];
+const load=(svg)=>new Promise(r=>{const i=new Image();i.onload=()=>r(i);i.src=url(svg);});
+async function run(){
+  const lines=[];
+  for(const [d,dir] of Object.entries(DIRS)){
+    const m=B.marks[d];
+    for(const px of [16,32]){
+      const c=document.createElement('canvas');c.width=c.height=px;const g=c.getContext('2d');
+      g.fillStyle=B.C.page;const r=px*0.1875;g.beginPath();g.roundRect(0,0,px,px,r);g.fill();
+      g.drawImage(await load(m.s16.dark),0,0,px,px);
+      lines.push(`${dir}/png/favicon-${px}.png ${c.toDataURL('image/png')}`);
+    }
+    for(const [px,name,inset] of [[180,'apple-touch-icon',0.19],[512,'icon-512',0.19],[512,'icon-512-maskable',0.25]]){
+      const c=document.createElement('canvas');c.width=c.height=px;const g=c.getContext('2d');
+      g.fillStyle=B.C.page;g.fillRect(0,0,px,px);
+      const s=Math.round(px*(1-2*inset));const o=Math.round((px-s)/2);
+      g.drawImage(await load(m.s48.dark),o,o,s,s);
+      lines.push(`${dir}/png/${name}.png ${c.toDataURL('image/png')}`);
+    }
+  }
+  document.getElementById('out').textContent=lines.join('\n');
+}
+run();
+</script></body></html>

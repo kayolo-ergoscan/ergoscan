@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<title>Пиксель — эмоции</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans:wght@400;600&display=swap" rel="stylesheet" />
+<style>
+  html, body { margin: 0; background: #1c1b22; color: #fff; font-family: "IBM Plex Sans", system-ui, sans-serif; }
+  .sheet { padding: 48px 56px 56px; width: 1800px; box-sizing: border-box; }
+  h1 { margin: 0; font-size: 40px; font-weight: 600; letter-spacing: -0.02em; }
+  .sub { margin: 10px 0 34px; color: rgba(255,255,255,.62); font-size: 19px; }
+  .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 20px; }
+  .tile { background: #26252d; border-radius: 22px; padding: 18px 20px 20px; display: flex; flex-direction: column; align-items: center; }
+  .tile canvas { width: 270px; height: 240px; }
+  .name { align-self: stretch; font-size: 22px; font-weight: 600; margin-top: 6px; }
+  .when { align-self: stretch; font-size: 15px; color: rgba(255,255,255,.62); margin-top: 4px; line-height: 1.35; }
+  .inks { display: flex; gap: 20px; margin-top: 20px; }
+  .inks .tile { flex: 1; flex-direction: row; gap: 14px; padding: 10px 18px; }
+  .inks canvas { width: 110px; height: 100px; }
+  .inks .name { font-size: 17px; margin: 0; align-self: center; }
+  .reel { display: none; }
+  body.is-reel .sheet { display: none; }
+  body.is-reel .reel { display: block; }
+  .reel canvas { display: block; width: 960px; height: 540px; }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <h1>«Пиксель» · эмоции глазами</h1>
+  <div class="sub">Квадрат в цвете сущности страницы, глаза — прямоугольники: меняют размер, высоту, веки и взгляд. Моргает и озирается сам, неровно.</div>
+  <div class="grid" id="grid"></div>
+  <div class="inks" id="inks"></div>
+</div>
+<div class="reel"><canvas id="reel" width="1920" height="1080"></canvas></div>
+<script src="pixel.js"></script>
+<script>
+const { drawPixel } = PixelKit;
+const INK = { block: "#ffd23c", tx: "#ff6a2b", addr: "#ff7ab8", token: "#5b8dff", box: "#2fd27f" };
+const STATES = [
+  { name: "Покой", when: "сам моргает и озирается", mood: "idle", ink: "tx" },
+  { name: "Моргнул", when: "неровные паузы, иногда дважды", mood: "idle", ink: "tx", pose: { eyeScale: 0.1 } },
+  { name: "Смотрит на блок", when: "новый блок приземлился слева", mood: "look", ink: "block", pose: { gaze: { x: -1.2, y: 0.2 } } },
+  { name: "Радость", when: "новый блок: ^ ^ и прыжок", mood: "happy", ink: "block", hopAt: 260 },
+  { name: "Думает", when: "загрузка: щурится, глаза бегают, покачивается", mood: "think", ink: "tx" },
+  { name: "Удивление", when: "большой блок или транзакция", mood: "surprised", ink: "block", hopAt: 300 },
+  { name: "Дремлет", when: "нет данных, нода отстала", mood: "sleepy", ink: "box" },
+  { name: "Грустит", when: "ошибка, ничего не нашлось", mood: "sad", ink: "tx" },
+  { name: "Любопытство", when: "пустой адрес: заглядывает", mood: "curious", ink: "addr" },
+  { name: "Работает", when: "читает заголовок, стучит по ящику", mood: "work", ink: "box", pose: { pick: 0.6 } },
+];
+
+function settle(ctx, w, h, s, scale, from) {
+  // Run the engine from t=0 so moods ease in exactly as they do live.
+  const before = s.before || "idle";
+  const at = s.hopAt != null ? 1200 + s.hopAt : 2600;
+  for (let t = 0; t <= at; t += 16) {
+    ctx.clearRect(0, 0, w, h);
+    drawPixel(ctx, { x: w / 2, y: h - 22, scale, color: INK[s.ink], mood: t < 1200 ? before : s.mood, now: from + t, face: s.face || 1, ...(s.pose || {}) });
+  }
+}
+
+function tile(host, s, cw, ch, scale) {
+  const el = document.createElement("div");
+  el.className = "tile";
+  const c = document.createElement("canvas");
+  c.width = cw * 2; c.height = ch * 2;
+  el.append(c);
+  if (s.name) {
+    const n = document.createElement("div"); n.className = "name"; n.textContent = s.name; el.append(n);
+    const w = document.createElement("div"); w.className = "when"; w.textContent = s.when; el.append(w);
+  }
+  host.append(el);
+  const ctx = c.getContext("2d");
+  ctx.scale(2, 2);
+  settle(ctx, cw, ch, s, scale, 10000);
+  return el;
+}
+
+if (location.search.includes("reel")) {
+  document.body.classList.add("is-reel");
+} else {
+  const grid = document.getElementById("grid");
+  for (const s of STATES) tile(grid, s, 270, 240, 4.2);
+  const inks = document.getElementById("inks");
+  for (const [k, label] of [["block", "Блок"], ["tx", "Транзакция"], ["addr", "Адрес"], ["token", "Токен"], ["box", "Бокс"]]) {
+    const el = tile(inks, { mood: "idle", ink: k }, 110, 100, 2.4);
+    const n = document.createElement("div"); n.className = "name"; n.textContent = label; el.append(n);
+  }
+}
+
+// Reel: one scripted pass through every state (9.4 s), for the video (kept under 10 s).
+const SCRIPT = [
+  ["idle", 1300, "tx"], ["look", 850, "tx"], ["happy", 1000, "block"], ["think", 1300, "tx"],
+  ["surprised", 900, "block"], ["curious", 1000, "addr"], ["work", 800, "box"], ["sad", 950, "tx"], ["sleepy", 1300, "box"],
+];
+const RU = { idle: "покой", look: "смотрит", happy: "радость", think: "думает", surprised: "удивление", curious: "любопытство", work: "работает", sad: "грустит", sleepy: "дремлет" };
+window.reelLength = SCRIPT.reduce((a, s) => a + s[1], 0);
+function reelFrame(ctx, t0, now) {
+  const W = 960, H = 540;
+  let t = now - t0, i = 0;
+  while (i < SCRIPT.length - 1 && t > SCRIPT[i][1]) { t -= SCRIPT[i][1]; i++; }
+  const [mood, , ink] = SCRIPT[i];
+  ctx.fillStyle = "#1c1b22";
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = "#26252d";
+  ctx.fillRect(0, 430, W, 110);
+  const gaze = mood === "look" ? { x: Math.sin(t / 300) * 1.2, y: 0.1 } : null;
+  drawPixel(ctx, { x: W / 2, y: 430, scale: 6.2, color: INK[ink], mood, now, face: 1, gaze, pick: mood === "work" ? Math.max(0, Math.sin(t / 140)) * 0.7 : 0 });
+  ctx.fillStyle = "rgba(255,255,255,.62)";
+  ctx.font = "500 26px 'IBM Plex Mono', monospace";
+  ctx.fillText(RU[mood] || mood, 40, 500);
+}
+window.startReel = function () {
+  const c = document.getElementById("reel");
+  const ctx = c.getContext("2d");
+  ctx.setTransform(2, 0, 0, 2, 0, 0);
+  const t0 = performance.now();
+  const loop = (now) => { reelFrame(ctx, t0, now); if (now - t0 < window.reelLength + 300) requestAnimationFrame(loop); };
+  requestAnimationFrame(loop);
+};
+window.recordReel = async function (mime) {
+  const c = document.getElementById("reel");
+  const stream = c.captureStream(30);
+  const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 6_000_000 });
+  const parts = [];
+  rec.ondataavailable = (e) => e.data.size && parts.push(e.data);
+  const done = new Promise((r) => (rec.onstop = r));
+  rec.start(250);
+  window.startReel();
+  await new Promise((r) => setTimeout(r, window.reelLength + 200));
+  rec.stop();
+  await done;
+  const blob = new Blob(parts, { type: mime });
+  const buf = new Uint8Array(await blob.arrayBuffer());
+  let s = "";
+  for (let i = 0; i < buf.length; i += 0x8000) s += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
+  return btoa(s);
+};
+</script>
+</body>
+</html>

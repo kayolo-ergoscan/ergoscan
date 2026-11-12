@@ -1,504 +1,390 @@
 /**
- * Rail glyphs. Keep-set (home, blocks, txs, addresses, favorites, nfts)
- * is house-drawn. The rest are Lucide paths (ISC), same 24 box and 1.7 stroke.
+ * Rail and entity glyphs, ErgoScan's own set (sources: design/brand/src/icons.mjs).
+ *
+ * One rule for every glyph: 24 grid, 2 px stroke, miter joins, butt caps; the line
+ * is `currentColor`, and one solid "unit" (the box the glyph is about) carries the
+ * entity colour from CSS (`.ico-u--block|tx|addr|token|box|down`, or the text ink).
  */
+import clsx from "clsx";
 import type { ReactNode, SVGProps } from "react";
 
 type IconProps = SVGProps<SVGSVGElement>;
 
-function glyph(props: IconProps, paths: ReactNode) {
+/** Which entity colour the unit takes. `ink` follows the text colour. */
+type Ent = "ink" | "block" | "tx" | "addr" | "token" | "box" | "down";
+
+function glyph(
+  props: IconProps,
+  ent: Ent,
+  line: ReactNode,
+  unit?: ReactNode,
+  fill?: ReactNode
+) {
+  const { className, ...rest } = props;
   return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden
-      {...props}
-    >
-      {paths}
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden focusable="false" className={clsx("ico", className)} {...rest}>
+      <g stroke="currentColor" strokeWidth={2} strokeLinejoin="miter" strokeLinecap="butt" strokeMiterlimit={10}>
+        {line}
+      </g>
+      {fill ? <g fill="currentColor">{fill}</g> : null}
+      {unit ? <g className={`ico-u ico-u--${ent}`}>{unit}</g> : null}
     </svg>
   );
 }
 
-const sw = 1.7;
-const cap = { stroke: "currentColor", strokeWidth: sw, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
-
-/**
- * Home. The rail used to repeat the brand mark that already sits
- * in the block right above it, so the row had no glyph of its own.
- */
+/** Home: the house, its door is the unit. */
 export function IconHome(props: IconProps) {
-  return glyph(
-    props,
-    <>
-      <path d="M4 10.6 12 4.2l8 6.4V19a1.4 1.4 0 0 1-1.4 1.4H5.4A1.4 1.4 0 0 1 4 19v-8.4Z" {...cap} />
-      <path d="M9.6 20.4v-6h4.8v6" {...cap} />
-    </>
-  );
+  return glyph(props, "ink", <path d="M4 11 12 4.5 20 11v9H4z" />, <rect x="10" y="14" width="4" height="6" />);
 }
 
-/** Tokens — Lucide `coins`. */
-export function IconTokens(props: IconProps) {
-  return glyph(
-    props,
-    <>
-      <path d="M13.744 17.736a6 6 0 1 1-7.48-7.48" {...cap} />
-      <path d="M15 6h1v4" {...cap} />
-      <path d="m6.134 14.768.866-.5 2 3.464" {...cap} />
-      <circle cx="16" cy="8" r="6" {...cap} />
-    </>
-  );
-}
-
+/** Blocks: one block on the chain line. */
 export function IconBlocks(props: IconProps) {
   return glyph(
     props,
+    "block",
     <>
-      <rect x="3.8" y="9.2" width="10.4" height="10.4" rx="2.1" {...cap} />
-      <rect x="9.8" y="4.4" width="10.4" height="10.4" rx="2.1" {...cap} />
-    </>
+      <rect x="6" y="6" width="12" height="12" />
+      <path d="M1 12h5M18 12h5" />
+    </>,
+    <rect x="9" y="9" width="6" height="6" />
   );
 }
 
-/**
- * Transactions — the index tape: records running past, one of them leaving.
- * Deliberately not the box-to-box KPI mark: a rail glyph names a section at
- * 22px, it is not the same job as a mark answering a number.
- */
-export function IconTxs(props: IconProps) {
-  return glyph(
-    props,
-    <>
-      <path d="M4.4 6.6h9.6" {...cap} />
-      <path d="M4.4 12h13.2" {...cap} />
-      <path d="M4.4 17.4h11" {...cap} />
-      <path d="M17.4 4.6l2.4 2-2.4 2" {...cap} />
-    </>
-  );
-}
-
-/** One transaction in a row: an ink blot. Not the rail tape. */
-export function IconTxSlip(props: IconProps) {
-  return glyph(
-    props,
-    <>
-      <path
-        fill="currentColor"
-        stroke="none"
-        d="M12.4 3.6c2.6-.4 5.2.8 6.2 3.4.7 1.8.1 3.2 1 4.8.9 1.7-.1 3.6-1.6 4.6-1.7 1.1-3.4.2-5.1.7-1.5.4-2.8 1.6-4.4.7-1.9-1.1-1.5-3.2-2.2-4.8-.7-1.7-2.4-2.8-1.8-4.8.7-2.3 3-3.4 5-4 1.5-.5 2.2-.6 2.9-.6z"
-      />
-      <circle cx="19.4" cy="6.6" r="1.15" fill="currentColor" />
-      <circle cx="5.1" cy="17.6" r="0.75" fill="currentColor" />
-    </>
-  );
-}
-
-/** Names — Lucide `tag`. */
-export function IconNames(props: IconProps) {
-  return glyph(
-    props,
-    <>
-      <path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z" {...cap} />
-      <circle cx="7.5" cy="7.5" r=".5" fill="currentColor" />
-    </>
-  );
-}
-
-/** Addresses — one indexed entry: an identifier and what is held against it. */
-export function IconHolders(props: IconProps) {
-  return glyph(
-    props,
-    <>
-      <rect x="3.6" y="6.2" width="16.8" height="11.6" rx="2.6" {...cap} />
-      <circle cx="8.4" cy="12" r="1.9" {...cap} />
-      <path d="M12.6 10.4h5.2" {...cap} />
-      <path d="M12.6 13.6h3.4" {...cap} />
-    </>
-  );
-}
-
-/** Favorites — addresses kept on this device. */
-export function IconFavorites(props: IconProps) {
-  return glyph(
-    props,
-    <path d="M12 20.15S4.85 15.4 4.85 10.55A3.75 3.75 0 0 1 12 8.2a3.75 3.75 0 0 1 7.15 2.35C19.15 15.4 12 20.15 12 20.15Z" {...cap} />
-  );
-}
-
-/** DeFi — Lucide `landmark`. */
-export function IconDefi(props: IconProps) {
-  return glyph(
-    props,
-    <>
-      <path d="M10 18v-7" {...cap} />
-      <path d="M11.119 2.205a2 2 0 0 1 1.762 0l7.84 3.846A.5.5 0 0 1 20.5 7h-17a.5.5 0 0 1-.22-.949z" {...cap} />
-      <path d="M14 18v-7" {...cap} />
-      <path d="M18 18v-7" {...cap} />
-      <path d="M3 22h18" {...cap} />
-      <path d="M6 18v-7" {...cap} />
-    </>
-  );
-}
-
-/** DEX — Lucide `arrow-left-right`. */
-export function IconTape(props: IconProps) {
-  return glyph(
-    props,
-    <>
-      <path d="M8 3 4 7l4 4" {...cap} />
-      <path d="M4 7h16" {...cap} />
-      <path d="m16 21 4-4-4-4" {...cap} />
-      <path d="M20 17H4" {...cap} />
-    </>
-  );
-}
-
-/** Spectrum AMM — Lucide `droplets`. */
-export function IconSpectrum(props: IconProps) {
-  return glyph(
-    props,
-    <>
-      <path d="M7 16.3c2.2 0 4-1.83 4-4.05 0-1.16-.57-2.26-1.71-3.19S7.29 6.75 7 5.3c-.29 1.45-1.14 2.84-2.29 3.76S3 11.1 3 12.25c0 2.22 1.8 4.05 4 4.05z" {...cap} />
-      <path d="M12.56 6.6A10.97 10.97 0 0 0 14 3.02c.5 2.5 2 4.9 4 6.5s3 3.5 3 5.5a6.98 6.98 0 0 1-11.91 4.97" {...cap} />
-    </>
-  );
-}
-
-/**
- * Lithos protocol. The lithos.work mark is a pick through a broken ring.
- * Same 24 box and stroke as the other rail glyphs. LithosDex keeps the candles.
- */
-export function IconLithosProtocol(props: IconProps) {
-  return glyph(
-    props,
-    <>
-      <path d="M7.4 8.6a5.4 5.4 0 0 0 0 6.8" {...cap} />
-      <path d="M16.6 8.6a5.4 5.4 0 0 1 0 6.8" {...cap} />
-      <path d="M12 4.4v15.2" {...cap} />
-      <path d="M6.2 8.1 12 4.4 17.8 8.1" {...cap} />
-    </>
-  );
-}
-
-/** LithosDex — Lucide `chart-candlestick`. */
-export function IconLithos(props: IconProps) {
-  return glyph(
-    props,
-    <>
-      <path d="M9 5v4" {...cap} />
-      <rect width="4" height="6" x="7" y="9" rx="1" {...cap} />
-      <path d="M9 15v2" {...cap} />
-      <path d="M17 3v2" {...cap} />
-      <rect width="4" height="8" x="15" y="5" rx="1" {...cap} />
-      <path d="M17 13v3" {...cap} />
-      <path d="M3 3v16a2 2 0 0 0 2 2h16" {...cap} />
-    </>
-  );
-}
-
-/** Stable coins — Lucide `banknote`. */
-export function IconStable(props: IconProps) {
-  return glyph(
-    props,
-    <>
-      <rect width="20" height="12" x="2" y="6" rx="2" {...cap} />
-      <circle cx="12" cy="12" r="2" {...cap} />
-      <path d="M6 12h.01M18 12h.01" {...cap} />
-    </>
-  );
-}
-
-/** Basis — Lucide `vault`. The page is the lockboxes, same mark as the first tile. */
-export function IconBasis(props: IconProps) {
-  return glyph(
-    props,
-    <>
-      <rect width="18" height="18" x="3" y="3" rx="2" {...cap} />
-      <circle cx="7.5" cy="7.5" r=".5" fill="currentColor" />
-      <path d="m7.9 7.9 2.7 2.7" {...cap} />
-      <circle cx="16.5" cy="7.5" r=".5" fill="currentColor" />
-      <path d="m13.4 10.6 2.7-2.7" {...cap} />
-      <circle cx="7.5" cy="16.5" r=".5" fill="currentColor" />
-      <path d="m7.9 16.1 2.7-2.7" {...cap} />
-      <circle cx="16.5" cy="16.5" r=".5" fill="currentColor" />
-      <path d="m13.4 13.4 2.7 2.7" {...cap} />
-      <circle cx="12" cy="12" r="2" {...cap} />
-    </>
-  );
-}
-
-/** AgeUSD — Lucide `sigma`. */
-export function IconAgeusd(props: IconProps) {
-  return glyph(
-    props,
-    <path d="M18 7V5a1 1 0 0 0-1-1H6.5a.5.5 0 0 0-.4.8l4.5 6a2 2 0 0 1 0 2.4l-4.5 6a.5.5 0 0 0 .4.8H17a1 1 0 0 0 1-1v-2" {...cap} />
-  );
-}
-
-/** Use — Lucide `factory`. */
-export function IconUse(props: IconProps) {
-  return glyph(
-    props,
-    <>
-      <path d="M12 16h.01" {...cap} />
-      <path d="M16 16h.01" {...cap} />
-      <path d="M3 19a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8.5a.5.5 0 0 0-.769-.422l-4.462 2.844A.5.5 0 0 1 15 10.5v-2a.5.5 0 0 0-.769-.422L9.77 10.922A.5.5 0 0 1 9 10.5V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2z" {...cap} />
-      <path d="M8 16h.01" {...cap} />
-    </>
-  );
-}
-
-export function IconNfts(props: IconProps) {
-  return glyph(
-    props,
-    <>
-      <rect x="3.8" y="5" width="16.4" height="14" rx="2.4" {...cap} />
-      <circle cx="8.6" cy="10" r="1.45" {...cap} />
-      <path d="M4.6 16.4 8.4 13l2.7 2.2 3.6-4.6 4.3 5.8" {...cap} />
-    </>
-  );
-}
-
-/** Upcoming — Lucide `calendar-clock`. */
-export function IconRentSoon(props: IconProps) {
-  return glyph(
-    props,
-    <>
-      <path d="M16 14v2.2l1.6 1" {...cap} />
-      <path d="M16 2v4" {...cap} />
-      <path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5" {...cap} />
-      <path d="M3 10h5" {...cap} />
-      <path d="M8 2v4" {...cap} />
-      <circle cx="16" cy="16" r="6" {...cap} />
-    </>
-  );
-}
-
-/** History — Lucide `history`. */
-export function IconRentHist(props: IconProps) {
-  return glyph(
-    props,
-    <>
-      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" {...cap} />
-      <path d="M3 3v5h5" {...cap} />
-      <path d="M12 7v5l4 2" {...cap} />
-    </>
-  );
-}
-
-export function IconRent(props: IconProps) {
-  return glyph(
-    props,
-    <>
-      <path d="M10 2h4" {...cap} />
-      <path d="M12 14 15 11" {...cap} />
-      <circle cx="12" cy="14" r="8" {...cap} />
-    </>
-  );
-}
-
-/** Mempool — Lucide `hourglass`. */
+/** Mempool: an hourglass, the waiting box settled at the bottom. */
 export function IconMempool(props: IconProps) {
   return glyph(
     props,
-    <>
-      <path d="M5 22h14" {...cap} />
-      <path d="M5 2h14" {...cap} />
-      <path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22" {...cap} />
-      <path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2" {...cap} />
-    </>
+    "tx",
+    <path d="M5 3h14M5 21h14M7 3v3.5l5 5.5-5 5.5V21M17 3v3.5L12 12l5 5.5V21" />,
+    <rect x="9" y="15" width="6" height="5" />
   );
 }
 
-/** Rosen — Lucide `bridge`. */
-export function IconRosen(props: IconProps) {
+/** Transactions: a spent box, an arrow, the new box. */
+export function IconTxs(props: IconProps) {
   return glyph(
     props,
+    "tx",
     <>
-      <path d="M10 9.728V16" {...cap} />
-      <path d="M14 9.728V16" {...cap} />
-      <path d="M18 20V4" {...cap} />
-      <path d="m22 11-4-4A7.5 7.5 0 0 1 6 7l-4 4" {...cap} />
-      <path d="M22 16H2" {...cap} />
-      <path d="M6 20V4" {...cap} />
-    </>
+      <rect x="2" y="9" width="6" height="6" />
+      <path d="M10 12h3.5M11.5 9.5 14 12l-2.5 2.5" />
+    </>,
+    <rect x="16" y="8" width="7" height="8" />
   );
 }
 
-/** Learn — Lucide `graduation-cap`. */
-export function IconLearn(props: IconProps) {
+/** Addresses: a card, the owner square and two lines of what it holds. */
+export function IconHolders(props: IconProps) {
   return glyph(
     props,
+    "addr",
     <>
-      <path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z" {...cap} />
-      <path d="M22 10v6" {...cap} />
-      <path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5" {...cap} />
-    </>
+      <rect x="2" y="5" width="20" height="14" />
+      <path d="M14 10h5M14 14h3" />
+    </>,
+    <rect x="5" y="9" width="6" height="6" />
   );
 }
 
-/** Network directory — Lucide `globe`. */
-export function IconGlobe(props: IconProps) {
+/** Names: a tag with the owner square. */
+export function IconNames(props: IconProps) {
+  return glyph(props, "addr", <path d="M3 6h11l6 6-6 6H3z" />, <rect x="6" y="9" width="6" height="6" />);
+}
+
+/** Favorites: a heart. The only glyph without a unit. */
+export function IconFavorites(props: IconProps) {
   return glyph(
     props,
-    <>
-      <circle cx="12" cy="12" r="10" {...cap} />
-      <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" {...cap} />
-      <path d="M2 12h20" {...cap} />
-    </>
+    "down",
+    <path d="M12 20s-8-5-8-10.5A4.3 4.3 0 0 1 12 7a4.3 4.3 0 0 1 8 2.5C20 15 12 20 12 20z" />
   );
 }
 
-/** Status — the pulse of the index, not a second pair of server racks. */
-export function IconStatus(props: IconProps) {
+/** Tokens: a coin with a square hole. */
+export function IconTokens(props: IconProps) {
+  return glyph(props, "token", <circle cx="12" cy="12" r="8.5" />, <rect x="9" y="9" width="6" height="6" />);
+}
+
+/** NFTs: a picture, the sun is the unit. */
+export function IconNfts(props: IconProps) {
   return glyph(
     props,
-    <path d="M3.4 12.2H7l1.7-4.6 3.2 9.2 2.1-4.6H20.6" {...cap} />
+    "token",
+    <>
+      <rect x="3" y="3" width="18" height="18" />
+      <path d="M3 17l5-5 4 4 3-3 6 6" />
+    </>,
+    <rect x="13" y="6" width="5" height="5" />
   );
 }
 
-/** About — Lucide `info`. Who built the explorer, not a second Learn. */
-/** Settings — Lucide `monitor-cog`. */
-export function IconSettings(props: IconProps) {
+/** Storage rent: a box with a lid and a clock quarter. */
+export function IconRent(props: IconProps) {
   return glyph(
     props,
+    "box",
     <>
-      <path d="M12 17v4" {...cap} />
-      <path d="m14.305 7.53.923-.382" {...cap} />
-      <path d="m15.228 4.852-.923-.383" {...cap} />
-      <path d="m16.852 3.228-.383-.924" {...cap} />
-      <path d="m16.852 8.772-.383.923" {...cap} />
-      <path d="m19.148 3.228.383-.924" {...cap} />
-      <path d="m19.53 9.696-.382-.924" {...cap} />
-      <path d="m20.772 4.852.924-.383" {...cap} />
-      <path d="m20.772 7.148.924.383" {...cap} />
-      <path d="M22 13v2a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7" {...cap} />
-      <path d="M8 21h8" {...cap} />
-      <circle cx="18" cy="6" r="3" {...cap} />
-    </>
+      <rect x="3" y="4" width="18" height="4" />
+      <path d="M4 8v12h16V8" />
+      <circle cx="12" cy="14" r="3.5" />
+    </>,
+    <path d="M12 10.5V14h3.5a3.5 3.5 0 0 0-3.5-3.5z" />
   );
 }
 
-export function IconAbout(props: IconProps) {
+/** Rent, upcoming: a calendar, the due day is the unit. */
+export function IconRentSoon(props: IconProps) {
   return glyph(
     props,
+    "box",
     <>
-      <circle cx="12" cy="12" r="10" {...cap} />
-      <path d="M12 16v-4" {...cap} />
-      <path d="M12 8h.01" {...cap} />
-    </>
+      <rect x="3" y="5" width="18" height="16" />
+      <path d="M3 10h18M8 2v5M16 2v5" />
+    </>,
+    <rect x="12" y="13" width="5" height="5" />
   );
 }
 
-/** API — chevrons. A page glyph would collide with Learn. */
-export function IconApi(props: IconProps) {
+/** Rent, history: a dial turning back, the past quarter is the unit. */
+export function IconRentHist(props: IconProps) {
   return glyph(
     props,
-    <>
-      <path d="M8.2 6.4 4.6 12l3.6 5.6" {...cap} />
-      <path d="M15.8 6.4 19.4 12l-3.6 5.6" {...cap} />
-    </>
+    "box",
+    <path d="M4.3 8.5A8.5 8.5 0 1 1 3.5 12M3 3.5V9h5.5" />,
+    <path d="M12 7v5H7a5 5 0 0 1 5-5z" />
   );
 }
 
-/**
- * Nodes — machines with a status light. A peer graph was tried and collides
- * with the Markets hub mark; an uptime chart read as the NFTs picture glyph.
- */
-export function IconNodes(props: IconProps) {
+/** DeFi: a price curve on axes. */
+export function IconDefi(props: IconProps) {
   return glyph(
     props,
-    <>
-      <rect x="4.2" y="5" width="15.6" height="5.6" rx="1.8" {...cap} />
-      <rect x="4.2" y="13.4" width="15.6" height="5.6" rx="1.8" {...cap} />
-      <circle cx="8" cy="7.8" r="1.1" fill="currentColor" />
-      <circle cx="8" cy="16.2" r="1.1" fill="currentColor" />
-    </>
+    "token",
+    <path d="M4 3v17h17M7.5 4c.8 7.5 4.5 12 13.5 12.5" />,
+    <rect x="8" y="9" width="6" height="6" />
   );
 }
 
-/** Oracles — Lucide `satellite-dish`. */
+/** DEX: two boxes trading places. */
+export function IconTape(props: IconProps) {
+  return glyph(
+    props,
+    "token",
+    <>
+      <rect x="15" y="14" width="6" height="6" />
+      <path d="M11 7h7v4M15.5 9 18 11.5 20.5 9M13 17H6v-4M3.5 15 6 12.5 8.5 15" />
+    </>,
+    <rect x="3" y="4" width="6" height="6" />
+  );
+}
+
+/** ErgoDex: a pool tray holding a pair. */
+export function IconSpectrum(props: IconProps) {
+  return glyph(
+    props,
+    "token",
+    <>
+      <path d="M2 10v10h20V10" />
+      <rect x="14" y="13" width="4" height="4" />
+    </>,
+    <rect x="6" y="12" width="6" height="6" />
+  );
+}
+
+/** Pools: a tank and its level. */
+export function IconPool(props: IconProps) {
+  return glyph(props, "token", <path d="M3 3v17h18V3M3 10h18" />, <rect x="6" y="13" width="12" height="4" />);
+}
+
+/** LithosDex: two candles, the live one solid. */
+export function IconLithos(props: IconProps) {
+  return glyph(
+    props,
+    "token",
+    <>
+      <rect x="5" y="7" width="4" height="10" />
+      <path d="M7 2v5M7 17v5M17 4v5M17 18v3" />
+    </>,
+    <rect x="14" y="9" width="6" height="9" />
+  );
+}
+
+/** Lithos protocol: a pick and its arc, the ore is the unit. */
+export function IconLithosProtocol(props: IconProps) {
+  return glyph(props, "block", <path d="M4 20 14 10M8.5 4.5c5 0 10 4 11 11" />, <rect x="15" y="16" width="5" height="5" />);
+}
+
+/** Stable coins: a note with the coin square. */
+export function IconStable(props: IconProps) {
+  return glyph(
+    props,
+    "token",
+    <>
+      <rect x="2" y="6" width="20" height="12" />
+      <path d="M5.5 9v6M18.5 9v6" />
+    </>,
+    <rect x="9" y="9" width="6" height="6" />
+  );
+}
+
+/** AgeUSD: the reserve below, the minted coin above. */
+export function IconAgeusd(props: IconProps) {
+  return glyph(props, "token", <path d="M3 13h18v8H3zM9 13v8M15 13v8M12 9v4" />, <rect x="9" y="2" width="6" height="6" />);
+}
+
+/** Basis: a vault on feet with its handle. */
+export function IconBasis(props: IconProps) {
+  return glyph(
+    props,
+    "box",
+    <>
+      <rect x="3" y="3" width="18" height="16" />
+      <path d="M6 19v2M18 19v2M17 8v6" />
+    </>,
+    <rect x="7" y="8" width="6" height="6" />
+  );
+}
+
+/** USE: a mint works, its window is the unit. */
+export function IconUse(props: IconProps) {
+  return glyph(props, "token", <path d="M2 21h20M4 21V11l5 3v-3l5 3V4h5v17" />, <rect x="7" y="16" width="4" height="3" />);
+}
+
+/** Oracles: a square broadcasting both ways. */
 export function IconOracles(props: IconProps) {
   return glyph(
     props,
-    <>
-      <path d="M18 12a6 6 0 00-6-6" {...cap} />
-      <path d="M2.824 10.459a8 8 0 0010.717 10.717c.558-.276.623-1.012.183-1.452l-9.448-9.448c-.44-.44-1.176-.375-1.452.183" {...cap} />
-      <path d="M22 12A10 10 0 0012 2" {...cap} />
-      <path d="m9 15 4-4" {...cap} />
-    </>
+    "ink",
+    <path d="M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4M4.6 4.6a10.2 10.2 0 0 0 0 14.8M19.4 4.6a10.2 10.2 0 0 1 0 14.8" />,
+    <rect x="9" y="9" width="6" height="6" />
   );
 }
 
-/** USD v1 feed — Lucide `circle-dollar-sign`. */
+const FEED_ARCS = <path d="M5.5 5.5a9.2 9.2 0 0 0 0 13M18.5 5.5a9.2 9.2 0 0 1 0 13" />;
+
+/** USD v1 feed: the broadcast with a pixel 1. */
 export function IconOracleUsd(props: IconProps) {
-  return glyph(
-    props,
-    <>
-      <circle cx="12" cy="12" r="10" {...cap} />
-      <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8" {...cap} />
-      <path d="M12 18V6" {...cap} />
-    </>
-  );
+  return glyph(props, "ink", FEED_ARCS, <path d="M9 7h4v8h2v2H9v-2h2V9H9z" />);
 }
 
-/** USD v2 feed — Lucide `badge-dollar-sign`. */
+/** USD v2 feed: the broadcast with a pixel 2. */
 export function IconOracleUsdV2(props: IconProps) {
-  return glyph(
-    props,
-    <>
-      <path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z" {...cap} />
-      <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8" {...cap} />
-      <path d="M12 18V6" {...cap} />
-    </>
-  );
+  return glyph(props, "ink", FEED_ARCS, <path d="M9 7h6v6h-4v2h4v2H9v-6h4V9H9z" />);
 }
 
-/** XAU feed — Lucide `crown`. */
+/** XAU feed: the broadcast with a gold ingot. */
 export function IconOracleXau(props: IconProps) {
-  return glyph(
-    props,
-    <>
-      <path d="M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.246a1 1 0 0 1-.956.734H5.81a1 1 0 0 1-.957-.734L2.02 6.02a.5.5 0 0 1 .798-.519l4.276 3.664a1 1 0 0 0 1.516-.294z" {...cap} />
-      <path d="M5 21h14" {...cap} />
-    </>
-  );
+  return glyph(props, "block", FEED_ARCS, <path d="M6 16l2-6h8l2 6z" />);
 }
 
-/** GORT buyback — Lucide `gem`. */
+const BUYBACK = (
+  <>
+    <path d="M3 13v7h18v-7" />
+    <path d="M12 11v5M9.5 13.5 12 16l2.5-2.5" />
+  </>
+);
+
+/** GORT buyback: the token drops into the tray (gold, from the XAU feed). */
 export function IconGort(props: IconProps) {
-  return glyph(
-    props,
-    <>
-      <path d="M10.5 3 8 9l4 13 4-13-2.5-6" {...cap} />
-      <path d="M17 3a2 2 0 0 1 1.6.8l3 4a2 2 0 0 1 .013 2.382l-7.99 10.986a2 2 0 0 1-3.247 0l-7.99-10.986A2 2 0 0 1 2.4 7.8l2.998-3.997A2 2 0 0 1 7 3z" {...cap} />
-      <path d="M2 9h20" {...cap} />
-    </>
-  );
+  return glyph(props, "block", BUYBACK, <rect x="9" y="3" width="6" height="6" />);
 }
 
-/** DORT buyback — Lucide `hand-coins`. */
+/** DORT buyback: the token drops into the tray. */
 export function IconDort(props: IconProps) {
+  return glyph(props, "token", BUYBACK, <rect x="9" y="3" width="6" height="6" />);
+}
+
+/** Rosen bridge: two pylons and the deck, the crossing box on it. */
+export function IconRosen(props: IconProps) {
   return glyph(
     props,
+    "ink",
+    <path d="M1 14h22M6 3v18M18 3v18M6 4c2 3 10 3 12 0M1 10c2.5 0 4-2.5 5-6M23 10c-2.5 0-4-2.5-5-6" />,
+    <rect x="9" y="8" width="6" height="5" />
+  );
+}
+
+/** Guide: an open book with a bookmark. */
+export function IconLearn(props: IconProps) {
+  return glyph(props, "ink", <path d="M2 5h7l3 2 3-2h7v14h-7l-3 2-3-2H2zM12 7v14" />, <path d="M16 5h3v7l-1.5-1.3L16 12z" />);
+}
+
+/** Network: three peers linked, one of them solid. */
+export function IconGlobe(props: IconProps) {
+  return glyph(
+    props,
+    "ink",
     <>
-      <path d="M11 15h2a2 2 0 1 0 0-4h-3c-.6 0-1.1.2-1.4.6L3 17" {...cap} />
-      <path d="m7 21 1.6-1.4c.3-.4.8-.6 1.4-.6h4c1.1 0 2.1-.4 2.8-1.2l4.6-4.4a2 2 0 0 0-2.75-2.91l-4.2 3.9" {...cap} />
-      <path d="m2 16 6 6" {...cap} />
-      <circle cx="16" cy="9" r="2.9" {...cap} />
-      <circle cx="6" cy="5" r="3" {...cap} />
+      <rect x="3" y="3" width="5" height="5" />
+      <rect x="16" y="3" width="5" height="5" />
+      <path d="M9 5.5h6M5.5 9 10 16M18.5 9 14 16" />
+    </>,
+    <rect x="9" y="16" width="6" height="6" />
+  );
+}
+
+/** Nodes: two machines, one status light. */
+export function IconNodes(props: IconProps) {
+  return glyph(
+    props,
+    "box",
+    <>
+      <rect x="3" y="3" width="18" height="7" />
+      <rect x="3" y="14" width="18" height="7" />
+      <path d="M6 6.5h5M6 17.5h5" />
+    </>,
+    <rect x="15" y="16" width="3" height="3" />
+  );
+}
+
+/** Settings: three sliders, the moved knob is the unit. */
+export function IconSettings(props: IconProps) {
+  return glyph(
+    props,
+    "ink",
+    <path d="M3 6h18M3 12h18M3 18h18" />,
+    <rect x="6" y="10" width="4" height="4" />,
+    <>
+      <rect x="13" y="4" width="4" height="4" />
+      <rect x="14" y="16" width="4" height="4" />
     </>
   );
 }
 
-/** Pool list — Lucide `waves`. */
-export function IconPool(props: IconProps) {
+/** About: a square "i". */
+export function IconAbout(props: IconProps) {
   return glyph(
     props,
+    "ink",
     <>
-      <path d="M2 6c.6.5 1.2 1 2.5 1C7 7 7 5 9.5 5c2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1" {...cap} />
-      <path d="M2 12c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1" {...cap} />
-      <path d="M2 18c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1" {...cap} />
-    </>
+      <rect x="3" y="3" width="18" height="18" />
+      <path d="M12 11v6" />
+    </>,
+    <rect x="11" y="6.5" width="2" height="2.5" />
+  );
+}
+
+/** API: braces around a box. */
+export function IconApi(props: IconProps) {
+  return glyph(props, "ink", <path d="M8 4H6v6l-3 2 3 2v6h2M16 4h2v6l3 2-3 2v6h-2" />, <rect x="9" y="9" width="6" height="6" />);
+}
+
+/** Status: the index pulse running into a healthy box. */
+export function IconStatus(props: IconProps) {
+  return glyph(props, "box", <path d="M1 12h4l2.5-5 4 10 2.5-5h1" />, <rect x="17" y="9" width="6" height="6" />);
+}
+
+/** More: a grid of four boxes, one of them solid. */
+export function IconMore(props: IconProps) {
+  return glyph(
+    props,
+    "ink",
+    <>
+      <rect x="3" y="3" width="7" height="7" />
+      <rect x="14" y="3" width="7" height="7" />
+      <rect x="3" y="14" width="7" height="7" />
+    </>,
+    <rect x="13" y="13" width="9" height="9" />
   );
 }
 

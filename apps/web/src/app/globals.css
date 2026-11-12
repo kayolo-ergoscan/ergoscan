@@ -5328,7 +5328,7 @@ html[data-ink="day"] .epoch-left {
   height: 100%;
   animation: sheet-float 9s cubic-bezier(0.45, 0, 0.55, 1) infinite;
 }
-.sheet-spin img {
+.sheet-spin .brand-mark {
   display: block;
   width: 100%;
   height: 100%;
@@ -5345,7 +5345,7 @@ html[data-ink="day"] .epoch-left {
 @media (prefers-reduced-motion: reduce) {
   .sheet-spin,
   .sheet-spin-drift,
-  .sheet-spin img {
+  .sheet-spin .brand-mark {
     animation: none;
     transition: none;
   }
@@ -5374,95 +5374,142 @@ html[data-ink="day"] .epoch-left {
   width: 100%;
 }
 
-.nav-scan {
-  position: relative;
+/* Brand «Трата»: spent box in the text ink, the new box in brand orange. */
+:root {
+  --brand-new: #ff6a2b;
+}
+
+html[data-ink="day"] {
+  --brand-new: #e4561c;
+}
+
+.brand-mark {
+  display: block;
+  flex: none;
+  shape-rendering: crispEdges;
+}
+
+.brand-mark-spent {
+  fill: var(--text);
+}
+
+.brand-mark-new {
+  fill: var(--brand-new);
+}
+
+.brand-word {
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.brand-word-tld {
+  color: var(--muted);
+}
+
+/* Rail header: mark + word, centred. Collapsed keeps the mark alone in the middle. */
+.nav-lockup {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  transition: filter 0.4s var(--ease);
+}
+
+.nav-brand-word {
+  display: inline-flex;
+  overflow: hidden;
+  max-width: 8em;
+  padding-left: 10px;
+  font-size: 17px;
+  opacity: 1;
+  transition:
+    max-width var(--rail-move) var(--rail-ease),
+    padding var(--rail-move) var(--rail-ease),
+    opacity calc(var(--rail-move) * 0.6) var(--rail-ease);
+}
+
+.nav-rail[data-collapsed="true"] .nav-brand-word {
+  max-width: 0;
+  padding-left: 0;
+  opacity: 0;
+}
+
+.nav-brand:hover .nav-lockup {
+  filter: brightness(1.12);
+}
+
+.nav-brand:active .nav-lockup {
+  filter: brightness(1.02);
+}
+
+.page-tail-brand {
   display: inline-flex;
   flex: none;
   align-items: center;
-  justify-content: center;
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
+  gap: 7px;
+  font-size: 13px;
 }
 
-.nav-scan.h-8 {
-  width: max-content;
-  max-width: calc(100% - 2.75rem);
-  transition: height var(--rail-move) var(--rail-ease);
+/* Glyph set (nav-icons.tsx): neutral line, one unit in the entity colour.
+   The day ink gets darker units so each keeps ≥ 3:1 on the paper. */
+:root {
+  --ico-line: color-mix(in srgb, var(--text) 80%, transparent);
+  --ent-block: #ffd23c;
+  --ent-tx: #ff6a2b;
+  --ent-addr: #ff7ab8;
+  --ent-token: #5b8dff;
+  --ent-box: #2fd27f;
+  --ent-down: #ff5468;
 }
 
-.nav-scan-sizer {
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: 0;
-  white-space: nowrap;
-  visibility: hidden;
-  padding-inline: 16px;
+html[data-ink="day"] {
+  --ent-block: #a97c00;
+  --ent-tx: #d24a12;
+  --ent-addr: #c92f78;
+  --ent-token: #2b5fd9;
+  --ent-box: #138a4c;
+  --ent-down: #d42a3c;
 }
 
-.nav-scan.h-8 .nav-scan-word {
-  position: absolute;
-  inset: 0;
-  width: auto;
-  container-type: inline-size;
-  overflow: hidden;
-  padding-inline: min(16px, calc((100% - 10px) / 2));
+.ico-line {
+  color: var(--ico-line);
 }
 
-.nav-rail[data-collapsed="true"] .nav-scan.h-8 {
-  height: 1.75rem;
+[aria-current="page"] .ico-line,
+.is-pressed > .ico-line {
+  color: var(--text);
 }
 
-.nav-scan-corner {
-  position: absolute;
-  display: block;
-  overflow: visible;
-  pointer-events: none;
+.ico-u {
+  fill: var(--text);
 }
 
-/* Mark is 32px (w-8). Corner paint is 12 of the 64 viewBox, inset 8. */
-.nav-scan.h-8 .nav-scan-corner {
-  width: 6px;
-  height: 6px;
+.ico-u--block {
+  fill: var(--ent-block);
 }
 
-.nav-scan.h-8 .nav-scan-corner.tl { top: 4px; left: 4px; }
-.nav-scan.h-8 .nav-scan-corner.tr { top: 4px; right: 4px; }
-.nav-scan.h-8 .nav-scan-corner.bl { bottom: 4px; left: 4px; }
-.nav-scan.h-8 .nav-scan-corner.br { bottom: 4px; right: 4px; }
-
-/* Collapsed mark is 28px (w-7): 12/64*28 and 8/64*28. */
-.nav-scan.h-7 .nav-scan-corner,
-.nav-rail[data-collapsed="true"] .nav-scan .nav-scan-corner {
-  width: 5.25px;
-  height: 5.25px;
+.ico-u--tx {
+  fill: var(--ent-tx);
 }
 
-.nav-scan.h-7 .nav-scan-corner.tl,
-.nav-rail[data-collapsed="true"] .nav-scan .nav-scan-corner.tl { top: 3.5px; left: 3.5px; }
-.nav-scan.h-7 .nav-scan-corner.tr,
-.nav-rail[data-collapsed="true"] .nav-scan .nav-scan-corner.tr { top: 3.5px; right: 3.5px; }
-.nav-scan.h-7 .nav-scan-corner.bl,
-.nav-rail[data-collapsed="true"] .nav-scan .nav-scan-corner.bl { bottom: 3.5px; left: 3.5px; }
-.nav-scan.h-7 .nav-scan-corner.br,
-.nav-rail[data-collapsed="true"] .nav-scan .nav-scan-corner.br { bottom: 3.5px; right: 3.5px; }
-
-.nav-scan .nav-label {
-  container-type: normal;
+.ico-u--addr {
+  fill: var(--ent-addr);
 }
 
-.nav-scan-e {
-  width: 100%;
-  text-align: center;
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: 0;
+.ico-u--token {
+  fill: var(--ent-token);
 }
 
-.nav-scan .nav-ch {
-  opacity: clamp(0, calc((100cqi - var(--i) * 10px) / 8px), 1);
+.ico-u--box {
+  fill: var(--ent-box);
+}
+
+.ico-u--down {
+  fill: var(--ent-down);
 }
 
 .nav-row-root {
@@ -5593,23 +5640,6 @@ html[data-ink="day"] .epoch-left {
   transform: scale(0.88);
 }
 
-.nav-scan {
-  transform-origin: center left;
-  transition: filter 0.4s var(--ease);
-}
-
-.nav-scan--compact {
-  transform-origin: center;
-}
-
-.nav-brand:hover .nav-scan {
-  filter: brightness(1.12);
-}
-
-.nav-brand:active .nav-scan {
-  filter: brightness(1.02);
-}
-
 @keyframes route-nav-bar {
   0% {
     transform: translateX(-100%);
@@ -5621,20 +5651,6 @@ html[data-ink="day"] .epoch-left {
   100% {
     transform: translateX(100%);
   }
-}
-
-@keyframes route-nav-mark {
-  0%,
-  100% {
-    transform: scale(0.86);
-  }
-  50% {
-    transform: scale(1.12);
-  }
-}
-
-.route-nav-mark {
-  animation: route-nav-mark 1.6s var(--ease) infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -5655,8 +5671,8 @@ html[data-ink="day"] .epoch-left {
 
   .nav-row:hover .nav-glyph,
   .nav-row:active .nav-glyph,
-  .nav-brand:hover .nav-scan,
-  .nav-brand:active .nav-scan {
+  .nav-brand:hover .nav-lockup,
+  .nav-brand:active .nav-lockup {
     filter: none;
   }
 }

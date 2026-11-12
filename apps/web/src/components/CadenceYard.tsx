@@ -2,13 +2,16 @@
 
 import { useEffect, useRef, type MouseEvent as ReactMouseEvent } from "react";
 import { useRouter } from "next/navigation";
-import { drawWallE } from "./wall-e";
+import { drawPixel, pixelColor, type PixelMood } from "./pixel";
 import { lookEdge, lookInk } from "@/lib/look";
 
 /**
  * Live-block tape drawn on a canvas, same family as the rent yard.
  * Crates stand on plates. Height is the block's transaction weight.
- * The robot stays at the right and checks the block that is still growing.
+ * «Пиксель» (in the block colour) stays at the right and watches the block that
+ * is still growing: a new block makes him hop with ^ ^ eyes and follow it in,
+ * a busy one surprises him, a tx landing gets a knock, and when no block has
+ * come for a long while (or no data at all) he dozes off.
  */
 
 export type CadenceYardBlock = {
@@ -46,6 +49,10 @@ const LOGO_TOSS = 10;
 type Hit = { id: string; x: number; top: number; bot: number };
 
 const SLOTS = 8;
+/** No new block for this long: the node or the chain is behind, he dozes. Ergo aims at 2 min. */
+const STALE_MS = 8 * 60_000;
+/** No data at all after this long: dozing too. */
+const NO_DATA_MS = 2500;
 /** A 39-tx block fills the track. That is the busy size the row is drawn against. */
 const BUSY_TX = 39;
 /** At or under this, nobody on screen is a full block. Don't stretch them to the ceiling. */
@@ -103,10 +110,15 @@ export function CadenceYard({
     };
     mark.src = "/lithos-mark.png";
     let primed = false;
-    let head = 0;
-    let look = 0;
     let pickSwing = 0;
     let roll = 0;
+    const mountAt = performance.now();
+    let lastNewestId: string | null = null;
+    let lastNewAt = mountAt;
+    let cheerUntil = 0;
+    let cheerBig = false;
+    let ink = "";
+    let inkAt = -1e9;
     let swingUntil = 0;
     let waveTick = -1;
     let waveId: string | null = null;
@@ -138,8 +150,15 @@ export function CadenceYard({
         phase = reduce ? "live" : "intro";
         introStart = now;
       }
+      if (now - inkAt > 1000) {
+        ink = pixelColor("block");
+        inkAt = now;
+      }
       if (phase === "wait") {
         hits.current = [];
+        if (now - mountAt > NO_DATA_MS) {
+          drawPixel(ctx, { x: robotX, y: ground, scale: 1, color: ink, mood: "sleepy", now, face: -1, reduce });
+        }
         raf = requestAnimationFrame(paint);
         return;
       }
@@ -253,29 +272,46 @@ export function CadenceYard({
       hits.current = drawn;
 
       const newest = list[list.length - 1];
-      if (newest && !reduce) {
-        roll += dt * 10;
-        if (now < swingUntil) {
-          pickSwing = Math.sin(((swingUntil - now) / 420) * Math.PI);
-          head = 0;
-          look = 0;
-        } else {
-          pickSwing = 0;
-          const phase = now / 980;
-          const sweep = Math.sin(phase);
-          head = Math.sign(sweep) * Math.pow(Math.abs(sweep), 0.72) * 0.58;
-          look = Math.sin(phase + 0.85) * 2.35;
+      if (newest && newest.id !== lastNewestId) {
+        // A new block: cheer, or gasp at a busy one. Not for the first paint.
+        if (lastNewestId !== null && phase === "live") {
+          cheerUntil = now + 1600;
+          cheerBig = newest.weight >= BUSY_TX;
         }
-      } else {
-        head = 0;
-        look = 0;
-        pickSwing = 0;
+        lastNewestId = newest.id;
+        lastNewAt = now;
       }
+      pickSwing = newest && !reduce && now < swingUntil ? Math.sin(((swingUntil - now) / 420) * Math.PI) : 0;
       const driveX = -40 + (robotX + 40) * Math.min(1, driveU);
       const rx = phase === "intro" ? driveX : robotX;
       if (phase === "intro") roll += dt * 42;
       if (newest) {
-        drawWallE(ctx, { x: rx, y: ground, head, look, pick: pickSwing, roll });
+        let mood: PixelMood = "idle";
+        let gaze: { x: number; y: number } | null = null;
+        if (now < cheerUntil) {
+          mood = cheerBig ? "surprised" : "happy";
+          // Eyes follow the new crate as it slides in to its plate.
+          const g = ghosts.get(newest.id);
+          if (g) gaze = { x: Math.max(-1.3, Math.min(1.3, (g.x - rx) / 40)), y: 0.15 };
+        } else if (now - lastNewAt > STALE_MS) {
+          mood = "sleepy";
+        } else if (pickSwing > 0.05) {
+          mood = "work";
+        }
+        drawPixel(ctx, {
+          x: rx,
+          y: ground,
+          scale: 1,
+          color: ink,
+          mood,
+          now,
+          face: -1,
+          look: mood === "idle" ? 0.7 : 0,
+          gaze,
+          pick: pickSwing,
+          roll,
+          reduce,
+        });
       }
       if (markOk) {
         for (const m of marks) drawLithosMark(ctx, mark, m.x, m.peak, m.extra);

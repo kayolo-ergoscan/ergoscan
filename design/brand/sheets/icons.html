@@ -1,0 +1,68 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=block" rel="stylesheet">
+<style>
+:root{--page:#0e0e0e;--tile:#1a1a1a;--t2:#c6c6c6;--t3:#a3a3a3}
+body{margin:0;background:var(--page);color:#fff;font-family:'IBM Plex Sans';padding:36px 40px;width:1720px}
+h1{font:600 30px 'IBM Plex Sans';margin:0 0 6px;letter-spacing:-.01em}
+.sub{color:var(--t3);font:400 16px 'IBM Plex Sans';margin-bottom:26px}
+.sec{font:600 13px 'IBM Plex Mono';color:var(--t3);letter-spacing:.12em;text-transform:uppercase;margin:24px 0 12px}
+.grid{display:grid;grid-template-columns:repeat(10,1fr);gap:10px}
+.cell{background:var(--tile);border-radius:12px;padding:16px 10px 12px;display:flex;flex-direction:column;align-items:center;gap:12px}
+.pair{display:flex;align-items:flex-end;gap:16px;height:52px}
+.lab{font:500 13px 'IBM Plex Sans';color:var(--t2);text-align:center;white-space:nowrap}
+.ent .lab{color:#fff}
+.ent .pair{gap:10px}
+.kpi{width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center}
+.row2{display:flex;gap:28px;margin-top:26px;align-items:flex-start}
+.constr{background:var(--tile);border-radius:14px;padding:20px;display:flex;gap:26px;align-items:center}
+.note{font:400 15px/1.55 'IBM Plex Sans';color:var(--t2);max-width:560px}
+.note b{color:#fff;font-weight:600}
+.mono{font-family:'IBM Plex Mono'}
+</style></head><body>
+<script src="assets.js"></script><script src="common.js"></script>
+<h1>Иконки ErgoScan — один набор на всё</h1>
+<div class="sub">Сетка 24 px · одна линия 2 px · прямые углы · в каждой иконке одна сплошная клетка — «бокс» eUTXO. Клетка несёт цвет сущности, линия нейтральная.</div>
+<div class="sec">Навигация · 19 · 48 px и 24 px</div>
+<div class="grid" id="nav"></div>
+<div class="sec">Сущности · 10 · свой цвет у каждой</div>
+<div class="grid ent" id="ent"></div>
+<div class="row2">
+  <div class="constr" id="constr"></div>
+  <div class="note">
+    <b>Почему так.</b> Линия — как у таблиц и цифр в «Сигнале»: ровная, без скруглений. Сплошная клетка — общий атом бренда (тот же квадрат, что в логотипе): блок держит клетку внутри, токен — квадратное отверстие монеты, адрес — идентикон, бокс — крышку.<br><br>
+    <b>Цвет.</b> В меню линия <span class="mono">#c6c6c6</span>, клетка — цвет сущности (жёлтый блок, оранжевая транзакция, розовый адрес, синий токен, зелёный бокс), у служебных пунктов — белая. Активный пункт: всё чёрное на белой плашке.<br><br>
+    <b>Свои пути, без Lucide.</b> Сейчас больше половины иконок меню и подменю — пути Lucide; этот набор целиком наш. Подпункты (DEX, стейблы, фиды оракулов…) рисуются по тем же правилам следующим шагом.
+  </div>
+</div>
+<script>
+const {B,el,raw}=H;
+const IC=B.icons.list;
+const R=(ic,o)=>raw(B.renderIcon(ic,o),o.px);
+const nav=document.getElementById('nav'), ent=document.getElementById('ent');
+for(const ic of IC.filter(i=>i.group==='nav')){
+  const acc=B.accColor(ic);
+  nav.append(el('div',{class:'cell'},
+    el('div',{class:'pair'},R(ic,{line:'#c6c6c6',acc,px:48}),R(ic,{line:'#c6c6c6',acc,px:24})),
+    el('div',{class:'lab'},ic.label)));
+}
+for(const ic of IC.filter(i=>i.group==='entity')){
+  const acc=B.accColor(ic);
+  const tile=el('div',{class:'kpi',style:{background:acc+'26'}},R(ic,{line:acc,acc,px:24}));
+  ent.append(el('div',{class:'cell'},
+    el('div',{class:'pair'},R(ic,{line:acc,acc,px:48}),R(ic,{line:'#c6c6c6',acc,px:24}),tile),
+    el('div',{class:'lab'},ic.label)));
+}
+// construction view: one glyph at 10x on the 24 grid
+const c=document.getElementById('constr');
+for(const id of ['blocks','tokens','defi']){
+  const ic=IC.find(i=>i.id===id);
+  const box=el('div',{style:{position:'relative',width:'192px',height:'192px'}});
+  let grid='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="192" height="192" style="position:absolute;inset:0">';
+  for(let i=0;i<=24;i++){grid+=`<path d="M${i} 0V24M0 ${i}H24" stroke="${i%4?'#262626':'#333'}" stroke-width=".06"/>`}
+  grid+='<rect x="2" y="2" width="20" height="20" fill="none" stroke="#3b3b3b" stroke-width=".08" stroke-dasharray=".3 .3"/></svg>';
+  box.innerHTML=grid;
+  const g=R(ic,{line:'#c6c6c6',acc:B.accColor(ic),px:192});g.style.position='absolute';g.style.inset='0';
+  box.append(g);
+  c.append(el('div',{style:{display:'flex',flexDirection:'column',gap:'8px',alignItems:'center'}},box,el('div',{class:'lab mono'},ic.label+' · 24 grid')));
+}
+</script></body></html>

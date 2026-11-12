@@ -46,7 +46,7 @@ export function OraclesDoor() {
             href={door.href}
             className="home-tile-enter mod kpi-tile--press flex items-center gap-3 rounded-[20px] border border-[var(--border)] bg-[var(--module)] px-4 py-4"
           >
-            <span className="inline-flex shrink-0 text-accent">
+            <span className="ico-line inline-flex shrink-0">
               <NavIcon id={door.icon} className="size-[22px]" />
             </span>
             <span className="min-w-0">

@@ -3,13 +3,14 @@
 import { useEffect, useRef, type MouseEvent as ReactMouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import { rentToneInk } from "@/lib/rent-miner-patrol";
-import { drawWallE } from "./wall-e";
+import { drawPixel, pixelColor, type PixelMood } from "./pixel";
 import { lookEdge, lookInk } from "@/lib/look";
 import type { RentTapeRow } from "@ergoscan/shared";
 
 /**
- * Crates sit still. Kayolo walks up to each one slowly, knocks with the pick,
- * the lid opens, and the rent due rises out of the box.
+ * Crates sit still. «Пиксель» (in the box colour) hops up to each one slowly,
+ * knocks on it with a focused squint, the lid opens, and he looks up curious
+ * as the rent due rises out of the box.
  */
 const WALK_PX = 28;
 const WORK_MS = 2600;
@@ -133,6 +134,8 @@ export function RentBelt({
     let lastLead: string | null = null;
     let roll = 0;
     let face = 1;
+    let ink = "";
+    let inkAt = -1e9;
 
     const paint = (now: number) => {
       const dt = Math.min(0.05, (now - last) / 1000);
@@ -234,17 +237,24 @@ export function RentBelt({
         onLeadRef.current(next);
       }
       if (cur) {
-        const look = mode === "check" ? lidOpen(hopT) : 0;
-        drawWallE(ctx, {
+        if (now - inkAt > 1000) {
+          ink = pixelColor("box");
+          inkAt = now;
+        }
+        const open = mode === "check" ? lidOpen(hopT) : 0;
+        const mood: PixelMood = mode !== "check" ? "idle" : open > 0.2 ? "curious" : "work";
+        drawPixel(ctx, {
           x: rx,
           y: ry + 16,
-          head: 0,
-          look: 0,
           pick: pickSwing,
           roll,
           face,
           scale: 0.82,
-          eyeLift: look * 3,
+          color: ink,
+          mood,
+          now,
+          gaze: open > 0.2 ? { x: face * 0.6, y: -0.9 * open } : null,
+          reduce,
         });
       }
       if (mode === "check" && struck) {

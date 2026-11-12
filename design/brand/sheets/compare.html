@@ -1,0 +1,65 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=block" rel="stylesheet">
+<style>
+:root{--page:#0e0e0e;--tile:#1a1a1a;--t2:#c6c6c6;--t3:#a3a3a3}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:#fff;font-family:'IBM Plex Sans';width:1600px;padding:32px 40px 34px}
+h1{font:600 32px 'IBM Plex Sans';margin:0 0 4px;letter-spacing:-.01em}
+.sub{color:var(--t2);font:400 17px 'IBM Plex Sans';margin-bottom:22px}
+.cols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}
+.c{background:var(--tile);border-radius:18px;padding:22px 24px;display:flex;flex-direction:column;gap:18px;position:relative}
+.c.pick{outline:3px solid #ff6a2b;outline-offset:-3px}
+.hd{display:flex;align-items:baseline;gap:12px}
+.chip{font:600 18px 'IBM Plex Mono';color:#0e0e0e;background:#fff;border-radius:6px;padding:1px 9px}
+.nm{font:600 30px 'IBM Plex Sans'}
+.badge{position:absolute;right:22px;top:24px;font:600 14px 'IBM Plex Sans';color:#0e0e0e;background:#ff6a2b;border-radius:6px;padding:3px 10px}
+.row{display:flex;align-items:center;gap:22px}
+.small{font:500 12px 'IBM Plex Mono';color:var(--t3)}
+.pc{font:400 15px/1.5 'IBM Plex Sans';color:var(--t2)}
+.pc b{color:#fff;font-weight:600}
+.cap{font:500 11px 'IBM Plex Mono';letter-spacing:.12em;text-transform:uppercase;color:var(--t3);margin:22px 0 10px}
+.bottom{display:grid;grid-template-columns:1.1fr 1fr;gap:20px}
+.t{background:var(--tile);border-radius:18px;padding:20px 24px}
+</style></head><body>
+<script src="assets.js"></script><script src="common.js"></script><script src="brand.js"></script>
+<h1>Логотип ErgoScan — три направления</h1>
+<div class="sub">Все три — плоские, без градиентов и свечения, выведены из Ergo: блок, бокс eUTXO, трата, сущности сайта. Одинаково держатся в 16 px и в иконке приложения.</div>
+<div class="cols" id="cols"></div>
+<div class="bottom">
+  <div><div class="cap">B: цвет сплошного бокса — нужно ваше слово</div><div class="t" id="bcol"></div></div>
+  <div><div class="cap">пробовал и отбросил</div><div class="t" id="drop"></div></div>
+</div>
+<script>
+const {B,el,raw,pix}=H;
+const PC={
+  a:['Рамка','<b>+</b> узнаваемо: те же уголки, что сейчас; самый спокойный.<br><b>−</b> уголки-видоискатель есть у сканеров QR, камер и Face ID — знак меньше всего «наш».'],
+  b:['Трата','<b>+</b> смысл Ergo в двух фигурах: потраченный бокс → новый бокс. Читается в 16 px, легко анимируется, не похож на типовые крипто-знаки.<br><b>−</b> издалека похоже на иконку «копировать» — спасает цвет и вес.'],
+  c:['Ступени','<b>+</b> знак = легенда цветов сайта, самый яркий в ленте Telegram.<br><b>−</b> пять цветов в 16 px шумят; цвет у нас означает сущность, а в знаке он «просто красивый».'],
+};
+const cols=document.getElementById('cols');
+for(const d of ['a','b','c']){
+  const m=B.marks[d];
+  const c=el('div',{class:'c'+(d==='b'?' pick':'')});
+  if(d==='b')c.append(el('span',{class:'badge'},'мой выбор'));
+  c.append(el('div',{class:'hd'},el('span',{class:'chip'},d.toUpperCase()),el('span',{class:'nm'},'«'+PC[d][0]+'»')));
+  c.append(el('div',{class:'row',style:{justifyContent:'space-between'}},BR.mark(d,150),el('div',{style:{display:'flex',flexDirection:'column',gap:'10px',alignItems:'center'}},pix(m.s16.dark,16,5,'#1a1a1a'),el('div',{class:'small'},'16 px ×5')),BR.appIcon(d,104)));
+  c.append(el('div',{style:{background:'#0e0e0e',borderRadius:'12px',height:'84px',display:'flex',alignItems:'center',justifyContent:'center'}},BR.lockup(d,30)));
+  c.append(el('div',{class:'pc',html:PC[d][1]}));
+  cols.append(c);
+}
+// B colour options
+const bc=document.getElementById('bcol');
+const r=el('div',{class:'row',style:{gap:'34px'}});
+for(const [k,l] of [['tx','оранжевый · транзакция (как в «Сигнале»)'],['block','жёлтый · блок'],['box','зелёный · бокс']]){
+  const s=B.bColors[k];
+  r.append(el('div',{style:{display:'flex',flexDirection:'column',gap:'10px',alignItems:'center'}},
+    el('div',{class:'row',style:{gap:'14px'}},raw(s.s48,72),pix(s.s16,16,4,'#1a1a1a')),el('div',{class:'small',style:{color:k==='tx'?'#fff':'#a3a3a3'}},l)));
+}
+bc.append(r);
+const dr=document.getElementById('drop');
+const rr=el('div',{class:'row',style:{gap:'30px'}});
+for(const [k,why] of [['vyemka','похоже на человечка'],['kartoteka','похоже на «выравнивание»'],['stupeniGap','рассыпается в 16 px']]){
+  rr.append(el('div',{style:{display:'flex',flexDirection:'column',gap:'10px',alignItems:'center'}},pix(B.explored[k].s16,16,4,'#1a1a1a'),el('div',{class:'small'},why)));
+}
+dr.append(rr);
+</script></body></html>

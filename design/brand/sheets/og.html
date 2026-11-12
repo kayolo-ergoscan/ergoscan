@@ -1,0 +1,10 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=block" rel="stylesheet">
+<style>body{margin:0;background:#0e0e0e;width:1200px;height:630px;overflow:hidden}</style></head><body>
+<script src="assets.js"></script><script src="common.js"></script><script src="brand.js"></script><script src="cards.js"></script>
+<script>
+const {q}=H;
+const d=q.get('d')||'b', c=q.get('card')||'default';
+const node = c==='tx'?CARDS.tx(d) : c==='address'?CARDS.address(d,false) : c==='address-named'?CARDS.address(d,true) : c==='token'?CARDS.token(d) : CARDS.deflt(d);
+document.body.append(node);
+</script></body></html>

@@ -7,8 +7,8 @@ import clsx from "clsx";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useT } from "@/lib/i18n/I18nProvider";
 import { explorerHref, useSiteHost } from "@/lib/site-host";
-import { HOME, INK } from "@/lib/palette";
 import { usePaperPress } from "@/lib/use-paper-press";
+import { BrandMark, BrandWord } from "./BrandMark";
 import { NavIcon, type NavIconId } from "./nav-icons";
 
 type NavLeaf = {
@@ -149,13 +149,6 @@ function pathActive(
 
 const pillEase: [number, number, number, number] = [0.4, 0, 0.2, 1];
 
-const SCAN_CORNERS = [
-  { key: "tl", d: "M18 10H10v8", viewBox: "8 8 12 12" },
-  { key: "tr", d: "M46 10h8v8", viewBox: "44 8 12 12" },
-  { key: "bl", d: "M10 46v8h8", viewBox: "8 44 12 12" },
-  { key: "br", d: "M54 46v8h-8", viewBox: "44 44 12 12" },
-] as const;
-
 function NavChars({ text, from = 0 }: { text: string; from?: number }) {
   return Array.from(text).map((ch, n) => (
     <span key={from + n} className="nav-ch" style={{ "--i": from + n } as CSSProperties}>
@@ -184,47 +177,12 @@ export function NavBrand({
           : "nav-brand-row relative z-10 h-[var(--toolbar)] w-full justify-center px-0"
       )}
     >
-      <span className={clsx("nav-scan", compact ? "h-7 w-7" : "h-8")}>
-        {SCAN_CORNERS.map((corner) => (
-          <svg
-            key={corner.key}
-            className={clsx("nav-scan-corner", corner.key)}
-            viewBox={corner.viewBox}
-            aria-hidden="true"
-          >
-            <path
-              d={corner.d}
-              fill="none"
-              stroke="#4DB7F2"
-              strokeWidth="4"
-              strokeLinecap="square"
-              strokeLinejoin="miter"
-            />
-          </svg>
-        ))}
-        {compact ? (
-          <span className="nav-scan-e" style={{ color: HOME.forming }}>
-            E
+      <span className={clsx("nav-lockup", compact && "nav-lockup--compact")}>
+        <BrandMark size={24} className="nav-mark" />
+        {compact ? null : (
+          <span className="nav-brand-word" aria-hidden={collapsed || undefined}>
+            <BrandWord />
           </span>
-        ) : (
-          <>
-          <span className="nav-scan-sizer" aria-hidden="true">ERGOSCANME</span>
-          <span className="nav-label nav-scan-word" aria-hidden={collapsed || undefined}>
-            <span className="nav-line items-baseline text-[15px] font-semibold uppercase leading-none">
-              {[
-                <span key="ergo" className="nav-line" style={{ color: HOME.forming }}>
-                  <NavChars text="ERGO" />
-                </span>,
-                <span key="scan" className="nav-line" style={{ color: INK.cyan }}>
-                  <NavChars text="SCAN" from={4} />
-                </span>,
-                <span key="me" className="nav-line" style={{ color: "var(--down)" }}>
-                  <NavChars text="ME" from={8} />
-                </span>,
-              ]}
-            </span>
-          </span>
-          </>
         )}
       </span>
     </Link>
@@ -275,7 +233,7 @@ function NavRow({
   const body = (
     <>
       <span className="nav-glyph relative z-[1] inline-flex shrink-0">
-        <NavIcon id={item.icon} className={nested ? "size-[18px] text-accent" : "size-[22px] text-accent"} />
+        <NavIcon id={item.icon} className={nested ? "ico-line size-[18px]" : "ico-line size-[22px]"} />
       </span>
       <span
         className={clsx(
@@ -414,7 +372,7 @@ function NavBranch({
             <span className="nav-glyph inline-flex shrink-0">
               <NavIcon
                 id={item.icon}
-                className={nested ? "size-[18px] text-accent" : "size-[22px] text-accent"}
+                className={nested ? "ico-line size-[18px]" : "ico-line size-[22px]"}
               />
             </span>
             <span
@@ -454,7 +412,7 @@ function NavBranch({
         <span className="nav-glyph relative z-[1] inline-flex shrink-0">
           <NavIcon
             id={item.icon}
-            className={nested ? "size-[18px] text-accent" : "size-[22px] text-accent"}
+            className={nested ? "ico-line size-[18px]" : "ico-line size-[22px]"}
           />
         </span>
         <span

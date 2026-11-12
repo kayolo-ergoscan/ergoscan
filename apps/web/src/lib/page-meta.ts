@@ -40,7 +40,7 @@ export function absUrl(path: string): string {
 }
 
 /** Site-wide share image. A page's own openGraph replaces the layout's, so every page names one. */
-export const DEFAULT_OG_IMAGE = "/og.png?v=4";
+export const DEFAULT_OG_IMAGE = "/og.png?v=5";
 
 export function pageMeta(opts: {
   title: string;

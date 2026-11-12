@@ -1,5 +1,6 @@
 /**
  * GET /og/{tx|address|token}/{id} → 1200×630 PNG for link previews (og:image).
+ * GET /og/site/card → the site-wide card (scripts/bake-og.py saves it as public/og.png).
  * Data comes from the same snapshot fetchers as the pages; nothing is stored.
  * Unknown ids fall back to the site-wide /og.png.
  */
@@ -12,24 +13,28 @@ import {
   type TxPageSnapshot,
 } from "@/lib/list-snapshots";
 import {
+  BigFigure,
   Chips,
-  Fact,
+  Gap,
   Mono,
   OG,
   OG_SIZE,
   OgFrame,
+  OgSiteCard,
   nanoToErg,
+  ogClock,
+  ogDate,
   ogFonts,
   ogNumber,
   ogShort,
   ogText,
-  ogUtc,
   scaled,
   tokenLogoData,
   type OgChip,
+  type OgTile,
 } from "@/lib/og-card";
 import { getGateway } from "@/lib/config";
-import { SITE_URL } from "@/lib/site-meta";
+import { SITE_OG_CAPTION, SITE_OG_HEADING, SITE_URL } from "@/lib/site-meta";
 import { tokenSymbol } from "@/lib/token-meta";
 import { groupParties, markFeeOutputIndexes, type TxIo } from "@/lib/tx-flow";
 import { toBigIntAmt } from "@/lib/format";
@@ -43,7 +48,7 @@ const DUST_NANO = 10_000_000n;
 const ADDR = /^[1-9A-HJ-NP-Za-km-z]{30,3000}$/;
 
 function fallback(): Response {
-  return Response.redirect(new URL("/og.png?v=4", SITE_URL), 302);
+  return Response.redirect(new URL("/og.png?v=5", SITE_URL), 302);
 }
 
 function who(address: string | null | undefined): string {
@@ -125,70 +130,73 @@ async function txCard(tx: TxPageSnapshot) {
   const toLabel = receivers[0] ? who(receivers[0].p.address) : to[0] ? who(to[0].address) : "—";
   const fromMore = Math.max(0, senders.length - 1);
   const toMore = Math.max(0, receivers.length - 1);
-  const when = ogUtc(tx.timestamp ?? null);
   const what =
     action === "oracle-datapoint"
       ? "oracle update"
       : category === "contract"
         ? "contract call, nothing transferred"
         : "sent to itself";
+  const ts = tx.timestamp ?? null;
+  const day = ogDate(ts);
+  const nIn = tx.inputCount ?? ins.length;
+  const nOut = tx.outputCount ?? outs.length;
+  const tiles: OgTile[] = [
+    tx.inclusionHeight != null
+      ? { label: "Block", value: tx.inclusionHeight.toLocaleString("en-US"), color: OG.block }
+      : { label: "Status", value: "pending", color: OG.tx },
+    { label: day ? `${day} · UTC` : "Time · UTC", value: ogClock(ts) ?? "—" },
+    // The fee already leads a fee-only card, and a block reward pays none: show the size there.
+    lead === "fee" || coinbase
+      ? { label: "Size", value: (tx.size ?? 0).toLocaleString("en-US"), unit: "bytes" }
+      : { label: "Fee", value: ogNumber(nanoToErg(tx.fee ?? 0), 6), unit: "ERG" },
+    { label: "Boxes in → out", value: `${nIn} → ${nOut}` },
+  ];
+  const party = (label: string) => (
+    <div style={{ display: "flex", color: OG.address, fontWeight: 600, maxWidth: 420, overflow: "hidden" }}>{label}</div>
+  );
+  const plus = (n: number) =>
+    n ? <div style={{ display: "flex", marginLeft: 10, color: OG.muted, fontFamily: "Plex Mono" }}>+{n}</div> : null;
 
   return (
     <OgFrame
       plate={coinbase ? "Block reward" : tx.confirmed ? "Transaction" : "Mempool transaction"}
       plateColor={coinbase ? OG.block : OG.tx}
-      left={[
-        tx.inclusionHeight != null ? (
-          <Fact label="Block" value={tx.inclusionHeight.toLocaleString("en-US")} color={OG.block} />
-        ) : (
-          <Fact label="Status" value="pending" color={OG.tx} />
-        ),
-        when ? <Fact value={when} /> : null,
-      ]}
-      right={ogShort(tx.id, 8)}
+      id={ogShort(tx.id, 8)}
+      tiles={tiles}
     >
-      {lead === "erg" ? (
-        <div style={{ display: "flex", alignItems: "baseline", gap: 18 }}>
-          <Mono size={112}>{ogNumber(nanoToErg(movedNano), 4)}</Mono>
-          <Mono size={44} color={OG.muted} weight={500}>
-            ERG
-          </Mono>
+      {lead === "fee" ? (
+        <div style={{ display: "flex", alignItems: "center", fontSize: 34 }}>
+          {party(fromLabel)}
+          <div style={{ display: "flex", marginLeft: 20, color: OG.muted }}>{what}</div>
         </div>
+      ) : (
+        <div style={{ display: "flex", alignItems: "center", fontSize: 34 }}>
+          {party(fromLabel)}
+          {plus(fromMore)}
+          <div style={{ display: "flex", marginLeft: 20, marginRight: 20, color: OG.tx }}>→</div>
+          {party(toLabel)}
+          {plus(toMore)}
+        </div>
+      )}
+      <Gap h={22} />
+      {lead === "erg" ? (
+        <BigFigure value={ogNumber(nanoToErg(movedNano), 4)} unit="ERG" />
       ) : headToken ? (
-        <div style={{ display: "flex", alignItems: "center", gap: 26 }}>
+        <div style={{ display: "flex", alignItems: "center" }}>
           {headLogo ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={headLogo} width={92} height={92} style={{ borderRadius: 999 }} alt="" />
+            <img src={headLogo} width={84} height={84} style={{ borderRadius: 999 }} alt="" />
           ) : (
-            <div style={{ display: "flex", width: 92, height: 92, borderRadius: 999, background: OG.token }} />
+            <div style={{ display: "flex", width: 84, height: 84, borderRadius: 999, background: OG.token }} />
           )}
-          <div style={{ display: "flex", alignItems: "baseline", gap: 18 }}>
-            <Mono size={104}>{ogNumber(headToken.amount, 4)}</Mono>
-            <div style={{ display: "flex", fontSize: 44, fontWeight: 600, color: OG.token }}>{headToken.label}</div>
+          <div style={{ display: "flex", marginLeft: 24 }}>
+            <BigFigure value={ogNumber(headToken.amount, 4)} unit={headToken.label} size={96} unitColor={OG.token} />
           </div>
         </div>
       ) : (
-        <div style={{ display: "flex", alignItems: "baseline", gap: 18 }}>
-          <Mono size={112}>{ogNumber(nanoToErg(tx.fee ?? 0), 6)}</Mono>
-          <Mono size={44} color={OG.muted} weight={500}>
-            ERG fee
-          </Mono>
-        </div>
+        <BigFigure value={ogNumber(nanoToErg(tx.fee ?? 0), 6)} unit="ERG fee" />
       )}
-      {lead === "fee" ? (
-        <div style={{ display: "flex", alignItems: "center", gap: 22, fontSize: 36 }}>
-          <div style={{ display: "flex", color: OG.address, fontWeight: 600 }}>{fromLabel}</div>
-          <div style={{ display: "flex", color: OG.muted }}>{what}</div>
-        </div>
-      ) : (
-        <div style={{ display: "flex", alignItems: "center", gap: 22, fontSize: 36 }}>
-          <div style={{ display: "flex", color: OG.address, fontWeight: 600 }}>{fromLabel}</div>
-          {fromMore ? <div style={{ display: "flex", color: OG.muted, fontFamily: "Plex Mono" }}>+{fromMore}</div> : null}
-          <div style={{ display: "flex", color: OG.muted }}>→</div>
-          <div style={{ display: "flex", color: OG.address, fontWeight: 600 }}>{toLabel}</div>
-          {toMore ? <div style={{ display: "flex", color: OG.muted, fontFamily: "Plex Mono" }}>+{toMore}</div> : null}
-        </div>
-      )}
+      {chips.length ? <Gap h={24} /> : null}
       <Chips chips={chips} more={more} />
     </OgFrame>
   );
@@ -224,30 +232,39 @@ async function addressCard(address: string) {
       amount: t.amountUi ?? scaled(t.amount, t.decimals ?? 0),
       label: ogText(tokenSymbol(t.tokenId, t.name), 14) || ogText(t.name, 14) || ogShort(t.tokenId, 4),
     }));
-  const { chips, more } = await chipsFor(list);
-  const tokenCount = (data as { tokenCount?: number }).tokenCount ?? list.length;
-  const firstTs = (data as { firstTs?: number | null }).firstTs ?? null;
-  const since = ogUtc(firstTs)?.split(",")[0] ?? null;
+  const { chips } = await chipsFor(list);
+  const tokenCount = data.tokenCount ?? list.length;
+  const txTotal = data.pagination?.txs.total ?? null;
+  const boxes = data.pagination?.boxes;
+  const boxTotal = boxes ? (boxes.total ?? (boxes.hasMore ? null : boxes.returned)) : null;
+  const tiles: OgTile[] = [
+    { label: "Transactions", value: txTotal != null ? txTotal.toLocaleString("en-US") : "—", color: OG.tx },
+    { label: "Unspent boxes", value: boxTotal != null ? boxTotal.toLocaleString("en-US") : "—", color: OG.box },
+    { label: "First seen", value: ogDate(data.firstTs) ?? "—" },
+    { label: "Last seen", value: ogDate(data.lastTs) ?? "—" },
+  ];
   return (
-    <OgFrame
-      plate="Address"
-      plateColor={OG.address}
-      left={[
-        <Fact label="Tokens" value={tokenCount.toLocaleString("en-US")} color={OG.token} />,
-        since ? <Fact label="Since" value={since} /> : null,
-      ]}
-      right={name ? ogShort(data.address, 8) : null}
-    >
-      <div style={{ display: "flex", fontSize: name ? 52 : 44, fontWeight: 600, color: OG.address, fontFamily: name ? "Plex Sans" : "Plex Mono" }}>
-        {name || ogShort(data.address, 12)}
-      </div>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 18 }}>
-        <Mono size={104}>{ogNumber(erg, 4)}</Mono>
-        <Mono size={44} color={OG.muted} weight={500}>
-          ERG
+    <OgFrame plate="Address" plateColor={OG.address} tiles={tiles}>
+      {name ? (
+        <div style={{ display: "flex", alignItems: "baseline" }}>
+          <div style={{ display: "flex", fontSize: name.length > 20 ? 40 : 50, fontWeight: 600, color: OG.text, lineHeight: 1, maxWidth: 660, overflow: "hidden" }}>
+            {name}
+          </div>
+          <div style={{ display: "flex", marginLeft: 22 }}>
+            <Mono size={30} color={OG.address} weight={500}>
+              {ogShort(data.address, 8)}
+            </Mono>
+          </div>
+        </div>
+      ) : (
+        <Mono size={40} color={OG.address} weight={500}>
+          {ogShort(data.address, 12)}
         </Mono>
-      </div>
-      <Chips chips={chips} more={more} />
+      )}
+      <Gap h={24} />
+      <BigFigure value={ogNumber(erg, 4)} unit="ERG" />
+      {chips.length || tokenCount ? <Gap h={24} /> : null}
+      <Chips chips={chips} tail={tokenCount > chips.length ? `${tokenCount.toLocaleString("en-US")} tokens` : null} />
     </OgFrame>
   );
 }
@@ -259,47 +276,27 @@ async function tokenCard(tokenId: string) {
   const fullName = ogText(row.name, 40);
   const logo = await tokenLogoData(row.tokenId);
   const supply = row.emission != null ? ogNumber(scaled(row.emission, row.decimals ?? 0), 2) : null;
-  const since = row.firstTs != null ? ogUtc(row.firstTs)?.split(",")[0] ?? null : null;
+  const n = (v: number | null) => (v != null ? v.toLocaleString("en-US") : "—");
+  const tiles: OgTile[] = [
+    { label: "Holders", value: n(row.holders), color: OG.address },
+    { label: "Transactions", value: n(row.txCount), color: OG.tx },
+    { label: "Supply", value: supply ?? "—" },
+    { label: "First minted", value: ogDate(row.firstTs) ?? "—" },
+  ];
+  const sub = [fullName && fullName !== symbol ? fullName : null, `${row.decimals ?? 0} decimals`].filter(Boolean).join(" · ");
   return (
-    <OgFrame
-      plate="Token"
-      plateColor={OG.token}
-      left={[since ? <Fact label="Since" value={since} /> : null]}
-      right={ogShort(row.tokenId, 8)}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: 32 }}>
+    <OgFrame plate="Token" plateColor={OG.token} id={ogShort(row.tokenId, 8)} tiles={tiles}>
+      <div style={{ display: "flex", alignItems: "center" }}>
         {logo ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={logo} width={128} height={128} style={{ borderRadius: 999 }} alt="" />
+          <img src={logo} width={136} height={136} style={{ borderRadius: 999 }} alt="" />
         ) : (
-          <div style={{ display: "flex", width: 128, height: 128, borderRadius: 999, background: OG.token }} />
+          <div style={{ display: "flex", width: 136, height: 136, borderRadius: 999, background: OG.token }} />
         )}
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <div style={{ display: "flex", fontSize: 76, fontWeight: 600, color: OG.text }}>{symbol}</div>
-          {fullName && fullName !== symbol ? (
-            <div style={{ display: "flex", fontSize: 32, color: OG.soft }}>{fullName}</div>
-          ) : null}
+        <div style={{ display: "flex", flexDirection: "column", marginLeft: 36 }}>
+          <div style={{ display: "flex", fontSize: 84, fontWeight: 600, color: OG.text, lineHeight: 1, letterSpacing: -1.5 }}>{symbol}</div>
+          <div style={{ display: "flex", marginTop: 16, fontSize: 32, color: OG.soft }}>{sub}</div>
         </div>
-      </div>
-      <div style={{ display: "flex", gap: 56 }}>
-        {row.holders != null ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <div style={{ display: "flex", fontSize: 26, color: OG.muted }}>Holders</div>
-            <Mono size={56} color={OG.address}>{row.holders.toLocaleString("en-US")}</Mono>
-          </div>
-        ) : null}
-        {supply ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <div style={{ display: "flex", fontSize: 26, color: OG.muted }}>Supply</div>
-            <Mono size={56}>{supply}</Mono>
-          </div>
-        ) : null}
-        {row.txCount != null ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <div style={{ display: "flex", fontSize: 26, color: OG.muted }}>Transactions</div>
-            <Mono size={56} color={OG.tx}>{row.txCount.toLocaleString("en-US")}</Mono>
-          </div>
-        ) : null}
       </div>
     </OgFrame>
   );
@@ -314,7 +311,10 @@ export async function GET(
   try {
     let card: React.ReactElement | null = null;
     let maxAge = 600;
-    if (kind === "tx" && HEX64.test(id.toLowerCase())) {
+    if (kind === "site" && id === "card") {
+      card = <OgSiteCard heading={SITE_OG_HEADING} caption={SITE_OG_CAPTION} />;
+      maxAge = 86_400;
+    } else if (kind === "tx" && HEX64.test(id.toLowerCase())) {
       const tx = await fetchTransaction(id.toLowerCase());
       if (tx) {
         card = await txCard(tx);

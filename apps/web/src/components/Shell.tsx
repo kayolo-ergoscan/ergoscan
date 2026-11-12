@@ -14,7 +14,8 @@ import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { fetchChainStats } from "@/lib/chain-stats";
 import { formatCompact, formatUsd } from "@/lib/format";
 import { IndexerStatus } from "./IndexerStatus";
-import { HOME, INK } from "@/lib/palette";
+import { INK } from "@/lib/palette";
+import { BrandMark, BrandWord } from "./BrandMark";
 import { HeaderScout } from "./HeaderScout";
 import { ErgUsdContext, PriceTape, useSiteMarket } from "./PriceTape";
 import type { SiteMarket } from "@/lib/site-market";
@@ -82,7 +83,7 @@ function SheetMark({ home }: { home: boolean }) {
       aria-hidden
     >
       <span className="sheet-spin-drift">
-        <img src="/ergoscan-mark.svg" alt="" />
+        <BrandMark size={64} />
       </span>
     </div>
   );
@@ -192,10 +193,9 @@ export function Shell({
 
           <footer className="page-tail">
             <span className="inline-flex min-w-0 flex-wrap items-center gap-3">
-              <span className="inline-flex shrink-0 items-baseline gap-[0.28em] font-semibold tracking-[0.06em]">
-                <span style={{ color: HOME.forming }}>ERGO</span>
-                <span style={{ color: INK.cyan }}>SCAN</span>
-                <span style={{ color: "var(--down)" }}>ME</span>
+              <span className="page-tail-brand">
+                <BrandMark size={16} />
+                <BrandWord />
               </span>
               <SyncChip compact />
             </span>

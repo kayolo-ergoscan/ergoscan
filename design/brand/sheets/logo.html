@@ -1,0 +1,64 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=block" rel="stylesheet">
+<style>
+:root{--page:#0e0e0e;--tile:#1a1a1a;--t2:#c6c6c6;--t3:#a3a3a3}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:#fff;font-family:'IBM Plex Sans';width:1600px;height:920px;padding:34px 40px;overflow:hidden;position:relative}
+.head{display:flex;gap:36px;align-items:flex-start;height:108px}
+.ttl{display:flex;align-items:baseline;gap:14px;min-width:330px}
+.chip{font:600 22px 'IBM Plex Mono';color:#0e0e0e;background:#fff;border-radius:6px;padding:2px 10px}
+.name{font:600 44px 'IBM Plex Sans';letter-spacing:-.02em}
+.idea{font:400 18px/1.5 'IBM Plex Sans';color:var(--t2);max-width:1120px}
+.idea b{color:#fff;font-weight:600}
+.cap{font:500 12px 'IBM Plex Mono';letter-spacing:.12em;text-transform:uppercase;color:var(--t3);margin-bottom:10px}
+.t{background:var(--tile);border-radius:16px;padding:20px}
+.light{background:#f4f4f2;color:#0e0e0e}
+.center{display:flex;align-items:center;justify-content:center}
+.small{font:500 12px 'IBM Plex Mono';color:var(--t3)}
+.lt .small{color:#777}
+</style></head><body>
+<script src="assets.js"></script><script src="common.js"></script><script src="brand.js"></script><script src="cards.js"></script>
+<script>
+const {B,el,raw,pix,img,q}=H;
+const d=q.get('d')||'a';
+const TXT={
+ a:{n:'Рамка',idea:'<b>Рамка сканера держит один блок.</b> Развитие нынешних уголков [ ] — пользователи уже знают знак; жёлтый квадрат — последний блок сети. Самый безопасный путь: узнаваемость остаётся, знак становится чище и держится в 16 px.',move:'Движение: на каждый новый блок уголки на миг сжимаются — «захват».'},
+ b:{n:'Трата',idea:'<b>Вся модель eUTXO в двух квадратах.</b> Контур — потраченный бокс, сплошной — бокс, который создала транзакция; новый лежит поверх старого. Оранжевый — цвет транзакции и логотипа в концепте «Сигнал».',move:'Движение: на новый блок сплошной квадрат «съезжает» в контур и появляется следующий — тот же цикл служит лоадером.'},
+ c:{n:'Ступени',idea:'<b>Пять клеток — пять сущностей сайта в их цветах:</b> блок → транзакция → адрес → токен → бокс. Знак — легенда всего интерфейса, а лесенка — растущая высота цепи. Самый яркий и самый «системный» вариант.',move:'Движение: загрузка — клетки загораются по очереди снизу вверх; новый блок — вспыхивает жёлтая.'},
+}[d];
+document.title=TXT.n;
+document.body.append(el('div',{class:'head'},
+  el('div',{class:'ttl'},el('span',{class:'chip'},d.toUpperCase()),el('span',{class:'name'},'«'+TXT.n+'»')),
+  el('div',{class:'idea',html:TXT.idea+'<br><span style="color:#a3a3a3">'+TXT.move+'</span>'})));
+
+const A=(x,y,w,h,node,extra={})=>{node.style.position='absolute';node.style.left=x+'px';node.style.top=y+'px';if(w)node.style.width=w+'px';if(h)node.style.height=h+'px';Object.assign(node.style,extra);document.body.append(node);return node;};
+const cap=(x,y,t)=>A(x,y,0,0,el('div',{class:'cap',style:{whiteSpace:'nowrap'}},t));
+const m=B.marks[BR.MK[d]];
+// row 1
+A(40,150,380,400,el('div',{class:'t center',style:{flexDirection:'column',gap:'22px'}},BR.mark(d,240),el('div',{class:'small'},'знак · сетка 48')));
+A(440,150,560,190,el('div',{class:'t center',style:{background:'#0e0e0e',border:'1px solid #2a2a2a'}},BR.lockup(d,46,'dark')));
+A(440,360,560,190,el('div',{class:'t light center lt'},BR.lockup(d,46,'light')));
+cap(1020,150,'меню «Сигнал»');
+A(1020,174,248,0,BR.nav(d,{count:7,width:248}));
+cap(1288,150,'иконка приложения');
+A(1288,174,272,226,el('div',{class:'t center',style:{background:'#000',flexDirection:'column',gap:'6px',padding:'10px'}},BR.appIcon(d,180),el('div',{class:'small'},'180 px · 1:1')));
+const split=el('div',{style:{display:'flex',borderRadius:'16px',overflow:'hidden'}});
+split.append(el('div',{class:'center',style:{background:'#e9e9ee',width:'136px',height:'130px'}},BR.appIcon(d,96)));
+split.append(el('div',{class:'center',style:{background:'#2c2c2e',width:'136px',height:'130px'}},BR.appIcon(d,96)));
+A(1288,420,272,130,split);
+// row 2
+const pv=el('div',{class:'t'},el('div',{class:'cap'},'favicon · реальные пиксели'));
+const pr=el('div',{style:{display:'flex',gap:'24px',alignItems:'flex-end',marginTop:'18px'}});
+const col=(...k)=>el('div',{style:{display:'flex',flexDirection:'column',gap:'8px',alignItems:'center'}},...k);
+pr.append(col(pix(m.s16.dark,16,8,'#1a1a1a'),el('div',{class:'small'},'16 px ×8')));
+pr.append(col(pix(m.s16.light,16,4,'#ffffff'),el('div',{class:'small'},'16 светлый')));
+pr.append(col(pix(m.s16.dark,32,3,'#1a1a1a'),el('div',{class:'small'},'32 px ×3')));
+pv.append(pr);
+A(40,578,380,300,pv);
+const tb=el('div',{class:'t',style:{display:'flex',flexDirection:'column',gap:'16px'}},el('div',{class:'cap'},'вкладка браузера · 1:1'));
+tb.append(BR.tabs(d,'light'),BR.tabs(d,'dark'));
+A(440,578,560,300,tb);
+cap(1020,578,'картинка ссылки 1200×630 · ×0.45');
+const og=BR.ogDefault(d);og.style.transform='scale(0.45)';og.style.transformOrigin='0 0';
+A(1020,600,540,284,el('div',{style:{borderRadius:'12px',overflow:'hidden',outline:'1px solid #2a2a2a'}},og));
+</script></body></html>
