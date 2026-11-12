@@ -237,12 +237,14 @@ export function FeedRentDangerRow({
   const amount = bigOf(row.amount);
   const dec = row.decimals ?? 0;
   const project = meta.name && meta.name !== meta.symbol ? meta.name : null;
+  const [riskPre = "", riskPost = ""] = t("rent.danger.usd").split("{n}");
   return (
     <FeedRow
       k={TONE_KIND[rentRowTone({ rentDue: false, blocksUntilRent: row.blocksUntilRent })]}
       tile={<TokenLogo tokenId={row.tokenId} size={22} />}
       tileTitle={meta.name}
       lead={{ rank: rank.toLocaleString(tag) }}
+      className="is-danger"
       enterClass={enterClass}
       title={
         <Link
@@ -265,7 +267,13 @@ export function FeedRentDangerRow({
           </span>
         </>
       }
-      value={<span className="feed-amt is-down tabular-nums">{t("rent.danger.usd").replace("{n}", usdText)}</span>}
+      value={
+        <span className="feed-amt is-down tabular-nums">
+          {riskPre.trim() ? <span className="feed-unit">{riskPre.trim()} </span> : null}
+          {usdText}
+          {riskPost.trim() ? <span className="feed-unit">{riskPost.trim()}</span> : null}
+        </span>
+      }
       sub={t("rent.danger.short").replace("{n}", formatScaledAmount(short, 9, tag))}
       detail={() => (
         <FeedFields>

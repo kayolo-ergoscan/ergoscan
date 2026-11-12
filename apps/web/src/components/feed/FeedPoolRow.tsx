@@ -109,7 +109,7 @@ export function FeedPoolRow({
           ) : null}
         </>
       }
-      value={<FeedAmount raw={tvlNano} glance />}
+      value={<FeedAmount raw={tvlNano} cents />}
       sub={
         <span className="tabular-nums">
           <FeedPhrase text={t("feed.vol24")} value={day24 ?? "—"} slot="{v}" />

@@ -1168,6 +1168,32 @@ button.feed-caret:hover {
   color: var(--muted-2);
 }
 
+/* 360 px phones: a little less air between the columns, and the optional part of a sub line steps aside. */
+@media (max-width: 379px) {
+  .feed-row {
+    column-gap: 8px;
+    padding-inline: 10px;
+  }
+  .feed-sub-opt {
+    display: none;
+  }
+}
+/* A route title («Ergo → Cardano») on a narrow phone wraps at its arrow rather than being cut. */
+@media (max-width: 639px) {
+  .feed-row.is-route .feed-title > .feed-name {
+    white-space: normal;
+  }
+}
+/* Rent danger rows on a phone: the rank goes, the due phrase may take two lines. */
+@media (max-width: 639px) {
+  .feed-row.is-danger .feed-facts > .feed-when {
+    display: none;
+  }
+  .feed-row.is-danger .feed-facts > .feed-kind {
+    white-space: normal;
+  }
+}
+
 /* ── rent collectors (batch 3, fork C) ── */
 
 /* The donut's colour in front of a collector's name: the row is its legend. */

@@ -486,6 +486,7 @@ function FeedRosenRow({ row, lead, enterClass }: { row: RosenEventItem; lead: Fe
       tileTitle={stLabel}
       lead={lead}
       leadSub={!lead.same && height ? height : undefined}
+      className="is-route"
       enterClass={enterClass}
       title={
         <span className="feed-name font-semibold">

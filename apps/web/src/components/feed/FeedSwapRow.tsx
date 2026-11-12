@@ -174,8 +174,12 @@ export function FeedSwapRow({
       sub={
         price != null || ago ? (
           <span className="tabular-nums" suppressHydrationWarning>
-            {price != null ? <PrettyPrice n={price} /> : null}
-            {price != null && ago ? " · " : null}
+            {price != null ? (
+              <span className="feed-sub-opt">
+                <PrettyPrice n={price} />
+                {ago ? " · " : null}
+              </span>
+            ) : null}
             {ago}
           </span>
         ) : null
