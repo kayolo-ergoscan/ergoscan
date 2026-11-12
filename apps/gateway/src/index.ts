@@ -967,7 +967,9 @@ server.listen(PORT, BIND, () => {
   );
   void refreshSpectrumPoolNfts();
   warmErgoTreeParser();
-  startTemplateHashFill();
+  // The site gateway (ergoscan_gateway, UPDATE on script.template_hash) fills template hashes.
+  // The public API process has no write grant and only repeated the work every 5 s (audit 12 Nov).
+  if (process.env.API_CONTOUR !== "1") startTemplateHashFill();
   void pollMempool();
   void fetchNodeInfo();
   void refreshBlockEta();
