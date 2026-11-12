@@ -17,6 +17,7 @@ import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { useChainTipRefresh, usePageSync } from "@/lib/page-sync";
 import { SNAPSHOT_FETCH, enteringIds, snapshotPath, useEnterIds, ENTER_MS } from "@/lib/keyed-enter";
 import { TX_PACK, parseTxListItems, type TxListItem } from "@/lib/list-snapshots";
+import { appendPack, keysetAfter, mergeHead, shouldFill, trimToFill } from "@/lib/tx-tape-fill";
 import { useFavoriteList } from "@/lib/favorites";
 
 function loc(locale: string): string {
@@ -47,6 +48,12 @@ export function TransactionsView({
   const [hasMore, setHasMore] = useState(initialHasMore);
   const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor);
   const [page, setPage] = useState(0);
+  /** Txs on the pages before this one: a page is as many packs as it took to fill it. */
+  const [pageOffset, setPageOffset] = useState(0);
+  /** Packs this page has read (the fill stops at FILL_MAX_PACKS). */
+  const [packs, setPacks] = useState(initialItems.length ? 1 : 0);
+  const [filling, setFilling] = useState(false);
+  const [fillFailed, setFillFailed] = useState(false);
   const [pending, setPending] = useState(false);
   const [ready, setReady] = useState(initialItems.length > 0);
   const [err, setErr] = useState<string | null>(null);
@@ -57,68 +64,102 @@ export function TransactionsView({
   const packEnter = useEnterIds(ENTER_MS, seedIds.length ? ["pack"] : []);
   const [listReady, setListReady] = useState(seedIds.length > 0);
   const opened = useRef(seedIds.length > 0);
+  /** Where this page starts; null is the top of the chain. */
   const cursorRef = useRef<string | null>(null);
-  const cursorStack = useRef<(string | null)[]>([]);
+  const cursorStack = useRef<{ cursor: string | null; offset: number }[]>([]);
   const nextCursorRef = useRef<string | null>(initialNextCursor);
   nextCursorRef.current = nextCursor;
   const itemsRef = useRef(items);
   itemsRef.current = items;
+  /** Bumped when the page changes: a fill still in flight for the old page is dropped. */
+  const pageGen = useRef(0);
+  const fillAbort = useRef<AbortController | null>(null);
+  const fillingRef = useRef(false);
+  fillingRef.current = filling;
 
+  const fetchPack = useCallback(async (cursor: string | null, signal?: AbortSignal) => {
+    const q = new URLSearchParams({
+      limit: String(TX_PACK),
+      mempool: "0",
+    });
+    if (cursor) q.set("cursor", cursor);
+    else q.set("offset", "0");
+    const r = await fetch(`${getGateway()}${snapshotPath(`/v1/transactions/recent?${q}`, tipRef.current?.height)}`, {
+      ...SNAPSHOT_FETCH,
+      signal,
+    });
+    if (!r.ok) throw new Error(String(r.status));
+    const j = (await r.json()) as {
+      items?: TxListItem[];
+      updatedAt?: string | null;
+      hasMore?: boolean;
+      nextCursor?: string | null;
+    };
+    const rows = parseTxListItems(j.items);
+    const more = typeof j.hasMore === "boolean" ? j.hasMore : rows.length >= TX_PACK;
+    const last = rows[rows.length - 1];
+    const nxt =
+      typeof j.nextCursor === "string" && j.nextCursor.length ? j.nextCursor : more && last ? keysetAfter(last) : null;
+    return { rows, more, next: more ? nxt : null, updatedAt: j.updatedAt ?? null };
+  }, []);
+
+  /** A page from its first pack; `silent` is a new block on the first page (no dimming). */
   const load = useCallback(
     (silent = false) => {
-      if (!silent && itemsRef.current.length) setPending(true);
       const want = cursorRef.current;
-      const q = new URLSearchParams({
-        limit: String(TX_PACK),
-        mempool: "0",
-      });
-      if (want) q.set("cursor", want);
-      else q.set("offset", "0");
-      void fetch(
-        `${getGateway()}${snapshotPath(`/v1/transactions/recent?${q}`, tipRef.current?.height)}`,
-        SNAPSHOT_FETCH
-      )
-        .then(async (r) => {
-          if (!r.ok) throw new Error(String(r.status));
-          return r.json() as Promise<{
-            items?: TxListItem[];
-            updatedAt?: string | null;
-            hasMore?: boolean;
-            nextCursor?: string | null;
-          }>;
-        })
-        .then((j) => {
-          if (cursorRef.current !== want) return;
-          const next = parseTxListItems(j.items);
-          if (!next.length && want) {
-            const prev = cursorStack.current.pop() ?? null;
-            cursorRef.current = prev;
+      // A new block while the first page is filling: the next block refreshes it.
+      if (silent && fillingRef.current) return;
+      const refresh = silent && want === null && itemsRef.current.length > 0;
+      if (!refresh) {
+        pageGen.current += 1;
+        fillAbort.current?.abort();
+        setFilling(false);
+        setFillFailed(false);
+      }
+      const gen = pageGen.current;
+      if (!silent && itemsRef.current.length) setPending(true);
+      void fetchPack(want)
+        .then((r) => {
+          if (cursorRef.current !== want || gen !== pageGen.current) return;
+          if (!r.rows.length && want) {
+            const prev = cursorStack.current.pop();
+            cursorRef.current = prev?.cursor ?? null;
+            setPageOffset(prev?.offset ?? 0);
             setPage(cursorStack.current.length);
             return;
           }
-          if (!next.length && !want) {
+          if (!r.rows.length && !want) {
             setErr(null);
             setReady(true);
-            markSynced(j.updatedAt);
+            markSynced(r.updatedAt);
             return;
           }
-          const more = typeof j.hasMore === "boolean" ? j.hasMore : next.length >= TX_PACK;
-          const last = next[next.length - 1];
-          const nxt =
-            typeof j.nextCursor === "string" && j.nextCursor.length
-              ? j.nextCursor
-              : more && last
-                ? `${last.inclusionHeight ?? -1}:${last.index ?? -1}:${last.id}`
-                : null;
-          setItems((prev) => {
-            enter.mark(enteringIds(prev, next));
-            return next;
-          });
-          setHasMore(more);
-          setNextCursor(more ? nxt : null);
+          const merged = refresh ? mergeHead(itemsRef.current, r.rows) : null;
+          if (merged) {
+            // New rows on top of a filled page; it keeps about the same number of rows people made.
+            const kept = trimToFill(merged);
+            setItems((prev) => {
+              enter.mark(enteringIds(prev, kept.rows));
+              return kept.rows;
+            });
+            if (kept.cut) {
+              setHasMore(true);
+              setNextCursor(keysetAfter(kept.rows[kept.rows.length - 1]!));
+            }
+          } else {
+            if (refresh) pageGen.current += 1;
+            setItems((prev) => {
+              enter.mark(enteringIds(prev, r.rows));
+              return r.rows;
+            });
+            setPacks(1);
+            setHasMore(r.more);
+            setNextCursor(r.next);
+            setFillFailed(false);
+          }
           setErr(null);
           setReady(true);
-          markSynced(j.updatedAt);
+          markSynced(r.updatedAt);
         })
         .catch((e) => {
           if (!silent) setErr(String(e));
@@ -128,7 +169,7 @@ export function TransactionsView({
           if (!silent) setPending(false);
         });
     },
-    [enter.mark, markSynced]
+    [enter.mark, fetchPack, markSynced]
   );
 
   const painted = useRef(false);
@@ -167,6 +208,8 @@ export function TransactionsView({
     pageSeen.current = page;
     loadRef.current();
   }, [page]);
+
+  useEffect(() => () => fillAbort.current?.abort(), []);
 
   useChainTipRefresh(true, () => {
     if (cursorRef.current !== null) return;
@@ -250,6 +293,42 @@ export function TransactionsView({
     actionOf: (row) => row.meaning?.action,
     isOpen: (day) => openDays.has(day),
   });
+  /** Rows on screen as rows: a fold summary is not one, an opened day's rows are. */
+  const visible = tape.reduce((n, x) => (isTxFold(x) ? n : n + 1), 0);
+
+  /*
+   * While machine rows are folded a pack can show three rows. Pull the next pack, one request
+   * at a time, until FILL_ROWS rows show or the page has read FILL_MAX_PACKS packs; an error
+   * stops it for this page. Opening a day shows its rows, so nothing more is needed then.
+   */
+  useEffect(() => {
+    if (!listReady || pending) return;
+    if (!shouldFill({ visible, packs, hasMore, busy: filling, failed: fillFailed })) return;
+    const cursor = nextCursorRef.current;
+    if (!cursor) return;
+    const gen = pageGen.current;
+    const ac = new AbortController();
+    fillAbort.current = ac;
+    setFilling(true);
+    void fetchPack(cursor, ac.signal)
+      .then((r) => {
+        if (gen !== pageGen.current) return;
+        setItems((prev) => {
+          const next = appendPack(prev, r.rows);
+          enter.mark(enteringIds(prev, next));
+          return next;
+        });
+        setPacks((n) => n + 1);
+        setHasMore(r.more);
+        setNextCursor(r.next);
+      })
+      .catch(() => {
+        if (gen === pageGen.current && !ac.signal.aborted) setFillFailed(true);
+      })
+      .finally(() => {
+        if (gen === pageGen.current) setFilling(false);
+      });
+  }, [listReady, pending, visible, packs, hasMore, filling, fillFailed, fetchPack, enter.mark]);
 
   return (
     <Shell>
@@ -298,8 +377,8 @@ export function TransactionsView({
             />
           </Feed>
           <RankWindow
-            offset={page * TX_PACK}
-            pageSize={TX_PACK}
+            offset={pageOffset}
+            pageSize={Math.max(1, items.length)}
             shown={items.length}
             total={txTotal != null && txTotal > 0 ? txTotal : null}
             scrub={false}
@@ -310,19 +389,20 @@ export function TransactionsView({
             nextLabel={t("addresses.packNext")}
             tapeLabel={t("txs.packTape")}
             hint={t("txs.packHint")}
-            disabled={pending}
+            disabled={pending || filling}
             onOffset={(next) => {
-              const cur = page * TX_PACK;
-              if (next > cur) {
+              if (next > pageOffset) {
                 const nxt = nextCursorRef.current;
                 if (!hasMore || !nxt) return;
-                cursorStack.current.push(cursorRef.current);
+                cursorStack.current.push({ cursor: cursorRef.current, offset: pageOffset });
                 cursorRef.current = nxt;
+                setPageOffset(pageOffset + items.length);
                 setPage(cursorStack.current.length);
-              } else if (next < cur) {
-                if (!cursorStack.current.length) return;
-                const prev = cursorStack.current.pop() ?? null;
-                cursorRef.current = prev;
+              } else if (next < pageOffset) {
+                const prev = cursorStack.current.pop();
+                if (!prev) return;
+                cursorRef.current = prev.cursor;
+                setPageOffset(prev.offset);
                 setPage(cursorStack.current.length);
               }
             }}
