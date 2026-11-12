@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import Link from "next/link";
 import dynamic from "next/dynamic";
 import clsx from "clsx";
 import { rentNanoToErg } from "@ergoscan/shared";
 import { formatGroupedInt } from "@/lib/format";
 import { enteringIds, useEnterIds } from "@/lib/keyed-enter";
+import { Feed, FeedSection } from "@/components/feed/Feed";
+import { FeedRentPoolRow } from "@/components/feed/FeedRentRow";
 import {
-  RENT_POOL_ROW_CLASS,
   formatRentSharePct,
   hasRentMinerRows,
   mergeRentMinerPools,
@@ -63,12 +63,6 @@ function PeriodTabs({
       ))}
     </div>
   );
-}
-
-function formatPoolErg(nano: string, locale: string): string {
-  const erg = rentNanoToErg(nano);
-  if (!Number.isFinite(erg) || erg <= 0) return "0";
-  return formatGroupedInt(BigInt(Math.round(erg)), locale);
 }
 
 export function RentMinerPools({
@@ -227,72 +221,17 @@ export function RentMinerPools({
             {t(emptyKey)}
           </p>
         ) : (
-          <ul className="m-0 max-h-[12.5rem] list-none overflow-y-auto p-0">
-            {rows.map((row) => (
-              <PoolRow
-                key={row.id}
-                row={row}
-                locale={locale}
-                enterClass={enter.enterClass(row.id)}
-              />
-            ))}
-          </ul>
+          <div className="feed-pools -mx-4 sm:-mx-5">
+            <Feed className="is-rank">
+              <FeedSection label={t("rent.pools")}>
+                {rows.map((row, i) => (
+                  <FeedRentPoolRow key={row.id} row={row} rank={i + 1} enterClass={enter.enterClass(row.id)} />
+                ))}
+              </FeedSection>
+            </Feed>
+          </div>
         )}
       </div>
     </section>
-  );
-}
-
-function PoolRow({
-  row,
-  locale,
-  enterClass,
-}: {
-  row: RentMinerRow;
-  locale: string;
-  enterClass?: string;
-}) {
-  const pct = formatRentSharePct(row.share);
-  const erg = formatPoolErg(row.rentNano, locale);
-  const inner = (
-    <>
-      <div className="flex min-w-0 items-baseline justify-between gap-3">
-        <span className="flex min-w-0 items-center gap-2">
-          <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: row.ink }} aria-hidden />
-          <span className="truncate text-[13px] font-medium leading-none">{row.name}</span>
-        </span>
-        <span className="flex shrink-0 items-baseline gap-2 tabular-nums">
-          <span className="text-[13px] font-medium leading-none tracking-tight text-[var(--text)]">
-            {erg}
-          </span>
-          <span className="min-w-[2.25rem] text-right text-[12px] leading-none text-[var(--muted)]">{pct}</span>
-        </span>
-      </div>
-      <div className="mt-1 h-[3px] overflow-hidden rounded-full bg-[var(--wash)]" aria-hidden>
-        <div
-          className="h-full rounded-full"
-          style={{
-            width: `${Math.min(100, Math.max(0, row.share * 100))}%`,
-            background: row.ink,
-          }}
-        />
-      </div>
-    </>
-  );
-  const cls = clsx(
-    "flex h-full flex-col justify-center rounded-[10px] px-1 py-1 text-[var(--text)] transition-colors duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
-    enterClass,
-    row.address && "hover:bg-[var(--wash-faint)]"
-  );
-  return (
-    <li className={clsx("list-none", RENT_POOL_ROW_CLASS)}>
-      {row.address ? (
-        <Link prefetch={false} href={`/address/${encodeURIComponent(row.address)}`} className={cls}>
-          {inner}
-        </Link>
-      ) : (
-        <div className={cls}>{inner}</div>
-      )}
-    </li>
   );
 }

@@ -932,3 +932,19 @@ button.feed-caret:hover {
   padding: 0 6px;
   color: var(--muted-2);
 }
+
+/* ── rent collectors (batch 3, fork C) ── */
+
+/* The donut's colour in front of a collector's name: the row is its legend. */
+.feed-ink {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ink, var(--k));
+}
+/* Collectors under their donut: four rows show, the rest scroll inside the card. */
+.feed-pools {
+  max-height: 14.25rem;
+  overflow-y: auto;
+}
