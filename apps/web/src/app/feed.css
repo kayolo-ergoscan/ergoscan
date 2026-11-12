@@ -1358,3 +1358,300 @@ html[data-look="c"] main .feed-row.is-quiet .feed-title > a.mx-word {
     display: none;
   }
 }
+
+/* ── Tx page header from the meaning (TxMeaningHeader): tile, action, phrase, cards, facts, «how». ── */
+.txm {
+  min-width: 0;
+  padding: 16px 16px 14px;
+}
+.txm-head {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+}
+.txm-tile .feed-tile {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+}
+.txm-tile .feed-tile svg {
+  width: 22px;
+  height: 22px;
+}
+.txm-title {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+.txm-action {
+  font-size: 24px;
+  font-weight: 650;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.txm-where {
+  padding: 3px 9px;
+  border-radius: 8px;
+  background: var(--wash);
+  font-size: 14px;
+  line-height: 1.3;
+  color: var(--muted);
+}
+.txm-guess {
+  font-size: 13px;
+  color: var(--muted-2);
+}
+.txm-id {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+.txm-hash {
+  overflow: hidden;
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.txm-phrase {
+  margin-top: 12px;
+  font-size: 18px;
+  line-height: 1.45;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.txm-num,
+.txm-fig {
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+.txm-party {
+  color: var(--accent);
+  white-space: nowrap;
+}
+.txm-num {
+  white-space: nowrap;
+}
+.txm-party.is-mono {
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: -0.02em;
+}
+a.txm-party:hover,
+a.txm-unit:hover,
+a.txm-link:hover {
+  text-decoration: underline;
+}
+.txm-party.is-plain {
+  color: var(--muted);
+}
+
+/* Cards: drops on the glass, no lines. Gave is red, got is green. */
+.txm-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+.txm-card {
+  min-width: 168px;
+  max-width: 100%;
+  padding: 9px 14px 10px;
+  border-radius: 14px;
+  background: var(--wash-faint);
+}
+.txm-card-title {
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--muted);
+}
+.txm-card-body {
+  margin-top: 4px;
+}
+.txm-line {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: baseline;
+  font-size: 15px;
+  line-height: 1.4;
+}
+.txm-amt {
+  white-space: nowrap;
+}
+.txm-unit {
+  font-weight: 500;
+  color: var(--text);
+}
+.txm-card.is-gave .txm-fig,
+.txm-card.is-gave .txm-unit,
+html[data-look="c"] main .txm-card.is-gave a.txm-unit {
+  color: var(--down) !important;
+}
+.txm-card.is-got .txm-fig,
+.txm-card.is-got .txm-unit,
+html[data-look="c"] main .txm-card.is-got a.txm-unit {
+  color: var(--up) !important;
+}
+.txm-to {
+  display: inline-flex;
+  min-width: 0;
+  align-items: baseline;
+  margin-left: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.txm-arrow {
+  padding: 0 5px;
+  color: var(--muted-2);
+}
+.txm-word-note {
+  margin-left: 4px;
+  color: var(--muted);
+}
+.txm-to > .txm-word-note:first-child {
+  margin-left: 0;
+}
+.txm-card-note {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--muted-2);
+}
+
+/* Block, time, size, boxes: one quiet line with the KPI marks. */
+.txm-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 22px;
+  margin-top: 14px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.txm-fact {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.txm-fact > svg.txm-ico {
+  width: 16px;
+  height: 16px;
+  color: var(--mark, var(--muted-2));
+}
+.txm-k {
+  color: var(--muted);
+}
+.txm-v {
+  display: inline-flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 6px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.txm-v > .txm-arrow {
+  padding: 0;
+}
+.txm-dim {
+  font-weight: 400;
+  color: var(--muted-2);
+}
+.txm-link {
+  color: var(--accent);
+}
+.txm-pending {
+  color: var(--muted);
+}
+.txm-how {
+  margin-top: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.txm-how-k {
+  margin-right: 8px;
+  font-weight: 600;
+  color: var(--text);
+}
+.txm-rule {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 0 7px;
+  border-radius: 6px;
+  background: var(--wash);
+  font-size: 12px;
+  color: var(--muted-2);
+  white-space: nowrap;
+}
+.txm-tabs {
+  max-width: 420px;
+}
+@media (min-width: 640px) {
+  .txm {
+    padding: 18px 22px 16px;
+  }
+}
+/* Phone: the summary first (head, phrase, gave and got), then the technical facts, one a line. */
+@media (max-width: 639px) {
+  .txm-action {
+    font-size: 20px;
+  }
+  .txm-where {
+    font-size: 13px;
+  }
+  .txm-id {
+    flex-basis: 100%;
+    margin-left: 0;
+  }
+  .txm-phrase {
+    font-size: 16px;
+  }
+  .txm-cards {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .txm-card {
+    min-width: 0;
+    padding: 8px 12px 9px;
+  }
+  .txm-card.is-flows {
+    grid-column: 1 / -1;
+  }
+  .txm-line {
+    font-size: 14px;
+  }
+  .txm-amt {
+    white-space: normal;
+  }
+  .txm-facts {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 5px;
+  }
+  .txm-fact {
+    white-space: normal;
+  }
+  .txm-k {
+    width: 64px;
+    flex: none;
+  }
+  .txm-v {
+    flex-wrap: wrap;
+  }
+  .txm-tabs {
+    max-width: none;
+  }
+}

@@ -1237,6 +1237,11 @@ export const en: Record<string, string> = {
   "tx.dataInputs": "{n} data input|{n} data inputs",
   "tx.noIo": "None",
   "tx.confs": "{n} conf",
+  "tx.meaning.how": "How we know",
+  "tx.meaning.rule": "rule",
+  "tx.meaning.boxes": "Boxes",
+  "tx.meaning.seen": "Seen",
+  "tx.meaning.inMempool": "in the mempool",
   "tx.explain.eyebrow": "Transaction explanation",
   "tx.explain.title": "What happened",
   "tx.explain.lead":

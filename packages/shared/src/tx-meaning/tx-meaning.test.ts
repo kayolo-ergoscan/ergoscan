@@ -9,8 +9,10 @@ import {
   classifyTxMeaning,
   compactMeaning,
   formatAmount,
+  meaningPage,
   meaningRow,
   meaningView,
+  sayHow,
   isFoldedAction,
   multisigOf,
   sayMeaning,
@@ -395,5 +397,94 @@ describe("tx meaning: words and numbers", () => {
     assert.equal(meaningView(inn, inn.actor!).title.ru, "Получено из Cardano");
     const post = classifyTxMeaning(txOf(byId("9a430ec5")), ctxOf(byId("9a430ec5")));
     assert.equal(meaningView(post, post.actor!).title.ru, "Цена отправлена");
+  });
+});
+
+describe("tx meaning: page header", () => {
+  const full = (p: string) => {
+    const g = byId(p);
+    return classifyTxMeaning(txOf(g), ctxOf(g));
+  };
+  const page = (p: string, lang: "ru" | "en" = "ru") => meaningPage(full(p), lang);
+  const keys = (p: string) => page(p).cards.map((c) => c.key);
+
+  it("a swap: gave without the fee, got, the pool and the extra payment, the fee to who paid it", () => {
+    const pg = page("a323e730");
+    assert.deepEqual(keys("a323e730"), ["gave", "got", "flows", "fee"]);
+    assert.equal(pg.row.word, "Обмен");
+    assert.equal(pg.phrase, sayMeaning(full("a323e730"), "ru"));
+    const [gave, , flows, fee] = pg.cards;
+    assert.ok(gave?.key === "gave" && gave.note === "без комиссии сети" && gave.sign === -1);
+    assert.ok(flows?.key === "flows");
+    assert.deepEqual(flows.flows.map((f) => f.word ?? f.to?.addr.slice(0, 4)), ["пул ErgoDex", "9gvv"]);
+    assert.ok(fee?.key === "fee" && fee.nano === "50000000" && fee.payer?.addr.startsWith("9fYV") && fee.note === "платил");
+    assert.equal(pg.how, "Потрачен «ErgoDex AMM Pool (ERG/token)».");
+    assert.equal(pg.rule, "пулы");
+    assert.deepEqual(pg.parties.map((x) => x.label), ["9fYV…reou", "9gvv…DDPB"]);
+    assert.equal(page("a323e730", "en").cards[2]?.title, "Where the money went");
+  });
+
+  it("removing liquidity: shares back to the pool, two tokens out, a contract paid the fee, the order is named", () => {
+    const pg = page("c580819c");
+    const gave = pg.cards[0]!;
+    assert.ok(gave.key === "gave" && gave.title === "Вернул в пул" && gave.note === "доли пула");
+    const got = pg.cards[1]!;
+    assert.ok(got.key === "got" && got.assets.length === 2);
+    const fee = pg.cards.find((c) => c.key === "fee")!;
+    assert.ok(fee.key === "fee" && fee.payer === null && fee.note === "платил контракт");
+    assert.deepEqual(keys("c580819c"), ["gave", "got", "fee"], "LP back into the pool is said once, by «Вернул в пул»");
+    assert.match(pg.how, /^Потрачен «ErgoDex AMM Pool \(token\/token\)»; исполнена заявка 3qtA…/);
+  });
+
+  it("a miner payout: paid to N miners, reemission is a word, the rule is consensus", () => {
+    const pg = page("d0f6f6f5");
+    const gave = pg.cards[0]!;
+    assert.ok(gave.key === "gave" && gave.title === "Выплатил майнерам" && gave.note === "20 майнерам");
+    const flows = pg.cards.find((c) => c.key === "flows")!;
+    assert.ok(flows.key === "flows" && flows.flows[0]?.word === "реэмиссия" && flows.flows[0]?.to === null);
+    assert.equal(pg.how, "Потрачено 13 боксов «Miner reward lock».");
+    assert.equal(pg.rule, "консенсус");
+    assert.equal(page("d0f6f6f5", "en").how, "Spent 13 boxes of «Miner reward lock».");
+  });
+
+  it("an oracle update moves nothing for anyone: only the fee card; the posts are in «how»", () => {
+    assert.deepEqual(keys("39451a3d"), ["fee"]);
+    assert.equal(page("39451a3d").how, "Потрачен «Oracle v1 live epoch»; по 4 ответам операторов.");
+  });
+
+  it("a transfer goes to the exchange by name; a wallet rule says how it was read", () => {
+    const pg = page("ed512b15");
+    const flows = pg.cards.find((c) => c.key === "flows")!;
+    assert.ok(flows.key === "flows" && flows.flows[0]?.to?.name === "KuCoin");
+    assert.equal(pg.how, "Кто — кошелёк, плативший комиссию; по движению денег.");
+    assert.deepEqual(pg.parties.map((x) => x.label), ["9hkY…HeMY", "KuCoin"]);
+  });
+
+  it("an unknown contract says so; no signer names the contract that acted", () => {
+    assert.match(page("67ff4af6").how, /этот контракт нам не знаком\.$/);
+    assert.equal(page("67ff4af6").row.word, "Вызов контракта");
+    assert.match(page("0b45de0f").how, /кошелёк не подписывал, контракт kFBA…rmzt сработал сам\.$/);
+    assert.deepEqual(page("0b45de0f").parties, []);
+  });
+
+  it("the list form with the row's fee gives the same cards", () => {
+    for (const g of GOLDEN) {
+      const m = classifyTxMeaning(txOf(g), ctxOf(g));
+      const c = JSON.parse(JSON.stringify(compactMeaning(m)));
+      for (const lang of ["ru", "en"] as const) {
+        assert.deepEqual(meaningPage(c, lang, { feeNano: m.fee.nano }).cards, meaningPage(m, lang).cards, g.id);
+      }
+    }
+  });
+
+  it("every fact of the golden set has words in both languages", () => {
+    for (const g of GOLDEN) {
+      const m = classifyTxMeaning(txOf(g), ctxOf(g));
+      for (const lang of ["ru", "en"] as const) {
+        const how = sayHow(m, lang);
+        if (m.why.length || m.conf !== "exact") assert.ok(how.length > 3, `${g.id} ${lang}`);
+        assert.ok(!how.includes("undefined"), g.id);
+      }
+    }
   });
 });

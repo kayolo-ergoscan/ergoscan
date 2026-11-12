@@ -37,6 +37,65 @@ export function parseMeaning(raw: unknown): CompactMeaning | undefined {
   return m as unknown as CompactMeaning;
 }
 
+/**
+ * The full form (a tx page): with its phrase, fee and «how». Null for anything else, and the
+ * page keeps its old header.
+ */
+export function parseFullMeaning(raw: unknown): TxMeaning | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const m = raw as Record<string, unknown>;
+  if (!isAction(m.action) || typeof m.v !== "number") return undefined;
+  const fee = m.fee as { nano?: unknown } | null | undefined;
+  if (!fee || typeof fee !== "object" || typeof fee.nano !== "string") return undefined;
+  if (!Array.isArray(m.why) || !Array.isArray(m.gave) || !Array.isArray(m.got)) return undefined;
+  return m as unknown as TxMeaning;
+}
+
+/** A piece of the phrase: plain words, an address the phrase names, or a figure. */
+export type PhrasePart = { text: string; addr?: string; num?: true };
+
+const FIGURE = /\d+(?: \d{3})*(?:\.\d+)?/g;
+
+const LETTER = /[\p{L}_]/u;
+
+function withFigures(text: string, out: PhrasePart[]): void {
+  let at = 0;
+  for (const m of text.matchAll(FIGURE)) {
+    const i = m.index ?? 0;
+    // A digit inside a name («SigUSD2», «ERG2USD») is part of the name, not a figure.
+    if (LETTER.test(text[i - 1] ?? "") || LETTER.test(text[i + m[0].length] ?? "")) continue;
+    if (i > at) out.push({ text: text.slice(at, i) });
+    out.push({ text: m[0], num: true });
+    at = i + m[0].length;
+  }
+  if (at < text.length) out.push({ text: text.slice(at) });
+}
+
+/**
+ * The phrase cut into pieces the page can link and set in mono: «9fYV…reou» → its address,
+ * «4.95» and «132.36» → figures. Longer labels win («Hero Miners» before «Hero»).
+ */
+export function phraseParts(text: string, parties: ReadonlyArray<{ label: string; addr: string }>): PhrasePart[] {
+  const labels = parties.filter((p) => p.label.length > 1).sort((a, b) => b.label.length - a.label.length);
+  const out: PhrasePart[] = [];
+  let buf = "";
+  let i = 0;
+  while (i < text.length) {
+    const hit = labels.find((p) => text.startsWith(p.label, i));
+    if (hit) {
+      if (buf) withFigures(buf, out);
+      buf = "";
+      out.push({ text: hit.label, addr: hit.addr });
+      i += hit.label.length;
+      continue;
+    }
+    buf += text[i];
+    i++;
+  }
+  if (buf) withFigures(buf, out);
+  return out;
+}
+
 const TILE: Record<MeaningActionId, [FeedKind, FeedGlyphId]> = {
   send: ["transfer", "transfer"],
   multisend: ["transfer", "out"],
