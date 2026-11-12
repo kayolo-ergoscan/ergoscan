@@ -29,6 +29,7 @@ import { catchAsyncRoutes, jsonErrorHandler, logUnhandledRejections } from "./li
 import { isPartnerIp, parsePartnerList } from "./lib/rateAllow.js";
 import { installExactJson } from "./lib/exactJson.js";
 import { stampTemplateHashes } from "./lib/txTemplateHash.js";
+import { mempoolMeaning, mempoolMeaningSlim, warmMempoolMeanings, type CompactMeaning } from "./lib/txMeaning.js";
 import { SubblockEngine } from "./lib/subblocks.js";
 import { SealWatcher } from "./lib/seal.js";
 import { RecentIds, VanishClock, freshIds } from "./lib/live-pool.js";
@@ -333,6 +334,14 @@ function snapshot(): MempoolSnapshot {
     totalSize: list.reduce((s, b) => s + b.size, 0),
     totalFees: list.reduce((s, b) => s + b.fee, 0),
   };
+}
+
+/** HTTP only: balls with the additive list-form `meaning`. The WebSocket snapshot stays as it was. */
+function withMeanings(list: BallProps[]): Array<BallProps & { meaning?: CompactMeaning }> {
+  return list.map((b) => {
+    const meaning = mempoolMeaningSlim(b.id);
+    return meaning ? { ...b, meaning } : b;
+  });
 }
 
 function withEta(h: Omit<FeeHistogram, "ts" | "eta"> | ReturnType<typeof buildFeeHistogram>): FeeHistogram {
@@ -789,6 +798,8 @@ async function pollMempoolLocked(): Promise<void> {
       broadcast({ type: "mempool.remove", data: { id, reason: LIVE_MS > 0 ? "dropped" : "confirmed" } });
     }
     balls = next;
+    // Meanings for new mempool txs; never blocks or fails the poll.
+    void warmMempoolMeanings(filled).catch(() => undefined);
     feeHist = withEta(hist);
     pushMempoolSample({
       ts: Date.now(),
@@ -914,7 +925,8 @@ app.get("/v1/mempool", async (req, res) => {
   cacheNoStore(res);
   const address = String(req.query.address ?? "").trim();
   if (!address) {
-    res.json(snapshot());
+    const snap = snapshot();
+    res.json({ ...snap, balls: withMeanings(snap.balls) });
     return;
   }
   // Soft poll leaves ball.addresses empty — resolve on-demand (capped) for this query only.
@@ -938,8 +950,8 @@ app.get("/v1/mempool", async (req, res) => {
   res.json({
     ts: Date.now(),
     network: NETWORK,
-    balls: matched,
-    items: matched,
+    balls: withMeanings(matched),
+    items: withMeanings(matched),
     count: matched.length,
     totalSize: matched.reduce((s, b) => s + b.size, 0),
     totalFees: matched.reduce((s, b) => s + b.fee, 0),
@@ -955,7 +967,8 @@ app.get("/v1/mempool/:id", (req, res, next) => {
   cacheNoStore(res);
   const b = balls.get(req.params.id);
   if (!b) return res.status(404).json({ error: "not_found" });
-  res.json(b);
+  const meaning = mempoolMeaning(b.id);
+  res.json(meaning ? { ...b, meaning } : b);
 });
 
 app.get("/v1/fees/histogram", (_req, res) => {

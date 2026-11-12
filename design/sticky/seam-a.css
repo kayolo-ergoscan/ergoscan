@@ -1,0 +1,43 @@
+/*
+ * Variant A «Кромка» (edge). Header and plate stay two tiles on black, like
+ * every other tile in the grid. A black collar around the header keeps rows
+ * from showing above or beside it; the plate pins one gutter below. Only while
+ * rows run under the plate does it get a 2px edge in the page's entity colour.
+ */
+html[data-seam="a"] .feed {
+  --feed-pin: var(--seam-pin);
+}
+@media (min-width: 1024px) {
+  html[data-seam="a"] .stage-col > header.sticky {
+    box-shadow: 0 0 0 var(--float-pad) var(--bg) !important;
+  }
+}
+@media (max-width: 1023px) {
+  html[data-seam="a"] .stage-col > header.sticky::before {
+    background: var(--bg) !important;
+  }
+}
+html[data-seam="a"] .feed-plate {
+  transition: box-shadow 180ms var(--ease);
+}
+html[data-seam="a"] .feed-plate[data-stuck] {
+  /* edge first, then a bg collar that hides rows at the plate's round corners */
+  box-shadow:
+    0 2px 0 0 var(--seam-ink),
+    0 -6px 0 6px var(--bg);
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-seam="a"] .feed-plate {
+    transition: none;
+  }
+}
+
+@media (max-width: 1023px) {
+  /* Over a solid band the phone pill needs no glass: flat tile, like the desktop header. */
+  html[data-seam="a"] .phone-toolbar {
+    background: var(--module) !important;
+    border-color: transparent !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+}

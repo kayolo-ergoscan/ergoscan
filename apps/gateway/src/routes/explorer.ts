@@ -41,7 +41,8 @@ import {
   type IdxBoxRow,
   type IdxNft,
 } from "../lib/indexDb.js";
-import { getRentPage } from "../lib/snapshots.js";
+import { getRentPage, rentTapeMarks } from "../lib/snapshots.js";
+import { meaningsByIds } from "../lib/txMeaning.js";
 import { resolveDecimals, sharePctOfEmission } from "../lib/explorerCompat.js";
 
 export type ExplorerDeps = {
@@ -534,9 +535,15 @@ export function registerExplorerRoutes(app: Express, deps: ExplorerDeps) {
           source: "indexer:missing",
         });
       }
+      const meanings = await meaningsByIds(page.items.map((t) => t.id), rentTapeMarks).catch(
+        () => new Map()
+      );
       return res.json({
         tokenId: id,
-        items: page.items,
+        items: page.items.map((t) => {
+          const meaning = meanings.get(t.id);
+          return meaning ? { ...t, meaning } : t;
+        }),
         pagination: {
           offset,
           limit,

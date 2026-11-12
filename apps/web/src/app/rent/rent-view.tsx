@@ -796,7 +796,7 @@ function RentDanger({
     />
   );
   return (
-    <div className="feed-sheet mt-2">
+    <div id="danger" className="feed-sheet mt-2 scroll-mt-24">
       <Feed className="is-rank">
         {rows.length ? (
           <FeedSection plate={plate}>

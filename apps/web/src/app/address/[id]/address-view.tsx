@@ -174,6 +174,8 @@ const TX_PAGE = 25;
 const BOX_PAGE = 25;
 const TOKEN_PAGE = 25;
 const NFT_PAGE = 24;
+/** A key address is 51 characters; anything longer (P2S contracts) gets the two-line head…tail title. */
+const BARE_TITLE_MAX = 60;
 const ADDR_TABS = ["activity", "tokens", "nfts", "boxes"] as const;
 type AddrTab = (typeof ADDR_TABS)[number];
 
@@ -1055,6 +1057,8 @@ export function AddressView({
   const typeLabel = t(`address.type.${party.kind}`);
 
   const name = party.known ?? data?.name?.name ?? address;
+  /** Unnamed and longer than a key address (51): printed whole it stretched the whole tile row. */
+  const bareLong = !(party.known || data?.name) && address.length > BARE_TITLE_MAX;
   const tokensFirstWait =
     !tokensSettled && tokenRows.length === 0 && !tokensFailed;
   const nftsFirstWait =
@@ -1110,7 +1114,15 @@ export function AddressView({
                     !(party.known || data.name) && "font-mono"
                   )}
                 >
-                  <NameMarquee text={name} fade />
+                  {bareLong ? (
+                    // Contract addresses run to thousands of characters: two lines, head and tail.
+                    <span className="addr-title-long">
+                      <span className="addr-title-head">{address.slice(0, Math.ceil(address.length / 2))}</span>
+                      <span className="addr-title-tail">{address.slice(Math.ceil(address.length / 2))}</span>
+                    </span>
+                  ) : (
+                    <NameMarquee text={name} fade />
+                  )}
                 </h1>
                 <p className="mt-0.5 flex min-w-0 items-center gap-1">
                   <code className="min-w-0 truncate font-mono text-[12px] leading-[1.15] text-[var(--muted-2)]">
