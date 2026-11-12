@@ -40,7 +40,7 @@ export function SettingsView() {
 
 function TumblerRow({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="flex flex-col gap-3 border-b border-[var(--border-soft)] py-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-3 border-b border-[var(--border-soft)] py-4 last:border-b-0 lg:flex-row lg:items-center lg:justify-between">
       <p className="m-0 text-[15px] font-semibold tracking-tight text-[var(--text)]">{label}</p>
       {children}
     </div>
@@ -59,7 +59,12 @@ function Tumbler<T extends string>({
   onChange: (id: T) => void;
 }) {
   return (
-    <div className="flex flex-wrap justify-end gap-1" role="radiogroup" aria-label={label}>
+    <div
+      className="flex flex-wrap justify-end gap-1 max-lg:grid max-lg:w-full"
+      style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}
+      role="radiogroup"
+      aria-label={label}
+    >
       {options.map((o) => {
         const on = o.id === value;
         return (
@@ -71,6 +76,8 @@ function Tumbler<T extends string>({
             title={o.title ?? o.label}
             className={clsx(
               "chip-press inline-flex h-8 w-[6.75rem] items-center justify-center gap-1.5 rounded-[9px] px-2.5 text-[13px] font-medium",
+              // Phone: full-width switch, 44 px rows.
+              "max-lg:h-11 max-lg:w-full max-lg:rounded-[12px] max-lg:text-[15px]",
               "transition-colors duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
               on
                 ? "is-pressed bg-[var(--panel-hover)] text-[var(--text)]"

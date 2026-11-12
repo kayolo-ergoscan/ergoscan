@@ -1,0 +1,150 @@
+/*
+ * Phone shell (< 1024 px): the price ticker only on the home page, the bottom
+ * sheets (More, prices) and the full-screen search. Desktop never shows these:
+ * the sheets are `lg:hidden`, the search picks its phone layout below lg, and
+ * the dock rules sit in a phone media query.
+ */
+
+/* ── Ticker: home only. Elsewhere the header price opens the price sheet. ── */
+@media (max-width: 1023px) {
+  .stage-col.is-dockless {
+    --dock-h: 0px;
+    /* The page tail ends above the tab bar instead of under it. */
+    padding-bottom: calc(var(--tabbar) + 0.5rem);
+  }
+  .stage-col.is-dockless > .explorer-dock {
+    display: none;
+  }
+}
+
+/* The strip is 26 px and moving: one 44 px target over it opens the price sheet. */
+.price-tape-hit {
+  position: absolute;
+  z-index: 2;
+  left: 0;
+  right: 0;
+  top: -15px;
+  bottom: -3px;
+  background: transparent;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* ── Bottom sheet ── */
+.sheet-scrim {
+  background: rgb(0 0 0 / 0.55);
+}
+.bottom-sheet {
+  border: 1px solid rgb(var(--border-rgb) / 0.14);
+  border-bottom: 0;
+  border-radius: 1.35rem 1.35rem 0 0;
+  background: var(--module);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  box-shadow: 0 -12px 40px rgb(0 0 0 / 0.5);
+}
+.bottom-sheet-head {
+  touch-action: none;
+  cursor: grab;
+}
+.bottom-sheet-grabber {
+  display: block;
+  width: 36px;
+  height: 4px;
+  margin: 8px auto 0;
+  border-radius: 999px;
+  background: var(--wash-strong);
+}
+
+/* ── More ── */
+.more-group-head {
+  margin: 10px 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+}
+.more-tile {
+  background: var(--wash);
+  color: var(--text);
+  -webkit-tap-highlight-color: transparent;
+}
+.more-tile-label {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  max-width: 100%;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.more-tile-more {
+  color: var(--muted-2);
+}
+.more-tile.is-under {
+  background: var(--wash-strong);
+}
+.more-row {
+  color: var(--text);
+  -webkit-tap-highlight-color: transparent;
+}
+.more-tile:active,
+.more-row:active,
+.more-foot-link:active,
+.price-sheet-row:active {
+  background: var(--wash-mid);
+}
+.more-tile[aria-current="page"],
+.more-row[aria-current="page"],
+.more-foot-link[aria-current="page"] {
+  background: var(--text);
+  color: var(--bg);
+}
+.more-tile[aria-current="page"] .ico-line,
+.more-row[aria-current="page"] .ico-line,
+.more-foot-link[aria-current="page"] .ico-line,
+.more-tile[aria-current="page"] .more-tile-more {
+  color: var(--bg);
+}
+.more-foot {
+  border-top: 1px solid var(--border-soft);
+}
+.more-foot-link {
+  color: var(--muted);
+}
+.more-seg {
+  background: var(--wash);
+}
+.more-seg-on {
+  background: var(--text);
+  color: var(--bg);
+  box-shadow: none;
+}
+
+/* ── Search on a phone ── */
+.search-sheet-field {
+  background: var(--wash);
+}
+.search-sheet-field:focus-within {
+  background: var(--wash-mid);
+}
+/* Chips look 36 px; the hit area reaches 44 px into the 8 px row gap. */
+.search-chip-hit {
+  position: relative;
+}
+.search-chip-hit::after {
+  content: "";
+  position: absolute;
+  inset: -4px 0;
+}
+.search-known {
+  color: var(--c-token, var(--accent));
+}
+@media (pointer: coarse) {
+  .search-keys {
+    display: none;
+  }
+}

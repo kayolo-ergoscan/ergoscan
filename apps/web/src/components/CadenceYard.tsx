@@ -4,6 +4,7 @@ import { useEffect, useRef, type MouseEvent as ReactMouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import { drawPixel, pixelColor, type PixelMood } from "./pixel";
 import { lookEdge, lookInk } from "@/lib/look";
+import { canvasDpr, watchOnScreen } from "@/lib/canvas-run";
 
 /**
  * Live-block tape drawn on a canvas, same family as the rent yard.
@@ -101,6 +102,8 @@ export function CadenceYard({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     let raf = 0;
+    /** Off screen (<10 % visible) or a hidden tab: no frames. */
+    let on = true;
     let last = performance.now();
     const ghosts = new Map<string, Ghost>();
     const mark = new Image();
@@ -132,7 +135,7 @@ export function CadenceYard({
       const parent = canvas.parentElement;
       const w = Math.max(1, parent?.clientWidth ?? 320);
       const h = Math.max(1, parent?.clientHeight ?? 84);
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const dpr = canvasDpr();
       if (canvas.width !== Math.floor(w * dpr) || canvas.height !== Math.floor(h * dpr)) {
         canvas.width = Math.floor(w * dpr);
         canvas.height = Math.floor(h * dpr);
@@ -159,7 +162,7 @@ export function CadenceYard({
         if (now - mountAt > NO_DATA_MS) {
           drawPixel(ctx, { x: robotX, y: ground, scale: 1, color: ink, mood: "sleepy", now, face: -1, reduce });
         }
-        raf = requestAnimationFrame(paint);
+        raf = on ? requestAnimationFrame(paint) : 0;
         return;
       }
       const introT = phase === "intro" ? now - introStart : 0;
@@ -317,11 +320,23 @@ export function CadenceYard({
         for (const m of marks) drawLithosMark(ctx, mark, m.x, m.peak, m.extra);
       }
 
-      raf = requestAnimationFrame(paint);
+      raf = on ? requestAnimationFrame(paint) : 0;
     };
 
-    raf = requestAnimationFrame(paint);
-    return () => cancelAnimationFrame(raf);
+    const stop = watchOnScreen(canvas, (visible) => {
+      on = visible;
+      if (!on) {
+        if (raf) cancelAnimationFrame(raf);
+        raf = 0;
+      } else if (!raf) {
+        last = performance.now();
+        raf = requestAnimationFrame(paint);
+      }
+    });
+    return () => {
+      stop();
+      cancelAnimationFrame(raf);
+    };
   }, [reduce]);
 
   const pick = (ev: { clientX: number; clientY: number }) => {

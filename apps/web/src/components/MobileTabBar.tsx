@@ -75,6 +75,7 @@ export function MobileTabBar({
           type="button"
           onClick={onMore}
           aria-label={t("nav.more")}
+          aria-haspopup="dialog"
           aria-expanded={moreOpen}
           className={clsx(
             "chip-press mx-1 my-1 flex min-h-[44px] flex-col items-center justify-center gap-0.5 overflow-hidden rounded-[10px] text-[10px] font-medium",
