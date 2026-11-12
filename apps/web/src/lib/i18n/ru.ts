@@ -1575,7 +1575,7 @@ export const ru: Record<string, string> = {
   "feed.active": "активен {ago}",
   "feed.sort.label": "Сортировка",
   "feed.oracles": "{n} оракул|{n} оракула|{n} оракулов",
-  "feed.oracleLive": "отправляет",
+  "feed.oracleLive": "в эфире",
   "feed.oracleSilent": "молчит",
   "feed.posted": "отправил {ago}",
   "feed.wins": "{n} победа|{n} победы|{n} побед",

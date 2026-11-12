@@ -1573,7 +1573,7 @@ export const en: Record<string, string> = {
   "feed.active": "active {ago}",
   "feed.sort.label": "Sort",
   "feed.oracles": "{n} oracle|{n} oracles",
-  "feed.oracleLive": "posting",
+  "feed.oracleLive": "live",
   "feed.oracleSilent": "silent",
   "feed.posted": "posted {ago}",
   "feed.wins": "{n} win|{n} wins",
