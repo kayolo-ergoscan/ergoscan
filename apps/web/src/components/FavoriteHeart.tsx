@@ -47,7 +47,7 @@ export function FavoriteHeart({
         timer.current = window.setTimeout(() => setPop(false), POP_MS);
       }}
       className={clsx(
-        "chip-press relative inline-flex shrink-0 items-center justify-center transition-colors duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[var(--wash)]",
+        "chip-press tap-44 relative inline-flex shrink-0 items-center justify-center transition-colors duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[var(--wash)]",
         size === "sm" ? "h-[18px] w-[18px] rounded-[5px]" : "h-8 w-8 rounded-[8px]",
         ready ? "" : "invisible",
         on ? "" : "text-[var(--muted)] hover:text-[#e25563]"

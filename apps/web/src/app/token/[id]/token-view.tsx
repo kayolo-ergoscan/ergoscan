@@ -1095,6 +1095,7 @@ export function TokenView({
                           tx={tx}
                           lead={lead}
                           decimals={decimals}
+                          unit={sym}
                           enterClass={txEnter.enterClass(tx.id)}
                         />
                       )}
@@ -1406,16 +1407,28 @@ function FeedParty({ list, many, manyHint }: { list: string[]; many: string; man
   );
 }
 
-/** One token tx on the feed: who to whom, how much of this token, mint and burn signed. */
+/** A pool's name without the pair in brackets: "ErgoDex AMM Pool". */
+function poolShort(address: string): string {
+  const party = describeParty(address);
+  return party.known ? party.known.replace(/\s*\(.*\)\s*$/, "") : party.short || shortId(address, 6);
+}
+
+/**
+ * One token tx on the feed: who to whom, how much of this token, mint and burn
+ * signed. A swap with a pool on one side reads as a trade: the trader and
+ * Buy/Sell, then the pool.
+ */
 function FeedTokenTxRow({
   tx,
   lead,
   decimals,
+  unit,
   enterClass,
 }: {
   tx: TokenTxRow;
   lead: FeedLead;
   decimals: number;
+  unit: string;
   enterClass?: string;
 }) {
   const { t, locale } = useI18n();
@@ -1434,6 +1447,13 @@ function FeedTokenTxRow({
   const to = partyList(tx.to);
   const many = t("address.multiple");
   const manyHint = t("address.multipleHint");
+  const isPool = (a: string) => describeParty(a).kind === "pool";
+  const poolFrom = tx.kind === "swap" ? from.find(isPool) : undefined;
+  const poolTo = tx.kind === "swap" ? to.find(isPool) : undefined;
+  const pool = poolFrom && !poolTo ? poolFrom : poolTo && !poolFrom ? poolTo : undefined;
+  const side: "buy" | "sell" | null = pool ? (pool === poolFrom ? "buy" : "sell") : null;
+  const trader = side === "buy" ? to.filter((a) => !isPool(a)) : side === "sell" ? from.filter((a) => !isPool(a)) : [];
+  const trade = side != null && pool != null && trader.length > 0;
   const height =
     tx.inclusionHeight != null ? (
       <Link prefetch={false} href={`/block/${tx.inclusionHeight}`} className="tabular-nums">
@@ -1442,31 +1462,57 @@ function FeedTokenTxRow({
     ) : null;
   return (
     <FeedRow
-      k={tx.kind}
+      k={trade ? (side === "buy" ? "in" : "out") : tx.kind}
       glyph={tx.kind}
-      tileTitle={kindLabel}
+      tileTitle={trade ? `${kindLabel} · ${t(side === "buy" ? "feed.buy" : "feed.sell")}` : kindLabel}
       lead={lead}
       leadSub={!lead.same ? height : undefined}
+      href={`/tx/${tx.id}`}
       enterClass={enterClass}
       title={
-        <span className="feed-route">
-          <FeedParty list={from} many={many} manyHint={manyHint} />
-          <span className="feed-route-arrow" aria-hidden>
-            →
+        trade ? (
+          <span className="feed-route">
+            <FeedParty list={trader} many={many} manyHint={manyHint} />
+            <span className="feed-side" data-k={side === "buy" ? "in" : "out"}>
+              {t(side === "buy" ? "feed.buy" : "feed.sell")}
+            </span>
           </span>
-          <FeedParty list={to} many={many} manyHint={manyHint} />
-        </span>
+        ) : (
+          <span className="feed-route">
+            <FeedParty list={from} many={many} manyHint={manyHint} />
+            <span className="feed-route-arrow" aria-hidden>
+              →
+            </span>
+            <FeedParty list={to} many={many} manyHint={manyHint} />
+          </span>
+        )
       }
       facts={
-        <>
-          <span className="feed-kind">{kindLabel}</span>
-          <Link prefetch={false} href={`/tx/${tx.id}`} title={tx.id} className="font-mono tabular-nums">
-            {shortId(tx.id, 8)}
-          </Link>
-          {height ? <span className="feed-phone-only">{height}</span> : null}
-        </>
+        trade && pool ? (
+          <>
+            <Link
+              prefetch={false}
+              href={`/address/${encodeURIComponent(pool)}`}
+              data-addr={pool}
+              title={describeParty(pool).known ?? pool}
+            >
+              {poolShort(pool)}
+            </Link>
+            <Link prefetch={false} href={`/tx/${tx.id}`} title={tx.id} className="feed-wide font-mono tabular-nums">
+              {shortId(tx.id, 8)}
+            </Link>
+          </>
+        ) : (
+          <>
+            <span className="feed-kind">{kindLabel}</span>
+            <Link prefetch={false} href={`/tx/${tx.id}`} title={tx.id} className="font-mono tabular-nums">
+              {shortId(tx.id, 8)}
+            </Link>
+            {height ? <span className="feed-phone-only">{height}</span> : null}
+          </>
+        )
       }
-      value={<FeedAmount raw={raw} decimals={decimals} unit={null} signed={amt.signed} glance />}
+      value={<FeedAmount raw={raw} decimals={decimals} unit={unit} signed={amt.signed} glance />}
       detail={() => (
         <FeedFields>
           <FeedField label={t("detail.tx")} wide>
