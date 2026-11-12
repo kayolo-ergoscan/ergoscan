@@ -5,7 +5,7 @@ import { HomeExplorer } from "@/components/HomeExplorer";
 import { JsonLd } from "@/components/JsonLd";
 import type { ChainStats, PoolShare } from "@/lib/chain-stats";
 import { homeToChainStats, type ErgMarket } from "@/lib/list-snapshots";
-import { cachedHome, websiteJsonLd } from "@/lib/page-meta";
+import { cachedHome, DEFAULT_OG_IMAGE, websiteJsonLd } from "@/lib/page-meta";
 import { SITE_DESCRIPTION, SITE_URL } from "@/lib/site-meta";
 import type { RentTapeRow } from "@ergoscan/shared";
 
@@ -143,7 +143,7 @@ export async function generateMetadata(): Promise<Metadata> {
       description:
         "ErgoScan wallet API. The same paths as the official Ergo explorer. Decimal string amounts. No key.",
       alternates: { canonical: "https://api.ergoscan.me/" },
-      openGraph: { url: "https://api.ergoscan.me/" },
+      openGraph: { url: "https://api.ergoscan.me/", images: [{ url: DEFAULT_OG_IMAGE, width: 1200, height: 630 }] },
     };
   }
   const home = await cachedHome();
@@ -154,7 +154,7 @@ export async function generateMetadata(): Promise<Metadata> {
         ? `${SITE_DESCRIPTION} Height ${height.toLocaleString("en-US")}.`
         : SITE_DESCRIPTION,
     alternates: { canonical: SITE_URL },
-    openGraph: { url: SITE_URL },
+    openGraph: { url: SITE_URL, images: [{ url: DEFAULT_OG_IMAGE, width: 1200, height: 630 }] },
   };
 }
 

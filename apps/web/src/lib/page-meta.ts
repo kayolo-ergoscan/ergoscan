@@ -39,15 +39,21 @@ export function absUrl(path: string): string {
   return `${SITE_URL}${p}`;
 }
 
+/** Site-wide share image. A page's own openGraph replaces the layout's, so every page names one. */
+export const DEFAULT_OG_IMAGE = "/og.png?v=4";
+
 export function pageMeta(opts: {
   title: string;
   description: string;
   path: string;
   index?: boolean;
+  /** Per-page share card (e.g. /og/tx/{id}); the site image otherwise. */
+  image?: string;
 }): Metadata {
   const url = absUrl(opts.path);
   const index = opts.index !== false;
   const robots = index ? INDEX : NOINDEX;
+  const image = opts.image || DEFAULT_OG_IMAGE;
   return {
     title: opts.title,
     description: opts.description,
@@ -59,11 +65,13 @@ export function pageMeta(opts: {
       siteName: SITE_NAME,
       title: `${opts.title} · ErgoScan`,
       description: opts.description,
+      images: [{ url: image, width: 1200, height: 630, alt: `${opts.title} · ErgoScan` }],
     },
     twitter: {
       card: "summary_large_image",
       title: `${opts.title} · ErgoScan`,
       description: opts.description,
+      images: [image],
     },
   };
 }
@@ -250,6 +258,7 @@ export function txPageMeta(id: string, tx: Awaited<ReturnType<typeof fetchTransa
     title: `${tx.confirmed ? "Tx" : "Mempool tx"} ${shortId(tx.id, 8)}`,
     description: `Ergo transaction ${tx.id}. ${bits.join(" ")}`,
     path,
+    image: `/og/tx/${tx.id}`,
   });
 }
 
@@ -278,6 +287,7 @@ export function addressPageMeta(
     title,
     description: `Ergo${kind} address ${data.address}${book ? ` (${label})` : ""}. Confirmed ${erg}, ${tokens} token${tokens === 1 ? "" : "s"}.`,
     path,
+    image: `/og/address/${data.address}`,
   });
 }
 
@@ -293,6 +303,7 @@ export function tokenPageMeta(
     title: symbol,
     description: `Ergo token ${row.name || symbol} (${row.tokenId}). ${holders}.`,
     path,
+    image: `/og/token/${row.tokenId}`,
   });
 }
 
