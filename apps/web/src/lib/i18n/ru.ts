@@ -835,6 +835,7 @@ export const ru: Record<string, string> = {
   "mempool.kpiFeesSub": "Сумма в очереди",
   "mempool.kpiP50": "Комиссия p50",
   "mempool.kpiEta": "Следующий блок через {n}",
+  "mempool.kpiEtaDue": "Блок вот-вот",
   "mempool.colIo": "Вх/вых",
   "mempool.packTape": "Окно мемпула",
   "mempool.packHint": "По 25, сначала новые. Живая очередь — не цепочка.",

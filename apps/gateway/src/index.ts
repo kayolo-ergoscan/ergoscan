@@ -351,13 +351,7 @@ function applySeal(seal: SealEvent) {
   broadcast({ type: "block.sealed", data: seal });
   sealedRecent.add(seal.txIds, Date.now());
   vanish.forget(seal.txIds);
-  dropSealedBalls(seal.txIds);
-  // force planner window to new tip
-  subblocks.resync({
-    tipHeight: seal.height,
-    lastBlockTs: seal.timestamp,
-    avgIntervalMs: blockEta.avgIntervalMs,
-  });
+  // The next-block countdown restarts now, not at the next poll.
   if (seal.timestamp > blockEta.lastBlockTs) {
     blockEta = {
       ...blockEta,
@@ -366,11 +360,22 @@ function applySeal(seal: SealEvent) {
       nextEtaSec: Math.floor(blockEta.avgIntervalMs / 1000),
     };
   }
+  if (!dropSealedBalls(seal.txIds)) {
+    feeHist = withEta(feeHist);
+    broadcast({ type: "fees.histogram", data: feeHist });
+  }
+  // force planner window to new tip
+  subblocks.resync({
+    tipHeight: seal.height,
+    lastBlockTs: seal.timestamp,
+    avgIntervalMs: blockEta.avgIntervalMs,
+  });
 }
 
-function dropSealedBalls(ids: readonly string[]) {
+/** Removes the sealed balls and re-sends snapshot + fees. False when none of them was shown. */
+function dropSealedBalls(ids: readonly string[]): boolean {
   const drop = ids.filter((id) => balls.has(id));
-  if (!drop.length) return;
+  if (!drop.length) return false;
   for (const id of drop) {
     balls.delete(id);
     rawMempool.delete(id);
@@ -389,6 +394,7 @@ function dropSealedBalls(ids: readonly string[]) {
   });
   broadcast({ type: "mempool.snapshot", data: snapshot() });
   broadcast({ type: "fees.histogram", data: feeHist });
+  return true;
 }
 
 function recomputeFees() {

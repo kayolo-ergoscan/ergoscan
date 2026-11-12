@@ -114,7 +114,19 @@ export function MempoolView({
   const totalFees = balls.reduce((s, b) => s + toBigIntAmt(b.fee), 0n);
   const fill = loadPct(totalSize);
   const p50 = fees?.p50 ?? initialP50;
-  const eta = formatEta(fees?.eta?.nextEtaSec);
+  // Count down every second from the last block; past the average interval the block is due.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  const etaInfo = fees?.eta;
+  const etaLeft =
+    etaInfo && etaInfo.lastBlockTs > 0 && etaInfo.avgIntervalMs > 0
+      ? Math.max(0, (etaInfo.lastBlockTs + etaInfo.avgIntervalMs - now) / 1000)
+      : etaInfo?.nextEtaSec;
+  const eta = etaLeft != null && etaLeft < 1 ? null : formatEta(etaLeft);
+  const etaDue = etaLeft != null && etaLeft < 1;
 
   const kpis = [
     {
@@ -150,7 +162,7 @@ export function MempoolView({
       label: t("mempool.kpiP50"),
       value: p50 != null ? formatFeeRate(p50) : miss,
       unavailable: p50 == null,
-      sub: eta != null ? t("mempool.kpiEta").replace("{n}", eta) : t("fees.kpiEta"),
+      sub: etaDue ? t("mempool.kpiEtaDue") : eta != null ? t("mempool.kpiEta").replace("{n}", eta) : t("fees.kpiEta"),
       mark: <KpiMarkChartColumn tone={INK.teal} />,
       ink: INK.teal,
       enter: 3,

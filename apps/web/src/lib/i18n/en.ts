@@ -833,6 +833,7 @@ export const en: Record<string, string> = {
   "mempool.kpiFeesSub": "Sum in the queue",
   "mempool.kpiP50": "p50 fee rate",
   "mempool.kpiEta": "Next block in {n}",
+  "mempool.kpiEtaDue": "Next block any moment",
   "mempool.colIo": "I/O",
   "mempool.packTape": "Mempool window",
   "mempool.packHint": "25 at a time, newest first. Live queue — not the chain.",
