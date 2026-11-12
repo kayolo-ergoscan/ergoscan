@@ -1033,6 +1033,23 @@ button.feed-caret:hover {
   }
 }
 
+/* A board in a narrow side column (DEX top traders): short lead, tight gaps, the figure only as wide as it is. */
+@media (min-width: 1280px) {
+  .feed.is-side {
+    --feed-lead: 1.75rem;
+  }
+  .feed.is-side .feed-row {
+    column-gap: 8px;
+    padding-left: 10px;
+  }
+  .feed.is-side .feed-value {
+    min-width: 0;
+  }
+  .feed.is-side .feed-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* ── small parts batch 2 added ── */
 
 /* A source line under a board. */

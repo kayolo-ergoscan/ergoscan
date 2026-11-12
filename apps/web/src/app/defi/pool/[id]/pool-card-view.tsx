@@ -17,7 +17,6 @@ import {
   KpiMarkVault,
   KpiMarkTrendingUp,
 } from "@/components/kpi-marks";
-import { AddressActivityWhen } from "@/components/AddressTapeRow";
 import { TokenAvatar } from "@/components/TokenBadge";
 import { PrettyPrice } from "@/components/PrettyNum";
 import { RankWindow } from "@/components/RankWindow";
@@ -33,16 +32,18 @@ import { resolveTokenMeta, tokenTickerInk } from "@/lib/token-meta";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { useFavoriteOf } from "@/lib/favorites";
 import { SNAPSHOT_FETCH, snapshotPath, useEnterIds } from "@/lib/keyed-enter";
+import { Feed, FeedBoard, FeedCount, FeedEmpty, FeedPlate, FeedSkeleton, FeedSort } from "@/components/feed/Feed";
+import { FeedLpRow, LP_SORT_LABEL, type FeedLpHolder, type FeedLpSort } from "@/components/feed/FeedPoolRow";
+import { FeedSwapTape, swapEventId } from "@/components/feed/FeedSwapRow";
 import { getGateway } from "@/lib/config";
-import { noteRouteNavigation } from "@/lib/route-nav";
 import { isErgBase, type PoolBoardRow } from "@/lib/defi-pools";
 
 const PACK = 25;
-const ERG_ZERO = "0".repeat(64);
+const LP_SORTS: LpSort[] = ["share", "tvl", "txs", "last", "first"];
 
 type ViewId = "trades" | "lp" | "deposit" | "withdraw";
 type TradeSort = "time" | "amount";
-type LpSort = "share" | "tvl" | "txs" | "first" | "last";
+type LpSort = FeedLpSort;
 type Dir = "asc" | "desc";
 
 type Trade = {
@@ -58,14 +59,7 @@ type Trade = {
   trader: string | null;
 };
 
-type LpRow = {
-  address: string;
-  share: number | null;
-  tvlErg: number | null;
-  txCount: number | null;
-  firstTs: number | null;
-  lastTs: number | null;
-};
+type LpRow = FeedLpHolder;
 
 type PoolHead = PoolBoardRow & {
   feePct?: number | null;
@@ -95,15 +89,7 @@ function loc(locale: string): string {
   return locale === "ru" ? "ru-RU" : "en-US";
 }
 
-function shortHash(id: string): string {
-  if (!id || id.length <= 10) return id;
-  return `${id.slice(0, 5)}..${id.slice(-5)}`;
-}
 
-function fmtAmt(n: number): string {
-  if (!Number.isFinite(n)) return "—";
-  return formatGroupedNumber(n, 2, 2);
-}
 
 function fmtErgFull(n: number): string {
   if (!Number.isFinite(n)) return "—";
@@ -144,7 +130,7 @@ export function PoolCardView({
   const [pending, setPending] = useState(false);
   const enter = useEnterIds(
     undefined,
-    (initial?.events ?? []).map((row) => row.txId)
+    (initial?.events ?? []).map((row) => swapEventId(row))
   );
 
   const load = useCallback(
@@ -169,7 +155,7 @@ export function PoolCardView({
           const ids =
             nextView === "lp"
               ? (j.lps ?? []).slice(0, PACK).map((row) => row.address)
-              : (j.events ?? []).map((row) => row.txId);
+              : (j.events ?? []).map((row) => swapEventId(row));
           enter.mark(ids);
           setCard(j);
         })
@@ -221,12 +207,6 @@ export function PoolCardView({
     });
   }, [lps, lpSort, lpDir]);
   const lpPage = sortedLps.slice(offset, offset + PACK);
-  const when = {
-    locale: loc(locale),
-    openLabel: t("addresses.openTx"),
-    copyLabel: t("tx.copy"),
-    copiedLabel: t("tx.copied"),
-  };
 
   const name = pool ? pairLabel(pool) : shortId(poolId, 4);
   const quoteId = pool?.tokenId;
@@ -439,474 +419,134 @@ export function PoolCardView({
         </AddrFactCard>
       </div>
 
-      <div className="addr-sheet mt-2">
-          <div className={clsx("addr-pan kpi-tape transition-opacity duration-[400ms]", pending && "opacity-60")}>
-            {view === "lp" ? (
-              <LpTape
-                rows={lpPage}
-                locale={locale}
-                t={t}
-                miss={miss}
-                when={when}
-                sort={lpSort}
-                dir={lpDir}
-                enterClass={enter.enterClass}
-                onSort={(k) => {
-                  if (lpSort === k) setLpDir((d) => (d === "desc" ? "asc" : "desc"));
-                  else {
-                    setLpSort(k);
-                    setLpDir(k === "first" ? "asc" : "desc");
-                  }
-                  setOffset(0);
-                }}
-              />
-            ) : view === "deposit" || view === "withdraw" ? (
-              <FlowTape
-                rows={events}
-                kind={view}
-                poolName={name}
-                quoteId={quoteId ?? null}
-                locale={locale}
-                t={t}
-                sort={sort}
-                dir={dir}
-                enterClass={enter.enterClass}
-                onSort={(k) => {
-                  const nextDir = sort === k ? (dir === "desc" ? "asc" : "desc") : "desc";
-                  setSort(k);
-                  setDir(nextDir);
-                  setOffset(0);
-                  load(view, 0, k, nextDir);
-                }}
-              />
+      <div className="feed-sheet mt-2">
+        {view === "lp" ? (
+          !sortedLps.length ? (
+            pending || !card?.lps ? (
+              <Feed>
+                <FeedSkeleton />
+              </Feed>
             ) : (
-              <TradesTape
-                rows={events}
-                locale={locale}
-                t={t}
-                sort={sort}
-                dir={dir}
-                enterClass={enter.enterClass}
-                onSort={(k) => {
-                  const nextDir = sort === k ? (dir === "desc" ? "asc" : "desc") : "desc";
-                  setSort(k);
-                  setDir(nextDir);
-                  setOffset(0);
-                  load(view, 0, k, nextDir);
-                }}
+              <Feed>
+                <FeedEmpty k="addr" title={t("pool.lpEmpty")} />
+              </Feed>
+            )
+          ) : (
+            <>
+              <Feed busy={pending} className="is-rank">
+                <FeedBoard
+                  plate={
+                    <FeedPlate
+                      tag={t("pool.tapeLp")}
+                      count={<FeedCount k="feed.holders" n={sortedLps.length} />}
+                      end={
+                        <FeedSort
+                          label={t("feed.sort.label")}
+                          options={LP_SORTS.map((key) => ({ key, label: t(LP_SORT_LABEL[key]) }))}
+                          active={lpSort}
+                          dir={lpDir}
+                          disabled={pending}
+                          onSort={(k) => {
+                            if (lpSort === k) setLpDir((d) => (d === "desc" ? "asc" : "desc"));
+                            else {
+                              setLpSort(k);
+                              setLpDir(k === "first" ? "asc" : "desc");
+                            }
+                            setOffset(0);
+                          }}
+                        />
+                      }
+                    />
+                  }
+                >
+                  {lpPage.map((row, i) => (
+                    <FeedLpRow key={row.address} row={row} rank={offset + i + 1} enterClass={enter.enterClass(row.address)} />
+                  ))}
+                </FeedBoard>
+              </Feed>
+              <RankWindow
+                offset={offset}
+                pageSize={PACK}
+                shown={lpPage.length}
+                total={sortedLps.length}
+                hasMore={offset + PACK < sortedLps.length}
+                loc={loc(locale)}
+                ofLabel={t("addresses.packOf")}
+                prevLabel={t("addresses.packPrev")}
+                nextLabel={t("addresses.packNext")}
+                tapeLabel={t("pool.tapeLp")}
+                hint={t("spectrum.packHint")}
+                disabled={pending}
+                onOffset={setOffset}
               />
+            </>
+          )
+        ) : (
+          <>
+            {!events.length ? (
+              pending || !card ? (
+                <Feed>
+                  <FeedSkeleton />
+                </Feed>
+              ) : (
+                <Feed>
+                  <FeedEmpty
+                    k={view === "trades" ? "swap" : view === "deposit" ? "mint" : "burn"}
+                    title={t(view === "deposit" ? "feed.poolNoDeposits" : view === "withdraw" ? "feed.poolNoWithdrawals" : "feed.poolNoTrades")}
+                  />
+                </Feed>
+              )
+            ) : (
+              <Feed busy={pending} className={sort === "time" ? undefined : "is-rank"}>
+                <FeedSwapTape
+                  rows={events}
+                  tag={t(view === "deposit" ? "pool.tapeDeposit" : view === "withdraw" ? "pool.tapeWithdraw" : "pool.tapeTrades")}
+                  total={flowAligned ? (card?.tradesCount ?? null) : events.length}
+                  sort={sort}
+                  dir={dir}
+                  timeKey="time"
+                  sorts={
+                    view === "trades"
+                      ? [
+                          { key: "time", label: t("defi.time") },
+                          { key: "amount", label: t("defi.amount") },
+                        ]
+                      : [{ key: "time", label: t("defi.time") }]
+                  }
+                  onSort={(k) => {
+                    const nextDir = sort === k ? (dir === "desc" ? "asc" : "desc") : "desc";
+                    setSort(k);
+                    setDir(nextDir);
+                    setOffset(0);
+                    load(view, 0, k, nextDir);
+                  }}
+                  pending={pending}
+                  offset={offset}
+                  enterClass={enter.enterClass}
+                />
+              </Feed>
             )}
-          </div>
-        {view !== "lp" ? (
-          <RankWindow
-            offset={offset}
-            pageSize={PACK}
-            shown={events.length}
-            total={flowAligned ? (card?.tradesCount ?? null) : events.length}
-            hasMore={flowAligned && offset + PACK < (card?.tradesCount ?? 0)}
-            loc={loc(locale)}
-            ofLabel={t("addresses.packOf")}
-            prevLabel={t("addresses.packPrev")}
-            nextLabel={t("addresses.packNext")}
-            tapeLabel={t(view === "deposit" ? "pool.tapeDeposit" : view === "withdraw" ? "pool.tapeWithdraw" : "pool.tapeTrades")}
-            hint={t("spectrum.packHint")}
-            disabled={pending}
-            onOffset={(next) => {
-              setOffset(next);
-              load(view, next, sort, dir);
-            }}
-          />
-        ) : card?.view === "lp" && !pending && sortedLps.length === 0 ? (
-          <p className="px-3 py-4 text-[13px] text-[var(--muted)]">{t("pool.lpEmpty")}</p>
-        ) : sortedLps.length ? (
-          <RankWindow
-            offset={offset}
-            pageSize={PACK}
-            shown={lpPage.length}
-            total={sortedLps.length}
-            hasMore={offset + PACK < sortedLps.length}
-            loc={loc(locale)}
-            ofLabel={t("addresses.packOf")}
-            prevLabel={t("addresses.packPrev")}
-            nextLabel={t("addresses.packNext")}
-            tapeLabel={t("pool.tapeLp")}
-            hint={t("spectrum.packHint")}
-            disabled={pending}
-            onOffset={setOffset}
-          />
-        ) : null}
+            <RankWindow
+              offset={offset}
+              pageSize={PACK}
+              shown={events.length}
+              total={flowAligned ? (card?.tradesCount ?? null) : events.length}
+              hasMore={flowAligned && offset + PACK < (card?.tradesCount ?? 0)}
+              loc={loc(locale)}
+              ofLabel={t("addresses.packOf")}
+              prevLabel={t("addresses.packPrev")}
+              nextLabel={t("addresses.packNext")}
+              tapeLabel={t(view === "deposit" ? "pool.tapeDeposit" : view === "withdraw" ? "pool.tapeWithdraw" : "pool.tapeTrades")}
+              hint={t("spectrum.packHint")}
+              disabled={pending}
+              onOffset={(next) => {
+                setOffset(next);
+                load(view, next, sort, dir);
+              }}
+            />
+          </>
+        )}
       </div>
     </Shell>
-  );
-}
-
-function SortBtn({
-  label,
-  on,
-  dir,
-  align,
-  onClick,
-  edge = false,
-}: {
-  label: string;
-  on: boolean;
-  dir: Dir;
-  align: "left" | "right";
-  onClick: () => void;
-  /** Sit on the tile edge, same inset as the row text. */
-  edge?: boolean;
-}) {
-  return (
-    <div className={clsx("flex h-full min-w-0 items-center", edge && "px-3", align === "right" && "justify-end")}>
-      <button
-        type="button"
-        onClick={onClick}
-        className={clsx(
-          "chip-press inline-flex shrink-0 items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[10px] px-2 py-1.5 text-[12px] font-medium leading-none transition-colors duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:text-[var(--text)]",
-          edge && "-mx-2",
-          on ? "is-pressed bg-[var(--wash-strong)] text-[var(--text)]" : "text-[var(--muted)]"
-        )}
-      >
-        {align === "right" ? (
-          <>
-            <Caret on={on} dir={dir} />
-            <span>{label}</span>
-          </>
-        ) : (
-          <>
-            <span>{label}</span>
-            <Caret on={on} dir={dir} />
-          </>
-        )}
-      </button>
-    </div>
-  );
-}
-
-function Caret({ on, dir }: { on: boolean; dir: Dir }) {
-  return (
-    <span className="sort-mark" aria-hidden>
-      <span className={clsx("sort-caret sort-caret-up", on && dir === "asc" && "is-on")} />
-      <span className={clsx("sort-caret sort-caret-dn", on && dir === "desc" && "is-on")} />
-    </span>
-  );
-}
-
-function legText(amount: number, symbol: string): string {
-  if (!Number.isFinite(amount) || amount <= 0) return "—";
-  return `${fmtAmt(amount)} ${symbol}`;
-}
-
-function FlowTape({
-  rows,
-  kind,
-  poolName,
-  quoteId,
-  locale,
-  t,
-  sort,
-  dir,
-  enterClass,
-  onSort,
-}: {
-  rows: Trade[];
-  kind: "deposit" | "withdraw";
-  poolName: string;
-  quoteId: string | null;
-  locale: string;
-  t: (k: string) => string;
-  sort: TradeSort;
-  dir: Dir;
-  enterClass: (id: string) => string | undefined;
-  onSort: (k: TradeSort) => void;
-}) {
-  return (
-    <>
-      <div className="addr-head addr-lane addr-lane-x lp-flow-tape text-[12px] font-medium">
-        <div className="lp-hold-pair">
-          <div className="px-3 text-[var(--muted)]">{t("defi.side")}</div>
-          <div className="px-3 text-right text-[var(--muted)]">{t("pool.colPair")}</div>
-        </div>
-        <div className="lp-hold-pair">
-          <div className="px-3 text-[var(--muted)]">{t("pool.flowLeg1")}</div>
-          <div className="px-3 text-right text-[var(--muted)]">{t("pool.flowLeg2")}</div>
-        </div>
-        <div className="text-[var(--muted)]">{t("pool.flowPrice")}</div>
-        <div className="text-[var(--muted)]">{t("pool.flowWho")}</div>
-        <div className="lp-hold-pair">
-          <div className="px-3 text-[var(--muted)]">{t("detail.tx")}</div>
-          <SortBtn label={t("defi.time")} on={sort === "time"} dir={dir} align="right" edge onClick={() => onSort("time")} />
-        </div>
-      </div>
-      {rows.map((row) => (
-        <FlowTapeRow
-          key={row.txId}
-          row={row}
-          kind={kind}
-          poolName={poolName}
-          quoteId={quoteId}
-          locale={locale}
-          t={t}
-          enterClass={enterClass(row.txId)}
-        />
-      ))}
-    </>
-  );
-}
-
-function FlowTapeRow({
-  row,
-  kind,
-  poolName,
-  quoteId,
-  locale,
-  t,
-  enterClass,
-}: {
-  row: Trade;
-  kind: "deposit" | "withdraw";
-  poolName: string;
-  quoteId: string | null;
-  locale: string;
-  t: (k: string) => string;
-  enterClass?: string;
-}) {
-  const sid = row.side.toLowerCase();
-  const withdraw = kind === "withdraw" || sid === "redeem" || sid === "withdraw";
-  const quote = row.tokenId ? resolveTokenMeta(row.tokenId, row.tokenName) : null;
-  const quoteSym = quote?.symbol || (row.tokenId ? shortId(row.tokenId, 4) : "—");
-  const base = !isErgBase(row.baseId, null) && row.baseId ? resolveTokenMeta(row.baseId, row.baseName) : null;
-  const baseSym = isErgBase(row.baseId, null) ? "ERG" : base?.symbol || (row.baseId ? shortId(row.baseId, 4) : "—");
-  const price = row.tokenAmount > 0 && row.baseAmount > 0 ? row.baseAmount / row.tokenAmount : null;
-  const word = t(withdraw ? "pool.flowWithdraw" : "pool.flowDeposit");
-  return (
-    <div className={clsx("addr-lane addr-lane-x lp-flow-tape border-t border-[var(--border-soft)] text-[13px]", enterClass)}>
-      <div className="lp-hold-pair">
-        <p className={clsx("px-3 font-medium leading-none", withdraw ? "text-[#FF4D6D]" : "text-[var(--up)]")}>{word}</p>
-        <div className="min-w-0 px-3">
-          {quoteId ? (
-            <Link prefetch={false} href={`/token/${quoteId}`} className="flex min-w-0 items-center justify-end gap-2">
-              <TokenAvatar tokenId={quoteId} symbol={quote?.symbol} size={22} />
-              <span className="truncate font-semibold" style={{ color: tokenTickerInk(quoteId) }}>
-                {poolName}
-              </span>
-            </Link>
-          ) : (
-            <span className="block truncate text-right font-semibold">{poolName}</span>
-          )}
-        </div>
-      </div>
-      <div className="lp-hold-pair">
-        <p className="min-w-0 truncate px-3 tabular-nums">{legText(row.tokenAmount, quoteSym)}</p>
-        <p className="min-w-0 truncate px-3 text-right tabular-nums">{legText(row.baseAmount, baseSym)}</p>
-      </div>
-      <div className="min-w-0 tabular-nums">
-        <PrettyPrice n={price} />
-      </div>
-      <div className="min-w-0">
-        {row.trader ? (
-          <Link
-            prefetch={false}
-            href={`/address/${encodeURIComponent(row.trader)}`}
-            className="block truncate font-mono text-[12px] text-accent hover:underline"
-          >
-            {shortHash(row.trader)}
-          </Link>
-        ) : (
-          <span className="text-[var(--muted)]">—</span>
-        )}
-      </div>
-      <div className="lp-hold-pair">
-        <div className="min-w-0 px-3">
-          <Link prefetch={false} href={`/tx/${row.txId}`} className="inline-block whitespace-nowrap font-mono text-accent hover:underline">
-            {shortHash(row.txId)}
-          </Link>
-        </div>
-        <AddressActivityWhen
-          ts={row.time}
-          align="right"
-          locale={locale}
-          openLabel={t("addresses.openTx")}
-          copyLabel={t("tx.copy")}
-          copiedLabel={t("tx.copied")}
-        />
-      </div>
-    </div>
-  );
-}
-
-function TradesTape({
-  rows,
-  locale,
-  t,
-  sort,
-  dir,
-  enterClass,
-  onSort,
-}: {
-  rows: Trade[];
-  locale: string;
-  t: (k: string) => string;
-  sort: TradeSort;
-  dir: Dir;
-  enterClass: (id: string) => string | undefined;
-  onSort: (k: TradeSort) => void;
-}) {
-  return (
-    <>
-      <div className="addr-head addr-lane addr-lane-x pool-tape text-[12px] font-medium">
-        <div className="flex min-w-0 items-center px-3 text-[var(--muted)]">{t("defi.token")}</div>
-        <div className="pool-split">
-          <div className="flex h-full min-w-0 items-center px-3 text-[12px] font-medium leading-none text-[var(--muted)]">{t("defi.side")}</div>
-          <div className="flex h-full min-w-0 items-center justify-end px-3 text-right text-[12px] font-medium leading-none text-[var(--muted)]">{t("defi.price")}</div>
-        </div>
-        <div className="pool-split">
-          <SortBtn label={t("defi.amount")} on={sort === "amount"} dir={dir} align="left" edge onClick={() => onSort("amount")} />
-          <div className="flex h-full min-w-0 items-center justify-end px-3 text-right text-[12px] font-medium leading-none text-[var(--muted)]">{t("defi.paid")}</div>
-        </div>
-        <div className="pool-split">
-          <div className="flex h-full min-w-0 items-center px-3 text-[12px] font-medium leading-none text-[var(--muted)]">{t("detail.tx")}</div>
-          <div className="flex h-full min-w-0 items-center justify-end px-3 text-right text-[12px] font-medium leading-none text-[var(--muted)]">{t("defi.trader")}</div>
-        </div>
-        <SortBtn label={t("defi.time")} on={sort === "time"} dir={dir} align="right" edge onClick={() => onSort("time")} />
-      </div>
-      {rows.map((row) => (
-        <TradeTapeRow key={row.txId} row={row} locale={locale} t={t} enterClass={enterClass(row.txId)} />
-      ))}
-    </>
-  );
-}
-
-function TradeTapeRow({
-  row,
-  locale,
-  t,
-  enterClass,
-}: {
-  row: Trade;
-  locale: string;
-  t: (k: string) => string;
-  enterClass?: string;
-}) {
-  const meta = row.tokenId ? resolveTokenMeta(row.tokenId, row.tokenName) : null;
-  const label = meta?.symbol || (row.tokenId ? shortId(row.tokenId, 4) : "—");
-  const sid = row.side.toLowerCase();
-  const sideKey =
-    sid === "mint" ? "defi.side.deposit" : sid === "redeem" ? "defi.side.withdraw" : `defi.side.${sid}`;
-  const side = t(sideKey) !== sideKey ? t(sideKey) : row.side;
-  const buy = sid === "buy" || sid === "mint";
-  const sell = sid === "sell" || sid === "redeem";
-  const ergoPaid = isErgBase(row.baseId, null);
-  const price = row.tokenAmount > 0 && row.baseAmount > 0 ? row.baseAmount / row.tokenAmount : null;
-  return (
-    <div className={clsx("addr-lane addr-lane-x pool-tape border-t border-[var(--border-soft)] text-[13px]", enterClass)}>
-      <div className="flex min-w-0 items-center px-3">
-        {row.tokenId ? (
-          <Link prefetch={false} href={`/token/${row.tokenId}`} className="flex min-w-0 items-center gap-2">
-            <TokenAvatar tokenId={row.tokenId} symbol={meta?.symbol} size={22} />
-            <span className="truncate font-semibold" style={{ color: tokenTickerInk(row.tokenId) }}>
-              {label}
-            </span>
-          </Link>
-        ) : (
-          <span className="text-[var(--muted)]">—</span>
-        )}
-      </div>
-      <div className="pool-split">
-        <div className="flex h-full min-w-0 items-center px-3">
-          <p className={clsx("font-medium lowercase leading-none", buy && "text-[var(--up)]", sell && "text-[#FF4D6D]", !buy && !sell && "text-[var(--muted)]")}>
-            {side}
-          </p>
-        </div>
-        <div className="flex h-full min-w-0 items-center justify-end px-3 text-right tabular-nums">
-          <PrettyPrice n={price} />
-        </div>
-      </div>
-      <div className="pool-split">
-        <div className="min-w-0 px-3 tabular-nums">{fmtAmt(row.tokenAmount)}</div>
-        <div className="min-w-0 px-3 text-right tabular-nums text-[var(--up)]">
-          {row.baseAmount ? (ergoPaid ? fmtErgFull(row.baseAmount) : fmtAmt(row.baseAmount)) : "—"}
-        </div>
-      </div>
-      <div className="pool-split">
-        <div className="flex h-full min-w-0 items-center px-3">
-          <Link prefetch={false} href={`/tx/${row.txId}`} className="inline-block whitespace-nowrap font-mono text-accent hover:underline">
-            {shortHash(row.txId)}
-          </Link>
-        </div>
-        <div className="min-w-0 px-3 text-right">
-          {row.trader ? (
-            <Link prefetch={false} href={`/address/${encodeURIComponent(row.trader)}`} className="block truncate font-mono text-[12px] text-accent hover:underline">
-              {shortHash(row.trader)}
-            </Link>
-          ) : (
-            <span className="text-[var(--muted)]">—</span>
-          )}
-        </div>
-      </div>
-      <AddressActivityWhen ts={row.time} align="right" locale={locale} openLabel={t("addresses.openTx")} copyLabel={t("tx.copy")} copiedLabel={t("tx.copied")} />
-    </div>
-  );
-}
-
-function LpTape({
-  rows,
-  locale,
-  t,
-  miss,
-  when,
-  sort,
-  dir,
-  enterClass,
-  onSort,
-}: {
-  rows: LpRow[];
-  locale: string;
-  t: (k: string) => string;
-  miss: string;
-  when: { locale: string; openLabel: string; copyLabel: string; copiedLabel: string };
-  sort: LpSort;
-  dir: Dir;
-  enterClass: (id: string) => string | undefined;
-  onSort: (k: LpSort) => void;
-}) {
-  return (
-    <>
-      <div className="addr-head addr-lane addr-lane-x lp-hold-tape text-[12px] font-medium">
-        <div className="lp-hold-pair">
-          <div className="px-3 text-[var(--muted)]">{t("addresses.colAddress")}</div>
-          <SortBtn label={t("pool.share")} on={sort === "share"} dir={dir} align="right" edge onClick={() => onSort("share")} />
-        </div>
-        <SortBtn label={t("pool.implied")} on={sort === "tvl"} dir={dir} align="left" edge onClick={() => onSort("tvl")} />
-        <SortBtn label={t("pool.lpTxs")} on={sort === "txs"} dir={dir} align="left" edge onClick={() => onSort("txs")} />
-        <SortBtn label={t("pool.colFirst")} on={sort === "first"} dir={dir} align="left" edge onClick={() => onSort("first")} />
-        <SortBtn label={t("pool.colLast")} on={sort === "last"} dir={dir} align="left" edge onClick={() => onSort("last")} />
-      </div>
-      {rows.map((row) => (
-        <div
-          key={row.address}
-          className={clsx("addr-lane addr-lane-x lp-hold-tape border-t border-[var(--border-soft)] text-[13px]", enterClass(row.address))}
-        >
-          <div className="lp-hold-pair">
-            <div className="flex min-w-0 items-center px-3">
-              <Link prefetch={false} href={`/address/${encodeURIComponent(row.address)}`} className="block truncate font-mono text-[12px] text-accent hover:underline">
-                {shortHash(row.address)}
-              </Link>
-            </div>
-            <div className="px-3 text-right tabular-nums">
-              {row.share != null ? `${row.share.toLocaleString(loc(locale), { maximumFractionDigits: 2 })}%` : miss}
-            </div>
-          </div>
-          <div className="flex min-w-0 items-center px-3 tabular-nums font-semibold" style={{ color: INK.gold }}>
-            {row.tvlErg != null && row.tvlErg > 0 ? fmtErgFull(row.tvlErg) : miss}
-          </div>
-          <div className="flex items-center px-3 tabular-nums font-semibold" style={{ color: INK.gold }}>
-            {row.txCount != null ? row.txCount.toLocaleString(loc(locale)) : miss}
-          </div>
-          <AddressActivityWhen ts={row.firstTs} align="left" {...when} />
-          <AddressActivityWhen ts={row.lastTs} align="left" {...when} />
-        </div>
-      ))}
-    </>
   );
 }
