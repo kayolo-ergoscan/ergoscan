@@ -105,6 +105,7 @@ export function HopNav({
   }
   return (
     <Link
+      prefetch={false}
       href={href}
       data-dir={dir}
       title={hint}

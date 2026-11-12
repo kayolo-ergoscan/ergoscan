@@ -1407,8 +1407,6 @@ export const ru: Record<string, string> = {
   "network.op.ergoplatform": "Официальный",
   "network.op.ergoplatformP2p": "Официальный P2P",
   "network.op.cornell": "Cornell",
-  "network.op.cornellBackup": "Cornell, резерв",
-  "network.op.codeutxo": "CodeUTXO",
   "network.op.ergexplorer": "ErgExplorer",
   "network.op.sigmaspace": "SigmaSpace",
   "about.eyebrow": "Независимый проводник",

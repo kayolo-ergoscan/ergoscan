@@ -608,6 +608,7 @@ export function TokenTapeRow({
           <div className="flex min-w-0 items-center gap-1.5">
             {name ? (
               <Link
+                prefetch={false}
                 href={href}
                 className="min-w-0 truncate font-semibold hover:underline"
                 style={{ color: tokenTickerInk(row.tokenId) }}
@@ -631,6 +632,7 @@ export function TokenTapeRow({
       <div className="token-lane-id min-w-0 grid">
         <div className="min-w-0 px-2">
           <Link
+            prefetch={false}
             href={href}
             className="block truncate font-mono text-[12px] text-accent hover:underline"
             title={row.tokenId}

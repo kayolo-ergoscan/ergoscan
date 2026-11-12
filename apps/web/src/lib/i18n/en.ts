@@ -1405,8 +1405,6 @@ export const en: Record<string, string> = {
   "network.op.ergoplatform": "Official",
   "network.op.ergoplatformP2p": "Official P2P",
   "network.op.cornell": "Cornell",
-  "network.op.cornellBackup": "Cornell backup",
-  "network.op.codeutxo": "CodeUTXO",
   "network.op.ergexplorer": "ErgExplorer",
   "network.op.sigmaspace": "SigmaSpace",
   "about.eyebrow": "Independent explorer",

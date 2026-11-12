@@ -479,6 +479,7 @@ export function BlockView({
                 <KpiNum>{head.height.toLocaleString(loc(locale))}</KpiNum>
                 {head.lithos ? (
                   <Link
+                    prefetch={false}
                     href="/lithos"
                     title={t("block.chip.lithosHint")}
                     className="chip-press shrink-0 rounded-full bg-[var(--wash-strong)] px-1.5 py-0.5 text-[10px] font-semibold leading-none tracking-tight text-[var(--text)]"
@@ -623,6 +624,7 @@ export function BlockView({
             <p className="mt-0.5 truncate text-[17px] font-semibold leading-none tracking-tight">
               {minerAddr ? (
                 <Link
+                  prefetch={false}
                   href={`/address/${minerAddr}`}
                   className="block min-w-0 truncate text-accent hover:underline"
                 >

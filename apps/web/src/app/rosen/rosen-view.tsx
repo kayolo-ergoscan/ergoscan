@@ -462,7 +462,7 @@ function RosenRef({
     );
   }
   return (
-    <Link href={hit.href} className={cls}>
+    <Link prefetch={false} href={hit.href} className={cls}>
       {label}
     </Link>
   );

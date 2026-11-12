@@ -148,7 +148,7 @@ export function HomeRentTape({
           </div>
 
           <div className="mt-auto flex items-baseline justify-between gap-3 pt-3">
-            <Link href="/rent" className="text-[13px] text-[var(--muted)] hover:text-[var(--text)]">
+            <Link prefetch={false} href="/rent" className="text-[13px] text-[var(--muted)] hover:text-[var(--text)]">
               {t("home.viewAll")}
             </Link>
           </div>
@@ -239,6 +239,7 @@ function DangerLine({ row, locale }: { row: RentDangerRow; locale: string }) {
   const usd = dangerHoldingUsd(row);
   return (
     <Link
+      prefetch={false}
       href={`/token/${row.tokenId}`}
       title={`${meta.symbol} · ${glance.exact}`}
       className="grid h-8 grid-cols-[18px_minmax(0,1fr)_auto] items-center gap-2 rounded-[8px] px-1 hover:bg-[var(--wash)]"

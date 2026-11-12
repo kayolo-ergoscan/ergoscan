@@ -448,6 +448,7 @@ export function BasisView({ initial }: { initial: BasisSnap | null }) {
                   className="addr-lane addr-lane-x basis-tape border-t border-[var(--border-soft)] text-[13px]"
                 >
                   <Link
+                    prefetch={false}
                     href={`/box/${row.boxId}`}
                     className="flex min-w-0 items-center gap-2.5 font-medium text-[var(--text)] hover:underline"
                   >
@@ -470,6 +471,7 @@ export function BasisView({ initial }: { initial: BasisSnap | null }) {
                   </span>
                   {row.creator ? (
                     <Link
+                      prefetch={false}
                       href={`/address/${row.creator}`}
                       className="truncate font-mono text-[12px] text-soft hover:underline"
                       title={row.creator}
@@ -481,6 +483,7 @@ export function BasisView({ initial }: { initial: BasisSnap | null }) {
                   )}
                   {trackerId ? (
                     <Link
+                      prefetch={false}
                       href={row.trackerBoxId ? `/box/${row.trackerBoxId}` : `/token/${trackerId}`}
                       className="truncate font-mono text-[12px] text-soft hover:underline"
                       title={trackerId}
@@ -492,6 +495,7 @@ export function BasisView({ initial }: { initial: BasisSnap | null }) {
                   )}
                   {row.height != null ? (
                     <Link
+                      prefetch={false}
                       href={`/block/${row.height}`}
                       className="is-end font-mono text-[12px] tabular-nums text-soft hover:underline"
                     >

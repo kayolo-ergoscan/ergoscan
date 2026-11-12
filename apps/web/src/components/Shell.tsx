@@ -316,6 +316,7 @@ function ErgPrice({ compact = false }: { compact?: boolean }) {
   const mcapText = mcap != null ? `$${formatCompact(mcap)}` : "—";
   return (
     <Link
+      prefetch={false}
       href="/"
       title={`${t("header.ergPrice")} ${priceText} · ${t("header.mcap")} ${mcapText}`}
       className={

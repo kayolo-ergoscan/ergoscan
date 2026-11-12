@@ -75,6 +75,7 @@ export function TxDrawer({
             <div className="flex flex-wrap gap-2">
               {ball.tokenIds.slice(0, 6).map((id: string) => (
                 <Link
+                  prefetch={false}
                   key={id}
                   href={`/token/${id}`}
                   className="rounded-full border border-[var(--border)] px-2.5 py-1 font-mono text-[11px] text-accent"
@@ -92,6 +93,7 @@ export function TxDrawer({
 
         <div className="mt-8 flex flex-wrap gap-2">
           <Link
+            prefetch={false}
             href={`/tx/${ball.txId}`}
             className="rounded-[8px] bg-[var(--invert)] px-4 py-2 text-[13px] font-semibold text-[var(--invert-fg)]"
           >
@@ -105,6 +107,7 @@ export function TxDrawer({
             {t("drawer.copyId")}
           </button>
           <Link
+            prefetch={false}
             href="/mempool"
             className="rounded-[8px] border border-[var(--border)] px-4 py-2 text-[13px] text-[var(--muted)]"
           >

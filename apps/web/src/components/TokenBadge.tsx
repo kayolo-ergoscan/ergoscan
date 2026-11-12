@@ -117,7 +117,7 @@ export function TokenBadge({
   }
 
   return (
-    <Link href={`/token/${meta.tokenId}`} className={cls} title={meta.tokenId}>
+    <Link prefetch={false} href={`/token/${meta.tokenId}`} className={cls} title={meta.tokenId}>
       {inner}
     </Link>
   );

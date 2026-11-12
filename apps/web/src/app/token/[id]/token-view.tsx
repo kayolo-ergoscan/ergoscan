@@ -1241,7 +1241,7 @@ function NftInfoPanel({
     rows.push({
       label: t("token.nft.mintAddress"),
       node: (
-        <Link href={`/address/${encodeURIComponent(nft.mintAddress)}`} className="truncate text-accent hover:underline">
+        <Link prefetch={false} href={`/address/${encodeURIComponent(nft.mintAddress)}`} className="truncate text-accent hover:underline">
           {mintParty?.known || mintParty?.short || shortId(nft.mintAddress, 8)}
         </Link>
       ),
@@ -1251,7 +1251,7 @@ function NftInfoPanel({
     rows.push({
       label: t("token.nft.mintTx"),
       node: (
-        <Link href={`/tx/${encodeURIComponent(nft.mintTxId)}`} className="truncate font-mono text-accent hover:underline">
+        <Link prefetch={false} href={`/tx/${encodeURIComponent(nft.mintTxId)}`} className="truncate font-mono text-accent hover:underline">
           {clipNftFact(nft.mintTxId)}
         </Link>
       ),
@@ -1268,6 +1268,7 @@ function NftInfoPanel({
       label: t("token.nft.collection"),
       node: (
         <Link
+          prefetch={false}
           href={`/token/${encodeURIComponent(nft.collectionTokenId)}`}
           className="truncate text-accent hover:underline"
         >
@@ -1499,6 +1500,7 @@ function PartyPeek({
   const label = party.known || party.short || shortId(head, 6);
   return (
     <Link
+      prefetch={false}
       href={`/address/${encodeURIComponent(head)}`}
       data-addr={head}
       title={head}
@@ -1609,6 +1611,7 @@ function TokenTxRowView({
       </div>
       <div className="flex min-w-0 items-center gap-2 px-3">
         <Link
+          prefetch={false}
           href={`/tx/${tx.id}`}
           className="min-w-0 truncate font-mono text-[12px] text-accent hover:underline"
         >
@@ -1628,6 +1631,7 @@ function TokenTxRowView({
       <div className="flex min-w-0 items-center justify-end px-3">
         {tx.inclusionHeight != null ? (
           <Link
+            prefetch={false}
             href={`/block/${tx.inclusionHeight}`}
             className="tabular-nums text-accent hover:underline"
           >

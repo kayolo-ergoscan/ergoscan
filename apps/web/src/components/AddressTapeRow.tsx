@@ -149,6 +149,7 @@ export function AddressActivityWhen({
         <span className="text-[var(--muted)]">—</span>
       ) : href ? (
         <Link
+          prefetch={false}
           href={href}
           aria-label={`${openLabel} · ${rel} · ${stamp}`}
           className="block whitespace-nowrap"
@@ -169,6 +170,7 @@ export function AddressActivityWhen({
           )}
         >
             <Link
+              prefetch={false}
               href={href}
               className="max-w-[14.5rem] break-all text-left font-mono text-[11px] leading-snug text-[var(--accent)]"
             >
@@ -257,6 +259,7 @@ export function AddressTapeRow({
               className="h-[18px] w-[18px] shrink-0"
             />
             <Link
+              prefetch={false}
               href={`/address/${encodeURIComponent(row.address)}`}
               aria-label={aria}
               className="min-w-0 whitespace-nowrap font-mono leading-none text-soft hover:underline lg:shrink-0"
@@ -452,6 +455,7 @@ export function TokenHolderTapeRow({
               className="h-[18px] w-[18px] shrink-0"
             />
             <Link
+              prefetch={false}
               href={`/address/${encodeURIComponent(row.address)}`}
               aria-label={aria}
               className="min-w-0 whitespace-nowrap font-mono leading-none text-soft hover:underline lg:shrink-0"

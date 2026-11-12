@@ -55,6 +55,7 @@ export function IndexerStatus() {
 
   return (
     <Link
+      prefetch={false}
       href="/status"
       className="inline-flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[10px] text-[var(--muted-2)] transition-colors duration-[400ms] hover:text-[var(--text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
       title={

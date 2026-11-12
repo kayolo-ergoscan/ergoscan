@@ -50,6 +50,7 @@ export function TxLaneRow({
         <div className="min-w-0 px-3">
           <div className="flex items-center gap-2">
             <Link
+              prefetch={false}
               href={`/tx/${row.id}`}
               className="whitespace-nowrap font-mono text-accent hover:underline"
             >
@@ -127,6 +128,7 @@ export function TxLaneRow({
         {showHeight ? (
           row.inclusionHeight != null ? (
             <Link
+              prefetch={false}
               href={`/block/${row.inclusionHeight}`}
               className="flex min-w-0 items-center justify-end px-3 text-right font-mono tabular-nums text-accent hover:underline"
             >

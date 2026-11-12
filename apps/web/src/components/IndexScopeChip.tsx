@@ -41,6 +41,7 @@ export function IndexScopeChip({ className }: { className?: string }) {
 
   return (
     <Link
+      prefetch={false}
       href="/status"
       className={clsx(
         "inline-flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-full border border-[var(--border)] bg-[var(--wash-faint)] px-3 py-1 font-mono text-[11px] text-[var(--muted)] transition-colors duration-[400ms] hover:bg-[var(--wash)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]",

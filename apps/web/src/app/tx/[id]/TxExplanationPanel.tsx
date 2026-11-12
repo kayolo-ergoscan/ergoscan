@@ -254,6 +254,7 @@ export function TxExplanationPanel({
               const amount = formatTokenAmount(raw, decimals, locale);
               return (
                 <Link
+                  prefetch={false}
                   key={change.tokenId}
                   href={`/token/${change.tokenId}`}
                   className="rounded-full bg-[var(--wash)] px-2.5 py-1 text-[11px] text-[var(--text)] transition-colors duration-[400ms] hover:bg-[var(--wash-mid)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
@@ -276,7 +277,7 @@ export function TxExplanationPanel({
 
       <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-[var(--border-soft)] pt-3 text-[11px] text-[var(--muted-2)]">
         <span>{t("tx.explain.noIntent")}</span>
-        <Link href="/learn#evidence" className="text-[var(--accent)] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]">
+        <Link prefetch={false} href="/learn#evidence" className="text-[var(--accent)] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]">
           {t("tx.explain.how")}
         </Link>
         <a

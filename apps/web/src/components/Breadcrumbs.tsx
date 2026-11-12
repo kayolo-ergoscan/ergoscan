@@ -20,7 +20,7 @@ export function Breadcrumbs({ items }: { items: Crumb[] }) {
           <span key={`${c.label}-${i}`} className="inline-flex items-center gap-1.5">
             {i > 0 && <span className="text-[var(--muted-2)]">/</span>}
             {c.href && !last ? (
-              <Link href={c.href} className="text-accent hover:underline">
+              <Link prefetch={false} href={c.href} className="text-accent hover:underline">
                 {c.label}
               </Link>
             ) : (

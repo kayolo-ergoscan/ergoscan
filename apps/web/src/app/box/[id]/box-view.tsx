@@ -336,6 +336,7 @@ export function BoxView({
                 {creation != null ? (
                   <KpiNum>
                     <Link
+                      prefetch={false}
                       href={`/block/${creation}`}
                       className="hover:underline"
                       style={{ color: heightSplit ? INK.gold : aligned ? INK.teal : INK.sky }}
@@ -387,13 +388,14 @@ export function BoxView({
               <p className="mt-0.5 truncate text-[17px] font-semibold leading-none tabular-nums tracking-tight">
                 {spent && spentHeight != null ? (
                   <KpiNum>
-                    <Link href={`/block/${spentHeight}`} className="text-accent hover:underline">
+                    <Link prefetch={false} href={`/block/${spentHeight}`} className="text-accent hover:underline">
                       {spentHeight.toLocaleString(loc(locale))}
                     </Link>
                   </KpiNum>
                 ) : spent && data.spentTransactionId ? (
                   <KpiNum>
                     <Link
+                      prefetch={false}
                       href={`/tx/${data.spentTransactionId}`}
                       className="font-mono text-[15px] text-accent hover:underline"
                     >
@@ -789,7 +791,7 @@ function BoxLife({
         <p className="box-k">{t("box.in")}</p>
         <p className="mt-2 flex min-w-0 items-center gap-1">
           {createdHref && createdId ? (
-            <Link href={createdHref} className="min-w-0 truncate font-mono text-[13px] text-accent hover:underline">
+            <Link prefetch={false} href={createdHref} className="min-w-0 truncate font-mono text-[13px] text-accent hover:underline">
               {shortId(createdId, 8)}
             </Link>
           ) : (
@@ -804,7 +806,7 @@ function BoxLife({
         ) : null}
         {createdHeight != null ? (
           <p className="mt-1 text-[12px]">
-            <Link href={`/block/${createdHeight}`} className="tabular-nums text-accent hover:underline">
+            <Link prefetch={false} href={`/block/${createdHeight}`} className="tabular-nums text-accent hover:underline">
               {createdHeight.toLocaleString(loc(locale))}
             </Link>
           </p>
@@ -815,7 +817,7 @@ function BoxLife({
         <p className="box-k">{t("box.owner")}</p>
         {address && ownerLabel ? (
           <p className="mt-2 min-w-0 truncate font-mono text-[13px]">
-            <Link href={`/address/${encodeURIComponent(address)}`} className="text-accent hover:underline">
+            <Link prefetch={false} href={`/address/${encodeURIComponent(address)}`} className="text-accent hover:underline">
               {ownerLabel}
             </Link>
           </p>
@@ -829,7 +831,7 @@ function BoxLife({
         <p className="box-k">{spent ? t("box.out") : t("box.unspent")}</p>
         <p className="mt-2 flex min-w-0 items-center gap-1">
           {spent && spentHref && spentId ? (
-            <Link href={spentHref} className="min-w-0 truncate font-mono text-[13px] text-accent hover:underline">
+            <Link prefetch={false} href={spentHref} className="min-w-0 truncate font-mono text-[13px] text-accent hover:underline">
               {shortId(spentId, 8)}
             </Link>
           ) : (
@@ -843,7 +845,7 @@ function BoxLife({
         ) : null}
         {spentHeight != null ? (
           <p className="mt-1 text-[12px]">
-            <Link href={`/block/${spentHeight}`} className="tabular-nums text-accent hover:underline">
+            <Link prefetch={false} href={`/block/${spentHeight}`} className="tabular-nums text-accent hover:underline">
               {spentHeight.toLocaleString(loc(locale))}
             </Link>
           </p>

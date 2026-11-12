@@ -252,6 +252,7 @@ export function PoolCardView({
             </h1>
             <p className="mt-0.5 flex min-w-0 items-center gap-1">
               <Link
+                prefetch={false}
                 href={`/token/${poolId}`}
                 className="shrink-0 whitespace-nowrap font-mono text-[12px] leading-[1.15] text-accent hover:underline"
               >
@@ -684,7 +685,7 @@ function FlowTapeRow({
         <p className={clsx("px-3 font-medium leading-none", withdraw ? "text-[#FF4D6D]" : "text-[var(--up)]")}>{word}</p>
         <div className="min-w-0 px-3">
           {quoteId ? (
-            <Link href={`/token/${quoteId}`} className="flex min-w-0 items-center justify-end gap-2">
+            <Link prefetch={false} href={`/token/${quoteId}`} className="flex min-w-0 items-center justify-end gap-2">
               <TokenAvatar tokenId={quoteId} symbol={quote?.symbol} size={22} />
               <span className="truncate font-semibold" style={{ color: tokenTickerInk(quoteId) }}>
                 {poolName}
@@ -705,6 +706,7 @@ function FlowTapeRow({
       <div className="min-w-0">
         {row.trader ? (
           <Link
+            prefetch={false}
             href={`/address/${encodeURIComponent(row.trader)}`}
             className="block truncate font-mono text-[12px] text-accent hover:underline"
           >
@@ -716,7 +718,7 @@ function FlowTapeRow({
       </div>
       <div className="lp-hold-pair">
         <div className="min-w-0 px-3">
-          <Link href={`/tx/${row.txId}`} className="inline-block whitespace-nowrap font-mono text-accent hover:underline">
+          <Link prefetch={false} href={`/tx/${row.txId}`} className="inline-block whitespace-nowrap font-mono text-accent hover:underline">
             {shortHash(row.txId)}
           </Link>
         </div>
@@ -800,7 +802,7 @@ function TradeTapeRow({
     <div className={clsx("addr-lane addr-lane-x pool-tape border-t border-[var(--border-soft)] text-[13px]", enterClass)}>
       <div className="flex min-w-0 items-center px-3">
         {row.tokenId ? (
-          <Link href={`/token/${row.tokenId}`} className="flex min-w-0 items-center gap-2">
+          <Link prefetch={false} href={`/token/${row.tokenId}`} className="flex min-w-0 items-center gap-2">
             <TokenAvatar tokenId={row.tokenId} symbol={meta?.symbol} size={22} />
             <span className="truncate font-semibold" style={{ color: tokenTickerInk(row.tokenId) }}>
               {label}
@@ -828,13 +830,13 @@ function TradeTapeRow({
       </div>
       <div className="pool-split">
         <div className="flex h-full min-w-0 items-center px-3">
-          <Link href={`/tx/${row.txId}`} className="inline-block whitespace-nowrap font-mono text-accent hover:underline">
+          <Link prefetch={false} href={`/tx/${row.txId}`} className="inline-block whitespace-nowrap font-mono text-accent hover:underline">
             {shortHash(row.txId)}
           </Link>
         </div>
         <div className="min-w-0 px-3 text-right">
           {row.trader ? (
-            <Link href={`/address/${encodeURIComponent(row.trader)}`} className="block truncate font-mono text-[12px] text-accent hover:underline">
+            <Link prefetch={false} href={`/address/${encodeURIComponent(row.trader)}`} className="block truncate font-mono text-[12px] text-accent hover:underline">
               {shortHash(row.trader)}
             </Link>
           ) : (
@@ -887,7 +889,7 @@ function LpTape({
         >
           <div className="lp-hold-pair">
             <div className="flex min-w-0 items-center px-3">
-              <Link href={`/address/${encodeURIComponent(row.address)}`} className="block truncate font-mono text-[12px] text-accent hover:underline">
+              <Link prefetch={false} href={`/address/${encodeURIComponent(row.address)}`} className="block truncate font-mono text-[12px] text-accent hover:underline">
                 {shortHash(row.address)}
               </Link>
             </div>

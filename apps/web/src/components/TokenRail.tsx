@@ -57,6 +57,7 @@ export function TokenRail() {
               : null;
           return (
             <Link
+              prefetch={false}
               key={t.tokenId}
               href={`/token/${t.tokenId}`}
               className="flex shrink-0 items-center gap-1.5 rounded-full border border-[var(--border-soft)] bg-[var(--wash-faint)] px-2 py-1 transition hover:border-[var(--border)] hover:bg-[var(--wash)]"
@@ -74,6 +75,7 @@ export function TokenRail() {
           );
         })}
         <Link
+          prefetch={false}
           href="/defi/spectrum"
           className="ml-1 shrink-0 text-[10px] font-medium text-accent/90 hover:text-accent"
         >

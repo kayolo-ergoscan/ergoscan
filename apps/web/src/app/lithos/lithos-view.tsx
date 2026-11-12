@@ -136,6 +136,7 @@ function Addr({ address }: { address: string }) {
   const name = lookupAddress(address)?.name;
   return (
     <Link
+      prefetch={false}
       href={`/address/${address}`}
       title={name ? `${name} · ${address}` : address}
       className={clsx(
@@ -294,7 +295,7 @@ export function LithosProtocolView({ initial }: { initial: LithosProtocolSnap | 
                 {t(link.key)}
               </a>
             ))}
-            <Link href="/defi/lithos" className="text-[12px] leading-none text-accent hover:underline">
+            <Link prefetch={false} href="/defi/lithos" className="text-[12px] leading-none text-accent hover:underline">
               LithosDex
             </Link>
           </div>
@@ -352,12 +353,14 @@ export function LithosProtocolView({ initial }: { initial: LithosProtocolSnap | 
                   <div className="block-lane-pair">
                     <div className="min-w-0 px-3">
                       <Link
+                        prefetch={false}
                         href={`/block/${row.blockId}`}
                         className="block min-w-0 truncate font-mono tabular-nums text-accent hover:underline"
                       >
                         {row.height.toLocaleString(L)}
                       </Link>
                       <Link
+                        prefetch={false}
                         href={`/tx/${row.txId}`}
                         title={row.txId}
                         className="mt-0.5 block truncate font-mono text-[11px] text-[var(--muted)] hover:text-accent hover:underline"

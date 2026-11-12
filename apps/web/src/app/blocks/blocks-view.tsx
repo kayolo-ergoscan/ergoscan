@@ -447,6 +447,7 @@ export function BlockTapeRow({
         <div className="min-w-0 px-3">
           <div className="flex min-w-0 items-center gap-2">
             <Link
+              prefetch={false}
               href={`/block/${row.id}`}
               onFocus={() => prefetchBlockCard(row.id)}
               className="min-w-0 truncate font-mono tabular-nums text-accent hover:underline"
@@ -466,7 +467,7 @@ export function BlockTapeRow({
         </div>
         <div className="lithos-col">
           {row.lithos ? (
-            <Link href="/lithos" title={t("block.chip.lithosHint")} className="chip-press inline-flex">
+            <Link prefetch={false} href="/lithos" title={t("block.chip.lithosHint")} className="chip-press inline-flex">
               <img
                 src="/lithos-mark.png"
                 alt=""
@@ -495,7 +496,7 @@ export function BlockTapeRow({
       <div className="block-lane-pair">
         <div className="min-w-0 px-3">
           {minerAddr ? (
-            <Link href={`/address/${minerAddr}`} className="block min-w-0 truncate text-accent hover:underline">
+            <Link prefetch={false} href={`/address/${minerAddr}`} className="block min-w-0 truncate text-accent hover:underline">
               {miner}
             </Link>
           ) : (
@@ -519,6 +520,7 @@ export function BlockTapeRow({
       <div className="block-lane-pair">
         <div className="min-w-0 px-3">
           <Link
+            prefetch={false}
             href={`/block/${row.id}`}
             className="block whitespace-nowrap font-mono text-accent hover:underline"
           >

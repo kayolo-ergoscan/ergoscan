@@ -85,6 +85,7 @@ export function NftCard({
   const badge = item.kind && item.kind !== "image" ? item.kindLabel : null;
   return (
     <Link
+      prefetch={false}
       href={to}
       title={title}
       className={clsx("addr-nft-card chip-press", sheetEnter != null && "home-tile-enter", enterClass)}
@@ -133,6 +134,7 @@ export function NftGroupCard({
 }) {
   return (
     <Link
+      prefetch={false}
       href={href}
       className={clsx("addr-nft-card chip-press", sheetEnter != null && "home-tile-enter", enterClass)}
       style={sheetEnter != null ? { ["--enter" as string]: sheetEnter } : undefined}

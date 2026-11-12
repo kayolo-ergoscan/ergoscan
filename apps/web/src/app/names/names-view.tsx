@@ -400,6 +400,7 @@ function NameTapeRow({
             className="h-[18px] w-[18px] shrink-0"
           />
           <Link
+            prefetch={false}
             href={`/address/${encodeURIComponent(row.address)}`}
             aria-label={aria}
             className="min-w-0 text-soft hover:underline"

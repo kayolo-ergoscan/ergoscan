@@ -420,7 +420,7 @@ export function RentView({
           <p className="mt-3 hidden flex-wrap items-baseline gap-x-3 gap-y-1 px-1 text-[12px] leading-relaxed text-[var(--muted)] lg:flex">
             <EvidenceBadge kind="chain" />
             <span className="min-w-0 flex-1">{t("rent.evidence.body")}</span>
-            <Link href="/learn#evidence" className="shrink-0 text-[var(--accent)] hover:underline">
+            <Link prefetch={false} href="/learn#evidence" className="shrink-0 text-[var(--accent)] hover:underline">
               {t("rent.evidence.method")}
             </Link>
           </p>
@@ -490,6 +490,7 @@ export function RentView({
                   <div className="block-lane-pair">
                     <div className="min-w-0 px-3">
                       <Link
+                        prefetch={false}
                         href={`/box/${row.boxId}`}
                         title={row.boxId}
                         className="whitespace-nowrap font-mono text-accent hover:underline"
@@ -520,6 +521,7 @@ export function RentView({
                     </div>
                     <div className="flex min-w-0 items-center justify-end px-3">
                       <Link
+                        prefetch={false}
                         href={`/block/${row.spentHeight}`}
                         className="whitespace-nowrap tabular-nums text-accent hover:underline"
                       >
@@ -660,6 +662,7 @@ function ClaimWho({
   }
   return (
     <Link
+      prefetch={false}
       href={`/address/${encodeURIComponent(who.id)}`}
       title={who.id}
       className="whitespace-nowrap font-mono text-accent hover:underline"
@@ -710,6 +713,7 @@ function ClaimTickers({
         const meta = resolveTokenMeta(tok.tokenId, null, tok.name);
         return (
           <Link
+            prefetch={false}
             key={tok.tokenId}
             href={`/token/${encodeURIComponent(tok.tokenId)}`}
             title={meta.name}
@@ -1040,11 +1044,12 @@ function RentDanger({
                 className="grid h-[3.25rem] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3"
               >
                 <div className="flex min-w-0 items-center gap-2.5">
-                  <Link href={`/token/${row.tokenId}`} className="shrink-0" aria-label={meta.symbol}>
+                  <Link prefetch={false} href={`/token/${row.tokenId}`} className="shrink-0" aria-label={meta.symbol}>
                     <TokenLogo tokenId={row.tokenId} size={28} />
                   </Link>
                   <span className="min-w-0">
                     <Link
+                      prefetch={false}
                       href={`/token/${row.tokenId}`}
                       className="block truncate text-[14px] font-semibold tracking-[-0.02em] hover:underline"
                       style={{ color: tokenTickerInk(row.tokenId) }}
@@ -1054,7 +1059,7 @@ function RentDanger({
                     <span className="mt-0.5 block truncate text-[12px] text-[var(--muted)]">
                       {meta.name}
                       {" · "}
-                      <Link href={`/box/${row.boxId}`} className="text-accent hover:underline">
+                      <Link prefetch={false} href={`/box/${row.boxId}`} className="text-accent hover:underline">
                         {when}
                       </Link>
                     </span>
@@ -1157,6 +1162,7 @@ function SeizedTokens({
         const meta = resolveTokenMeta(tok.tokenId, null, tok.name);
         return (
           <Link
+            prefetch={false}
             key={tok.tokenId}
             href={`/token/${encodeURIComponent(tok.tokenId)}`}
             title={meta.name}
@@ -1206,6 +1212,7 @@ function RentRow({
       <div className="block-lane-pair rent-addr-pair">
         <div className="min-w-0 overflow-hidden px-3">
           <Link
+            prefetch={false}
             href={href}
             title={row.address || row.boxId}
             className="block min-w-0 overflow-hidden text-accent hover:underline"
@@ -1262,6 +1269,7 @@ function RentRow({
         </div>
         <div className="flex min-w-0 items-center justify-end px-3">
           <Link
+            prefetch={false}
             href={`/block/${row.creationHeight}`}
             className="whitespace-nowrap tabular-nums text-accent hover:underline"
           >

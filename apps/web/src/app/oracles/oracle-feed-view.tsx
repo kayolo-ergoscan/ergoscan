@@ -525,11 +525,11 @@ function OracleTapeRow({
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={oracleOperatorMarkSrc(seed)} alt="" className="size-6 shrink-0 rounded-[5px]" />
         {row.address ? (
-          <Link href={`/address/${row.address}`} className="min-w-0 truncate text-accent hover:underline">
+          <Link prefetch={false} href={`/address/${row.address}`} className="min-w-0 truncate text-accent hover:underline">
             {name}
           </Link>
         ) : (
-          <Link href={`/box/${row.boxId}`} className="min-w-0 truncate text-accent hover:underline">
+          <Link prefetch={false} href={`/box/${row.boxId}`} className="min-w-0 truncate text-accent hover:underline">
             {name}
           </Link>
         )}
@@ -554,6 +554,7 @@ function OracleTapeRow({
           <div className="oracle-col-id">
             {row.address ? (
               <Link
+                prefetch={false}
                 href={`/address/${row.address}`}
                 className="min-w-0 truncate font-mono text-[12px] text-accent hover:underline"
                 title={row.address}
@@ -573,6 +574,7 @@ function OracleTapeRow({
       <div className="oracle-col-answer">
         {row.address ? (
           <Link
+            prefetch={false}
             href={`/address/${row.address}`}
             className="min-w-0 truncate font-mono text-[12px] text-accent hover:underline"
             title={row.address}

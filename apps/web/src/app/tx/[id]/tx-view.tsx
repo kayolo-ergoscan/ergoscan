@@ -512,7 +512,7 @@ export function TxView({
                 {data.confirmed && height != null ? (
                   blockHref ? (
                     <KpiNum>
-                      <Link href={blockHref} className="text-accent hover:underline">
+                      <Link prefetch={false} href={blockHref} className="text-accent hover:underline">
                         {height.toLocaleString(loc(locale))}
                       </Link>
                     </KpiNum>
@@ -748,6 +748,7 @@ function PartyRow({
           <p className="flex min-w-0 items-center gap-1">
             {party.address ? (
               <Link
+                prefetch={false}
                 href={`/address/${party.address}`}
                 title={party.address}
                 className={clsx(
@@ -759,6 +760,7 @@ function PartyRow({
               </Link>
             ) : boxId ? (
               <Link
+                prefetch={false}
                 href={`/box/${boxId}`}
                 title={boxId}
                 className="min-w-0 truncate font-mono text-accent hover:underline"
@@ -913,6 +915,7 @@ function BoxRow({
           <p className="flex min-w-0 items-center gap-1.5">
             {io.address ? (
               <Link
+                prefetch={false}
                 href={`/address/${io.address}`}
                 title={io.address}
                 className={clsx(
@@ -925,6 +928,7 @@ function BoxRow({
               </Link>
             ) : io.boxId ? (
               <Link
+                prefetch={false}
                 href={`/box/${io.boxId}`}
                 title={io.boxId}
                 className="min-w-0 truncate font-mono text-accent hover:underline"
@@ -953,7 +957,7 @@ function BoxRow({
             ) : null}
             {(fee && io.address) || d.known ? " · " : null}
             {io.boxId ? (
-              <Link href={`/box/${io.boxId}`} className="font-mono text-accent hover:underline">
+              <Link prefetch={false} href={`/box/${io.boxId}`} className="font-mono text-accent hover:underline">
                 {shortId(io.boxId, 6)}
               </Link>
             ) : (
@@ -1083,6 +1087,7 @@ function TokenFold({
             return (
               <li key={tid} className="flex min-w-0 items-center justify-between gap-3 text-[12px]">
                 <Link
+                  prefetch={false}
                   href={`/token/${tid}`}
                   className="flex min-w-0 items-center gap-1.5 text-accent hover:underline"
                 >
@@ -1128,6 +1133,7 @@ function TokenSheetRow({
       )}
     >
       <Link
+        prefetch={false}
         href={`/token/${row.tokenId}`}
         className="flex min-w-0 items-center gap-2 text-accent hover:underline"
       >

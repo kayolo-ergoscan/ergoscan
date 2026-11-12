@@ -643,7 +643,7 @@ export function NetworkOrbit({ enter = 0 }: { enter?: number }) {
         )}
       </div>
         <div className="mt-auto flex items-baseline justify-between gap-3 pt-3">
-          <Link href="/learn#limits" className="text-[13px] text-[var(--muted)] hover:text-[var(--text)]">
+          <Link prefetch={false} href="/learn#limits" className="text-[13px] text-[var(--muted)] hover:text-[var(--text)]">
             {t("nav.learn")}
           </Link>
         </div>
