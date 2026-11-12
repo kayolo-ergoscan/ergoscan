@@ -1265,6 +1265,34 @@ async function bumpTokenInts(
   );
 }
 
+/**
+ * tokens.holders = rows with amount > 0 in token_balances, counted, not bumped (12 Nov 2026: the
+ * +1/-1 deltas had drifted on 911 of 141 889 tokens, by up to 24). stats_height = the block where
+ * holders last changed; with public.index_height it tells the DEX how fresh the number is.
+ * Null height (fork unwind) leaves stats_height as it was.
+ */
+export async function recountHoldersFor(
+  client: Queryable,
+  tokenIds: Iterable<string>,
+  height: number | null
+): Promise<void> {
+  const ids = [...new Set(tokenIds)].filter(Boolean);
+  if (!ids.length) return;
+  await client.query(
+    `UPDATE tokens t
+        SET holders = s.n,
+            stats_height = COALESCE($2::bigint, t.stats_height)
+       FROM (SELECT v.token_id,
+                    (SELECT count(*)::int FROM token_balances b
+                      WHERE b.token_id = v.token_id AND b.amount > 0) AS n
+               FROM unnest($1::text[]) AS v(token_id)) s
+      WHERE t.token_id = s.token_id
+        AND (t.holders IS DISTINCT FROM s.n
+             OR t.stats_height IS DISTINCT FROM COALESCE($2::bigint, t.stats_height))`,
+    [ids, height]
+  );
+}
+
 async function bumpCatalog(
   client: Queryable,
   holders: number,
@@ -1439,9 +1467,7 @@ async function creditBalances(
     ]
   );
   const inserted = ins.rows.filter((row) => isInsertedFlag(row.inserted));
-  const holderDelta = new Map<string, number>();
-  for (const row of inserted) addCount(holderDelta, row.token_id, 1);
-  await bumpTokenInts(client, "holders", holderDelta);
+  await recountHoldersFor(client, inserted.map((row) => row.token_id), h);
   await bumpCatalog(client, await uniqueHoldersGained(client, inserted), 0);
 }
 
@@ -1486,9 +1512,7 @@ async function debitBalances(
        )`,
       [gone.map((g) => g.token_id), gone.map((g) => g.address)]
     );
-    const holderDelta = new Map<string, number>();
-    for (const row of gone) addCount(holderDelta, row.token_id, -1);
-    await bumpTokenInts(client, "holders", holderDelta);
+    await recountHoldersFor(client, gone.map((row) => row.token_id), h);
     const lost = await uniqueHoldersLost(
       client,
       gone.map((g) => g.address)
@@ -1832,7 +1856,14 @@ async function recountHolders(client: Queryable): Promise<void> {
     UPDATE tokens t SET holders = COALESCE(s.n, 0)
     FROM s WHERE t.token_id = s.token_id
   `);
-  await client.query(`UPDATE tokens SET holders = 0 WHERE holders IS NULL`);
+  // Tokens whose last holder left keep no token_balances row; the join above skips them.
+  await client.query(`
+    UPDATE tokens t SET holders = 0
+    WHERE (t.holders IS NULL OR t.holders <> 0)
+      AND NOT EXISTS (
+        SELECT 1 FROM token_balances b WHERE b.token_id = t.token_id AND b.amount > 0
+      )
+  `);
   const u = await client.query<{ n: string }>(
     `SELECT COUNT(DISTINCT address)::text AS n FROM token_balances WHERE amount > 0`
   );

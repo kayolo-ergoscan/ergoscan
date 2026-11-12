@@ -71,3 +71,24 @@ test("token_balances tx_count cursor is token_id TAB address", () => {
   assert.deepEqual(parseTokenBalanceTxCountCursor(raw), { tokenId: "ab", address: "9fLYhello" });
   assert.deepEqual(parseTokenBalanceTxCountCursor(""), { tokenId: "", address: "" });
 });
+
+test("holders are counted from token_balances, not bumped (12 Nov 2026)", async () => {
+  const { recountHoldersFor } = await import("./tokenStats.js");
+  const calls: { sql: string; params: unknown[] }[] = [];
+  const client = {
+    query: (async (sql: string, params: unknown[]) => {
+      calls.push({ sql, params });
+      return { rows: [], rowCount: 0 };
+    }) as never,
+  };
+  await recountHoldersFor(client, [], 100);
+  assert.equal(calls.length, 0);
+  await recountHoldersFor(client, ["aa", "bb", "aa", ""], 1915200);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0]!.params, [["aa", "bb"], 1915200]);
+  assert.match(calls[0]!.sql, /count\(\*\)::int FROM token_balances b/);
+  assert.match(calls[0]!.sql, /b\.amount > 0/);
+  assert.match(calls[0]!.sql, /stats_height = COALESCE\(\$2::bigint, t\.stats_height\)/);
+  await recountHoldersFor(client, ["cc"], null);
+  assert.deepEqual(calls[1]!.params, [["cc"], null]);
+});
