@@ -3,7 +3,6 @@
  * Split en/ru for maintainability + reliable GitHub sync.
  */
 import { en } from "./en";
-import { ru } from "./ru";
 
 export type Locale = "en" | "ru";
 
@@ -16,10 +15,23 @@ export const STORAGE_KEY = "lumen-stage-locale";
 
 type Dict = Record<string, string>;
 
-export const MESSAGES: Record<Locale, Dict> = { en, ru };
+/**
+ * English ships with every page. Russian (~100 KB of source) is its own chunk, loaded only
+ * when RU is picked; until it arrives, keys fall back to English (the server renders EN anyway).
+ */
+export const MESSAGES: Partial<Record<Locale, Dict>> = { en };
 
 export function translate(locale: Locale, key: string): string {
-  return MESSAGES[locale]?.[key] ?? MESSAGES.en[key] ?? key;
+  return MESSAGES[locale]?.[key] ?? en[key as keyof typeof en] ?? key;
+}
+
+export function localeLoaded(locale: Locale): boolean {
+  return MESSAGES[locale] != null;
+}
+
+export async function loadLocale(locale: Locale): Promise<void> {
+  if (MESSAGES[locale]) return;
+  if (locale === "ru") MESSAGES.ru = (await import("./ru")).ru;
 }
 
 export function detectLocale(): Locale {

@@ -11,6 +11,8 @@ import {
 } from "react";
 import {
   detectLocale,
+  loadLocale,
+  localeLoaded,
   LOCALES,
   STORAGE_KEY,
   translate,
@@ -30,22 +32,33 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>("en");
   const [ready, setReady] = useState(false);
 
-  useEffect(() => {
-    setLocaleState(detectLocale());
-    setReady(true);
+  // Switch once the dictionary is here; until then the whole page stays English (text and
+  // number formats together).
+  const applyLocale = useCallback((l: Locale) => {
+    if (localeLoaded(l)) {
+      setLocaleState(l);
+      return;
+    }
+    void loadLocale(l)
+      .then(() => setLocaleState(l))
+      .catch(() => {
+        /* chunk failed: stay on English */
+      });
   }, []);
 
+  useEffect(() => {
+    applyLocale(detectLocale());
+    setReady(true);
+  }, [applyLocale]);
+
   const setLocale = useCallback((l: Locale) => {
-    setLocaleState(l);
+    applyLocale(l);
     try {
       localStorage.setItem(STORAGE_KEY, l);
     } catch {
       /* */
     }
-    if (typeof document !== "undefined") {
-      document.documentElement.lang = l;
-    }
-  }, []);
+  }, [applyLocale]);
 
   useEffect(() => {
     if (ready) document.documentElement.lang = locale;

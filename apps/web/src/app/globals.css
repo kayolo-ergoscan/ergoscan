@@ -2835,8 +2835,10 @@ html[data-float="ada"] .explorer-dock {
   animation: price-tape var(--tape-s, 42s) linear infinite;
   will-change: transform;
 }
+/* Hover, or keyboard focus on a chip (WCAG 2.2.2: moving content can be paused). */
 .price-tape-run.is-still,
-.price-tape-run:hover {
+.price-tape-run:hover,
+.price-tape-run:focus-within {
   animation-play-state: paused;
 }
 .price-tape-chip {
