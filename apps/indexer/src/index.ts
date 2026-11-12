@@ -114,6 +114,7 @@ import {
   addressesForBoxIds,
   bumpTokensForBoxes,
   insertBoxAssetsMany,
+  mergeOutputAssets,
   insertBoxesMany,
   insertTransactionsMany,
   markSpentMany,
@@ -925,6 +926,7 @@ async function indexTxBatched(
       registers: registersJson(o),
     });
     // Position = place in the node's list (contracts read tokens(0), tokens(1) …).
+    const outAssets: AssetInsertRow[] = [];
     for (const [assetIndex, a] of (o.assets ?? []).entries()) {
       if (!a.tokenId) continue;
       const amt = exactIntStr(a.amount);
@@ -938,8 +940,9 @@ async function indexTxBatched(
           issuance: minted.has(a.tokenId),
         })
       );
-      assetRows.push({ boxId, tokenId: a.tokenId, amount: amt, index: assetIndex });
+      outAssets.push({ boxId, tokenId: a.tokenId, amount: amt, index: assetIndex });
     }
+    assetRows.push(...mergeOutputAssets(outAssets));
     if (address && address.length <= MAX_ADDRESS_TX_LEN) {
       addrRows.push({ address, txId, height });
     }
@@ -1091,6 +1094,7 @@ async function writeHeightRows(
         assets,
       });
       // Position = place in the node's list (contracts read tokens(0), tokens(1) …).
+      const outAssets: AssetInsertRow[] = [];
       for (const [assetIndex, a] of (o.assets ?? []).entries()) {
         if (!a.tokenId) continue;
         const amt = exactIntStr(a.amount);
@@ -1104,8 +1108,9 @@ async function writeHeightRows(
             issuance: minted.has(a.tokenId),
           })
         );
-        assetRows.push({ boxId, tokenId: a.tokenId, amount: amt, index: assetIndex });
+        outAssets.push({ boxId, tokenId: a.tokenId, amount: amt, index: assetIndex });
       }
+      assetRows.push(...mergeOutputAssets(outAssets));
       if (address && address.length <= MAX_ADDRESS_TX_LEN) {
         addrRows.push({ address, txId, height });
       }
