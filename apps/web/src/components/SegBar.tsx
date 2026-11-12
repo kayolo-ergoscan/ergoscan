@@ -32,7 +32,7 @@ export function SegBar({
 export function segItem(on: boolean, opts?: { press?: boolean }) {
   const press = opts?.press !== false;
   return clsx(
-    "flex min-w-0 flex-1 items-center justify-center truncate rounded-[10px] px-1.5 py-1.5 text-center text-[12px] font-medium transition-colors duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] sm:px-3 sm:text-[13px]",
+    "flex min-w-0 flex-1 items-center justify-center truncate rounded-[10px] px-1.5 py-1.5 max-lg:min-h-10 text-center text-[12px] font-medium transition-colors duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] sm:px-3 sm:text-[13px]",
     press && "chip-press",
     on
       ? clsx("seg-on bg-[var(--wash-strong)] text-[var(--text)]", press && "is-pressed")

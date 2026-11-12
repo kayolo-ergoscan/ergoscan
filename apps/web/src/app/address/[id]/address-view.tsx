@@ -1450,13 +1450,14 @@ export function AddressView({
               ) : !nftTotal && !nfts.length ? (
                 <FavKayolo line={t("address.noNfts")} />
               ) : (
-                <div className="addr-sheet">
-                  <div
-                    className={clsx(
-                      "transition-opacity duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
-                      nftsLoading && nfts.length > 0 && "opacity-60"
-                    )}
-                  >
+                <div className="feed-sheet">
+                  <Feed busy={nftsLoading && nfts.length > 0}>
+                    <section className="feed-day feed-gallery">
+                    <FeedPlate
+                      tag={t("address.tab.nfts")}
+                      now
+                      count={<FeedCount k="feed.nfts" n={nftTotal > 0 ? nftTotal : nfts.length} />}
+                    />
                     <div className="addr-nft-grid">
                       {nfts.map((row) => (
                         <NftCard
@@ -1473,7 +1474,8 @@ export function AddressView({
                         />
                       ))}
                     </div>
-                  </div>
+                    </section>
+                  </Feed>
                   <RankWindow
                     offset={nftOffset}
                     pageSize={NFT_PAGE}

@@ -8,14 +8,12 @@ import clsx from "clsx";
 import {
   RENT_SERIES_DAY_MS,
   fillRentRangeGaps,
-  collectableRentNano,
   rentNanoToErg,
   rentYearSpan,
   rollupRentSeries,
   type RentSeriesPoint,
 } from "@ergoscan/shared";
 import { Shell } from "@/components/Shell";
-import { StuckPin } from "@/components/StuckPin";
 import { AddressPageSkeleton } from "@/components/AddressPageSkeleton";
 import { AddrFactCard } from "@/components/AddrFactCard";
 import { EvidenceBadge } from "@/components/EvidenceBadge";
@@ -31,26 +29,29 @@ import {
 } from "@/components/kpi-marks";
 import { KpiNum } from "@/components/KpiGrid";
 import { RankWindow } from "@/components/RankWindow";
-import { TokenLogo } from "@/components/TokenBadge";
 import {
   formatCompact,
-  describeRentErg,
   formatErg,
   formatErgFixed,
   formatGroupedNumber,
-  formatTokenAmount,
-  formatActivityStamp,
-  formatRelTime,
   shortId,
-  nanoErgToNumber,
-  relAgeTone,
-  relAgeToneClass,
+  toEpochMs,
 } from "@/lib/format";
 import { INK } from "@/lib/palette";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { countText } from "@/lib/i18n/messages";
 import { useKeepFresh, usePageSync } from "@/lib/page-sync";
-import { SNAPSHOT_FETCH, enteringIds, useEnterIds } from "@/lib/keyed-enter";
+import { ENTER_MS, SNAPSHOT_FETCH, enteringIds, useEnterIds } from "@/lib/keyed-enter";
+import {
+  Feed,
+  FeedBoard,
+  FeedCount,
+  FeedDays,
+  FeedEmpty,
+  FeedPlate,
+  FeedSection,
+} from "@/components/feed/Feed";
+import { FeedRentClaimRow, FeedRentDangerRow, FeedRentRow } from "@/components/feed/FeedRentRow";
 import {
   RENT_PACK,
   type RentBoxRow,
@@ -58,13 +59,9 @@ import {
   type RentPageData,
   type RentWindow,
 } from "@/lib/list-snapshots";
-import { dangerHoldingUsd } from "@/lib/rent-danger";
 import { getGateway } from "@/lib/config";
 import { lookupAddress } from "@/lib/address-book";
-import { NameMarquee } from "@/components/NameMarquee";
 import { hasRentMinerRows, formatRentSharePct, rentShareOf } from "@/lib/rent-miner-pools";
-import { rentRowTone } from "@/lib/rent-row-tone";
-import { resolveTokenMeta, tokenAtRisk, tokenTickerInk } from "@/lib/token-meta";
 import { RentMinerPools } from "@/components/RentMinerPools";
 
 const ERG_LINE = "#5ee0a0";
@@ -74,8 +71,6 @@ const RentHistoryChart = dynamic(() => import("@/components/RentHistoryChart"), 
   loading: () => <div className="h-full min-h-[168px] w-full" />,
 });
 
-const BLOCKS_PER_YEAR = 262_980;
-const BLOCKS_PER_DAY = 720;
 
 function fetchRentPack(params: URLSearchParams): Promise<RentPageData | null> {
   return fetch(`${getGateway()}/v1/page/rent?${params}`, SNAPSHOT_FETCH)
@@ -106,18 +101,6 @@ function usePagerAfterRows(resetKey: string) {
 
 function loc(locale: string): string {
   return locale === "ru" ? "ru-RU" : "en-US";
-}
-
-function formatHorizon(blocks: number | null, locale: string, t: (k: string) => string): string {
-  if (blocks == null) return "—";
-  if (blocks <= 0) return t("rent.cap.now");
-  if (blocks < 2000) {
-    return countText(t, locale, "rent.status.inBlocks", blocks, blocks.toLocaleString(loc(locale)));
-  }
-  const years = blocks / BLOCKS_PER_YEAR;
-  if (years >= 1) return `~${years.toFixed(1)}y`;
-  const days = Math.max(1, Math.round(blocks / BLOCKS_PER_DAY));
-  return `~${days}d`;
 }
 
 function windowCovered(
@@ -158,20 +141,26 @@ export function RentView({
   const { markSynced } = usePageSync();
   const [data, setData] = useState<RentPageData | null>(initial);
   const [offset, setOffset] = useState(0);
-  const [tape, setTape] = useState<RentBoxRow[] | null>(null);
+  /* The server sends the first upcoming page. With nothing due it is the page
+     the client would build, so it paints in the first HTML. */
+  const [seed] = useState<RentBoxRow[] | null>(() =>
+    pane === "upcoming" && initial && (initial.due?.boxCount ?? 0) === 0 && initial.items.length
+      ? initial.items.slice(0, RENT_PACK)
+      : null
+  );
+  const [tape, setTape] = useState<RentBoxRow[] | null>(seed);
   const [claimOffset, setClaimOffset] = useState(0);
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
-  const [stuck, setStuck] = useState(false);
   const dataRef = useRef(data);
   dataRef.current = data;
-  const enter = useEnterIds();
+  const enter = useEnterIds(ENTER_MS, seed ? seed.map((row) => row.boxId) : []);
   const packEnter = useEnterIds();
-  const [listReady, setListReady] = useState(false);
+  const [listReady, setListReady] = useState(seed != null);
   const opened = useRef(false);
   const seq = useRef(0);
   const painted = useRef(false);
-  const tapeRef = useRef<RentBoxRow[] | null>(null);
+  const tapeRef = useRef<RentBoxRow[] | null>(seed);
 
   const load = useCallback(
     (silent = false, nextOff = offset, nextClaim = claimOffset) => {
@@ -304,18 +293,19 @@ export function RentView({
     painted.current = true;
     if ((initial?.items.length ?? 0) > 0) markSynced();
     packSeen.current = packKey;
-    loadRef.current(false, 0, 0);
-  }, [initial, markSynced, packKey]);
+    loadRef.current(seed != null, 0, 0);
+  }, [initial, markSynced, packKey, seed]);
 
   useEffect(() => {
     if (opened.current) return;
     if (!data) return;
     opened.current = true;
+    if (seed) return;
     const ids = (data.items ?? []).map((row) => row.boxId);
     enter.mark(ids);
     if (ids.length) packEnter.mark(["pack"]);
     setListReady(true);
-  }, [data, enter.mark, packEnter.mark]);
+  }, [data, enter.mark, packEnter.mark, seed]);
 
   useEffect(() => {
     if (packSeen.current === packKey) return;
@@ -446,83 +436,21 @@ export function RentView({
           </div>
 
           <div className="mt-2 min-w-0">
-            <div className="addr-sheet">
-            <div className="addr-pan kpi-tape">
-            <div className="addr-head addr-lane addr-lane-x block-tx-pairs rent-tape text-[12px] font-medium">
-              <div className="block-lane-pair rent-addr-pair">
-                <div className="min-w-0">{t("rent.colWho")}</div>
-              </div>
-              <div className="block-lane-pair">
-                <div className="min-w-0">{t("rent.recent")}</div>
-                <div className="min-w-0 justify-end">{t("rent.colSeized")}</div>
-              </div>
-              <div className="block-lane-pair">
-                <div className="min-w-0">{t("rent.colStatus")}</div>
-                <div className="min-w-0 justify-end">{t("rent.colRent")}</div>
-              </div>
-              <div className="block-lane-pair rent-when-pair">
-                <div className="min-w-0">{t("rent.colWhen")}</div>
-                <div className="min-w-0 justify-end">{t("blocks.height")}</div>
-              </div>
-            </div>
-            {data.collected?.recent?.length ? (
-              data.collected.recent.map((row) => (
-                <div
-                  key={row.boxId}
-                  className="addr-lane addr-lane-x block-tx-pairs rent-tape border-t border-[var(--border-soft)] py-2.5 text-[13px]"
-                >
-                  <div className="block-lane-pair rent-addr-pair">
-                    <div className="min-w-0 px-3">
-                      <ClaimWho row={row} t={t} />
-                    </div>
-                  </div>
-                  <div className="block-lane-pair">
-                    <div className="min-w-0 px-3">
-                      <Link
-                        prefetch={false}
-                        href={`/box/${row.boxId}`}
-                        title={row.boxId}
-                        className="whitespace-nowrap font-mono text-accent hover:underline"
-                      >
-                        {shortId(row.boxId, 8)}
-                      </Link>
-                    </div>
-                    <div className="flex min-w-0 items-center justify-end px-3">
-                      <ClaimTickers tokens={row.tokens} t={t} />
-                    </div>
-                  </div>
-                  <div className="block-lane-pair">
-                    <div className="flex min-w-0 items-center px-3">
-                      <ClaimStatus row={row} t={t} />
-                    </div>
-                    <div className="min-w-0 px-3 text-right">
-                      <RentErg nano={row.rentNano} />
-                    </div>
-                  </div>
-                  <div className="block-lane-pair rent-when-pair">
-                    <div className="min-w-0 px-3">
-                      <p className={clsx("whitespace-nowrap tabular-nums", relAgeToneClass(relAgeTone(row.spentTs)))}>
-                        {formatRelTime(row.spentTs, locale)}
-                      </p>
-                      <p className="mt-0.5 whitespace-nowrap text-[12px] tabular-nums text-[var(--muted-2)]">
-                        {formatActivityStamp(row.spentTs)}
-                      </p>
-                    </div>
-                    <div className="flex min-w-0 items-center justify-end px-3">
-                      <Link
-                        prefetch={false}
-                        href={`/block/${row.spentHeight}`}
-                        className="whitespace-nowrap tabular-nums text-accent hover:underline"
-                      >
-                        {row.spentHeight.toLocaleString(loc(locale))}
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <p className="px-3 py-4 text-[12px] text-[var(--muted)]">{t("rent.recentEmpty")}</p>
-            )}
+            <div className="feed-sheet">
+            <Feed busy={pending}>
+              {data.collected?.recent?.length ? (
+                <FeedDays
+                  items={data.collected.recent}
+                  msOf={(row) => toEpochMs(row.spentTs)}
+                  countOf={(n) => <FeedCount k="feed.claims" n={n} />}
+                  render={(row, lead) => (
+                    <FeedRentClaimRow key={row.boxId} row={row} lead={lead} enterClass={enter.enterClass(row.boxId)} />
+                  )}
+                />
+              ) : (
+                <FeedEmpty k="rent" title={t("rent.recentEmpty")} />
+              )}
+            </Feed>
             <div ref={historyPager.endRef} className="h-px w-full" aria-hidden />
             {historyPager.open &&
               ((data.collected?.recentTotal ?? 0) > RENT_PACK || claimOffset > 0) && (
@@ -542,59 +470,41 @@ export function RentView({
               />
             )}
             </div>
-            </div>
           </div>
           </>
           )}
 
           {pane === "upcoming" && (
           <>
-          <RentDanger rows={data.danger ?? []} settled locale={locale} t={t} />
+          <RentDanger rows={data.danger ?? []} settled t={t} />
           {listReady && (
           <div className="mt-2 min-w-0">
-            <div className="addr-sheet">
-              <StuckPin onStuck={setStuck} />
-              <div className={packEnter.enterClass("pack")}>
-              <div
-                className={clsx(
-                  "addr-pan kpi-tape transition-opacity duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
-                  pending && "opacity-60"
-                )}
-              >
-                <div className={clsx("addr-head addr-lane addr-lane-x block-tx-pairs rent-tape text-[12px] font-medium", stuck && "is-stuck")}>
-                  <div className="block-lane-pair rent-addr-pair">
-                    <div className="min-w-0">{t("rent.colAddress")}</div>
-                  </div>
-                  <div className="block-lane-pair">
-                    <div className="min-w-0">{t("rent.colSeized")}</div>
-                    <div className="min-w-0 justify-end">{t("rent.colValue")}</div>
-                  </div>
-                  <div className="block-lane-pair">
-                    <div className="min-w-0">{t("rent.colStatus")}</div>
-                    <div className="min-w-0 justify-end">{t("rent.colRent")}</div>
-                  </div>
-                  <div className="block-lane-pair rent-when-pair">
-                    <div className="min-w-0">{t("rent.colCreated")}</div>
-                    <div className="min-w-0 justify-end">{t("blocks.height")}</div>
-                  </div>
-                </div>
-                {items.map((row) => (
-                  <RentRow
-                    key={row.boxId}
-                    row={row}
-                    locale={locale}
-                    t={t}
-                    enterClass={enter.enterClass(row.boxId)}
-                  />
-                ))}
-                {!items.length && tape != null && !pending && (
-                  <p className="px-3 py-4 text-[13px] text-[var(--muted)]">
-                    {t("rent.emptyTape")}
-                  </p>
-                )}
-                <div ref={upcomingPager.endRef} className="h-px w-full" aria-hidden />
-              </div>
-              </div>
+            <div className="feed-sheet">
+              <Feed className="is-rank" busy={pending} enterClass={packEnter.enterClass("pack")}>
+                {items.length ? (
+                  <FeedBoard
+                    plate={
+                      <FeedPlate
+                        tag={t("nav.rentUpcoming")}
+                        now
+                        count={<FeedCount k="feed.boxes" n={data.pagination.total ?? items.length} />}
+                      />
+                    }
+                  >
+                    {items.map((row, i) => (
+                      <FeedRentRow
+                        key={row.boxId}
+                        row={row}
+                        rank={offset + i + 1}
+                        enterClass={enter.enterClass(row.boxId)}
+                      />
+                    ))}
+                  </FeedBoard>
+                ) : tape != null && !pending ? (
+                  <FeedEmpty k="rent" title={t("rent.emptyTape")} plate={<FeedPlate tag={t("nav.rentUpcoming")} />} />
+                ) : null}
+              </Feed>
+              <div ref={upcomingPager.endRef} className="h-px w-full" aria-hidden />
               {upcomingPager.open && (items.length > 0 || offset > 0) && (
                 <RankWindow
                   offset={offset}
@@ -623,102 +533,6 @@ export function RentView({
         </>
       )}
     </Shell>
-  );
-}
-
-/** Same clip as the address tape: 10…10 on a wide row, 4…4 when the rail is open. */
-function claimWho(row: { collector?: string | null; owner?: string | null }): {
-  id: string | null;
-  renewed: boolean;
-} {
-  const collector = row.collector?.trim() || "";
-  const owner = row.owner?.trim() || "";
-  if (collector) return { id: collector, renewed: false };
-  if (owner) return { id: owner, renewed: true };
-  return { id: null, renewed: false };
-}
-
-function ClaimWho({
-  row,
-  t,
-}: {
-  row: { collector?: string | null; owner?: string | null };
-  t: (k: string) => string;
-}) {
-  const who = claimWho(row);
-  if (!who.id) {
-    return <span className="text-[var(--muted)]">{t("rent.poolsUncovered")}</span>;
-  }
-  return (
-    <Link
-      prefetch={false}
-      href={`/address/${encodeURIComponent(who.id)}`}
-      title={who.id}
-      className="whitespace-nowrap font-mono text-accent hover:underline"
-    >
-      <TapeAddr id={who.id} />
-    </Link>
-  );
-}
-
-function ClaimStatus({
-  row,
-  t,
-}: {
-  row: { collector?: string | null; owner?: string | null };
-  t: (k: string) => string;
-}) {
-  const renewed = claimWho(row).renewed;
-  return (
-    <span className={clsx("leading-tight", renewed ? "text-[var(--c-token-text)]" : "text-[var(--up)]")}>
-      {renewed ? t("rent.status.renewed") : t("rent.status.collected")}
-    </span>
-  );
-}
-
-function TapeAddr({ id }: { id: string }) {
-  return (
-    <>
-      <span className="lg:hidden">{shortId(id, 4)}</span>
-      <span className="hidden lg:inline">{shortId(id, 10)}</span>
-    </>
-  );
-}
-
-function ClaimTickers({
-  tokens,
-  t,
-}: {
-  tokens?: { tokenId: string; name: string | null }[];
-  t: (k: string) => string;
-}) {
-  const list = (tokens ?? []).filter((tok) => tokenAtRisk(tok.tokenId));
-  if (!list.length) return <span className="text-[var(--muted)]">—</span>;
-  const shown = list.slice(0, 3);
-  const more = list.length - shown.length;
-  return (
-    <div className="flex max-w-full flex-wrap justify-end gap-x-1.5 gap-y-0.5 text-right">
-      {shown.map((tok) => {
-        const meta = resolveTokenMeta(tok.tokenId, null, tok.name);
-        return (
-          <Link
-            prefetch={false}
-            key={tok.tokenId}
-            href={`/token/${encodeURIComponent(tok.tokenId)}`}
-            title={meta.name}
-            className="max-w-[6.5rem] truncate text-[12px] font-medium hover:underline"
-            style={{ color: tokenTickerInk(tok.tokenId) }}
-          >
-            {meta.symbol}
-          </Link>
-        );
-      })}
-      {more > 0 ? (
-        <span className="text-[12px] text-[var(--muted)]">
-          {t("rent.moreTokens").replace("{n}", String(more))}
-        </span>
-      ) : null}
-    </div>
   );
 }
 
@@ -957,128 +771,48 @@ function HistoryKpis({
   );
 }
 
-function formatDangerUsd(n: number, locale: string): string {
-  if (!Number.isFinite(n) || n <= 0) return "—";
-  if (n >= 1000) return `$${Math.round(n).toLocaleString(loc(locale))}`;
-  if (n >= 1) return `$${n.toFixed(2)}`;
-  return `$${n.toFixed(4)}`;
-}
+const DANGER_SHOWN = 5;
 
-function RentErg({ nano }: { nano: string }) {
-  const d = describeRentErg(nano);
-  if (!d.tiny) return <span className="tabular-nums">{d.text}</span>;
-  return (
-    <span className="tabular-nums">
-      {d.sign}0.0
-      <span className="text-[0.85em]">({d.tiny.zeros})</span>
-      {d.tiny.digits} ERG
-    </span>
-  );
-}
-
+/** Tokens a short box loses to the collector: a feed section, five rows until opened. */
 function RentDanger({
   rows,
   settled,
-  locale,
   t,
 }: {
   rows: RentDangerRow[];
   settled: boolean;
-  locale: string;
   t: (k: string) => string;
 }) {
+  const [all, setAll] = useState(false);
+  const shown = all ? rows : rows.slice(0, DANGER_SHOWN);
+  const plate = (
+    <FeedPlate
+      tag={t("rent.danger.title")}
+      count={rows.length ? <FeedCount k="feed.tokens" n={rows.length} /> : undefined}
+      end={
+        rows.length > DANGER_SHOWN ? (
+          <button type="button" className="feed-sort-chip" aria-expanded={all} onClick={() => setAll((v) => !v)}>
+            {all ? t("feed.showLess") : t("feed.showAll")}
+          </button>
+        ) : undefined
+      }
+    />
+  );
   return (
-    <section
-      id="danger"
-      className="home-tile-enter mod mt-2 min-w-0 max-w-full scroll-mt-24 overflow-hidden rounded-[20px] border border-[var(--border)] bg-[var(--module)] px-4 py-3.5 sm:px-5"
-      style={{ "--enter": 5 } as CSSProperties}
-    >
-      <div className="flex items-start gap-3">
-        <span className="mt-0.5 inline-flex size-9 shrink-0 items-center justify-center text-[var(--down)]" aria-hidden>
-          <svg viewBox="0 0 24 24" className="size-7" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
-            <path d="M12 8v4" />
-            <path d="M12 16h.01" />
-          </svg>
-        </span>
-        <div className="min-w-0 flex-1">
-          <h2 className="text-[15px] font-semibold tracking-[-0.02em]">{t("rent.danger.title")}</h2>
-          <p className="mt-1 text-[12px] leading-relaxed text-[var(--muted)]">
-            {t("rent.danger.body")}
-          </p>
-        </div>
-      </div>
-      {rows.length ? (
-        <ul
-          className={clsx(
-            "mt-3 divide-y divide-[var(--border-soft)]",
-            rows.length > 5 && "max-h-[16.25rem] overflow-y-auto overscroll-contain"
-          )}
-        >
-          {rows.map((row) => {
-            const meta = resolveTokenMeta(row.tokenId, null, row.name);
-            const usd = formatDangerUsd(dangerHoldingUsd(row), locale);
-            const short = t("rent.danger.short").replace(
-              "{n}",
-              formatErgFixed(row.shortfallNano, locale, false)
-            );
-            const qty = formatTokenAmount(row.amount, row.decimals ?? 0, locale);
-            const when =
-              row.blocksUntilRent <= 0
-                ? t("rent.status.waiting")
-                : countText(
-                    t,
-                    locale,
-                    "rent.status.inBlocks",
-                    row.blocksUntilRent,
-                    row.blocksUntilRent.toLocaleString(loc(locale))
-                  );
-            return (
-              <li
-                key={`${row.boxId}:${row.tokenId}`}
-                className="grid h-[3.25rem] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3"
-              >
-                <div className="flex min-w-0 items-center gap-2.5">
-                  <Link prefetch={false} href={`/token/${row.tokenId}`} className="shrink-0" aria-label={meta.symbol}>
-                    <TokenLogo tokenId={row.tokenId} size={28} />
-                  </Link>
-                  <span className="min-w-0">
-                    <Link
-                      prefetch={false}
-                      href={`/token/${row.tokenId}`}
-                      className="block truncate text-[14px] font-semibold tracking-[-0.02em] hover:underline"
-                      style={{ color: tokenTickerInk(row.tokenId) }}
-                    >
-                      {meta.symbol}
-                    </Link>
-                    <span className="mt-0.5 block truncate text-[12px] text-[var(--muted)]">
-                      {meta.name}
-                      {" · "}
-                      <Link prefetch={false} href={`/box/${row.boxId}`} className="text-accent hover:underline">
-                        {when}
-                      </Link>
-                    </span>
-                  </span>
-                </div>
-                <div className="min-w-[5.5rem] text-center text-[13px] font-medium tabular-nums text-[var(--ink)]">
-                  {qty}
-                </div>
-                <div className="min-w-0 text-right">
-                  <div className="text-[14px] font-semibold tabular-nums text-[var(--down)]">
-                    {t("rent.danger.usd").replace("{n}", usd)}
-                  </div>
-                  <div className="mt-0.5 text-[12px] tabular-nums text-[var(--muted)]">{short}</div>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      ) : (
-        settled ? (
-          <p className="mt-3 text-[13px] text-[var(--muted)]">{t("rent.danger.empty")}</p>
-        ) : null
-      )}
-    </section>
+    <div id="danger" className="feed-sheet mt-2 scroll-mt-24">
+      <Feed className="is-rank">
+        {rows.length ? (
+          <FeedSection plate={plate}>
+            {shown.map((row, i) => (
+              <FeedRentDangerRow key={`${row.boxId}:${row.tokenId}`} row={row} rank={i + 1} />
+            ))}
+          </FeedSection>
+        ) : settled ? (
+          <FeedEmpty k="rent" title={t("rent.danger.empty")} plate={plate} />
+        ) : null}
+      </Feed>
+      <p className="feed-note">{t("rent.danger.body")}</p>
+    </div>
   );
 }
 
@@ -1124,157 +858,5 @@ function RentWindowCard({
         {windowCaption(w, covered, minHeight, t, locale)}
       </p>
     </AddrFactCard>
-  );
-}
-
-function boxCannotPay(row: RentBoxRow): boolean {
-  try {
-    return BigInt(row.valueNano || "0") < BigInt(row.rentNano || "0");
-  } catch {
-    return false;
-  }
-}
-
-function SeizedTokens({
-  row,
-  t,
-}: {
-  row: RentBoxRow;
-  t: (k: string) => string;
-}) {
-  if (!boxCannotPay(row)) {
-    return <span className="text-[var(--muted)]">—</span>;
-  }
-  const list = (row.tokens ?? []).filter((tok) => tokenAtRisk(tok.tokenId, tok.priceUsd));
-  if (!list.length) {
-    return <span className="text-[var(--muted)]">—</span>;
-  }
-  const shown = list.slice(0, 3);
-  const more = list.length - shown.length;
-  return (
-    <div className="flex max-w-full flex-wrap gap-x-1.5 gap-y-0.5">
-      {shown.map((tok) => {
-        const meta = resolveTokenMeta(tok.tokenId, null, tok.name);
-        return (
-          <Link
-            prefetch={false}
-            key={tok.tokenId}
-            href={`/token/${encodeURIComponent(tok.tokenId)}`}
-            title={meta.name}
-            className="max-w-[6.5rem] truncate text-[12px] font-medium hover:underline"
-            style={{ color: tokenTickerInk(tok.tokenId) }}
-          >
-            {meta.symbol}
-          </Link>
-        );
-      })}
-      {more > 0 ? (
-        <span className="text-[12px] text-[var(--muted)]">
-          {t("rent.moreTokens").replace("{n}", String(more))}
-        </span>
-      ) : null}
-    </div>
-  );
-}
-
-function RentRow({
-  row,
-  locale,
-  t,
-  enterClass,
-}: {
-  row: RentBoxRow;
-  locale: string;
-  t: (k: string) => string;
-  enterClass?: string;
-}) {
-  const href = row.address
-    ? `/address/${encodeURIComponent(row.address)}`
-    : `/box/${row.boxId}`;
-  const name = row.address ? lookupAddress(row.address)?.name?.trim() || null : null;
-  const inBlocks = countText(
-    t,
-    locale,
-    "rent.status.inBlocks",
-    row.blocksUntilRent,
-    row.blocksUntilRent.toLocaleString(loc(locale))
-  );
-  const tone = rentRowTone(row);
-  return (
-    <div
-      className={clsx(
-        "addr-lane addr-lane-x block-tx-pairs rent-tape border-t border-[var(--border-soft)] py-2.5 text-[13px]",
-        enterClass
-      )}
-    >
-      <div className="block-lane-pair rent-addr-pair">
-        <div className="min-w-0 overflow-hidden px-3">
-          <Link
-            prefetch={false}
-            href={href}
-            title={row.address || row.boxId}
-            className="block min-w-0 overflow-hidden text-accent hover:underline"
-          >
-            {name ? (
-              <NameMarquee text={name} className="min-w-0 w-full" />
-            ) : (
-              <span className="whitespace-nowrap font-mono">
-                {row.address ? <TapeAddr id={row.address} /> : shortId(row.boxId, 8)}
-              </span>
-            )}
-          </Link>
-          {name && row.address ? (
-            <p className="mt-0.5 truncate font-mono text-[11px] leading-none text-[var(--muted)]">
-              <TapeAddr id={row.address} />
-            </p>
-          ) : null}
-        </div>
-      </div>
-      <div className="block-lane-pair">
-        <div className="flex min-w-0 items-center px-3">
-          <SeizedTokens row={row} t={t} />
-        </div>
-        <div className="min-w-0 px-3 text-right text-[var(--up)]">
-          <RentErg nano={row.valueNano} />
-        </div>
-      </div>
-      <div className="block-lane-pair">
-        <div className="flex min-w-0 items-center px-3">
-          <span
-            className={clsx(
-              "leading-tight",
-              tone === "due" && "text-[var(--c-tx-text)]",
-              tone === "soon" && "text-[var(--c-block-text)]",
-              tone === "later" && "text-[var(--c-box-text)]"
-            )}
-            title={row.rentDue ? undefined : inBlocks}
-          >
-            {row.rentDue ? t("rent.status.waiting") : inBlocks}
-          </span>
-        </div>
-        <div className="min-w-0 px-3 text-right">
-          <RentErg nano={collectableRentNano(row.rentNano, row.valueNano)} />
-        </div>
-      </div>
-      <div className="block-lane-pair rent-when-pair">
-        <div className="min-w-0 px-3">
-          <p className={clsx("whitespace-nowrap tabular-nums", relAgeToneClass(relAgeTone(row.creationTs)))}>
-            {formatRelTime(row.creationTs, locale)}
-          </p>
-          <p className="mt-0.5 whitespace-nowrap text-[12px] tabular-nums text-[var(--muted-2)]">
-            {formatActivityStamp(row.creationTs)}
-          </p>
-        </div>
-        <div className="flex min-w-0 items-center justify-end px-3">
-          <Link
-            prefetch={false}
-            href={`/block/${row.creationHeight}`}
-            className="whitespace-nowrap tabular-nums text-accent hover:underline"
-          >
-            {row.creationHeight.toLocaleString(loc(locale))}
-          </Link>
-        </div>
-      </div>
-    </div>
   );
 }

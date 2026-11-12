@@ -938,7 +938,7 @@ function HomeActivityTile({
         <div className="relative mb-1 flex h-[22px] shrink-0 items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
             <h2 className="m-0 text-[13px] leading-none" style={{ color: HOME.forming }}>{title}</h2>
-            <Link prefetch={false} href={href} className="text-[13px] leading-none text-[var(--muted)] hover:text-[var(--text)]">
+            <Link prefetch={false} href={href} className="tap-44 text-[13px] leading-none text-[var(--muted)] hover:text-[var(--text)]">
               {viewAll}
             </Link>
           </div>
@@ -1688,7 +1688,7 @@ function HomeMempoolTile({
             <FormingAge ts={formingSince} />
           </span>
         </div>
-        <Link prefetch={false} href="/mempool" className="text-[13px] leading-none text-[var(--muted)] hover:text-[var(--text)]">
+        <Link prefetch={false} href="/mempool" className="tap-44 text-[13px] leading-none text-[var(--muted)] hover:text-[var(--text)]">
           {all}
         </Link>
       </div>
@@ -1804,7 +1804,7 @@ function BlockCadence({
             </>
           ) : null}
         </div>
-        <Link prefetch={false} href="/blocks" className="shrink-0 text-[13px] leading-none text-[var(--muted)] hover:text-[var(--text)]">
+        <Link prefetch={false} href="/blocks" className="tap-44 shrink-0 text-[13px] leading-none text-[var(--muted)] hover:text-[var(--text)]">
           {all}
         </Link>
       </div>

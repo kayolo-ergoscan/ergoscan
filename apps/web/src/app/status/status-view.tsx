@@ -11,9 +11,19 @@ import { INK } from "@/lib/palette";
 import {
   fetchTrustBoard,
   type TrustBoard,
+  type TrustFeedChip,
   type TrustMetric,
   type TrustSlice,
 } from "@/lib/trust-board";
+import {
+  Feed,
+  FeedAmount,
+  FeedCount,
+  FeedPhrase,
+  FeedPlate,
+  FeedRow,
+  FeedSection,
+} from "@/components/feed/Feed";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { formatStamp } from "@/lib/format";
 import type { ApiUse } from "@/lib/api-use";
@@ -217,18 +227,21 @@ function ApiUseCard({
         <p className="mt-3 text-[13px] text-[var(--muted)]">{t("status.api.empty")}</p>
       )}
       {hour?.paths.length ? (
-        <div className="mt-3 border-t border-[var(--border-soft)] pt-2.5">
-          <p className="text-[11px] text-[var(--muted-2)]">{t("status.api.paths")}</p>
-          <ul className="mt-1.5 flex flex-col gap-1">
-            {hour.paths.map((row) => (
-              <li key={row.path} className="flex min-w-0 items-baseline justify-between gap-3 text-[12px]">
-                <span className="truncate font-mono text-[var(--text)]">{row.path}</span>
-                <span className="shrink-0 font-mono tabular-nums text-[var(--muted)]">
-                  {row.hits.toLocaleString(loc)}
-                </span>
-              </li>
-            ))}
-          </ul>
+        <div className="relative -mx-4 mt-3 min-w-0">
+          <Feed className="is-rank">
+            <FeedSection
+              plate={
+                <FeedPlate
+                  tag={t("status.api.paths")}
+                  count={<FeedCount k="feed.requests" n={hour.requests} />}
+                />
+              }
+            >
+              {hour.paths.map((row, i) => (
+                <ApiPathRow key={row.path} row={row} rank={i + 1} total={hour.requests} />
+              ))}
+            </FeedSection>
+          </Feed>
         </div>
       ) : null}
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border-soft)] pt-2.5 text-[11px] text-[var(--muted-2)]">
@@ -286,37 +299,14 @@ function ServiceCard({
       </div>
 
       {slice.feeds?.length ? (
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          {slice.feeds.map((feed) => {
-            const live = feed.live != null && Number.isFinite(feed.live);
-            const ok = live && feed.live! > 0 && feed.hasPool;
-            return (
-              <Link
-                prefetch={false}
-                key={feed.slug}
-                href={`/oracles/${feed.slug}`}
-                className="flex min-w-0 items-center justify-between gap-3 rounded-[14px] bg-[var(--wash)] px-3 py-2.5 transition-colors duration-[400ms] ease-[var(--ease)] hover:bg-[var(--wash-mid)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
-              >
-                <span className="flex min-w-0 items-center gap-2">
-                  <span
-                    className={clsx(
-                      "size-1.5 shrink-0 rounded-full",
-                      ok ? "bg-[var(--up)]" : "bg-[var(--warning)]"
-                    )}
-                    aria-hidden
-                  />
-                  <span className="truncate text-[13px] font-medium text-[var(--text)]">
-                    {t(`status.feed.${feed.slug}`)}
-                  </span>
-                </span>
-                <span className="shrink-0 font-mono text-[12px] text-[var(--muted)]">
-                  {live
-                    ? t("status.feed.live").replace("{n}", String(feed.live))
-                    : "—"}
-                </span>
-              </Link>
-            );
-          })}
+        <div className="relative -mx-4 mt-3 min-w-0">
+          <Feed className="is-rank">
+            <FeedSection label={t(`status.service.${slice.id}`)}>
+              {slice.feeds.map((feed, i) => (
+                <OracleFeedRow key={feed.slug} feed={feed} rank={i + 1} locale={locale} />
+              ))}
+            </FeedSection>
+          </Feed>
         </div>
       ) : null}
 
@@ -371,6 +361,79 @@ function ServiceCard({
         </a>
       </div>
     </article>
+  );
+}
+
+/** One oracle pool: posting when its pool box is on chain and operators are live. */
+function OracleFeedRow({ feed, rank, locale }: { feed: TrustFeedChip; rank: number; locale: string }) {
+  const t = useT();
+  const loc = localeId(locale);
+  const live = feed.live != null && Number.isFinite(feed.live) ? feed.live : null;
+  const ok = live != null && live > 0 && feed.hasPool;
+  const state = ok ? t("feed.oracle.ok") : feed.hasPool ? t("feed.oracle.silent") : t("feed.oracle.noPool");
+  const href = `/oracles/${feed.slug}`;
+  return (
+    <FeedRow
+      k={ok ? "oracle" : "quiet"}
+      glyph="oracle"
+      hollow={!ok}
+      tileTitle={state}
+      lead={{ rank: rank.toLocaleString(loc) }}
+      title={
+        <Link prefetch={false} href={href} className="feed-name font-semibold hover:underline">
+          {t(`status.feed.${feed.slug}`)}
+        </Link>
+      }
+      facts={
+        <>
+          <span className="feed-kind">{state}</span>
+          <span className="feed-mid font-mono">{href}</span>
+        </>
+      }
+      value={
+        <span className="feed-amt tabular-nums">
+          {live != null ? <FeedPhrase text={t("status.feed.live")} value={live.toLocaleString(loc)} slot="{n}" /> : "—"}
+        </span>
+      }
+    />
+  );
+}
+
+/** One public API path of the last hour: its hits are the figure, its share of all requests a fact. */
+function ApiPathRow({ row, rank, total }: { row: { path: string; hits: number }; rank: number; total: number }) {
+  const t = useT();
+  const { locale } = useI18n();
+  const loc = localeId(locale);
+  const graphql = row.path.toLowerCase().includes("graphql");
+  const share = total > 0 ? Math.round((row.hits / total) * 100) : null;
+  /* A plain path opens on the public API host; a templated one has nothing to open. */
+  const href = /^\/[A-Za-z0-9/_.-]*$/.test(row.path) ? `https://api.ergoscan.me${row.path}` : null;
+  return (
+    <FeedRow
+      k={graphql ? "contract" : "box"}
+      glyph="protocol"
+      lead={{ rank: rank.toLocaleString(loc) }}
+      title={
+        href ? (
+          <a href={href} target="_blank" rel="noreferrer" title={row.path} className="feed-name font-mono hover:underline">
+            {row.path}
+          </a>
+        ) : (
+          <span className="feed-name font-mono" title={row.path}>
+            {row.path}
+          </span>
+        )
+      }
+      facts={
+        <>
+          <span className="feed-kind">{graphql ? "GraphQL" : "REST"}</span>
+          {share != null ? (
+            <span className="tabular-nums">{t("feed.api.share").replace("{pct}", `${share}%`)}</span>
+          ) : null}
+        </>
+      }
+      value={<FeedAmount raw={BigInt(row.hits)} decimals={0} unit={null} />}
+    />
   );
 }
 

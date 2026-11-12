@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import clsx from "clsx";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { NftCard, NftThumb } from "@/components/NftCard";
 import { RankWindow } from "@/components/RankWindow";
+import { Feed, FeedCount, FeedEmpty, FeedPlate } from "@/components/feed/Feed";
 import { Shell } from "@/components/Shell";
 import { getGateway } from "@/lib/config";
 import { shortId } from "@/lib/format";
@@ -172,38 +172,41 @@ export function NftBrowseView({
         </div>
       </div>
 
-      <div className="addr-sheet">
-        {!ready && !items.length ? (
-          <p className="mb-3 text-[var(--muted)]">{t("nfts.readyPreview")}</p>
-        ) : null}
-        {ready && !items.length ? (
-          <p className="mb-3 text-[var(--muted)]">
-            {kind === "series" ? t("nfts.empty.series") : t("nfts.empty.issuers")}
-          </p>
-        ) : null}
-        <div
-          className={clsx(
-            "transition-opacity duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
-            pending && items.length > 0 && "opacity-60"
-          )}
-        >
-          <div className="addr-nft-grid">
-            {items.map((row) => (
-              <NftCard
-                key={row.tokenId}
-                item={{
-                  tokenId: row.tokenId,
-                  name: row.name,
-                  collection: row.collection,
-                  artworkUrl: row.artworkUrl,
-                  kind: row.kind,
-                  kindLabel: row.kind ? t(`nfts.kind.${row.kind}`) : null,
-                }}
-                enterClass={enter.enterClass(row.tokenId)}
+      <div className="feed-sheet">
+        <Feed busy={pending && items.length > 0}>
+          {!items.length ? (
+            <FeedEmpty
+              k="nft"
+              plate={<FeedPlate tag={name} />}
+              title={
+                !ready ? t("nfts.readyPreview") : kind === "series" ? t("nfts.empty.series") : t("nfts.empty.issuers")
+              }
+            />
+          ) : (
+            <section className="feed-day feed-gallery">
+              <FeedPlate
+                tag={kind === "series" ? t("nfts.tab.series") : t("nfts.issuer.eyebrow")}
+                count={<FeedCount k="feed.nfts" n={total > 0 ? total : items.length} />}
               />
-            ))}
-          </div>
-        </div>
+              <div className="addr-nft-grid">
+                {items.map((row) => (
+                  <NftCard
+                    key={row.tokenId}
+                    item={{
+                      tokenId: row.tokenId,
+                      name: row.name,
+                      collection: row.collection,
+                      artworkUrl: row.artworkUrl,
+                      kind: row.kind,
+                      kindLabel: row.kind ? t(`nfts.kind.${row.kind}`) : null,
+                    }}
+                    enterClass={enter.enterClass(row.tokenId)}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+        </Feed>
         {ready ? (
           <RankWindow
             offset={offset}

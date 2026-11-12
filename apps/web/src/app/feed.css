@@ -10,7 +10,6 @@
   --k: var(--k-quiet);
   --k-fg: var(--k-quiet-ink);
   --feed-lead: 4.75rem;
-  --feed-pin: calc(var(--toolbar) + env(safe-area-inset-top, 0px) + 8px);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -122,6 +121,186 @@
 }
 .feed-plate-end .feed-amt {
   font-size: 13px;
+}
+
+/*
+ * The seam «Причал». The pin is the header's foot on a desktop and the pill's
+ * foot on a phone; StuckPin.tsx reads the same registered length. A plate that
+ * reaches it docks: the header's lower corners go square, the plate widens to
+ * the header's width under one hairline, and a 2px line in the section colour
+ * fills as the reader goes through that day. A plate in a narrower column
+ * ("free") only carries the line.
+ */
+@property --feed-pin {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 72px;
+}
+html {
+  --feed-pin: calc(var(--toolbar) + 1px);
+}
+@media (min-width: 1024px) {
+  html[data-float="ada"] {
+    --feed-pin: calc(var(--float-pad) + var(--toolbar) + 1px);
+  }
+  /* A collar of page colour above and beside the header: no row shows over it or in the gap. */
+  html[data-float="ada"] .stage-col > header.sticky {
+    box-shadow: 0 calc(-1 * var(--float-pad)) 0 var(--float-pad) var(--bg) !important;
+    transition: border-radius 160ms var(--ease) 120ms;
+  }
+  html[data-float="ada"]:has(.feed-plate[data-stuck="dock"]) .stage-col > header.sticky {
+    border-bottom-left-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+    transition-delay: 0s;
+  }
+}
+@media (max-width: 1023px) {
+  html {
+    --feed-pin: calc(var(--toolbar) - 0.4rem);
+  }
+  /* A solid band down to the pill's foot; over it the pill is a flat tile. */
+  .stage-col > header.sticky::before {
+    bottom: 0.4rem;
+    background: var(--bg);
+  }
+  .phone-toolbar {
+    border-color: transparent;
+    background: var(--module);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    transition: border-radius 160ms var(--ease) 120ms;
+  }
+  html:has(.feed-plate[data-stuck="dock"]) .phone-toolbar {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    transition-delay: 0s;
+  }
+  /* Pixel steps aside while a plate is pinned under the pill: nothing covers the plate,
+     and his hit spot cannot take a tap meant for it. He comes back when the plate leaves. */
+  .header-scout {
+    transition: opacity 160ms var(--ease) 120ms;
+  }
+  html:has(.feed-plate[data-stuck]) .header-scout {
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 120ms var(--ease), visibility 0s linear 120ms;
+  }
+}
+@media (max-width: 1023px) and (prefers-reduced-motion: reduce) {
+  .header-scout,
+  html:has(.feed-plate[data-stuck]) .header-scout {
+    transition: none;
+  }
+}
+.feed-plate[data-stuck] {
+  background-image: linear-gradient(
+    var(--seam-ink, var(--mark, var(--muted))),
+    var(--seam-ink, var(--mark, var(--muted)))
+  );
+  background-position: 0 100%;
+  background-repeat: no-repeat;
+  background-size: calc(var(--seam-p, 0) * 100%) 2px;
+}
+.feed-plate[data-stuck="dock"] {
+  margin-inline: calc(-1 * var(--dock-l, 0px)) calc(-1 * var(--dock-r, 0px));
+  padding-left: calc(14px + var(--dock-l, 0px));
+  padding-right: calc(10px + var(--dock-r, 0px));
+  border-radius: 0 0 8px 8px;
+  box-shadow: inset 0 1px 0 var(--border);
+}
+@media (max-width: 639px) {
+  .feed-plate[data-stuck="dock"] {
+    padding-left: calc(12px + var(--dock-l, 0px));
+    padding-right: calc(12px + var(--dock-r, 0px));
+  }
+}
+/* The address page has no section in the nav: its line takes the address colour. */
+.addr-page .feed-plate {
+  --seam-ink: var(--c-addr, var(--mark));
+}
+
+/*
+ * Taps. On a phone a row tap opens the item and the caret opens the detail;
+ * the detail ends with a wide button to the item. On a touch screen every
+ * small control answers a 44px square; the art stays its own size.
+ */
+.feed-row.has-href,
+.feed-row:has(.feed-title a[href]) {
+  cursor: pointer;
+}
+.feed-open {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 14px;
+  padding: 0 14px;
+  border-radius: 6px;
+  background: var(--chip-bg);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  transition: background-color 160ms var(--ease);
+}
+.feed-open:hover {
+  background: var(--chip-hover);
+}
+/* Buy / Sell beside a trader: a small tag in the side's colour. */
+.feed-side {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--k) 18%, transparent);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--k);
+}
+@media (max-width: 639px) {
+  .feed-row.can-open {
+    grid-template-columns: 28px minmax(0, 1fr) auto 20px;
+  }
+  .feed-row.can-open > button.feed-caret {
+    display: inline-flex;
+    width: 20px;
+  }
+}
+@media (pointer: coarse) {
+  .tap-44,
+  .feed-copy,
+  a.feed-chip,
+  button.feed-chip,
+  .feed-sort-chip,
+  button.feed-caret {
+    position: relative;
+  }
+  .tap-44::after,
+  .feed-copy::after,
+  a.feed-chip::after,
+  button.feed-chip::after,
+  .feed-sort-chip::after,
+  button.feed-caret::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    transform: translate(-50%, -50%);
+  }
+  /* The chip rail scrolls, so it would clip the squares: it grows to 44px and gives the room back. */
+  .feed-sort {
+    margin-block: -9px;
+    padding-block: 9px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-float="ada"] .stage-col > header.sticky,
+  .phone-toolbar {
+    transition: none !important;
+  }
 }
 
 /* ── row ── */
@@ -712,7 +891,6 @@ button.feed-caret:hover {
 
 @media (max-width: 1023px) {
   .feed {
-    --feed-pin: calc(var(--toolbar) + 8px);
     --feed-lead: 4.25rem;
   }
   .feed.is-rank {
@@ -871,6 +1049,23 @@ button.feed-caret:hover {
   }
 }
 
+/* A board in a narrow side column (DEX top traders): short lead, tight gaps, the figure only as wide as it is. */
+@media (min-width: 1280px) {
+  .feed.is-side {
+    --feed-lead: 1.75rem;
+  }
+  .feed.is-side .feed-row {
+    column-gap: 8px;
+    padding-left: 10px;
+  }
+  .feed.is-side .feed-value {
+    min-width: 0;
+  }
+  .feed.is-side .feed-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* ── small parts batch 2 added ── */
 
 /* A source line under a board. */
@@ -880,6 +1075,40 @@ button.feed-caret:hover {
   line-height: 1.4;
   color: var(--muted-2);
 }
+/* Art still on its way: the square breathes like a skeleton row. */
+.addr-nft-thumb:has(> img[src]:not([data-ready]):not([src^="data:"])) {
+  background: var(--skel);
+  animation: feed-breathe 1.6s var(--ease) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .addr-nft-thumb:has(> img[src]:not([data-ready])) {
+    animation: none;
+  }
+}
+/* A gallery under a plate: the NFT grid keeps its cards, the card holds them. */
+.feed-gallery > .addr-nft-grid {
+  padding: 12px;
+}
+@media (max-width: 639px) {
+  .feed-gallery > .addr-nft-grid {
+    gap: 8px;
+    padding: 8px;
+  }
+}
+
+/* Block header, extension and AD proof: key/value rows under plates. */
+.hdr-feed {
+  margin-top: 8px;
+}
+.hdr-doc .hdr-feed > .feed-day {
+  animation: hdr-drop 460ms var(--ease) 120ms both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hdr-doc .hdr-feed > .feed-day {
+    animation: none;
+  }
+}
+
 /* A fact that matters more than its neighbours (a name a project gave itself). */
 .feed-facts > .feed-accent {
   color: rgb(var(--accent-rgb));
@@ -889,6 +1118,28 @@ button.feed-caret:hover {
   display: flex;
   flex-wrap: wrap;
   gap: 4px 14px;
+}
+
+/* Oracle, buyback, Rosen, Lithos rows. */
+/* A live dot inside a kind word ("posting"). */
+.feed-pip {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  vertical-align: 0.08em;
+}
+/* A kind word for something idle (silent oracle, bridge event still processing). */
+.feed-facts > .feed-kind.is-off {
+  color: var(--muted);
+}
+.feed-facts > .feed-kind.is-alarm {
+  color: var(--down);
+}
+.feed-facts > .feed-gold {
+  color: var(--k-reward);
 }
 
 /* NFT card caption: the feed's name and facts line under the picture. */
@@ -933,6 +1184,59 @@ button.feed-caret:hover {
   color: var(--muted-2);
 }
 
+/* 360 px phones: a little less air between the columns, and the optional part of a sub line steps aside. */
+@media (max-width: 379px) {
+  .feed-row {
+    column-gap: 8px;
+    padding-inline: 10px;
+  }
+  .feed-sub-opt {
+    display: none;
+  }
+  .feed-side {
+    padding-inline: 4px;
+  }
+}
+/* A route title («Ergo → Cardano») on a narrow phone wraps at its arrow rather than being cut. */
+@media (max-width: 639px) {
+  .feed-row.is-route .feed-title > .feed-name {
+    white-space: normal;
+  }
+}
+/* On a phone a fact that is a phrase may take two lines; rent danger rows drop their rank.
+   Its dot moves into its own padding, so a wrapped second line starts under the first
+   line's text and not inside the clipped dot strip. */
+@media (max-width: 639px) {
+  .feed-facts > .feed-wrap {
+    position: relative;
+    padding-left: 15px;
+    white-space: normal;
+  }
+  .feed-facts > .feed-wrap::before {
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+  .feed-row.is-danger .feed-facts > .feed-when {
+    display: none;
+  }
+}
+
+/* ── rent collectors (batch 3, fork C) ── */
+
+/* The donut's colour in front of a collector's name: the row is its legend. */
+.feed-ink {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ink, var(--k));
+}
+/* Collectors under their donut: four rows show, the rest scroll inside the card. */
+.feed-pools {
+  max-height: 14.25rem;
+  overflow-y: auto;
+}
 /* /mempool live well: «← block N · K tx» at the mouth after a seal (TAG_MS in MempoolLiveWell). */
 .mempool-well-tag {
   background: var(--bg-elevated);

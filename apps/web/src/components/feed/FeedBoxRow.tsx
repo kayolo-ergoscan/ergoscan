@@ -108,6 +108,7 @@ export function FeedBoxRow({
       k={k}
       glyph={glyph}
       tileTitle={fee ? t("tx.minerFee") : t("detail.box")}
+      href={`/box/${boxId}`}
       lead={lead}
       enterClass={enterClass}
       title={title}

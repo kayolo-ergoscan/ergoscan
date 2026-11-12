@@ -10,6 +10,7 @@ import {
   formatH24,
   formatNumericDate,
   formatErgFixed,
+  formatScaledFixed,
   formatFactWhen,
   formatRelAge,
   formatRelTime,
@@ -164,4 +165,11 @@ test("laterEpochMs prefers tape over a stale summary lastTs", () => {
   assert.equal(laterEpochMs(snap, tip), tip);
   assert.equal(laterEpochMs(snap, null, tip), tip);
   assert.equal(laterEpochMs(null, undefined), null);
+});
+
+test("formatScaledFixed: two places for a balance column", () => {
+  assert.equal(formatScaledFixed(910_001_389_000_000n, 9, 2, "en"), "910\u00a0001.39");
+  assert.equal(formatScaledFixed(1_000_000_000n, 9, 2, "en"), "1.00");
+  assert.equal(formatScaledFixed(9_995_000_000n, 9, 2, "en"), "10.00");
+  assert.equal(formatScaledFixed(5n, 0, 2, "en"), "5.00");
 });

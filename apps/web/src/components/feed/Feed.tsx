@@ -25,13 +25,15 @@ import {
   type ReactNode,
 } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import { Tip, TipFigure, TipHead } from "@/components/Tip";
 import { TokenLogo } from "@/components/TokenBadge";
 import { useI18n } from "@/lib/i18n/I18nProvider";
-import { formatDottedDate, formatH24, formatScaledAmount, formatScaledGlance, shortId } from "@/lib/format";
+import { formatDottedDate, formatH24, formatScaledAmount, formatScaledFixed, formatScaledGlance, shortId } from "@/lib/format";
 import { tokenDecimals, tokenSymbol } from "@/lib/token-meta";
 import { FeedGlyph, type FeedGlyphId } from "./FeedGlyph";
+import { useStuckPlate } from "@/components/StuckPin";
 
 export type FeedKind =
   | "transfer"
@@ -154,8 +156,10 @@ export function FeedPlate({
   end?: ReactNode;
   className?: string;
 }) {
+  const ref = useRef<HTMLElement>(null);
+  useStuckPlate(ref);
   return (
-    <header className={clsx("feed-plate", now && "is-now", className)}>
+    <header ref={ref} className={clsx("feed-plate", now && "is-now", className)}>
       <span className="feed-plate-tag" suppressHydrationWarning>
         {tag}
       </span>
@@ -264,7 +268,8 @@ export function FeedSort<K extends string>({
 }: {
   options: { key: K; label: string }[];
   active: K;
-  dir: "asc" | "desc";
+  /** Without a direction the chips are a filter: no arrow on the pressed one. */
+  dir?: "asc" | "desc";
   onSort: (key: K) => void;
   label: string;
   disabled?: boolean;
@@ -309,7 +314,7 @@ export function FeedSort<K extends string>({
             onClick={() => onSort(o.key)}
           >
             {o.label}
-            {on ? (
+            {on && dir ? (
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden>
                 <path
                   d={dir === "desc" ? "M12 5v14M6 13l6 6 6-6" : "M12 19V5M6 11l6-6 6 6"}
@@ -357,6 +362,47 @@ export function FeedTile({
   );
 }
 
+/** Below this the shell is the phone one: a row tap opens the item, the caret opens the detail. */
+const PHONE_LAYOUT = "(max-width: 1023px)";
+
+/** The page a row stands for, when the row names none: its title's own link. */
+function titleLink(li: HTMLElement | null): HTMLAnchorElement | null {
+  return li?.querySelector<HTMLAnchorElement>(".feed-title a[href]") ?? null;
+}
+
+function openKey(href: string): string {
+  if (href.startsWith("/tx/")) return "feed.open.tx";
+  if (href.startsWith("/block/")) return "feed.open.block";
+  if (href.startsWith("/address/")) return "feed.open.address";
+  if (href.startsWith("/token/")) return "feed.open.token";
+  if (href.startsWith("/box/")) return "feed.open.box";
+  if (href.startsWith("/defi/pool/")) return "feed.open.pool";
+  return "feed.open";
+}
+
+/** The detail's last line: one wide button to the item's own page. */
+function FeedOpen({ href }: { href: string }) {
+  const { t } = useI18n();
+  const label = (
+    <>
+      {t(openKey(href))}
+      <span aria-hidden> →</span>
+    </>
+  );
+  if (!href.startsWith("/")) {
+    return (
+      <a className="feed-open" href={href} target="_blank" rel="noopener noreferrer">
+        {label}
+      </a>
+    );
+  }
+  return (
+    <Link prefetch={false} className="feed-open" href={href}>
+      {label}
+    </Link>
+  );
+}
+
 function isInteractive(e: MouseEvent): boolean {
   const el = e.target as HTMLElement;
   if (el.closest("a,button,input,select,label,[role='button']")) return true;
@@ -381,6 +427,7 @@ export function FeedRow({
   sub,
   subMinor = false,
   detail,
+  href,
   enterClass,
   onPointerEnter,
   className,
@@ -404,28 +451,46 @@ export function FeedRow({
   subMinor?: boolean;
   /** Built only when the row is opened. */
   detail?: () => ReactNode;
+  /** The item's own page, when it is not the title's link. */
+  href?: string;
   enterClass?: string;
   onPointerEnter?: () => void;
   className?: string;
   rowProps?: Record<string, string | undefined>;
 }) {
   const { t } = useI18n();
+  const router = useRouter();
+  const ref = useRef<HTMLLIElement>(null);
   const [open, setOpen] = useState(false);
+  const [goTo, setGoTo] = useState<string | null>(href ?? null);
   const canOpen = detail != null;
   const isRank = "rank" in lead;
   const leadText = isRank ? lead.rank : lead.text;
+  const toggle = () => {
+    if (!open) setGoTo(href ?? titleLink(ref.current)?.getAttribute("href") ?? null);
+    setOpen(!open);
+  };
+  const openItem = (): boolean => {
+    if (href) {
+      router.push(href);
+      return true;
+    }
+    const a = titleLink(ref.current);
+    if (!a) return false;
+    a.click();
+    return true;
+  };
   return (
     <li
-      className={clsx("feed-row", canOpen && "can-open", open && "is-open", enterClass, className)}
+      ref={ref}
+      className={clsx("feed-row", canOpen && "can-open", href && "has-href", open && "is-open", enterClass, className)}
       data-k={k}
-      onClick={
-        canOpen
-          ? (e) => {
-              if (isInteractive(e)) return;
-              setOpen((v) => !v);
-            }
-          : undefined
-      }
+      onClick={(e) => {
+        if (isInteractive(e)) return;
+        if (window.matchMedia(PHONE_LAYOUT).matches && openItem()) return;
+        if (canOpen) toggle();
+        else openItem();
+      }}
       onPointerEnter={onPointerEnter}
       {...rowProps}
     >
@@ -467,7 +532,7 @@ export function FeedRow({
           className="feed-caret"
           aria-expanded={open}
           aria-label={t("feed.details")}
-          onClick={() => setOpen((v) => !v)}
+          onClick={toggle}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
             <path d="m6 9 6 6 6-6" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
@@ -479,7 +544,10 @@ export function FeedRow({
       {open && detail ? (
         <>
           <span className="feed-trace" aria-hidden />
-          <div className="feed-detail">{detail()}</div>
+          <div className="feed-detail">
+            {detail()}
+            {goTo ? <FeedOpen href={goTo} /> : null}
+          </div>
         </>
       ) : null}
     </li>
@@ -537,6 +605,7 @@ export function FeedAmount({
   unit = "ERG",
   signed = false,
   glance = false,
+  cents = false,
   className,
 }: {
   raw: bigint | null | undefined;
@@ -544,6 +613,8 @@ export function FeedAmount({
   unit?: ReactNode;
   signed?: boolean;
   glance?: boolean;
+  /** A ranked balance column: every row whole and two decimals, so the column reads one way. */
+  cents?: boolean;
   className?: string;
 }) {
   const { locale } = useI18n();
@@ -551,7 +622,14 @@ export function FeedAmount({
   const abs = raw < 0n ? -raw : raw;
   const tag = feedLoc(locale);
   const exact = formatScaledAmount(abs, decimals, tag, decimals);
-  const text = glance ? formatScaledGlance(abs, decimals, tag).text : formatScaledAmount(abs, decimals, tag);
+  const hundredth = 10n ** BigInt(Math.max(0, decimals - 2));
+  const text = cents
+    ? abs > 0n && abs < hundredth
+      ? "<0.01"
+      : formatScaledFixed(abs, decimals, 2, tag)
+    : glance
+      ? formatScaledGlance(abs, decimals, tag).text
+      : formatScaledAmount(abs, decimals, tag);
   const sign = signed ? signOf(raw) : "";
   const tone = signed ? (raw > 0n ? "var(--up)" : raw < 0n ? "var(--down)" : undefined) : undefined;
   // The row shows a glance; the tip gives every digit. Nothing to add when they match.
