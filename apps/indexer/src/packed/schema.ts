@@ -141,6 +141,7 @@ CREATE TABLE IF NOT EXISTS packed.box_assets (
   token_id bytea NOT NULL,
   amount   numeric NOT NULL,
   PRIMARY KEY (box_id, token_id))${ts};
+ALTER TABLE packed.box_assets ADD COLUMN IF NOT EXISTS asset_index smallint;
 CREATE TABLE IF NOT EXISTS packed.address_tx (
   addr_id bigint NOT NULL,
   tx_id   bytea NOT NULL,

@@ -1412,7 +1412,8 @@ export async function unspentBoxesByTokenId(
     const assets =
       (await q<{ token_id: string; amount: string }>(
         `SELECT encode(token_id, 'hex') AS token_id, amount::text AS amount
-           FROM packed.box_assets WHERE box_id = decode(lower($1), 'hex')`,
+           FROM packed.box_assets WHERE box_id = decode(lower($1), 'hex')
+          ORDER BY asset_index NULLS LAST, token_id`,
         [r.box_id]
       )) ?? [];
     items.push({

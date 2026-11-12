@@ -924,7 +924,8 @@ async function indexTxBatched(
       outputIndex,
       registers: registersJson(o),
     });
-    for (const a of o.assets ?? []) {
+    // Position = place in the node's list (contracts read tokens(0), tokens(1) …).
+    for (const [assetIndex, a] of (o.assets ?? []).entries()) {
       if (!a.tokenId) continue;
       const amt = exactIntStr(a.amount);
       tokenRows.push(
@@ -937,7 +938,7 @@ async function indexTxBatched(
           issuance: minted.has(a.tokenId),
         })
       );
-      assetRows.push({ boxId, tokenId: a.tokenId, amount: amt });
+      assetRows.push({ boxId, tokenId: a.tokenId, amount: amt, index: assetIndex });
     }
     if (address && address.length <= MAX_ADDRESS_TX_LEN) {
       addrRows.push({ address, txId, height });
@@ -1089,7 +1090,8 @@ async function writeHeightRows(
         address,
         assets,
       });
-      for (const a of o.assets ?? []) {
+      // Position = place in the node's list (contracts read tokens(0), tokens(1) …).
+      for (const [assetIndex, a] of (o.assets ?? []).entries()) {
         if (!a.tokenId) continue;
         const amt = exactIntStr(a.amount);
         tokenRows.push(
@@ -1102,7 +1104,7 @@ async function writeHeightRows(
             issuance: minted.has(a.tokenId),
           })
         );
-        assetRows.push({ boxId, tokenId: a.tokenId, amount: amt });
+        assetRows.push({ boxId, tokenId: a.tokenId, amount: amt, index: assetIndex });
       }
       if (address && address.length <= MAX_ADDRESS_TX_LEN) {
         addrRows.push({ address, txId, height });

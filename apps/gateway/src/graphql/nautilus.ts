@@ -149,7 +149,7 @@ function registersOf(v: unknown): Record<string, unknown> {
   return {};
 }
 
-function shapeBox(row: Row, assets: { tokenId: string; amount: string }[], spent: Set<string>): Row {
+function shapeBox(row: Row, assets: { tokenId: string; amount: string; index?: number }[], spent: Set<string>): Row {
   const boxId = String(row.boxId ?? "");
   return {
     boxId,
@@ -175,11 +175,13 @@ function mempoolSpent(txs: Iterable<RawTx>): Set<string> {
   return spent;
 }
 
-function assetList(raw: { tokenId?: string; amount?: number | string }[] | undefined): { tokenId: string; amount: string }[] {
-  const out: { tokenId: string; amount: string }[] = [];
+function assetList(
+  raw: { tokenId?: string; amount?: number | string }[] | undefined
+): { tokenId: string; amount: string; index: number }[] {
+  const out: { tokenId: string; amount: string; index: number }[] = [];
   for (const asset of raw ?? []) {
     if (!asset.tokenId) continue;
-    out.push({ tokenId: asset.tokenId.toLowerCase(), amount: digits(asset.amount) });
+    out.push({ tokenId: asset.tokenId.toLowerCase(), amount: digits(asset.amount), index: out.length });
   }
   return out;
 }
@@ -259,14 +261,15 @@ async function attachAssets(sql: Sql, rows: Row[], spent: Set<string>): Promise<
             encode(token_id, 'hex') AS token_id,
             amount::text AS amount
        FROM packed.box_assets
-      WHERE box_id IN (SELECT decode(x, 'hex') FROM unnest($1::text[]) AS x)`,
+      WHERE box_id IN (SELECT decode(x, 'hex') FROM unnest($1::text[]) AS x)
+      ORDER BY box_id, asset_index NULLS LAST, token_id`,
     [ids]
   );
-  const byBox = new Map<string, { tokenId: string; amount: string }[]>();
+  const byBox = new Map<string, { tokenId: string; amount: string; index: number }[]>();
   for (const asset of assets) {
     const id = String(asset.box_id);
     const list = byBox.get(id) ?? [];
-    list.push({ tokenId: String(asset.token_id), amount: digits(asset.amount) });
+    list.push({ tokenId: String(asset.token_id), amount: digits(asset.amount), index: list.length });
     byBox.set(id, list);
   }
   return rows.map((row) => shapeBox(row, byBox.get(String(row.boxId)) ?? [], spent));

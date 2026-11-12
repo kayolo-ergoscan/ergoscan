@@ -108,6 +108,8 @@ export const NAUTILUS_SDL = /* GraphQL */ `
   type Asset {
     tokenId: String!
     amount: String!
+    "Position of the token in the box, node order (contracts read tokens(index))."
+    index: Int!
   }
 
   type Box {

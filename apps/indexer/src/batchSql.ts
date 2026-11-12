@@ -55,6 +55,8 @@ export type AssetInsertRow = {
   boxId: string;
   tokenId: string;
   amount: string;
+  /** Position in the box's token list, node order (0-based). */
+  index?: number | null;
 };
 
 export type AddressTxRow = {

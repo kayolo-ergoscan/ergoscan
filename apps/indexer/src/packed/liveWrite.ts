@@ -26,7 +26,7 @@ type BoxRow = {
   gix?: number | null;
 };
 
-type AssetRow = { boxId: string; tokenId: string; amount: string };
+type AssetRow = { boxId: string; tokenId: string; amount: string; index?: number | null };
 
 type TxRow = {
   id: string;
@@ -254,9 +254,9 @@ export async function writePackedAssets(
 ): Promise<AssetRow[]> {
   if (!rows.length) return [];
   const ins = await client.query<{ box_id: string; token_id: string }>(
-    `INSERT INTO packed.box_assets (box_id, token_id, amount)
-     SELECT packed.hex32(u.box_id), packed.hex32(u.token_id), u.amount::numeric
-       FROM unnest($1::text[], $2::text[], $3::text[]) AS u(box_id, token_id, amount)
+    `INSERT INTO packed.box_assets (box_id, token_id, amount, asset_index)
+     SELECT packed.hex32(u.box_id), packed.hex32(u.token_id), u.amount::numeric, u.idx::smallint
+       FROM unnest($1::text[], $2::text[], $3::text[], $4::int[]) AS u(box_id, token_id, amount, idx)
       WHERE u.box_id ~ '^[0-9a-fA-F]{64}$'
         AND u.token_id ~ '^[0-9a-fA-F]{64}$'
      ON CONFLICT (box_id, token_id) DO NOTHING
@@ -265,6 +265,7 @@ export async function writePackedAssets(
       rows.map((r) => r.boxId),
       rows.map((r) => r.tokenId),
       rows.map((r) => r.amount),
+      rows.map((r) => (Number.isInteger(r.index) && r.index! >= 0 && r.index! < 32768 ? r.index! : null)),
     ]
   );
   if (!ins.rows.length) return [];
