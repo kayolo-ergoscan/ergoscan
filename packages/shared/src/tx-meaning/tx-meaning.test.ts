@@ -220,6 +220,53 @@ describe("multi-send kinds", () => {
   });
 });
 
+describe("new tokens: issuer, kind, where they went", () => {
+  const run = (id: string, ctx?: MeaningCtx, strip = false) => {
+    const g = byId(id);
+    const tx = txOf(g);
+    const bare = (b: MeaningTx["outputs"][number]) => ({ ...b, additionalRegisters: null });
+    const t = strip ? { ...tx, inputs: tx.inputs.map(bare), outputs: tx.outputs.map(bare) } : tx;
+    return classifyTxMeaning(t, ctx ?? ctxOf(g));
+  };
+  it("no wallet signed: the contract whose box id the token took is the subject", () => {
+    const m = run("0031153bad");
+    assert.equal(m.byContract, true);
+    assert.ok(m.say.ru.startsWith("Контракт 27Ms…4uiE "), m.say.ru);
+    assert.ok(m.say.en.startsWith("Contract 27Ms…4uiE "), m.say.en);
+    assert.ok(m.say.ru.endsWith("→ 9enr…wwww"), m.say.ru);
+    assert.equal(sayMeaning(compactMeaning(m), "ru"), m.say.ru);
+  });
+  it("a whole-Long supply is a service token, no number in the phrase", () => {
+    const m = run("070efb6d6e");
+    assert.equal(m.sub, "service");
+    assert.ok(!/\d{4}/.test(m.say.ru.replace(/2Jow…iws5/, "")), m.say.ru);
+    assert.equal(meaningRow(compactMeaning(m), "ru").word, "Служебный токен");
+  });
+  it("an unnamed single unit kept by a script is the contract's id token, not an NFT", () => {
+    const m = run("00f23065a7");
+    assert.equal(m.sub, "id");
+    assert.ok(!m.say.ru.includes("NFT"), m.say.ru);
+    assert.equal(meaningRow(compactMeaning(m), "ru").word, "Токен-идентификатор");
+  });
+  it("kind from the index (lists) or from R7 (tx page); neither = plain words", () => {
+    assert.equal(run("6e60572ddc").sub, "collection");
+    assert.equal(run("52e35d6c80").sub, "audio");
+    // ErgoNames: kind only in R7 of the mint box.
+    assert.equal(run("ad0a0ebd16").sub, "collection");
+    const bare = run("ad0a0ebd16", undefined, true);
+    assert.equal(bare.sub, undefined);
+    assert.ok(bare.say.ru.includes("выпустил 1 000 000 000 ErgoNames"), bare.say.ru);
+    const noKind = run("0031153bad", { ...ctxOf(byId("0031153bad")), token: () => ({ name: "BFT Rally 0839", decimals: 0 }) }, true);
+    assert.equal(noKind.sub, undefined);
+    assert.ok(!noKind.say.ru.includes("изображение"), noKind.say.ru);
+  });
+  it("a wallet's mint into one other address says where it went", () => {
+    const m = run("02166684ed");
+    assert.equal(m.byContract, undefined);
+    assert.ok(m.say.ru.endsWith("→ 26DF…bvzY"), m.say.ru);
+  });
+});
+
 describe("tx meaning: rules", () => {
   it("box order and token order never change the answer", () => {
     for (const g of GOLDEN) {

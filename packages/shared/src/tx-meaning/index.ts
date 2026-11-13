@@ -57,6 +57,7 @@ export function classifyTxMeaning(tx: MeaningTx, ctx: MeaningCtx = {}): TxMeanin
   if (d.pair) m.pair = d.pair;
   if (d.count2 != null) m.count2 = d.count2;
   if (d.each) m.each = toAsset(d.each[0], d.each[1], ctx);
+  if (d.byContract) m.byContract = true;
   // The phrase is built from the meaning alone, so lists (CompactMeaning) get the same words.
   m.say = sayLines(m);
   return m;
@@ -106,6 +107,7 @@ export function compactMeaning(m: TxMeaning): CompactMeaning {
   if (m.label) c.label = m.label;
   if (m.pair) c.pair = m.pair;
   if (m.each) c.each = compactAsset(m.each);
+  if (m.byContract) c.byContract = true;
   return c;
 }
 

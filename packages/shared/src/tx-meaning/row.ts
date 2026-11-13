@@ -111,6 +111,11 @@ function notesOf(m: MeaningRowInput, lang: Lang): string[] {
       if (k >= 2) say(`забрали ${ruCount(k, "адрес", "адреса", "адресов")}`, `${enCount(k, "address", "addresses")} took it`);
       break;
     }
+    case "nft-mint":
+      if (m.sub === "image") say("изображение", "image");
+      else if (m.sub === "audio") say("аудио", "audio");
+      else if (m.sub === "video") say("видео", "video");
+      break;
     case "name-register":
       if (m.sub === "commit") say("заявка на имя", "name request");
       else if (m.label) out.push(m.label);
@@ -223,6 +228,10 @@ const SUB_WORD: Readonly<Record<string, { ru: string; en: string }>> = {
   "multisend/split": { ru: "Выплата поровну", en: "Equal payout" },
   "multisend/airdrop": { ru: "Раздача токена", en: "Token distribution" },
   "multisend/nft": { ru: "Рассылка NFT", en: "NFT distribution" },
+  "token-issue/service": { ru: "Служебный токен", en: "Service token" },
+  "token-issue/collection": { ru: "Коллекция NFT", en: "NFT collection" },
+  "nft-mint/collection": { ru: "Коллекция NFT", en: "NFT collection" },
+  "nft-mint/id": { ru: "Токен-идентификатор", en: "ID token" },
 };
 
 export function meaningRow(m: MeaningRowInput, lang: Lang): MeaningRow {

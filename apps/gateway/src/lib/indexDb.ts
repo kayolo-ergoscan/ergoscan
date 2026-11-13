@@ -3715,6 +3715,8 @@ export type IdxTokenMeta = {
   /** Exact digits of emission. */
   emissionText: string | null;
   artworkUrl: string | null;
+  /** EIP-4 kind from the mint (tokens.nft_kind: image, audio, video, collection…); null when unknown. */
+  nftKind: string | null;
 };
 
 export async function tokenMetaMany(
@@ -3729,9 +3731,12 @@ export async function tokenMetaMany(
     decimals: string | null;
     emission: string | null;
     artwork_url: string | null;
+    nft_kind: string | null;
   }>(
+    // nft_kind rides the same primary-key read (no new query); NULL where the column is missing.
     `SELECT token_id, name, decimals::text AS decimals, emission::text AS emission,
-            NULLIF(artwork_url, '') AS artwork_url
+            NULLIF(artwork_url, '') AS artwork_url,
+            ${(await tokensHaveNftKindColumn()) ? "NULLIF(nft_kind, '')" : "NULL::text"} AS nft_kind
      FROM tokens WHERE token_id = ANY($1::text[])`,
     [uniq]
   );
@@ -3742,6 +3747,7 @@ export async function tokenMetaMany(
       emission: r.emission != null ? Number(r.emission) : null,
       emissionText: r.emission ?? null,
       artworkUrl: withLpArt(r.token_id, r.artwork_url),
+      nftKind: r.nft_kind ?? null,
     });
   }
   return map;

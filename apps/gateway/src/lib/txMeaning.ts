@@ -107,8 +107,8 @@ export async function meaningCtx(
     need.length ? tokenMetaMany(need).catch(() => new Map()) : Promise.resolve(new Map()),
     nameIndex().catch(() => new Map<string, MeaningName>()),
   ]);
-  for (const [id, m] of rows as Map<string, { name: string | null; decimals: number | null }>) {
-    meta.set(id, { name: m.name, decimals: m.decimals });
+  for (const [id, m] of rows as Map<string, { name: string | null; decimals: number | null; nftKind?: string | null }>) {
+    meta.set(id, { name: m.name, decimals: m.decimals, kind: m.nftKind ?? null });
   }
   return {
     token: (id) => meta.get(id) ?? null,

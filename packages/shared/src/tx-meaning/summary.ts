@@ -146,10 +146,19 @@ function extraTail(xs: readonly MeaningExtraLike[] | undefined, lang: Lang): str
 
 type Lines = { ru: string; en: string };
 
+/** EIP-4 art kinds as the NFT phrase names them. */
+const ART_WORD: Readonly<Record<string, Lines>> = {
+  image: { ru: "изображение", en: "image" },
+  audio: { ru: "аудио", en: "audio" },
+  video: { ru: "видео", en: "video" },
+};
+
 export function sayLines(m: MeaningPhraseInput): Lines {
   const A = who(m.actor, m.actorName);
-  const ru = A ?? "Кто-то";
-  const en = A ?? "Someone";
+  // No wallet signed: the contract is the subject, and the phrase says so.
+  const byContract = m.byContract && A && !m.actorName;
+  const ru = byContract ? `Контракт ${A}` : (A ?? "Кто-то");
+  const en = byContract ? `Contract ${A}` : (A ?? "Someone");
   const P = { ru: protoName(m.protocol, "ru"), en: protoName(m.protocol, "en") };
   const V = { ru: venues(m, "ru"), en: venues(m, "en") };
   const gave = { ru: list(m.gave, "ru"), en: list(m.gave, "en") };
@@ -233,10 +242,28 @@ export function sayLines(m: MeaningPhraseInput): Lines {
       };
     }
     case "token-issue":
-      return { ru: `${ru} выпустил${gotS.ru || " токен"}`, en: `${en} issued${gotS.en || " a token"}` };
     case "nft-mint": {
       const name = m.got?.[0] ? assetLabel(m.got[0]) : "?";
-      return { ru: `${ru} выпустил NFT «${name}»`, en: `${en} minted NFT “${name}”` };
+      // «→ Z» only when one other address took all of the new token.
+      const toZ = m.counterparty ? ` → ${to}` : "";
+      switch (m.sub) {
+        case "service":
+          return { ru: `${ru} выпустил служебный токен «${name}»${toZ}`, en: `${en} issued a service token “${name}”${toZ}` };
+        case "collection":
+          return { ru: `${ru} создал коллекцию NFT «${name}»${toZ}`, en: `${en} created the NFT collection “${name}”${toZ}` };
+        case "id":
+          return m.counterparty
+            ? { ru: `${ru} создал контракт ${to}: токен-идентификатор ${name}`, en: `${en} created contract ${to}: ID token ${name}` }
+            : { ru: `${ru} выпустил токен-идентификатор ${name}`, en: `${en} issued the ID token ${name}` };
+        default:
+          break;
+      }
+      if (m.action === "token-issue") return { ru: `${ru} выпустил${gotS.ru || " токен"}${toZ}`, en: `${en} issued${gotS.en || " a token"}${toZ}` };
+      const art = m.sub ? ART_WORD[m.sub] : undefined;
+      return {
+        ru: `${ru} выпустил NFT «${name}»${art ? ` (${art.ru})` : ""}${toZ}`,
+        en: `${en} minted NFT “${name}”${art ? ` (${art.en})` : ""}${toZ}`,
+      };
     }
     case "burn":
       return { ru: `${ru} сжёг${gaveS.ru || " токены"}`, en: `${en} burned${gaveS.en || " tokens"}` };

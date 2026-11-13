@@ -8,6 +8,7 @@
  * 5. wallet moves: send / multisend / self / consolidate;
  * 6. fallback: contract call / sent to contract.
  */
+import { nftKindFromR7 } from "../eip4-nft.js";
 import { p2pkAddressFromCompressedPubkey } from "../oracle-pools.js";
 import { chainLabel } from "../rosen-chains.js";
 import { extractEventFromRegisters, parseCollCollByte } from "../rosen-event.js";
@@ -58,6 +59,8 @@ export type Draft = {
   each?: [AssetKey, bigint];
   /** The fee was paid by someone the phrase does not name (executor). */
   feeHidden?: boolean;
+  /** The actor is a contract, not a wallet that signed («Контракт 2Bgo…»). */
+  byContract?: boolean;
 };
 
 type Rule = (f: Facts, ctx: MeaningCtx) => Draft | null;
@@ -1056,23 +1059,64 @@ const ruleKnownContract: Rule = (f) => {
 
 // ── 4. issue and burn ───────────────────────────────────────────────────────
 
+/** The whole supply a Long holds: a contract's service token, not something to count. */
+const LONG_MAX = 9_223_372_036_854_775_807n;
+const ART_KINDS: ReadonlySet<string> = new Set(["image", "audio", "video"]);
+
+/**
+ * The EIP-4 kind of a new token: the index's tokens.nft_kind (lists have it), else R7 of a box
+ * that carries the token (the tx page has registers). R7 counts only as the exact 2-byte EIP-4 tag.
+ */
+function mintKind(f: Facts, ctx: MeaningCtx, id: string): string | null {
+  const known = ctx.token?.(id)?.kind;
+  if (known) return known;
+  for (const b of stable(f.outs.filter((o) => o.assets.has(id)))) {
+    const r7 = regHex(b.raw.additionalRegisters?.["R7"]);
+    const kind = r7.length === 8 && r7.startsWith("0e02") ? nftKindFromR7(r7) : null;
+    if (kind) return kind;
+  }
+  return null;
+}
+
 const ruleIssue: Rule = (f, ctx) => {
   if (!f.minted.size) return null;
   const [id, amt] = [...f.minted].sort((a, b) => (a[1] > b[1] ? -1 : a[1] < b[1] ? 1 : a[0] < b[0] ? -1 : 1))[0]!;
-  const dec = ctx.token?.(id)?.decimals ?? 0;
+  const meta = ctx.token?.(id);
+  const dec = meta?.decimals ?? 0;
   const nft = amt === 1n && !dec;
   const unknownScript = stable(f.ins.filter((b) => !b.wallet && !b.fee && !b.role))[0];
-  // Where the new token landed: the issuer, unless it went straight to someone else.
+  // The issuer is the wallet that signed. Without one, the contract whose box id the token took.
+  const mintBox = f.ins.find((b) => b.boxId === id && !b.fee);
   let actor = f.payer;
+  let byContract = false;
+  if (!actor && mintBox) {
+    actor = mintBox.address;
+    byContract = !mintBox.wallet;
+  }
   if (!actor) for (const [addr, bag] of f.net) if ((bag.get(id) ?? 0n) > 0n) actor = addr;
+  // «→ Z»: one other address holds all of the new token.
+  const holders = [...f.net].filter(([, bag]) => (bag.get(id) ?? 0n) > 0n);
+  const only = holders.length === 1 && holders[0]![0] !== actor && holders[0]![1].get(id) === amt ? holders[0]![0] : null;
+  const kind = mintKind(f, ctx, id);
+  let sub: string | undefined;
+  if (amt === LONG_MAX) sub = "service";
+  else if (kind === "collection") sub = "collection";
+  else if (nft && kind && ART_KINDS.has(kind)) sub = kind;
+  else if (nft && !kind && !meta?.name?.trim()) {
+    // An unnamed single unit kept by a script: the id token of that contract's box.
+    const keptByScript = f.outs.some((b) => b.assets.has(id) && !b.wallet && !b.fee);
+    if (keptByScript) sub = "id";
+  }
   return {
     action: nft ? "nft-mint" : "token-issue",
     protocol: null,
     conf: "exact",
     actor,
     got: [[id, amt]],
-    secondary: unknownScript ? ["contract-call"] : [],
-    counterparty: unknownScript?.address ?? null,
+    secondary: unknownScript && unknownScript.address !== actor ? ["contract-call"] : [],
+    counterparty: only,
+    ...(sub ? { sub } : {}),
+    ...(byContract ? { byContract: true } : {}),
     why: [{ k: "minted", v: id }],
   };
 };

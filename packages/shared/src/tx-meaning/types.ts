@@ -110,6 +110,8 @@ export type TxMeaning = {
   count2?: number;
   /** The one amount each receiver got, present only when all got the same («по 1.00»). */
   each?: MeaningAsset;
+  /** The actor is a contract (no wallet signed): the phrase says «Контракт 2Bgo…». */
+  byContract?: boolean;
   /** Which rule answered (consensus, oracle, pools, wallets…), for «Как определили». */
   rule: string;
   say: { ru: string; en: string };
@@ -145,6 +147,10 @@ export type MeaningPhraseInput = {
   pair?: string | null;
   sub?: string;
   each?: MeaningAssetLike;
+  byContract?: boolean;
+  /** Who paid the network fee: the full form has fee, the list form feePayer (only when not the actor). */
+  fee?: { payer: string | null };
+  feePayer?: string | null;
 };
 
 /**
@@ -181,4 +187,6 @@ export type CompactMeaning = {
   pair?: string;
   /** The one amount each receiver got, when all got the same. */
   each?: MeaningAssetLike;
+  /** The actor is a contract, not a wallet that signed. Present only when true. */
+  byContract?: true;
 };
