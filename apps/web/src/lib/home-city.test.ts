@@ -4,7 +4,7 @@ import { builtAt, sealPlan, storeyTimes, type CityBlock, type Fees, type Scene, 
 import { bodyHeight, cityGeo, drawCity, floorH, frontW, gapPx, storeysUp } from "./home-city/city";
 import { feeLevels, feeZone } from "./home-city/load";
 import { H_MAX, crateH, feeOrder, sizeIdx, yardLayout } from "./home-city/yard";
-import { momentLength, momentPlays, sealMatch, sealStoreys, sealTargets, waitingShown } from "./home-city/moment";
+import { momentLength, momentPlays, sealMatch, sealStoreys, sealTargets, sealYard, waitingShown } from "./home-city/moment";
 
 /* ---------- fixtures ---------- */
 
@@ -293,6 +293,27 @@ test("moment: the yard count holds the crates the crane has not lifted yet", () 
   assert.equal(waitingShown({ streamCount: 10, ids, ms: plan.end, inStream: empty }), 10);
   // The stream has not dropped them yet: no double count.
   assert.equal(waitingShown({ streamCount: 13, ids, ms: 0, inStream: new Set(ids) }), 13);
+});
+
+test("moment: a seal that comes with the snapshot that already dropped its txs still takes them from the yard", () => {
+  const a = tx(3000, 400, { id: "a" });
+  const b = tx(2000, 400, { id: "b" });
+  const c = tx(1000, 400, { id: "c" });
+  const left = tx(1500, 400, { id: "left" });
+  // The stream already shows only what is left; a, b and an older drop wait in the engine's «gone».
+  const gone = new Map([
+    ["a", a],
+    ["b", b],
+    ["old", tx(900, 400, { id: "old" })],
+  ]);
+  const y = sealYard({ count: 2, txs: [c, left] }, gone, ["cb", "a", "c", "b", "fee"]);
+  assert.deepEqual(y.txs.map((t) => t.id), ["c", "left", "a", "b"]);
+  assert.equal(y.count, 4, "the count as it was when the block came");
+  assert.deepEqual(sealMatch(["cb", "a", "c", "b", "fee"], y.txs), ["a", "c", "b"]);
+  // Nothing to put back: the yard as it is.
+  const same = sealYard({ count: 7, txs: [c, left] }, new Map(), ["a"]);
+  assert.equal(same.count, 7);
+  assert.equal(same.txs.length, 2);
 });
 
 /* ---------- Kayolo on the roofs ---------- */

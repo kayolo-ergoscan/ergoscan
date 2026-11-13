@@ -41,6 +41,28 @@ export function sealStoreys(txIds: readonly string[], yard: readonly YardTx[], r
   return { txs, kinds };
 }
 
+/**
+ * The yard as it stood when the block came. The stream may drop the block's txs in the same update
+ * that brings the seal (a snapshot right behind it); those just left the yard, so they are put back
+ * for the moment: the crane takes them from where they stood.
+ */
+export function sealYard(
+  mem: { count: number; txs: readonly YardTx[] },
+  gone: ReadonlyMap<string, YardTx>,
+  txIds: readonly string[]
+): { count: number; txs: YardTx[] } {
+  const have = new Set(mem.txs.map((t) => t.id));
+  const back: YardTx[] = [];
+  for (const id of txIds) {
+    if (have.has(id)) continue;
+    const t = gone.get(id);
+    if (!t) continue;
+    have.add(id);
+    back.push(t);
+  }
+  return { count: Math.max(mem.count, mem.txs.length) + back.length, txs: [...mem.txs, ...back] };
+}
+
 /** Storey index in the block of each leaving crate (the order the crane lands them). */
 export function sealTargets(txIds: readonly string[], ids: readonly string[]): number[] {
   const at = new Map<string, number>();

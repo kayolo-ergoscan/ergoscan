@@ -57,18 +57,31 @@ export type CityBall = {
 
 /** Per-block tx kinds, in block order: the `/v1/blocks/:id?limit=80` read the home made for its crate ink. */
 const READ_LIMIT = 80;
+/**
+ * The seal comes from the node, the block read from the database a moment later (0.3 s seen): a
+ * read made at the seal answers 404 (or no txs). The same read is asked again after these, then
+ * only when the tape next changes. The first lands while the moment still plays.
+ */
+const READ_RETRY_MS = [1_500, 5_000, 15_000];
 
 export function useBlockReads(blocks: readonly CityRow[]): Record<string, CityTx[]> {
   const [reads, setReads] = useState<Record<string, CityTx[]>>({});
   const cache = useRef<Record<string, CityTx[]>>({});
   const asked = useRef(new Set<string>());
+  const tries = useRef(new Map<string, number>());
+  const timers = useRef(new Map<string, number>());
   const want = useRef<string[]>([]);
+  const rows = useRef(blocks);
+  rows.current = blocks;
   const alive = useRef(true);
   const key = blocks.map((b) => b.id).join(",");
   useEffect(() => {
     alive.current = true;
+    const pending = timers.current;
     return () => {
       alive.current = false;
+      for (const h of pending.values()) window.clearTimeout(h);
+      pending.clear();
     };
   }, []);
   useEffect(() => {
@@ -88,28 +101,48 @@ export function useBlockReads(blocks: readonly CityRow[]): Record<string, CityTx
         return a.length === b.length && b.every((k) => prev[k] === next[k]) ? prev : next;
       });
     };
-    const keep = new Set(ids);
-    for (const id of Object.keys(cache.current)) if (!keep.has(id)) delete cache.current[id];
-    const missing = ids.filter((id) => !cache.current[id] && !asked.current.has(id));
-    paint();
-    for (const id of missing) {
+    const ask = (id: string) => {
       asked.current.add(id);
+      const later = () => {
+        asked.current.delete(id);
+        const n = tries.current.get(id) ?? 0;
+        if (!alive.current || n >= READ_RETRY_MS.length) return;
+        tries.current.set(id, n + 1);
+        timers.current.set(
+          id,
+          window.setTimeout(() => {
+            timers.current.delete(id);
+            if (alive.current && want.current.includes(id) && !cache.current[id] && !asked.current.has(id)) ask(id);
+          }, READ_RETRY_MS[n])
+        );
+      };
       void fetch(`${getGateway()}/v1/blocks/${encodeURIComponent(id)}?limit=${READ_LIMIT}&offset=0`, SNAPSHOT_FETCH)
         .then(async (r) => {
           if (!r.ok) throw new Error(String(r.status));
           const j = (await r.json()) as { txs?: Array<{ category?: string; color?: string }> };
-          cache.current[id] = (Array.isArray(j.txs) ? j.txs : []).map((t) => ({
+          const txs = Array.isArray(j.txs) ? j.txs : [];
+          // Every block has its coinbase: no txs yet means the database has not written them.
+          if (!txs.length && (rows.current.find((b) => b.id === id)?.txCount ?? 0) > 0) throw new Error("short");
+          cache.current[id] = txs.map((t) => ({
             color: typeof t.color === "string" ? t.color : "",
             category: typeof t.category === "string" ? t.category : "",
           }));
           asked.current.delete(id);
+          tries.current.delete(id);
           paint();
         })
-        .catch(() => {
-          // Asked again when the tape next changes.
-          asked.current.delete(id);
-        });
+        .catch(later);
+    };
+    const keep = new Set(ids);
+    for (const id of Object.keys(cache.current)) if (!keep.has(id)) delete cache.current[id];
+    for (const id of [...tries.current.keys()]) if (!keep.has(id)) tries.current.delete(id);
+    for (const [id, h] of [...timers.current]) {
+      if (keep.has(id)) continue;
+      window.clearTimeout(h);
+      timers.current.delete(id);
     }
+    paint();
+    for (const id of ids) if (!cache.current[id] && !asked.current.has(id) && !timers.current.has(id)) ask(id);
   }, [key]);
   return reads;
 }

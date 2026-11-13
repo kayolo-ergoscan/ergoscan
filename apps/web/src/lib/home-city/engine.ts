@@ -9,7 +9,7 @@ import { pixelSettling } from "@/components/pixel";
 import { readInks, sealPlan, type CityBlock, type Fees, type Frame, type Inks, type Scene, type YardTx } from "./common";
 import { cityGeo, cityTarget, citySiteRest, drawCity, type CityHit, type KayoloCue } from "./city";
 import { KAYOLO_ID, drawKayolo, kayoloScale } from "./kayolo";
-import { momentPlays, sealMatch, sealStoreys, sealTargets, waitingShown } from "./moment";
+import { momentPlays, sealMatch, sealStoreys, sealTargets, sealYard, waitingShown } from "./moment";
 import { cableAt, drawCrateFlight, drawYard, drawYardCable, yardCable, yardRest, type YardHit, type YardText } from "./yard";
 
 /** No new block for this long: the chain or the node is behind, he dozes. Ergo aims at 2 min. */
@@ -27,6 +27,8 @@ const RARE_LOOK_MS = 300;
 const RARE_HAPPY_MS = 1300;
 const RARE_HOP_MS = 420;
 const RARE_WAIT_MS = 4000;
+/** A tx that left the yard this recently still leaves it on the crane if the seal names it. */
+const GONE_MS = 20_000;
 /** Frames after the last change while his face eases (a blink or a mood already under way). */
 const SETTLE_MS = 1200;
 
@@ -104,6 +106,7 @@ export class CityEngine {
   private holdTimer = 0;
   private staleTimer = 0;
   private blinkTail = 0;
+  private gone = new Map<string, { tx: YardTx; at: number }>();
   private boxes = new Map<Element, { w: number; h: number }>();
   private rects: { host: DOMRect; city: DOMRect; yard: DOMRect } | null = null;
   private stops: (() => void)[] = [];
@@ -196,6 +199,11 @@ export class CityEngine {
 
   setData(d: EngineData) {
     const prevTop = this.data.blocks[0]?.height ?? null;
+    // Txs that just left the yard, kept a while: a seal in the same update takes them from here.
+    const at = performance.now();
+    const ids = new Set(d.mem.txs.map((t) => t.id));
+    for (const t of this.data.mem.txs) if (!ids.has(t.id)) this.gone.set(t.id, { tx: t, at });
+    for (const [id, g] of this.gone) if (ids.has(id) || at - g.at > GONE_MS) this.gone.delete(id);
     this.data = d;
     this.scene = null;
     const top = d.blocks[0]?.height ?? null;
@@ -240,7 +248,10 @@ export class CityEngine {
       this.commit(Math.max(s.height, this.committed ?? s.height));
       return;
     }
-    const memBefore = { count: Math.max(this.data.mem.count, this.data.mem.txs.length), txs: this.data.mem.txs.slice() };
+    const now = performance.now();
+    const gone = new Map<string, YardTx>();
+    for (const [id, g] of this.gone) if (now - g.at <= GONE_MS) gone.set(id, g.tx);
+    const memBefore = sealYard(this.data.mem, gone, s.txIds);
     const ids = sealMatch(s.txIds, memBefore.txs);
     const street = this.data.blocks.filter((b) => b.height < s.height && (this.committed == null || b.height <= this.committed));
     this.moment = {
