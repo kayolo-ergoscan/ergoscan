@@ -13,6 +13,7 @@ import {
   TX_MEANING_VERSION,
   classifyTxMeaning,
   compactMeaning,
+  rentMarkOf,
   type CompactMeaning,
   type MeaningBox,
   type MeaningCtx,
@@ -387,12 +388,24 @@ export async function meaningsByIds(ids: string[], rentMarks?: RentMarks): Promi
 const mempoolMeanings = new Map<string, { full: TxMeaning; slim: CompactMeaning }>();
 let mempoolBusy = false;
 
-/** Node tx JSON (unconfirmed dump: inputs are full boxes), after addresses and hashes are stamped. */
+/** Node tx JSON (unconfirmed dump: inputs are full boxes with spendingProof), after addresses and hashes are stamped. */
 type NodeTx = {
   id: string;
   inputs?: readonly object[];
   outputs?: readonly object[];
 };
+
+/**
+ * A mempool tx has no rent-writer mark yet: read it off the inputs (empty proof, extension 127),
+ * the writer's own test, so a rent sweep is said as rent before its block lands.
+ */
+export function mempoolRentMark(tx: { inputs?: readonly object[]; outputs?: readonly object[] }): string | null {
+  try {
+    return rentMarkOf(tx as Parameters<typeof rentMarkOf>[0]);
+  } catch {
+    return null;
+  }
+}
 
 function nodeBox(raw: object): MeaningBox {
   const b = raw as Record<string, unknown>;
@@ -433,6 +446,7 @@ export async function warmMempoolMeanings(txs: readonly NodeTx[]): Promise<void>
         id: t.id,
         inputs: (t.inputs ?? []).map(nodeBox),
         outputs: (t.outputs ?? []).map(nodeBox),
+        rent: mempoolRentMark(t),
       }));
     if (!fresh.length) return;
     const ctx = await meaningCtx(tokenIdsOf(fresh));

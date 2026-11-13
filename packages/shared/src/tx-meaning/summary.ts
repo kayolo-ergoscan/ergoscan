@@ -59,14 +59,20 @@ function amt(a: MeaningAssetLike): string {
   return `${formatAmount(a.amount, dec)} ${assetLabel(a)}`;
 }
 
+/** The amounts of one side, or "" when nothing moved: a phrase then drops the amount, never says «ничего». */
 function list(items: readonly MeaningAssetLike[] | undefined, lang: Lang): string {
   const xs = items ?? [];
-  if (!xs.length) return lang === "ru" ? "ничего" : "nothing";
+  if (!xs.length) return "";
   const shown = xs.slice(0, 2).map(amt);
   const and = lang === "ru" ? " и " : " and ";
   if (xs.length <= 2) return shown.join(and);
   const more = xs.length - 2;
   return lang === "ru" ? `${shown.join(", ")} и ещё ${more}` : `${shown.join(", ")} and ${more} more`;
+}
+
+/** « 1.00 ERG» with a leading space, or "" when the side is empty. */
+function sp(text: string): string {
+  return text ? ` ${text}` : "";
 }
 
 function who(addr: string | null | undefined, name: string | null | undefined): string | null {
@@ -132,6 +138,9 @@ export function sayLines(m: MeaningPhraseInput): Lines {
   const V = { ru: venues(m, "ru"), en: venues(m, "en") };
   const gave = { ru: list(m.gave, "ru"), en: list(m.gave, "en") };
   const got = { ru: list(m.got, "ru"), en: list(m.got, "en") };
+  // With a leading space, or "" when that side is empty: the amount clause drops out.
+  const gaveS = { ru: sp(gave.ru), en: sp(gave.en) };
+  const gotS = { ru: sp(got.ru), en: sp(got.en) };
   const to = who(m.counterparty, m.counterpartyName) ?? "?";
   const tail = { ru: extraTail(m.extra, "ru"), en: extraTail(m.extra, "en") };
   const n = m.count ?? 0;
@@ -140,37 +149,38 @@ export function sayLines(m: MeaningPhraseInput): Lines {
   switch (m.action) {
     case "send":
       if (m.sub === "own") {
-        return { ru: `${ru} перевёл ${gave.ru} между своими адресами${tail.ru}`, en: `${en} moved ${gave.en} between its own addresses${tail.en}` };
+        return { ru: `${ru} перевёл${gaveS.ru} между своими адресами${tail.ru}`, en: `${en} moved${gaveS.en} between its own addresses${tail.en}` };
       }
-      return { ru: `${ru} отправил ${gave.ru} → ${to}${tail.ru}`, en: `${en} sent ${gave.en} to ${to}${tail.en}` };
+      return { ru: `${ru} отправил${gaveS.ru} → ${to}${tail.ru}`, en: `${en} sent${gaveS.en} to ${to}${tail.en}` };
     case "multisend":
-      return { ru: `${ru} отправил ${gave.ru} адресам (${n})`, en: `${en} sent ${gave.en} to ${many(n, "address", "addresses")}` };
+      return { ru: `${ru} отправил${gaveS.ru} адресам (${n})`, en: `${en} sent${gaveS.en} to ${many(n, "address", "addresses")}` };
     case "self":
       return { ru: `${ru} перевёл средства себе`, en: `${en} moved funds to itself` };
     case "consolidate":
       return { ru: `${ru} объединил боксы: ${n} → ${m.count2 ?? 0}`, en: `${en} merged ${n} boxes into ${m.count2 ?? 0}` };
     case "block-reward":
+      if (!got.ru) return { ru: `Майнер ${ru}: награда за блок`, en: `Miner ${en}: block reward` };
       return { ru: `Майнер ${ru} получил ${got.ru} за блок`, en: `Miner ${en} got ${got.en} for the block` };
     case "fee-collect":
-      return { ru: `Майнер ${ru} забрал комиссии блока: ${got.ru}`, en: `Miner ${en} took the block fees: ${got.en}` };
+      return { ru: `Майнер ${ru} забрал комиссии блока${got.ru ? `: ${got.ru}` : ""}`, en: `Miner ${en} took the block fees${got.en ? `: ${got.en}` : ""}` };
     case "miner-payout":
       if (m.sub === "claim") {
-        return { ru: `Майнер ${ru} забрал награду: ${got.ru}${tail.ru}`, en: `Miner ${en} claimed the reward: ${got.en}${tail.en}` };
+        return { ru: `Майнер ${ru} забрал награду${got.ru ? `: ${got.ru}` : ""}${tail.ru}`, en: `Miner ${en} claimed the reward${got.en ? `: ${got.en}` : ""}${tail.en}` };
       }
-      return { ru: `${ru} выплатил ${gave.ru} майнерам (${n})${tail.ru}`, en: `${en} paid ${gave.en} to ${many(n, "miner", "miners")}${tail.en}` };
+      return { ru: `${ru} выплатил${gaveS.ru} майнерам (${n})${tail.ru}`, en: `${en} paid${gaveS.en} to ${many(n, "miner", "miners")}${tail.en}` };
     case "rent":
       return {
-        ru: `Майнер ${ru} взял плату за хранение со старых боксов (${n}): ${got.ru}`,
-        en: `Miner ${en} took storage rent from ${many(n, "old box", "old boxes")}: ${got.en}`,
+        ru: `Майнер ${ru} взял плату за хранение со старых боксов (${n})${got.ru ? `: ${got.ru}` : ""}`,
+        en: `Miner ${en} took storage rent from ${many(n, "old box", "old boxes")}${got.en ? `: ${got.en}` : ""}`,
       };
     case "token-issue":
-      return { ru: `${ru} выпустил ${got.ru}`, en: `${en} issued ${got.en}` };
+      return { ru: `${ru} выпустил${gotS.ru || " токен"}`, en: `${en} issued${gotS.en || " a token"}` };
     case "nft-mint": {
       const name = m.got?.[0] ? assetLabel(m.got[0]) : "?";
       return { ru: `${ru} выпустил NFT «${name}»`, en: `${en} minted NFT “${name}”` };
     }
     case "burn":
-      return { ru: `${ru} сжёг ${gave.ru}`, en: `${en} burned ${gave.en}` };
+      return { ru: `${ru} сжёг${gaveS.ru || " токены"}`, en: `${en} burned${gaveS.en || " tokens"}` };
     case "name-register":
       if (m.sub === "commit") {
         return { ru: `${ru} подал заявку на имя · ${P.ru}`, en: `${en} requested a name on ${P.en}` };
@@ -180,32 +190,34 @@ export function sayLines(m: MeaningPhraseInput): Lines {
         : { ru: `${ru} зарегистрировал имя · ${P.ru}`, en: `${en} registered a name on ${P.en}` };
     case "swap": {
       const by = m.viaOrder ? { ru: " по заявке", en: " by order" } : { ru: "", en: "" };
+      // One side empty (the pools paid out more than they took): say the side that moved.
+      const deal = {
+        ru: gave.ru && got.ru ? `обменял ${gave.ru} на ${got.ru}` : got.ru ? `получил ${got.ru}` : gave.ru ? `обменял ${gave.ru}` : "обменял",
+        en: gave.en && got.en ? `swapped ${gave.en} for ${got.en}` : got.en ? `got ${got.en}` : gave.en ? `swapped ${gave.en}` : "swapped",
+      };
       if (!A) {
         // No wallet signed (a contract traded on its own): the venue is the subject.
-        return {
-          ru: `${V.ru} обменял ${gave.ru} на ${got.ru}${by.ru}${tail.ru}`,
-          en: `${V.en} swapped ${gave.en} for ${got.en}${by.en}${tail.en}`,
-        };
+        return { ru: `${V.ru} ${deal.ru}${by.ru}${tail.ru}`, en: `${V.en} ${deal.en}${by.en}${tail.en}` };
       }
       return {
-        ru: `${ru} обменял ${gave.ru} на ${got.ru} · ${V.ru}${by.ru}${tail.ru}`,
-        en: `${en} swapped ${gave.en} for ${got.en} on ${V.en}${by.en}${tail.en}`,
+        ru: `${ru} ${deal.ru} · ${V.ru}${by.ru}${tail.ru}`,
+        en: `${en} ${deal.en} on ${V.en}${by.en}${tail.en}`,
       };
     }
     case "lp-add": {
       const by = m.viaOrder ? { ru: " по заявке", en: " by order" } : { ru: "", en: "" };
-      if (!A) return { ru: `В пул вложено ${gave.ru} · ${V.ru}${by.ru}`, en: `${gave.en} added to a pool on ${V.en}${by.en}` };
+      if (!A) return { ru: `В пул вложено${gaveS.ru} · ${V.ru}${by.ru}`, en: `${gave.en || "Liquidity"} added to a pool on ${V.en}${by.en}` };
       return {
-        ru: `${ru} вложил ${gave.ru} в пул · ${V.ru}${by.ru}${tail.ru}`,
-        en: `${en} added ${gave.en} to a pool on ${V.en}${by.en}${tail.en}`,
+        ru: `${ru} вложил${gaveS.ru} в пул · ${V.ru}${by.ru}${tail.ru}`,
+        en: `${en} added${gaveS.en || " liquidity"} to a pool on ${V.en}${by.en}${tail.en}`,
       };
     }
     case "lp-remove": {
       const by = m.viaOrder ? { ru: " по заявке", en: " by order" } : { ru: "", en: "" };
-      if (!A) return { ru: `Из пула забрано ${got.ru} · ${V.ru}${by.ru}`, en: `${got.en} removed from a pool on ${V.en}${by.en}` };
+      if (!A) return { ru: `Из пула забрано${gotS.ru} · ${V.ru}${by.ru}`, en: `${got.en || "Liquidity"} removed from a pool on ${V.en}${by.en}` };
       return {
-        ru: `${ru} забрал ${got.ru} из пула · ${V.ru}${by.ru}${tail.ru}`,
-        en: `${en} removed ${got.en} from a pool on ${V.en}${by.en}${tail.en}`,
+        ru: `${ru} забрал${gotS.ru} из пула · ${V.ru}${by.ru}${tail.ru}`,
+        en: `${en} removed${gotS.en || " liquidity"} from a pool on ${V.en}${by.en}${tail.en}`,
       };
     }
     case "pool-create":
@@ -213,68 +225,86 @@ export function sayLines(m: MeaningPhraseInput): Lines {
     case "order-place":
       if (m.sub === "update") return { ru: `${ru} изменил заявку · ${P.ru}`, en: `${en} updated an order on ${P.en}` };
       if (m.sub === "forward") {
-        return { ru: `${ru} выставил предложение форварда на сложность, внёс ${gave.ru} · ${P.ru}${tail.ru}`, en: `${en} posted a difficulty forward offer with ${gave.en} on ${P.en}${tail.en}` };
+        return {
+          ru: `${ru} выставил предложение форварда на сложность${gave.ru ? `, внёс ${gave.ru}` : ""} · ${P.ru}${tail.ru}`,
+          en: `${en} posted a difficulty forward offer${gave.en ? ` with ${gave.en}` : ""} on ${P.en}${tail.en}`,
+        };
       }
       if (m.sub === "deposit") {
-        return { ru: `${ru} создал заявку на вклад ${gave.ru} в пул · ${P.ru}${tail.ru}`, en: `${en} placed an order to add ${gave.en} to a pool on ${P.en}${tail.en}` };
+        return { ru: `${ru} создал заявку на вклад${gaveS.ru} в пул · ${P.ru}${tail.ru}`, en: `${en} placed an order to add${gaveS.en || " liquidity"} to a pool on ${P.en}${tail.en}` };
       }
       if (m.sub === "redeem") {
-        return { ru: `${ru} создал заявку на вывод из пула, отдал ${gave.ru} · ${P.ru}${tail.ru}`, en: `${en} placed an order to withdraw from a pool with ${gave.en} on ${P.en}${tail.en}` };
+        return {
+          ru: `${ru} создал заявку на вывод из пула${gave.ru ? `, отдал ${gave.ru}` : ""} · ${P.ru}${tail.ru}`,
+          en: `${en} placed an order to withdraw from a pool${gave.en ? ` with ${gave.en}` : ""} on ${P.en}${tail.en}`,
+        };
       }
-      return { ru: `${ru} создал заявку на обмен ${gave.ru} · ${P.ru}${tail.ru}`, en: `${en} placed a swap order with ${gave.en} on ${P.en}${tail.en}` };
-    case "order-cancel":
+      return { ru: `${ru} создал заявку на обмен${gaveS.ru} · ${P.ru}${tail.ru}`, en: `${en} placed a swap order${gave.en ? ` with ${gave.en}` : ""} on ${P.en}${tail.en}` };
+    case "order-cancel": {
+      const back = { ru: got.ru ? `, вернулось ${got.ru}` : "", en: got.en ? `, ${got.en} returned` : "" };
       if (m.sub === "closed") {
-        return { ru: `Заявка ${ru} закрыта, вернулось ${got.ru} · ${P.ru}`, en: `${en}'s order was closed, ${got.en} returned · ${P.en}` };
+        return { ru: `Заявка ${ru} закрыта${back.ru} · ${P.ru}`, en: `${en}'s order was closed${back.en} · ${P.en}` };
       }
       if (m.sub === "forward") {
-        return { ru: `${ru} отменил предложение форварда, вернулось ${got.ru} · ${P.ru}`, en: `${en} cancelled a difficulty forward offer, ${got.en} returned · ${P.en}` };
+        return { ru: `${ru} отменил предложение форварда${back.ru} · ${P.ru}`, en: `${en} cancelled a difficulty forward offer${back.en} · ${P.en}` };
       }
       if (m.sub === "loan") {
-        return { ru: `${ru} отменил заявку на заём, вернулось ${got.ru} · ${P.ru}`, en: `${en} cancelled a loan request, ${got.en} returned · ${P.en}` };
+        return { ru: `${ru} отменил заявку на заём${back.ru} · ${P.ru}`, en: `${en} cancelled a loan request${back.en} · ${P.en}` };
       }
-      return { ru: `${ru} отменил заявку, вернулось ${got.ru} · ${P.ru}`, en: `${en} cancelled an order, ${got.en} returned · ${P.en}` };
+      return { ru: `${ru} отменил заявку${back.ru} · ${P.ru}`, en: `${en} cancelled an order${back.en} · ${P.en}` };
+    }
     case "stable-mint":
-      return { ru: `${ru} выпустил ${got.ru} за ${gave.ru} · ${P.ru}${tail.ru}`, en: `${en} minted ${got.en} for ${gave.en} on ${P.en}${tail.en}` };
+      return {
+        ru: `${ru} выпустил${gotS.ru || " стейблкоин"}${gave.ru ? ` за ${gave.ru}` : ""} · ${P.ru}${tail.ru}`,
+        en: `${en} minted${gotS.en || " a stablecoin"}${gave.en ? ` for ${gave.en}` : ""} on ${P.en}${tail.en}`,
+      };
     case "stable-redeem":
-      return { ru: `${ru} погасил ${gave.ru} и получил ${got.ru} · ${P.ru}${tail.ru}`, en: `${en} redeemed ${gave.en} for ${got.en} on ${P.en}${tail.en}` };
+      return {
+        ru: `${ru} погасил${gaveS.ru || " стейблкоин"}${got.ru ? ` и получил ${got.ru}` : ""} · ${P.ru}${tail.ru}`,
+        en: `${en} redeemed${gaveS.en || " a stablecoin"}${got.en ? ` for ${got.en}` : ""} on ${P.en}${tail.en}`,
+      };
     case "loan":
       switch (m.sub) {
         case "lend":
-          return { ru: `${ru} выдал заём ${gave.ru}${m.counterparty ? ` → ${to}` : ""} · ${P.ru}`, en: `${en} lent ${gave.en}${m.counterparty ? ` to ${to}` : ""} on ${P.en}` };
+          return { ru: `${ru} выдал заём${gaveS.ru}${m.counterparty ? ` → ${to}` : ""} · ${P.ru}`, en: `${en} lent${gaveS.en || " a loan"}${m.counterparty ? ` to ${to}` : ""} on ${P.en}` };
         case "request":
-          return { ru: `${ru} создал заявку на заём под залог ${gave.ru} · ${P.ru}`, en: `${en} asked for a loan against ${gave.en} on ${P.en}` };
+          return {
+            ru: `${ru} создал заявку на заём${gave.ru ? ` под залог ${gave.ru}` : ""} · ${P.ru}`,
+            en: `${en} asked for a loan${gave.en ? ` against ${gave.en}` : ""} on ${P.en}`,
+          };
         case "claim":
-          return { ru: `${ru} забрал залог ${got.ru} · ${P.ru}`, en: `${en} claimed the collateral ${got.en} on ${P.en}` };
+          return { ru: `${ru} забрал залог${gotS.ru} · ${P.ru}`, en: `${en} claimed the collateral${gotS.en} on ${P.en}` };
         case "borrow":
-          return { ru: `${ru} взял заём ${got.ru} · ${P.ru}`, en: `${en} borrowed ${got.en} on ${P.en}` };
+          return { ru: `${ru} взял заём${gotS.ru} · ${P.ru}`, en: `${en} borrowed${gotS.en || " a loan"} on ${P.en}` };
         default:
           return { ru: `${ru}: операция займа · ${P.ru}`, en: `${en}: loan operation on ${P.en}` };
       }
     case "loan-repay":
-      return { ru: `${ru} погасил заём ${gave.ru} · ${P.ru}`, en: `${en} repaid ${gave.en} on ${P.en}` };
+      return { ru: `${ru} погасил заём${gaveS.ru} · ${P.ru}`, en: `${en} repaid${gaveS.en || " a loan"} on ${P.en}` };
     case "stake":
       if (m.sub === "open") {
-        return { ru: `${ru} открыл резерв ${gave.ru} · ${P.ru}`, en: `${en} opened a reserve with ${gave.en} · ${P.en}` };
+        return { ru: `${ru} открыл резерв${gaveS.ru} · ${P.ru}`, en: `${en} opened a reserve${gave.en ? ` with ${gave.en}` : ""} · ${P.en}` };
       }
-      return { ru: `${ru} внёс ${gave.ru} · ${P.ru}`, en: `${en} deposited ${gave.en} on ${P.en}` };
+      return { ru: `${ru} ${gave.ru ? `внёс ${gave.ru}` : "сделал вклад"} · ${P.ru}`, en: `${en} deposited${gaveS.en || " funds"} on ${P.en}` };
     case "unstake":
-      return { ru: `${ru} вывел ${got.ru} · ${P.ru}`, en: `${en} withdrew ${got.en} from ${P.en}` };
+      return { ru: `${ru} вывел${gotS.ru || " вклад"} · ${P.ru}`, en: `${en} withdrew${gotS.en || " a deposit"} from ${P.en}` };
     case "payout":
       if (m.sub === "reserve") {
-        return { ru: `${ru} получил ${got.ru} из резерва · ${P.ru}`, en: `${en} received ${got.en} from a reserve · ${P.en}` };
+        return { ru: `${ru} получил${gotS.ru || " выплату"} из резерва · ${P.ru}`, en: `${en} received${gotS.en || " a payout"} from a reserve · ${P.en}` };
       }
-      return { ru: `${ru} получил выплату ${got.ru} · ${P.ru}`, en: `${en} received ${got.en} from ${P.en}` };
+      return { ru: `${ru} получил выплату${gotS.ru} · ${P.ru}`, en: `${en} received${gotS.en || " a payout"} from ${P.en}` };
     case "auction":
       if (m.sub === "list") return { ru: `${ru} выставил лот на аукцион · ${P.ru}`, en: `${en} listed a lot on ${P.en}` };
-      if (m.sub === "bid") return { ru: `${ru} сделал ставку ${gave.ru} · ${P.ru}`, en: `${en} bid ${gave.en} on ${P.en}` };
+      if (m.sub === "bid") return { ru: `${ru} сделал ставку${gaveS.ru} · ${P.ru}`, en: `${en} bid${gaveS.en} on ${P.en}` };
+      if (!got.ru) return { ru: `Лот закрыт: ${ru} · ${P.ru}`, en: `Lot settled: ${en} on ${P.en}` };
       return { ru: `Лот закрыт: ${ru} получил ${got.ru} · ${P.ru}`, en: `Lot settled: ${en} got ${got.en} on ${P.en}` };
     case "bridge-out": {
       const c = m.chain ? { ru: m.chain, en: m.chain } : { ru: "другую сеть", en: "another chain" };
-      return { ru: `${ru} отправил ${gave.ru} в ${c.ru} · ${P.ru}${tail.ru}`, en: `${en} sent ${gave.en} to ${c.en} via ${P.en}${tail.en}` };
+      return { ru: `${ru} отправил${gaveS.ru} в ${c.ru} · ${P.ru}${tail.ru}`, en: `${en} sent${gaveS.en} to ${c.en} via ${P.en}${tail.en}` };
     }
     case "bridge-in": {
       const c = m.chain ? { ru: m.chain, en: m.chain } : { ru: "другой сети", en: "another chain" };
-      return { ru: `${ru} получил ${got.ru} из ${c.ru} · ${P.ru}`, en: `${en} received ${got.en} from ${c.en} via ${P.en}` };
+      return { ru: `${ru} получил${gotS.ru || " перевод"} из ${c.ru} · ${P.ru}`, en: `${en} received${gotS.en || " a transfer"} from ${c.en} via ${P.en}` };
     }
     case "mix":
       return { ru: `Шаг микширования · ${P.ru}`, en: `Mixing step · ${P.en}` };
@@ -312,9 +342,9 @@ export function sayLines(m: MeaningPhraseInput): Lines {
         : { ru: `${ru} вызвал контракт ${to}`, en: `${en} called contract ${to}` };
     case "to-contract":
       if (m.protocol && m.label) {
-        return { ru: `${ru} отправил ${gave.ru} в «${m.label}» · ${P.ru}`, en: `${en} sent ${gave.en} to “${m.label}” · ${P.en}` };
+        return { ru: `${ru} отправил${gaveS.ru} в «${m.label}» · ${P.ru}`, en: `${en} sent${gaveS.en} to “${m.label}” · ${P.en}` };
       }
-      return { ru: `${ru} отправил ${gave.ru} в контракт ${to}`, en: `${en} sent ${gave.en} to contract ${to}` };
+      return { ru: `${ru} отправил${gaveS.ru} в контракт ${to}`, en: `${en} sent${gaveS.en} to contract ${to}` };
   }
 }
 

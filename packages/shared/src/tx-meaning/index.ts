@@ -8,7 +8,7 @@ import { sayLines, toAsset } from "./summary.js";
 import type { CompactMeaning, MeaningAssetLike, MeaningCtx, MeaningTx, TxMeaning } from "./types.js";
 import { MEANING_VOCAB, isServiceAction } from "./vocab.js";
 
-export const TX_MEANING_VERSION = 4;
+export const TX_MEANING_VERSION = 5;
 
 export function classifyTxMeaning(tx: MeaningTx, ctx: MeaningCtx = {}): TxMeaning {
   const f = readFacts(tx);
@@ -108,6 +108,7 @@ export function compactMeaning(m: TxMeaning): CompactMeaning {
 }
 
 export { readFacts, multisigOf, shortAddr } from "./facts.js";
+export { rentMarkOf, rentOutIndex, type RentSpendTx } from "./rent-spend.js";
 export { assetLabel, assetText, extraNote, formatAmount, sayLines, sayMeaning } from "./summary.js";
 export { meaningOwnerRow, meaningView, type MeaningOwnerRow, type MeaningView, type MeaningViewRole } from "./perspective.js";
 export {

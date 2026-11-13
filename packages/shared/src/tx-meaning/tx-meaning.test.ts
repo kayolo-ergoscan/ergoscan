@@ -18,12 +18,14 @@ import {
   sayHow,
   isFoldedAction,
   multisigOf,
+  rentMarkOf,
   sayMeaning,
   ERGODEX_CP_POOL_TEMPLATES,
   ERGODEX_V3_SHELL_TEMPLATES,
   type MeaningBox,
   type MeaningCtx,
   type MeaningTx,
+  type RentSpendTx,
 } from "./index.js";
 
 describe("ErgoDex LP templates (ErgoScan's logo for liquidity tokens)", () => {
@@ -47,13 +49,17 @@ type Golden = {
   height: number;
   coinbase?: boolean;
   rent?: string;
+  /** Read as the mempool reads it: no rent mark, inputs carry spendingProof (rentMarkOf decides). */
+  mempool?: boolean;
   inputCount: number;
   outputCount: number;
   inputs: Packed[];
   outputs: Packed[];
   dataInputs?: Packed[];
-  tokens: Record<string, [string | null, number | null]>;
-  names: Record<string, string>;
+  /** [name, decimals, nft kind (tokens.nft_kind) when known]. */
+  tokens: Record<string, [string | null, number | null, string?]>;
+  /** A display name, or [name, names-book category]. */
+  names: Record<string, string | [string, string]>;
   expect: { action: string; protocol: string | null; conf: string; ru: string; en: string };
 };
 
@@ -71,7 +77,7 @@ function txOf(g: Golden): MeaningTx {
   return {
     id: g.id,
     coinbase: g.coinbase,
-    rent: g.rent,
+    rent: g.mempool ? rentMarkOf(g as unknown as RentSpendTx) : g.rent,
     inputCount: g.inputCount,
     outputCount: g.outputCount,
     inputs: g.inputs.map(unpack),
@@ -84,9 +90,13 @@ function ctxOf(g: Golden): MeaningCtx {
   return {
     token: (id) => {
       const t = g.tokens[id];
-      return t ? { name: t[0], decimals: t[1] } : null;
+      return t ? { name: t[0], decimals: t[1], kind: t[2] ?? null } : null;
     },
-    nameOf: (a) => (g.names[a] ? { name: g.names[a]! } : null),
+    nameOf: (a) => {
+      const n = g.names[a];
+      if (!n) return null;
+      return typeof n === "string" ? { name: n } : { name: n[0], category: n[1] };
+    },
   };
 }
 
@@ -115,6 +125,27 @@ describe("tx meaning: golden set", () => {
       assert.equal(m.family, MEANING_VOCAB[m.action].family);
     });
   }
+});
+
+describe("storage rent read off a mempool tx (rentMarkOf)", () => {
+  const W1 = "9fRw3bMzSNBu5ZDGnJBS4ARNhrPhKCjZRXeQnc3eTCWzBnpkC9e";
+  const W2 = "9eipEgK4eo3fZ1ZJWZUdPpRDkC2QtiPFpXGvcgb99WR8hhRNYsZ3";
+  const rentIn = (value: string, ext = "0300") => ({ value, address: W1, spendingProof: { proofBytes: "", extension: { "127": ext } } });
+  it("an empty proof with extension 127 and a smaller recreated box is rent; the P2PK that kept it makes it «rent»", () => {
+    assert.equal(rentMarkOf({ inputs: [rentIn("1000000")], outputs: [{ value: "900000", address: W1 }, { value: "100000", address: W2 }] }), "rent");
+  });
+  it("no P2PK kept the rent (only the box back to its owner): a renewal", () => {
+    assert.equal(rentMarkOf({ inputs: [rentIn("1000000")], outputs: [{ value: "900000", address: W1 }, { value: "100000", address: "88dhgzEuTXaQ2HPU" }] }), "rent-renew");
+  });
+  it("a signed input, or a box recreated whole, is not rent", () => {
+    const signed = { value: "1000000", address: W1, spendingProof: { proofBytes: "ab12", extension: { "127": "0300" } } };
+    assert.equal(rentMarkOf({ inputs: [signed], outputs: [{ value: "900000", address: W1 }] }), null);
+    assert.equal(rentMarkOf({ inputs: [rentIn("1000000")], outputs: [{ value: "1000000", address: W1 }] }), null);
+    assert.equal(rentMarkOf({ inputs: [{ value: "1000000", address: W1 }], outputs: [] }), null);
+  });
+  it("index -1 (zigzag 01): the whole box was taken", () => {
+    assert.equal(rentMarkOf({ inputs: [rentIn("1000000", "0301")], outputs: [{ value: "1000000", address: W2 }] }), "rent");
+  });
 });
 
 describe("tx meaning: rules", () => {

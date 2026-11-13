@@ -32,7 +32,8 @@ export type MeaningTx = {
   outputCount?: number | null;
 };
 
-export type MeaningTokenMeta = { name?: string | null; decimals?: number | null };
+/** kind: the EIP-4 type the indexer read off the mint (tokens.nft_kind: image, audio, video, collection…). */
+export type MeaningTokenMeta = { name?: string | null; decimals?: number | null; kind?: string | null };
 
 /** A display name for a wallet or service address (exchange, mining pool, foundation). */
 export type MeaningName = { name: string; category?: string | null };
