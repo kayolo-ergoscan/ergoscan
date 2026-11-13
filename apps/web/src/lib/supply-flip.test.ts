@@ -6,14 +6,19 @@ function vis(s: string): string {
   return s.replace(/\u00a0/g, " ");
 }
 
-test("supplyGlyphs groups whole ERG with spaces", () => {
-  assert.equal(vis(supplyGlyphs(83_430_000).join("")), "83 430 000");
-  assert.equal(vis(supplyGlyphs(97_739_924).join("")), "97 739 924");
+test("supplyGlyphs groups whole ERG by the UI language", () => {
+  assert.equal(supplyGlyphs(83_430_000, "en").join(""), "83,430,000");
+  assert.equal(supplyGlyphs(83_430_000).join(""), "83,430,000");
+  assert.equal(vis(supplyGlyphs(83_430_000, "ru").join("")), "83 430 000");
+  assert.equal(vis(supplyGlyphs(97_739_924, "ru").join("")), "97 739 924");
   assert.equal(supplyGlyphs(0).join(""), "0");
 });
 
 test("zipSupplyGlyphs pads the shorter value on the left", () => {
-  const z = zipSupplyGlyphs(999, 97_739_924);
+  const en = zipSupplyGlyphs(83_430_000, 97_739_924, "en");
+  assert.equal(en.map((g) => g.idle).join(""), "83,430,000");
+  assert.equal(en[2]?.hover, ",");
+  const z = zipSupplyGlyphs(999, 97_739_924, "ru");
   assert.equal(z.length, "97 739 924".length);
   assert.equal(vis(z.map((g) => g.hover).join("")), "97 739 924");
   assert.ok(z[0]?.idle === "\u00a0");

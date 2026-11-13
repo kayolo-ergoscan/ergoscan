@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { Tip, TipRow, TipRows } from "./Tip";
 import Link from "next/link";
 import { getGateway } from "@/lib/config";
-import { useT } from "@/lib/i18n/I18nProvider";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import { formatInt } from "@/lib/format";
 
 type St = {
   ok?: boolean;
@@ -18,7 +19,7 @@ type St = {
 };
 
 export function IndexerStatus() {
-  const t = useT();
+  const { t, locale } = useI18n();
   const [st, setSt] = useState<St | null>(null);
 
   useEffect(() => {
@@ -52,7 +53,7 @@ export function IndexerStatus() {
   const lag = st.lag ?? 0;
   const ok = st.ok !== false && lag <= 5;
   const mode = st.mode || "—";
-  const span = st.span != null ? st.span.toLocaleString() : "—";
+  const span = st.span != null ? formatInt(st.span, locale) : "—";
 
   const windowText =
     st.minHeight != null && st.lastHeight != null ? `h${st.minHeight}–${st.lastHeight}` : null;
@@ -92,7 +93,7 @@ export function IndexerStatus() {
       </span>
       {st.boxCount != null && (
         <span className="hidden md:inline">
-          {t("status.indexer.boxes")}: {st.boxCount.toLocaleString()}
+          {t("status.indexer.boxes")}: {formatInt(st.boxCount, locale)}
         </span>
       )}
     </Link>

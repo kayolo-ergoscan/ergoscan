@@ -1237,7 +1237,7 @@ export function AddressView({
                     className="mt-2 text-[13px] font-medium tabular-nums"
                     style={{ color: INK.violet }}
                   >
-                    ${formatGroupedNumber(usd, 2, 2)}
+                    ${formatGroupedNumber(usd, 2, 2, locale)}
                   </p>
                 )}
                 {unconfirmed !== 0n && (

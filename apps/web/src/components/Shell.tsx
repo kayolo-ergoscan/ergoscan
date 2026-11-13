@@ -15,7 +15,7 @@ import { MoreSheet } from "./MoreSheet";
 import { PriceSheet } from "./PriceSheet";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { fetchChainStats } from "@/lib/chain-stats";
-import { formatCompact, formatUsd } from "@/lib/format";
+import { formatCompact, formatUsdPrice } from "@/lib/format";
 import { IndexerStatus } from "./IndexerStatus";
 import { INK } from "@/lib/palette";
 import { BrandMark, BrandWord } from "./BrandMark";
@@ -332,6 +332,7 @@ function PricesHit({ onOpen }: { onOpen: () => void }) {
 
 function ErgPrice({ compact = false, onOpen }: { compact?: boolean; onOpen?: () => void }) {
   const t = useT();
+  const { locale } = useI18n();
   const usd = useContext(ErgUsdContext);
   const [circulating, setCirculating] = useState<number | null>(null);
 
@@ -349,7 +350,8 @@ function ErgPrice({ compact = false, onOpen }: { compact?: boolean; onOpen?: () 
   }, [load]);
 
   const mcap = usd != null && circulating != null ? usd * circulating : null;
-  const priceText = usd != null ? formatUsd(usd, 2) : "—";
+  // Same four significant digits as the home price tile and the price sheet.
+  const priceText = usd != null ? formatUsdPrice(usd, locale) : "—";
   const mcapText = mcap != null ? `$${formatCompact(mcap)}` : "—";
   if (compact && onOpen) {
     // Phone: the price opens the price sheet (ERG, market cap, the ticker list).

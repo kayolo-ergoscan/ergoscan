@@ -1,17 +1,18 @@
 import { groupIntDigits } from "./format";
 
-/** Whole ERG glyphs with NBSP thousands — `83430000` → `83 430 000`. */
-export function supplyGlyphs(n: number): string[] {
+/** Whole ERG glyphs, grouped by the UI language — `83430000` → `83,430,000` / `83 430 000`. */
+export function supplyGlyphs(n: number, locale?: string): string[] {
   if (!Number.isFinite(n) || n < 0) return ["0"];
-  return groupIntDigits(String(Math.round(n))).split("");
+  return groupIntDigits(String(Math.round(n)), locale).split("");
 }
 
 export function zipSupplyGlyphs(
   from: number,
-  to: number
+  to: number,
+  locale?: string
 ): { idle: string; hover: string }[] {
-  const a = supplyGlyphs(from);
-  const b = supplyGlyphs(to);
+  const a = supplyGlyphs(from, locale);
+  const b = supplyGlyphs(to, locale);
   const w = Math.max(a.length, b.length);
   const pad = (g: string[]) => Array.from({ length: w - g.length }, () => "\u00a0").concat(g);
   const idle = pad(a);

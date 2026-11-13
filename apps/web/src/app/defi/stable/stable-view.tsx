@@ -31,15 +31,15 @@ function loc(locale: string): string {
   return locale === "ru" ? "ru-RU" : "en-US";
 }
 
-function fmtTok(n: number | null | undefined, dec: number, _locale: string): string {
+function fmtTok(n: number | null | undefined, dec: number, locale: string): string {
   if (n == null || !Number.isFinite(n)) return "—";
-  return formatGroupedNumber(n / 10 ** dec, dec, dec);
+  return formatGroupedNumber(n / 10 ** dec, dec, dec, locale);
 }
 
 
-function fmtErgFull(n: number, _locale: string): string {
+function fmtErgFull(n: number, locale: string): string {
   if (!Number.isFinite(n)) return "—";
-  return `${formatGroupedNumber(n, 2, 2)} ERG`;
+  return `${formatGroupedNumber(n, 2, 2, locale)} ERG`;
 }
 
 export function StableView({ initial }: { initial: AgeUsdBank | null }) {
@@ -355,16 +355,16 @@ function ratioInk(band: "below" | "in" | "above" | null | undefined): string {
   return "var(--muted)";
 }
 
-function fmtUsdPx(n: number | null | undefined, _locale: string, digits: number): string {
+function fmtUsdPx(n: number | null | undefined, locale: string, digits: number): string {
   if (n == null || !Number.isFinite(n)) return "—";
   const max = n > 0 && n < 0.01 ? Math.max(digits, 6) : digits;
-  return `$${formatGroupedNumber(n, Math.min(2, max), max)}`;
+  return `$${formatGroupedNumber(n, Math.min(2, max), max, locale)}`;
 }
 
-function fmtErgPx(n: number | null | undefined, _locale: string): string {
+function fmtErgPx(n: number | null | undefined, locale: string): string {
   if (n == null || !Number.isFinite(n)) return "—";
   const max = n > 0 && n < 0.01 ? 6 : 4;
-  return `${formatGroupedNumber(n, 2, max)} ERG`;
+  return `${formatGroupedNumber(n, 2, max, locale)} ERG`;
 }
 
 function RatioTile({

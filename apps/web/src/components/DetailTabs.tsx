@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef, type MouseEvent } from "react";
 import { compactFigure } from "@/components/KpiGrid";
 import { railScrollTarget, tabJumpDelta, tabRoom } from "@/lib/detail-tabs";
+import { formatInt } from "@/lib/format";
 
 export type DetailTabItem<T extends string> = {
   id: T;
@@ -31,7 +32,7 @@ export function tabCount(
   plus = false
 ): string | null {
   if (n == null || !Number.isFinite(n) || n <= 0) return null;
-  const shown = compactFigure(n) ?? n.toLocaleString(locale === "ru" ? "ru-RU" : "en-US");
+  const shown = compactFigure(n) ?? formatInt(n, locale);
   return plus ? `${shown}+` : shown;
 }
 

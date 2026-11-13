@@ -83,9 +83,9 @@ function loc(locale: string): string {
 
 
 
-function fmtErgFull(n: number): string {
+function fmtErgFull(n: number, locale?: string): string {
   if (!Number.isFinite(n)) return "—";
-  return `${formatGroupedNumber(n, 2, 2)} ERG`;
+  return `${formatGroupedNumber(n, 2, 2, locale)} ERG`;
 }
 
 function fmtPct(n: number): string {
@@ -274,7 +274,7 @@ export function PoolCardView({
         >
           <p className="mt-0.5 text-[17px] font-semibold leading-[1.15] tabular-nums tracking-tight">
             <KpiNum compact={pool && pool.tvlErg > 0 ? compactFigure(pool.tvlErg, "ERG") : undefined}>
-              {pool && pool.tvlErg > 0 ? fmtErgFull(pool.tvlErg) : miss}
+              {pool && pool.tvlErg > 0 ? fmtErgFull(pool.tvlErg, locale) : miss}
             </KpiNum>
           </p>
           <p className="mt-0.5 truncate text-[12px] leading-[1.15]">
@@ -288,7 +288,7 @@ export function PoolCardView({
             <span className="font-semibold tabular-nums" style={{ color: INK.violet }}>
               {pool?.priceErg != null && pool.priceErg > 0 ? (
                 <>
-                  <PrettyPrice n={pool.priceErg} /> ERG
+                  <PrettyPrice n={pool.priceErg} locale={locale} /> ERG
                 </>
               ) : (
                 miss
@@ -344,7 +344,7 @@ export function PoolCardView({
         >
           <p className="mt-0.5 text-[17px] font-semibold leading-[1.15] tabular-nums tracking-tight">
             <KpiNum compact={pool?.volErg != null && pool.volErg > 0 ? compactFigure(pool.volErg, "ERG") : undefined}>
-              {pool?.volErg != null && pool.volErg > 0 ? fmtErgFull(pool.volErg) : miss}
+              {pool?.volErg != null && pool.volErg > 0 ? fmtErgFull(pool.volErg, locale) : miss}
             </KpiNum>
           </p>
           <p className="mt-0.5 truncate text-[12px] leading-[1.15] text-[var(--muted-2)]">
@@ -376,7 +376,7 @@ export function PoolCardView({
         >
           <p className="mt-0.5 text-[17px] font-semibold leading-[1.15] tabular-nums tracking-tight">
             <KpiNum>
-              {pool?.income30Erg != null ? fmtErgFull(pool.income30Erg) : miss}
+              {pool?.income30Erg != null ? fmtErgFull(pool.income30Erg, locale) : miss}
             </KpiNum>
           </p>
           <p className="mt-0.5 truncate text-[12px] leading-[1.15] text-[var(--muted-2)]">

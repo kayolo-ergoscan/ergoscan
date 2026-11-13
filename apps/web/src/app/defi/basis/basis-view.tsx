@@ -456,7 +456,7 @@ export function BasisView({ initial }: { initial: BasisSnap | null }) {
     },
     {
       label: t("basis.total"),
-      value: totalNano != null ? describeRentErg(totalNano).text ?? miss : miss,
+      value: totalNano != null ? describeRentErg(totalNano, locale).text ?? miss : miss,
       unavailable: totalNano == null,
       sub: unpriced > 0 ? t("basis.totalGap") : t("basis.totalSub"),
       mark: <KpiMark id="erg" tone={INK.teal} />,

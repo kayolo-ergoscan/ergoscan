@@ -3,12 +3,13 @@
 import { useState } from "react";
 import { FeedPlate } from "@/components/feed/Feed";
 import { formatGroupedInt } from "@/lib/format";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { BlockHeaderFields } from "@/lib/list-snapshots";
 
-function grouped(raw: string | null): string {
+function grouped(raw: string | null, locale: string): string {
   if (!raw) return "";
   try {
-    return formatGroupedInt(BigInt(raw)).replace(/\u00a0/g, " ");
+    return formatGroupedInt(BigInt(raw), locale).replace(/\u00a0/g, " ");
   } catch {
     return raw;
   }
@@ -102,6 +103,7 @@ export function BlockHeaderSheet({
   header: BlockHeaderFields;
   t: (k: string) => string;
 }) {
+  const { locale } = useI18n();
   const copyLabel = t("tx.copy");
   const copiedLabel = t("tx.copied");
   const roots: { label: string; value: string; tone: string }[] = [
@@ -114,7 +116,7 @@ export function BlockHeaderSheet({
     { label: "pk", value: header.powPk ?? "", copy: header.powPk ?? "", tone: "sky" },
     { label: "w", value: header.powW ?? "", copy: header.powW ?? "", tone: "green" },
     { label: "n", value: header.powN ?? "", copy: header.powN ?? "", tone: "gold" },
-    { label: "d", value: grouped(header.powD), copy: header.powD ?? "", numeric: true, tone: "coral" },
+    { label: "d", value: grouped(header.powD, locale), copy: header.powD ?? "", numeric: true, tone: "coral" },
   ];
   return (
     <section className="hdr-doc" aria-label={t("block.tab.header")}>
@@ -141,11 +143,11 @@ export function BlockHeaderSheet({
         </div>
         <div className="hdr-fact is-gold">
           <dt>{t("block.header.bits")}</dt>
-          <dd>{grouped(header.nBits) || "—"}</dd>
+          <dd>{grouped(header.nBits, locale) || "—"}</dd>
         </div>
         <div className="hdr-fact is-teal">
           <dt>{t("block.header.difficulty")}</dt>
-          <dd>{grouped(header.difficulty) || "—"}</dd>
+          <dd>{grouped(header.difficulty, locale) || "—"}</dd>
         </div>
       </dl>
       <div className="feed hdr-feed">

@@ -513,6 +513,12 @@ html {
   font-size: 12px;
   color: var(--muted-2);
 }
+/* RU under 380 px: «последний блок 1 мин назад» needs the date's room; the tag already names the day. */
+@media (max-width: 379px) {
+  html[lang="ru"] .feed-plate:has(.feed-plate-live) .feed-plate-date {
+    display: none;
+  }
+}
 .feed-facts a {
   color: inherit;
 }

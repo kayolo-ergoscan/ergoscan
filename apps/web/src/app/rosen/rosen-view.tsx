@@ -510,7 +510,8 @@ function FeedRosenRow({ row, lead, enterClass }: { row: RosenEventItem; lead: Fe
       sub={
         fee != null ? (
           <>
-            {t("feed.fee")}{" "}
+            {/* Its own word: Russian "сбор" keeps the route title on one line at 360 px. */}
+            {t("rosen.rowFee")}{" "}
             <FeedAmount raw={fee} decimals={dec} unit={token} glance />
           </>
         ) : null
