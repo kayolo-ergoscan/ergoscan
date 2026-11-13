@@ -6,6 +6,7 @@ import { useFloatTip, type TipRect } from "@/components/Tip";
 import { drawPixel, pixelColor, type PixelMood } from "./pixel";
 import { lookEdge, lookInk } from "@/lib/look";
 import { canvasDpr, watchOnScreen } from "@/lib/canvas-run";
+import { onKayolo } from "@/lib/kayolo/events";
 
 /**
  * Live-block tape drawn on a canvas, same family as the rent yard.
@@ -13,7 +14,8 @@ import { canvasDpr, watchOnScreen } from "@/lib/canvas-run";
  * «Пиксель» (in the block colour) stays at the right and watches the block that
  * is still growing: a new block makes him hop with ^ ^ eyes and follow it in,
  * a busy one surprises him, a tx landing gets a knock, and when no block has
- * come for a long while (or no data at all) he dozes off.
+ * come for a long while (or no data at all) he dozes off. A rare height (Kayolo E20, the 10k
+ * steps) gets one more beat after the usual cheer: eyes on that crate, then a hop.
  */
 
 export type CadenceYardBlock = {
@@ -61,6 +63,12 @@ const BUSY_TX = 39;
 const QUIET_TX = 4;
 const BODY_MIN = 14;
 const BODY_SPAN = 40;
+/** E20 on home: count(1) to the rare crate, then hopHappy (design/brand/kayolo-life.md §8.3). */
+const RARE_LOOK_MS = 300;
+const RARE_HAPPY_MS = 1300;
+/** A rare height that has not shown up on the tape by then still gets its beat, on the newest crate. */
+const RARE_CRATE_WAIT_MS = 4000;
+const RARE_TTL_MS = 60_000;
 
 /**
  * Quiet rows stay the height they would have beside a busy block.
@@ -140,6 +148,10 @@ export function CadenceYard({
     let phase: "wait" | "intro" | "live" = "wait";
     let introStart = 0;
     let liveAt = 0;
+    /** A rare height was announced; its beat waits for the crate and for the usual cheer. */
+    let rareCall: { height: number; at: number } | null = null;
+    let rareAt = 0;
+    let rareId: string | null = null;
 
     const paint = (now: number) => {
       const dt = Math.min(0.05, (now - last) / 1000);
@@ -297,6 +309,16 @@ export function CadenceYard({
         lastNewestId = newest.id;
         lastNewAt = now;
       }
+      if (rareCall && now - rareCall.at > RARE_TTL_MS) rareCall = null;
+      if (rareCall && phase === "live") {
+        const height = rareCall.height;
+        const crate = list.find((b) => b.height === height);
+        if (crate || now - rareCall.at > RARE_CRATE_WAIT_MS) {
+          rareAt = Math.max(now, cheerUntil);
+          rareId = crate?.id ?? newest?.id ?? null;
+          rareCall = null;
+        }
+      }
       pickSwing = newest && !reduce && now < swingUntil ? Math.sin(((swingUntil - now) / 420) * Math.PI) : 0;
       const driveX = -40 + (robotX + 40) * Math.min(1, driveU);
       const rx = phase === "intro" ? driveX : robotX;
@@ -308,6 +330,11 @@ export function CadenceYard({
           mood = cheerBig ? "surprised" : "happy";
           // Eyes follow the new crate as it slides in to its plate.
           const g = ghosts.get(newest.id);
+          if (g) gaze = { x: Math.max(-1.3, Math.min(1.3, (g.x - rx) / 40)), y: 0.15 };
+        } else if (rareAt && now >= rareAt && now < rareAt + RARE_LOOK_MS + RARE_HAPPY_MS) {
+          // The rare crate: a look at it, then a hop (the hop comes with the switch to happy).
+          mood = now < rareAt + RARE_LOOK_MS ? "look" : "happy";
+          const g = rareId ? ghosts.get(rareId) : undefined;
           if (g) gaze = { x: Math.max(-1.3, Math.min(1.3, (g.x - rx) / 40)), y: 0.15 };
         } else if (now - lastNewAt > STALE_MS) {
           mood = "sleepy";
@@ -346,8 +373,13 @@ export function CadenceYard({
         raf = requestAnimationFrame(paint);
       }
     });
+    const offRare = onKayolo((ev) => {
+      if (ev.k !== "chain:rare") return;
+      rareCall = { height: ev.height, at: performance.now() };
+    });
     return () => {
       stop();
+      offRare();
       cancelAnimationFrame(raf);
     };
   }, [reduce]);

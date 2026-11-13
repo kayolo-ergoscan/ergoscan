@@ -7,6 +7,10 @@
  * each other, blinks and glances come at uneven times and nothing loops on a beat.
  * `reduce` keeps him still: no hops, no wandering eyes, only the blink.
  * Sheets: design/brand/sheets/pixel.html.
+ *
+ * Kayolo's flags (design/brand/kayolo-life.md §9.7) are additions only: left out, the drawing is
+ * byte for byte what it was (pixel.test.ts keeps a golden log). They let a caller stop asking for
+ * frames: `breath`, `wobble`, `nod` and `glances` switch off the motions that never end.
  */
 
 export type PixelMood =
@@ -27,7 +31,9 @@ export type PixelMood =
   /** One eye bigger, leaning in: an empty page worth a peek. */
   | "curious"
   /** Focused squint, looking down at the job (reading, knocking a crate). */
-  | "work";
+  | "work"
+  /** ^ ^ eyes without the hop: pleased, a poke, a stroke. */
+  | "pleased";
 
 export type PixelPose = {
   /** Ground point under the middle of the body, in canvas CSS pixels. */
@@ -65,6 +71,33 @@ export type PixelPose = {
   reduce?: boolean;
   /** Several mascots on one canvas need their own id. */
   id?: string;
+  /* ---- Kayolo flags (§9.7); each one left out keeps today's drawing ---- */
+  /** 0…1, default 1: the slow squash of breathing (and the sleepy sway). It never asks for frames. */
+  breath?: number;
+  /** Default true: sleepy squares drift up. "one": a single still square (the frozen frame of sleep). */
+  zzz?: boolean | "one";
+  /** 0…1: lids, in place of the mood's own. */
+  doze?: number;
+  /** −0.2…+0.2 on top of the body squash. */
+  squash?: number;
+  /** 0…1: the whole figure fades (a move done by fading). */
+  alpha?: number;
+  /** 0…1: the front eye closes. */
+  wink?: number;
+  /** 0…1, default 1: the think sway and its darting eyes. 0 is a still think face. */
+  wobble?: number;
+  /** 0…1, default 1: the sleepy nod that loops every 4.2 s. */
+  nod?: number;
+  /** Default true: he glances around on his own. False holds the eyes where they are. */
+  glances?: boolean;
+  /** Multiplies the time between his own glances (default 1). */
+  glanceGap?: number;
+  /** Multiplies how far his own glances go (default 1). */
+  glanceRange?: number;
+  /** Multiplies the hop height (default 1). */
+  hopScale?: number;
+  /** Highest hop in CSS px (the phone keeps hops at 6 px or lower). */
+  hopMax?: number;
 };
 
 export const PIXEL_ORANGE = "#ff6a2b";
@@ -101,6 +134,7 @@ const MOODS: Record<PixelMood, Partial<Face>> = {
   sad: { w: 4.4, h: 6.6, lid: 0.14, slant: 0.42, dy: -1, gy: 0.85, squash: -0.07 },
   curious: { w: 4.6, h: 8.6, hL: 0.7, hR: 1.25, gx: 0.8, gy: -0.25, tilt: 0.09 },
   work: { w: 5, h: 4.2, slant: -0.18, gx: 0.6, gy: 0.6 },
+  pleased: { smile: 1, w: 5, dy: -2, squash: 0.08 },
 };
 
 type State = {
@@ -122,7 +156,14 @@ type State = {
   lastRoll: number;
   speed: number;
   wob: number;
+  /** The lid the last frame eased toward when `doze` set it. */
+  lidTo?: number;
+  /** What the last frame asked for: pixelWake reads it. */
+  calm: { wobble: number; nod: number; breath: number; zzz: boolean | "one"; glances: boolean; reduce: boolean };
 };
+
+/** A face's running state (moods easing, blink and glance clocks, a hop): moves from canvas to canvas. */
+export type PixelState = State;
 
 const states = new WeakMap<object, Map<string, State>>();
 
@@ -163,6 +204,7 @@ function stateOf(ctx: CanvasRenderingContext2D, id: string, now: number, mood: P
       lastRoll: 0,
       speed: 0,
       wob: rnd() * 1000,
+      calm: { wobble: 1, nod: 1, breath: 1, zzz: true, glances: true, reduce: false },
     };
     m.set(id, s);
   }
@@ -204,6 +246,14 @@ export function drawPixel(ctx: CanvasRenderingContext2D, pose: PixelPose) {
   const rnd = s.rnd;
   const face = (pose.face ?? -1) < 0 ? -1 : 1;
   const scale = pose.scale ?? 1;
+  const wobble = clamp(pose.wobble ?? 1, 0, 1);
+  const nodAmt = clamp(pose.nod ?? 1, 0, 1);
+  const breath = clamp(pose.breath ?? 1, 0, 1);
+  const zzz = pose.zzz ?? true;
+  const alpha = clamp(pose.alpha ?? 1, 0, 1);
+  // A still think face does not dart its eyes either.
+  const ownGlances = (pose.glances ?? true) && !(mood === "think" && wobble === 0);
+  s.calm = { wobble, nod: nodAmt, breath, zzz, glances: ownGlances, reduce };
 
   // Mood change: a hop for the loud ones.
   if (mood !== s.mood) {
@@ -218,6 +268,8 @@ export function drawPixel(ctx: CanvasRenderingContext2D, pose: PixelPose) {
 
   // Ease the face toward the mood. Slightly different rates per field read as organic.
   const target: Face = { ...BASE, ...MOODS[mood] };
+  if (pose.doze != null) target.lid = clamp(pose.doze, 0, 1);
+  s.lidTo = pose.doze != null ? target.lid : undefined;
   const k = (tau: number) => (reduce ? 1 : 1 - Math.exp(-dt / tau));
   const f = s.f;
   for (const key of Object.keys(target) as (keyof Face)[]) {
@@ -246,12 +298,17 @@ export function drawPixel(ctx: CanvasRenderingContext2D, pose: PixelPose) {
   if (f.smile > 0.6) blink = 0;
 
   // Glances: idle wanders, think darts, sleepy drifts. Pose gaze wins.
-  if (!reduce && now >= s.glanceNext) {
+  if (!ownGlances) {
+    s.glanceTo = { x: s.glance.x, y: s.glance.y };
+  } else if (!reduce && now >= s.glanceNext) {
     const dart = mood === "think";
-    const range = mood === "sleepy" ? 0.25 : dart ? 1 : 0.7;
+    let range = mood === "sleepy" ? 0.25 : dart ? 1 : 0.7;
+    if (pose.glanceRange != null) range *= pose.glanceRange;
     s.glanceTo = { x: (rnd() * 2 - 1) * range, y: (rnd() * 2 - 1) * range * (dart ? 0.5 : 0.45) };
     if (mood === "curious" || mood === "work") s.glanceTo.x *= 0.35;
-    s.glanceNext = now + (dart ? 260 + rnd() * 520 : mood === "sleepy" ? 2600 + rnd() * 2400 : 900 + rnd() * 2600);
+    let gap = dart ? 260 + rnd() * 520 : mood === "sleepy" ? 2600 + rnd() * 2400 : 900 + rnd() * 2600;
+    if (pose.glanceGap != null) gap *= pose.glanceGap;
+    s.glanceNext = now + gap;
   }
   const gk = 1 - Math.exp(-dt / (mood === "sleepy" ? 380 : 45));
   const gdx = (s.glanceTo.x - s.glance.x) * gk;
@@ -286,20 +343,27 @@ export function drawPixel(ctx: CanvasRenderingContext2D, pose: PixelPose) {
   if (s.hopKind && now - s.hopAt > 700) s.hopKind = null;
   const pick = clamp(pose.pick ?? 0, 0, 1);
   let sq = f.squash + hp.sq - pick * 0.12 - apart * 0.32;
+  if (pose.squash) sq += clamp(pose.squash, -0.2, 0.2);
   let lift = hp.y * scale;
+  if (s.hopKind && (pose.hopScale != null || pose.hopMax != null)) {
+    const peak = (s.hopKind === "surprised" ? 11 : 8) * scale;
+    lift *= Math.max(0, Math.min(pose.hopScale ?? 1, (pose.hopMax ?? Infinity) / peak));
+  }
   if (walking) {
     const ph = roll * 0.42;
     lift += Math.abs(Math.sin(ph)) * 2.2 * scale;
     sq += 0.07 * Math.abs(Math.sin(ph)) - 0.05;
   }
-  if (!reduce && mood === "sleepy") sq += 0.035 * Math.sin(now / 900);
-  else if (!reduce) sq += 0.012 * Math.sin(now / 640 + s.wob);
+  if (breath > 0) {
+    if (!reduce && mood === "sleepy") sq += 0.035 * Math.sin(now / 900) * breath;
+    else if (!reduce) sq += 0.012 * Math.sin(now / 640 + s.wob) * breath;
+  }
   let tilt = f.tilt * face + face * (pose.head ?? 0) * 0.2 + face * pick * 0.16;
-  if (!reduce && mood === "think") tilt += 0.05 * Math.sin((now + s.wob) / 260) + 0.02 * Math.sin(now / 97);
-  if (!reduce && mood === "sleepy") {
+  if (!reduce && mood === "think" && wobble > 0) tilt += (0.05 * Math.sin((now + s.wob) / 260) + 0.02 * Math.sin(now / 97)) * wobble;
+  if (!reduce && mood === "sleepy" && nodAmt > 0) {
     // Dozing: the square sinks forward, then catches itself.
     const nod = ((now + s.wob * 7) % 4200) / 4200;
-    tilt += face * (nod < 0.85 ? 0.07 * (nod / 0.85) : 0.07 * (1 - (nod - 0.85) / 0.15));
+    tilt += face * (nod < 0.85 ? 0.07 * (nod / 0.85) : 0.07 * (1 - (nod - 0.85) / 0.15)) * nodAmt;
   }
   if (reduce) tilt = f.tilt * face;
 
@@ -315,6 +379,7 @@ export function drawPixel(ctx: CanvasRenderingContext2D, pose: PixelPose) {
   ctx.translate(pose.x + face * pick * 2 * scale, pose.y - lift);
   ctx.rotate(tilt);
   ctx.fillStyle = color;
+  if (alpha !== 1) ctx.globalAlpha = alpha;
   ctx.fillRect(-bw / 2, -bh, bw, bh);
 
   // Eyes.
@@ -326,7 +391,8 @@ export function drawPixel(ctx: CanvasRenderingContext2D, pose: PixelPose) {
   for (const side of [-1, 1] as const) {
     const cx = side * f.dx * u + gx * 2.3 * u;
     const hMul = side === -face ? f.hL : f.hR;
-    const eh = Math.max(1.1, ehBase * hMul * (1 - blink * 0.9));
+    const shut = pose.wink && side === face ? Math.max(blink, clamp(pose.wink, 0, 1)) : blink;
+    const eh = Math.max(1.1, ehBase * hMul * (1 - shut * 0.9));
     const w = ew * u;
     const h = eh * vu;
     // Keep the eye inside the square with a margin.
@@ -335,7 +401,7 @@ export function drawPixel(ctx: CanvasRenderingContext2D, pose: PixelPose) {
     const top = bottom - h;
     const open = 1 - clamp(f.smile, 0, 1);
     if (open > 0.04) {
-      ctx.globalAlpha = open;
+      ctx.globalAlpha = open * alpha;
       ctx.fillStyle = EYE_INK;
       ctx.fillRect(left, top, w, h);
       // Lids: cut the top in the body colour; slant > 0 droops the outer corner.
@@ -357,7 +423,7 @@ export function drawPixel(ctx: CanvasRenderingContext2D, pose: PixelPose) {
     }
     if (f.smile > 0.04) {
       // ^ ^ : happy eyes squeezed shut.
-      ctx.globalAlpha = clamp(f.smile, 0, 1);
+      ctx.globalAlpha = clamp(f.smile, 0, 1) * alpha;
       ctx.strokeStyle = EYE_INK;
       ctx.lineWidth = 2.4 * u;
       ctx.lineCap = "butt";
@@ -370,7 +436,7 @@ export function drawPixel(ctx: CanvasRenderingContext2D, pose: PixelPose) {
       ctx.lineTo(cx + r, ay + r * 0.62);
       ctx.stroke();
     }
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = alpha;
   }
   if (mood === "sad" && f.lid > 0.12 && !reduce) {
     // One pixel tear runs down from the front eye now and then.
@@ -381,26 +447,26 @@ export function drawPixel(ctx: CanvasRenderingContext2D, pose: PixelPose) {
       const tx = face * f.dx * u + gx * 2.3 * u;
       const ty = cy0 + (f.h * 0.5 + 0.6) * vu + (t / 0.55) * (bh * 0.42);
       const ts = 1.8 * u;
-      ctx.globalAlpha = t < 0.45 ? 1 : 1 - (t - 0.45) / 0.1;
+      ctx.globalAlpha = (t < 0.45 ? 1 : 1 - (t - 0.45) / 0.1) * alpha;
       ctx.fillStyle = "#5b8dff";
       ctx.fillRect(tx - ts / 2, Math.min(ty, -ts - 0.5 * vu), ts, ts * 1.3);
-      ctx.globalAlpha = 1;
+      ctx.globalAlpha = alpha;
     }
   }
   ctx.restore();
 
   // Sleepy: little squares drifting up off the face side.
-  if (mood === "sleepy" && f.lid > 0.5) {
+  if (mood === "sleepy" && f.lid > 0.5 && zzz !== false) {
     ctx.save();
     ctx.fillStyle = color;
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < (zzz === "one" ? 1 : 3); i++) {
       const cyc = 2600;
-      const t = reduce ? 0.35 + i * 0.22 : (((now + i * (cyc / 3)) % cyc) / cyc);
+      const t = reduce || zzz === "one" ? 0.35 + i * 0.22 : (((now + i * (cyc / 3)) % cyc) / cyc);
       const a = t < 0.15 ? t / 0.15 : 1 - (t - 0.15) / 0.85;
       const size = (1.6 + t * 1.6) * scale * 1.3;
       const px = pose.x + face * (bw * 0.42 + t * 9 * scale) + Math.sin(t * 6 + i) * 2 * scale;
       const py = pose.y - lift - bh - 2 * scale - t * 16 * scale;
-      ctx.globalAlpha = clamp(a, 0, 1) * 0.85;
+      ctx.globalAlpha = clamp(a, 0, 1) * 0.85 * alpha;
       ctx.fillRect(px - size / 2, py - size / 2, size, size);
     }
     ctx.restore();
@@ -409,24 +475,53 @@ export function drawPixel(ctx: CanvasRenderingContext2D, pose: PixelPose) {
 
 /**
  * When this face next changes on its own, on the clock of its last frame. That frame's time while
- * a blink, hop, gait, glance or mood ease is still running (and always for think, sleepy and sad,
- * which never stand still); otherwise the next blink or glance. Infinity before the first frame.
- * Read-only: drawing is unchanged. A caller may stop its frames once this is later than now.
+ * a blink, hop, gait, glance or mood ease is still running, and while a motion that never ends is
+ * on (the think sway, the sleepy nod and sway, drifting squares, a tear); otherwise the next blink
+ * or glance. Infinity before the first frame. Read-only: drawing is unchanged. A caller may stop its
+ * frames once this is later than now. Breathing on an awake face never asks for frames.
  */
 export function pixelWake(ctx: CanvasRenderingContext2D, id = "main"): number {
   const s = states.get(ctx.canvas)?.get(id);
   if (!s) return Infinity;
   const now = s.t;
-  if (s.mood === "think" || s.mood === "sleepy" || s.mood === "sad") return now;
-  const blinkLen = 150;
+  const c = s.calm;
+  if (s.mood === "think" && c.wobble > 0 && !c.reduce) return now;
+  if (s.mood === "sleepy" && !c.reduce && (c.nod > 0 || c.breath > 0 || (c.zzz === true && s.f.lid > 0.5))) return now;
+  if (s.mood === "sad" && !c.reduce) return now;
+  const blinkLen = s.mood === "sleepy" ? 420 : 150;
   if (now < s.blinkAt + (s.blinkTwice ? blinkLen * 2 + 70 : blinkLen)) return now;
   if (s.hopKind || s.speed > 15 || s.smear > 0.01) return now;
   if (Math.abs(s.glanceTo.x - s.glance.x) > 0.01 || Math.abs(s.glanceTo.y - s.glance.y) > 0.01) return now;
   const target: Face = { ...BASE, ...MOODS[s.mood] };
+  if (s.lidTo != null) target.lid = s.lidTo;
   for (const key of Object.keys(target) as (keyof Face)[]) {
     if (s.f[key] !== target[key]) return now;
   }
-  return Math.min(s.blinkNext, s.glanceNext);
+  return c.glances && !c.reduce ? Math.min(s.blinkNext, s.glanceNext) : s.blinkNext;
+}
+
+/** A copy of the face's running state on this canvas (null before its first frame). */
+export function pixelState(ctx: CanvasRenderingContext2D, id = "main"): PixelState | null {
+  const s = states.get(ctx.canvas)?.get(id);
+  return s ? copyState(s) : null;
+}
+
+/**
+ * Carries a face over from another canvas (the header pass, his window, the layer): the mood keeps
+ * easing, the blink and glance clocks and a hop in the air go on, so the hand-over shows no jump.
+ */
+export function adoptPixelState(ctx: CanvasRenderingContext2D, id: string, state: PixelState | null) {
+  if (!state) return;
+  let m = states.get(ctx.canvas);
+  if (!m) {
+    m = new Map();
+    states.set(ctx.canvas, m);
+  }
+  m.set(id, copyState(state));
+}
+
+function copyState(s: State): State {
+  return { ...s, f: { ...s.f }, glance: { ...s.glance }, glanceTo: { ...s.glanceTo }, calm: { ...s.calm } };
 }
 
 /** Entity colour the page wears: block, tx, address, token, box, or the brand orange. */
