@@ -5,7 +5,7 @@ import { Tip } from "./Tip";
 import { useT } from "@/lib/i18n/I18nProvider";
 import type { EvidenceKind } from "@/lib/trust-board";
 
-const TONE: Record<EvidenceKind, string> = {
+export const EVIDENCE_TONE: Record<EvidenceKind, string> = {
   chain: "var(--accent)",
   decoded: "var(--k-nft, #9b87f5)",
   telemetry: "var(--c-net, #59b7c7)",
@@ -37,11 +37,24 @@ export function EvidenceBadge({
     >
       <span
         className="h-1.5 w-1.5 shrink-0 rounded-full"
-        style={{ backgroundColor: TONE[kind] }}
+        style={{ backgroundColor: EVIDENCE_TONE[kind] }}
         aria-hidden
       />
       {t(`trust.evidence.${kind}${compact ? ".short" : ""}`)}
     </span>
     </Tip>
+  );
+}
+
+/** The badge's dot alone: phones show it beside a figure and explain the colours once in a legend. */
+export function EvidenceDot({ kind, className }: { kind: EvidenceKind; className?: string }) {
+  const t = useT();
+  return (
+    <span
+      className={clsx("inline-block h-1.5 w-1.5 shrink-0 rounded-full", className)}
+      style={{ backgroundColor: EVIDENCE_TONE[kind] }}
+      role="img"
+      aria-label={t(`trust.evidence.${kind}`)}
+    />
   );
 }

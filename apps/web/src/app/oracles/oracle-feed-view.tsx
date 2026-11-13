@@ -68,6 +68,8 @@ function loc(locale: string): string {
 function fmtQuote(slug: OracleFeedSlug, n: number | null, locale: string): string {
   if (n == null || !Number.isFinite(n) || n <= 0) return "—";
   if (slug === "erg-usd" || slug === "ergusd") return formatUsd(n, 4);
+  // Gold answers sit near 1e-6: six fixed decimals rounded them all to "0.000001".
+  if (n < 0.01) return n.toLocaleString(loc(locale), { maximumSignificantDigits: 3 });
   return n.toLocaleString(loc(locale), { maximumFractionDigits: 6 });
 }
 
