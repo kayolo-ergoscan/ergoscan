@@ -33,6 +33,25 @@ function HopMark({ dir }: { dir: "back" | "fwd" }) {
   );
 }
 
+/** A plain chevron: the phone pair beside a block height («‹ 1 915 360 ›»). */
+function StepMark({ dir }: { dir: "back" | "fwd" }) {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" className="block-hop-mark" aria-hidden>
+      <path
+        d={dir === "back" ? "M14.5 6 8.5 12l6 6" : "M9.5 6l6 6-6 6"}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.9"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+const stepCell =
+  "block-hop detail-step chip-press flex shrink-0 items-center justify-center rounded-[12px] text-[var(--muted)] hover:text-[var(--text)]";
+
 const PRESS_MS = 280;
 
 /** Neighbor hop. Press in on click, release after a short beat — no slide replay. */
@@ -44,6 +63,7 @@ export function HopNav({
   hint,
   storageKey,
   onPrefetch,
+  chevron = false,
 }: {
   dir: "back" | "fwd";
   pageId: string;
@@ -52,7 +72,10 @@ export function HopNav({
   hint?: string;
   storageKey: string;
   onPrefetch?: (href: string) => void;
+  /** 44 px chevron instead of the block-and-arrow cell (phone title row). */
+  chevron?: boolean;
 }) {
+  const cell = chevron ? stepCell : hopCell;
   const [pressed, setPressed] = useState(() => {
     if (typeof window === "undefined") return false;
     try {
@@ -91,12 +114,12 @@ export function HopNav({
     return () => window.clearTimeout(id);
   }, [dir, pageId, storageKey]);
 
-  const mark = <HopMark dir={dir} />;
+  const mark = chevron ? <StepMark dir={dir} /> : <HopMark dir={dir} />;
   if (!href) {
     return (
       <span
         data-dir={dir}
-        className={clsx(hopCell, "cursor-default opacity-40")}
+        className={clsx(cell, "cursor-default opacity-40")}
         aria-disabled
         aria-label={label}
       >
@@ -120,7 +143,7 @@ export function HopNav({
       }}
       onPointerEnter={() => onPrefetch?.(href)}
       onFocus={() => onPrefetch?.(href)}
-      className={clsx(hopCell, pressed && "is-pressed")}
+      className={clsx(cell, pressed && "is-pressed")}
     >
       {mark}
     </Link>

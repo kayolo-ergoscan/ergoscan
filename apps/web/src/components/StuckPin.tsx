@@ -62,7 +62,10 @@ function paint() {
     const p = span > 0 ? Math.min(1, Math.max(0, (pin - cr.top) / span)) : 1;
     const l = b ? cr.left - b.left : -1;
     const r = b ? b.right - cr.right : -1;
-    const dock = l >= -0.5 && r >= -0.5 && l <= 80 && r <= 80;
+    // Docking needs the bar's foot at the pin. Under a phone detail page's tab strip the
+    // pin sits a strip lower (detail-phone.css): the plate rides there free, the pill stays round.
+    const atFoot = b != null && b.bottom >= pin - 4;
+    const dock = atFoot && l >= -0.5 && r >= -0.5 && l <= 80 && r <= 80;
     out.push({ plate, stuck, dock, p, l: Math.max(0, l), r: Math.max(0, r) });
   }
   for (const o of out) {
