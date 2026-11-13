@@ -16,7 +16,21 @@
 import type { PixelPose, PixelState } from "@/components/pixel";
 import { say, type BodyWhere } from "./events";
 import { KAYOLO_LAYER, TOUR_GAP_MS } from "./thresholds";
-import { modeOf, pageMemory, readMode, sectionOf, type Mode } from "./memory";
+import {
+  HOME_KEY,
+  familiar,
+  KEY_KEY,
+  MODE_KEY,
+  modeOf,
+  pageMemory,
+  readMode,
+  sectionOf,
+  writeHome,
+  writeKeyOn,
+  writeMode,
+  type Home,
+  type Mode,
+} from "./memory";
 
 export type BodyPose = {
   /** Ground point under his middle, viewport px. */
@@ -135,8 +149,12 @@ export function moveBody(p: { x: number; y: number; face?: 1 | -1 }) {
 
 /* ---------------- his window's place ---------------- */
 
-/** Where his window puts the body at home, viewport px (ground point under his middle). */
-export type SlotPlace = { x: number; y: number; face: 1 | -1 };
+/**
+ * Where his window puts the body at home, viewport px (ground point under his middle). `el` is the
+ * window that does it: the desktop one by the title or the phone one in the pill, whichever layout
+ * is on.
+ */
+export type SlotPlace = { x: number; y: number; face: 1 | -1; el?: HTMLElement | null };
 let slot: SlotPlace | null = null;
 const slotSubs = new Set<(p: SlotPlace | null, was: SlotPlace | null) => void>();
 
@@ -147,7 +165,7 @@ export function slotPlace(): SlotPlace | null {
 /** The window moved to a new title edge (or went away). Listeners walk him over. */
 export function setSlotPlace(p: SlotPlace | null) {
   const was = slot;
-  if (p && was && Math.abs(p.x - was.x) < 0.5 && Math.abs(p.y - was.y) < 0.5 && p.face === was.face) return;
+  if (p && was && p.el === was.el && Math.abs(p.x - was.x) < 0.5 && Math.abs(p.y - was.y) < 0.5 && p.face === was.face) return;
   slot = p;
   for (const fn of [...slotSubs]) {
     try {
@@ -182,10 +200,63 @@ function local() {
   }
 }
 
+function reduceNow(): boolean {
+  return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
 /** The mode in force now (stored choice, else «Тихий» under reduced motion). */
 export function currentMode(): Mode {
-  const reduce = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  return modeOf(readMode(local), reduce);
+  return modeOf(readMode(local), reduceNow());
+}
+
+/** The mode he wakes or comes back to: «Живой», or «Тихий» when the system asks for less motion. */
+export function wakeMode(): Mode {
+  return reduceNow() ? "calm" : "live";
+}
+
+/*
+ * The person's choices (§4.6, §5): his panel and /settings write them; every tab applies them at
+ * once. `storage` reaches the other tabs; this tab hears it from here.
+ */
+const choiceSubs = new Set<() => void>();
+let choiceWatch = false;
+
+function tellChoice() {
+  for (const fn of [...choiceSubs]) {
+    try {
+      fn();
+    } catch {
+      /* */
+    }
+  }
+}
+
+/** A choice changed (mode, home, Shift+K; here, in another tab, or the system motion setting). */
+export function onChoice(fn: () => void): () => void {
+  if (!choiceWatch && typeof window !== "undefined") {
+    choiceWatch = true;
+    window.addEventListener("storage", (e) => {
+      if (e.key == null || e.key === MODE_KEY || e.key === HOME_KEY || e.key === KEY_KEY) tellChoice();
+    });
+    window.matchMedia("(prefers-reduced-motion: reduce)").addEventListener("change", tellChoice);
+  }
+  choiceSubs.add(fn);
+  return () => choiceSubs.delete(fn);
+}
+
+export function chooseMode(m: Mode) {
+  writeMode(local, m);
+  tellChoice();
+}
+
+export function chooseHome(h: Home) {
+  writeHome(local, h);
+  tellChoice();
+}
+
+export function chooseKey(on: boolean) {
+  writeKeyOn(local, on);
+  tellChoice();
 }
 
 /* ---------------- the tour gate (§7.1) ---------------- */
@@ -235,8 +306,32 @@ function pointerInHeader(): boolean {
   return !!h && pointerY <= h.getBoundingClientRect().bottom;
 }
 
-type Arrival = { path: string; tour: boolean; first: boolean };
+type Arrival = { path: string; tour: boolean; first: boolean; intro: boolean };
 let arrival: Arrival | null = null;
+
+/*
+ * The introduction (§5): on the very first visit he wakes up in his window before the tour. Known
+ * people (an old site key, or his own memory from before) never see it; `hello` is set silently.
+ */
+let introPending = false;
+
+export function introPendingNow(): boolean {
+  return introPending;
+}
+
+/** The introduction is over (played, cut short by input, or given up): no second one. */
+export function endIntro() {
+  if (!introPending) return;
+  introPending = false;
+  pageMemory().noteHello();
+  for (const fn of [...ownerSubs]) {
+    try {
+      fn(owner);
+    } catch {
+      /* */
+    }
+  }
+}
 
 /**
  * One answer per arrival on a path (re-runs on the same path, a locale change, get the same one).
@@ -248,11 +343,13 @@ export function arrive(path: string): Arrival {
   if (arrival?.path === path) return arrival;
   const mem = pageMemory();
   const sec = sectionOf(path);
-  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const mode = currentMode();
+  // A «Живой» chosen on /settings under reduced motion is a person's choice: it gets the tour too.
+  const reduce = reduceNow() && mode !== "live";
   const first = !mem.shown();
   const tour = tourDue({
     path,
-    mode: currentMode(),
+    mode,
     reduce,
     shown: !first,
     seenToday: mem.sectionSeenToday(sec),
@@ -260,13 +357,29 @@ export function arrive(path: string): Arrival {
     nowMs: Date.now(),
     pointerInHeader: pointerInHeader(),
   });
+  let intro = false;
+  if (path !== "/" && first && !mem.hello()) {
+    const known = familiar(local) || !!mem.view().first;
+    if (!known && tour) intro = true;
+    else mem.noteHello();
+  }
   if (path !== "/") {
     mem.noteSection(sec);
     mem.markShown();
     if (tour) mem.noteTour();
     else mem.flush();
   }
-  arrival = { path, tour, first };
+  arrival = { path, tour, first, intro };
+  if (intro) {
+    introPending = true;
+    for (const fn of [...ownerSubs]) {
+      try {
+        fn(owner);
+      } catch {
+        /* */
+      }
+    }
+  }
   return arrival;
 }
 

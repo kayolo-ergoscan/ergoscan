@@ -1,6 +1,23 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createMemory, dayKey, MEMORY_KEY, MEMORY_MAX, MODE_KEY, modeOf, readHome, readMode, sectionOf, SESSION_KEY } from "./memory";
+import {
+  createMemory,
+  dayKey,
+  familiar,
+  KEY_KEY,
+  MEMORY_KEY,
+  MEMORY_MAX,
+  MODE_KEY,
+  modeOf,
+  readHome,
+  readKeyOn,
+  readMode,
+  sectionOf,
+  SESSION_KEY,
+  welcomeFor,
+  writeHome,
+  writeKeyOn,
+} from "./memory";
 import { tourDue, type TourInput } from "./body";
 
 function store(init: Record<string, string> = {}) {
@@ -120,4 +137,57 @@ test("the tour: first show or first entry today, 10 min apart, «Живой» on
   assert.equal(tourDue({ ...base, mode: "calm" }), false);
   assert.equal(tourDue({ ...base, reduce: true }), false);
   assert.equal(tourDue({ ...base, pointerInHeader: true }), false);
+});
+
+test("Э2 choices: home, Shift+K (on unless switched off), every access survives a blocked store", () => {
+  const s = store();
+  assert.equal(readKeyOn(() => s), true);
+  writeKeyOn(() => s, false);
+  assert.equal(s.map.get(KEY_KEY), "0");
+  assert.equal(readKeyOn(() => s), false);
+  writeHome(() => s, "p");
+  assert.equal(readHome(() => s), "p");
+  assert.equal(readKeyOn(() => broken), true);
+  assert.doesNotThrow(() => writeKeyOn(() => broken, false));
+  assert.doesNotThrow(() => writeHome(() => broken, "l"));
+});
+
+test("known people get no introduction: any old site key counts", () => {
+  assert.equal(familiar(() => store()), false);
+  assert.equal(familiar(() => store({ favorites: "[]" })), true);
+  assert.equal(familiar(() => store({ "lumen-stage-locale": "ru" })), true);
+  assert.equal(familiar(() => broken), false);
+});
+
+test("welcome back: < 10 min nothing, then noticed, a hop, the big one after a week", () => {
+  const now = Date.UTC(2026, 10, 13, 12);
+  const ago = (s: number) => Math.floor(now / 1000) - s;
+  assert.equal(welcomeFor(null, now), "none");
+  assert.equal(welcomeFor(ago(5 * 60), now), "none");
+  assert.equal(welcomeFor(ago(30 * 60), now), "notice");
+  assert.equal(welcomeFor(ago(20 * 3600), now), "hop");
+  assert.equal(welcomeFor(ago(9 * 86400), now), "big");
+});
+
+test("pets add up across tabs, the menu hint stops after 3, hello sticks; last-before is this load's", () => {
+  let now = Date.UTC(2026, 10, 13, 12);
+  const local = store({ [MEMORY_KEY]: JSON.stringify({ v: 1, last: Math.floor(now / 1000) - 7200, pets: 2 }) });
+  const a = createMemory({ local: () => local, session: () => null, now: () => now });
+  const b = createMemory({ local: () => local, session: () => null, now: () => now });
+  assert.equal(a.lastBefore(), Math.floor(now / 1000) - 7200);
+  a.pet();
+  b.pet();
+  b.pet();
+  a.flush(true);
+  b.flush(true);
+  assert.equal(JSON.parse(local.map.get(MEMORY_KEY) ?? "{}").pets, 5);
+  assert.equal(a.lastBefore(), Math.floor(now / 1000) - 7200, "a write does not move the greeting's clock");
+  for (let i = 0; i < 5; i++) if (a.hintLeft()) a.noteHint();
+  assert.equal(a.hintLeft(), false);
+  assert.equal(JSON.parse(local.map.get(MEMORY_KEY) ?? "{}").hint, 3);
+  assert.equal(b.hello(), false);
+  a.noteHello();
+  assert.equal(b.hello(), true, "another tab sees it");
+  now += 1000;
+  assert.ok((local.map.get(MEMORY_KEY) ?? "").length <= MEMORY_MAX);
 });

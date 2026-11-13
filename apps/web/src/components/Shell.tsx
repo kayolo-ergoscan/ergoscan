@@ -205,6 +205,8 @@ export function Shell({
             <div className="phone-toolbar flex h-14 items-center gap-2 px-2.5 lg:hidden">
               <NavBrand compact />
               <SearchField />
+              {/* His window in the pill: brand → search → Kayolo → price in Tab order (§3.2). */}
+              <KayoloSlot phone />
               <ErgPrice compact onOpen={openPrices} />
             </div>
           </header>

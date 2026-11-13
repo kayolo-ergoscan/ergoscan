@@ -1,8 +1,8 @@
 /**
  * Kayolo's memory, browser only (design/brand/kayolo-life.md §5). Nothing goes to the server.
  *
- * - `kayolo.v1.mode` and `kayolo.v1.home`: the person's choices. Only a person's action writes them
- *   (the panel and /settings come in Э2); the `storage` event applies them in every tab.
+ * - `kayolo.v1.mode`, `kayolo.v1.home`, `kayolo.v1.key`: the person's choices. Only a person's action
+ *   writes them (his panel, /settings); the `storage` event applies them in every tab.
  * - `kayolo.v1`: counters, at most 2 KB. Always read → merge → write, on pagehide and hidden, else
  *   at most once a minute: times take the max, counters add this tab's growth since its last write,
  *   lists join. Two tabs never wipe each other. Other fields (Э0's `rare`) are kept as they are.
@@ -15,10 +15,13 @@ export type Home = "r" | "l" | "p";
 
 export const MODE_KEY = "kayolo.v1.mode";
 export const HOME_KEY = "kayolo.v1.home";
+/** "0": Shift+K is off (WCAG 2.1.4). */
+export const KEY_KEY = "kayolo.v1.key";
 export const MEMORY_KEY = "kayolo.v1";
 export const SESSION_KEY = "kayolo.s";
 export const MEMORY_MAX = 2048;
 const SECS_MAX = 24;
+const HINT_MAX = 3;
 const COUNT_MAX = 9999;
 const FLUSH_MS = 60_000;
 
@@ -64,6 +67,50 @@ export function writeMode(store: () => Store | null, mode: Mode): void {
   set(store, MODE_KEY, mode);
 }
 
+/** A person's choice only (/settings). */
+export function writeHome(store: () => Store | null, home: Home): void {
+  set(store, HOME_KEY, home);
+}
+
+/** Shift+K opens him unless the person switched it off on /settings. */
+export function readKeyOn(store: () => Store | null): boolean {
+  return get(store, KEY_KEY) !== "0";
+}
+
+export function writeKeyOn(store: () => Store | null, on: boolean): void {
+  set(store, KEY_KEY, on ? "1" : "0");
+}
+
+/**
+ * Keys the site wrote before he lived here (§5): whoever has one has been here, so there is no
+ * introduction for them; `hello` is set silently.
+ */
+export const OLD_SITE_KEYS = [
+  "favorites",
+  "lumen-stage-locale",
+  "lumen.rail",
+  "ergoscan.ink",
+  "lumen-stage-search-recents",
+  "lumen-stage-watch",
+  "lumen-block-hop",
+] as const;
+
+export function familiar(store: () => Store | null): boolean {
+  return OLD_SITE_KEYS.some((k) => get(store, k) != null);
+}
+
+/** «С возвращением» (§5): how long he was away decides the greeting. */
+export type Welcome = "none" | "notice" | "hop" | "big";
+
+export function welcomeFor(lastSec: number | null, nowMs: number): Welcome {
+  if (!lastSec) return "none";
+  const away = nowMs / 1000 - lastSec;
+  if (away < 10 * 60) return "none";
+  if (away < 8 * 3600) return "notice";
+  if (away < 7 * 86_400) return "hop";
+  return "big";
+}
+
 /** The mode in force: the stored choice, else «Тихий» under reduced motion, else «Живой». */
 export function modeOf(stored: Mode | null, reduce: boolean): Mode {
   return stored ?? (reduce ? "calm" : "live");
@@ -90,6 +137,9 @@ export type Memory = Record<string, unknown> & {
   secs?: string[];
   tour?: number;
   pokes?: number;
+  pets?: number;
+  hint?: number;
+  hello?: number;
 };
 
 export function parseMemory(raw: string | null): Memory {
@@ -105,7 +155,20 @@ const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0
 const strs = (v: unknown) => (Array.isArray(v) ? v.filter((s): s is string => typeof s === "string") : []);
 
 /** This tab's view: what it learned since it last wrote. */
-export type Draft = { first?: string; last?: number; day?: string; secs: string[]; tour?: number; pokes: number; newDay: boolean };
+export type Draft = {
+  first?: string;
+  last?: number;
+  day?: string;
+  secs: string[];
+  tour?: number;
+  pokes: number;
+  pets?: number;
+  /** Times the «hold for the menu» line was shown (max, ≤ 3). */
+  hint?: number;
+  /** The introduction happened (or he was already known). */
+  hello?: boolean;
+  newDay: boolean;
+};
 
 /**
  * Disk + this tab. Times and days take the max, counters add the tab's growth, today's sections
@@ -131,6 +194,11 @@ export function mergeMemory(disk: Memory, mine: Draft): Memory {
   if (days) out.days = Math.min(COUNT_MAX, days);
   const pokes = Math.min(COUNT_MAX, num(disk.pokes) + mine.pokes);
   if (pokes) out.pokes = pokes;
+  const pets = Math.min(COUNT_MAX, num(disk.pets) + (mine.pets ?? 0));
+  if (pets) out.pets = pets;
+  const hint = Math.min(HINT_MAX, Math.max(num(disk.hint), mine.hint ?? 0));
+  if (hint) out.hint = hint;
+  if (num(disk.hello) || mine.hello) out.hello = 1;
   return out;
 }
 
@@ -144,6 +212,8 @@ export type MemoryDeps = {
 export function createMemory(deps: MemoryDeps) {
   let draft: Draft = { secs: [], pokes: 0, newDay: false };
   let wroteAt = -Infinity;
+  /** Last activity before this load (s): read once, before this tab writes its own. */
+  let before: number | null | undefined;
   /** No session storage: this module remembers the session. */
   let shownHere = false;
 
@@ -161,9 +231,17 @@ export function createMemory(deps: MemoryDeps) {
     }
     if (text.length <= MEMORY_MAX && set(deps.local, MEMORY_KEY, text)) {
       wroteAt = t;
-      draft = { day: draft.day, secs: [], pokes: 0, newDay: false };
+      draft = { day: draft.day, secs: [], pokes: 0, hint: draft.hint, hello: draft.hello, newDay: false };
     }
   };
+  const lastBefore = () => {
+    if (before === undefined) {
+      const v = num(disk().last);
+      before = v > 0 ? v : null;
+    }
+    return before;
+  };
+  lastBefore();
 
   return {
     view,
@@ -197,6 +275,27 @@ export function createMemory(deps: MemoryDeps) {
     },
     poke() {
       draft.pokes += 1;
+    },
+    pet() {
+      draft.pets = (draft.pets ?? 0) + 1;
+    },
+    /** Last activity before this page load, s (null on a first visit). */
+    lastBefore,
+    /** The «hold for the menu» line still has showings left (the first 3 in his life). */
+    hintLeft(): boolean {
+      return num(view().hint) < HINT_MAX;
+    },
+    noteHint() {
+      draft.hint = Math.min(HINT_MAX, num(view().hint) + 1);
+      flush(true);
+    },
+    /** He was introduced (or the person is already known): no introduction again. */
+    hello(): boolean {
+      return !!num(view().hello) || !!draft.hello;
+    },
+    noteHello() {
+      draft.hello = true;
+      flush(true);
     },
     flush,
   };

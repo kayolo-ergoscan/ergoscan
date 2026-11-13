@@ -15,18 +15,31 @@ import {
 } from "@/components/pixel";
 import { INK_EVENT } from "@/lib/skin-ink";
 import { onKayolo, say, type BodyWhere } from "@/lib/kayolo/events";
-import { bodyOwner, currentMode, onSlotPlace, setKeeper, setOwner, slotPlace, type Keeper } from "@/lib/kayolo/body";
+import {
+  arrivalOf,
+  bodyOwner,
+  currentMode,
+  endIntro,
+  introPendingNow,
+  onChoice,
+  onSlotPlace,
+  setKeeper,
+  setOwner,
+  slotPlace,
+  type Keeper,
+} from "@/lib/kayolo/body";
 import { createScheduler, levelAt, type Level, type Prio } from "@/lib/kayolo/scheduler";
 import { makeAct, step, type Act, type ActName, type PoseDelta, type Vec } from "@/lib/kayolo/acts";
 import { gazeTo, nookPoint, pageKind, parkPoint, tipPoint, wideLayout } from "@/lib/kayolo/anchors";
-import { MODE_KEY, pageMemory, readHome, type Mode } from "@/lib/kayolo/memory";
+import { pageMemory, readHome, welcomeFor, type Mode, type Welcome } from "@/lib/kayolo/memory";
 import { COARSE_QUERY, REDUCE_QUERY, WIDE_QUERY } from "@/lib/kayolo/motion";
 import * as K from "@/lib/kayolo/thresholds";
 
 /**
  * Kayolo's engine (design/brand/kayolo-life.md §2, §8.3, §9.1, §9.4, §9.10), loaded after idle. It
  * holds the body whenever the header scout has parked it (M1, §9.8): in his window at home (the
- * niche), and in a fixed layer at the phone park, the Addresses door or a note. There he lives:
+ * niche on the desktop, the window in the pill on the phone), and in a fixed layer at the Addresses
+ * door or a note. There he lives:
  * calm → reads → dozes → sleeps after 3 min without input, and wakes with «noticed»; he answers
  * every block by the §8.3 matrix and is poked from his window. One rAF and one timer at most; a frame
  * only while something has to change (an act, a blink, a level edge); none in the frozen sleep.
@@ -39,6 +52,10 @@ const GX = 28;
 const GY = 58;
 const HAND_EASE_MS = 400;
 const FADE_MS = 150;
+/** «Спрятан» → back: the seed grows into him (§4.6). */
+const GROW_MS = 420;
+/** «С возвращением» waits for the first pause (§5). */
+const WELCOME_PAUSE_MS = 1200;
 /** Eyes on the content at home (§2.6: gy +0.4). */
 const CONTENT_LIFT = -1.8;
 
@@ -91,7 +108,16 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
   let gazePt: Vec | null = null;
   let shy = false;
   let lastMove: Vec | null = null;
-  let walk: { fromX: number; toX: number; y: number; at: number; ms: number; roll0: number } | null = null;
+  let walk: { fromX: number; toX: number; y: number; fromY?: number; at: number; ms: number; roll0: number } | null = null;
+  /** The seed grows back into him (from «Спрятан»). */
+  let grow: number | null = null;
+  /** «С возвращением», once per load (§5). */
+  let welcome: Welcome = welcomeFor(pageMemory().lastBefore(), Date.now());
+  /** The introduction runs (§5): input cuts it short. */
+  let introRun = false;
+  /** Phone: a plate docked under the pill; he sits lower and does not hop (§3.2). */
+  let docked = false;
+  let dockRaf = 0;
   let fade: { at: number; from: Vec; to: Hold } | null = null;
   let roll = 0;
   let raf = 0;
@@ -104,10 +130,15 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
   let boxAt = { x: NaN, y: NaN };
   let dead = false;
 
-  const actReduce = () => reduceSys || mode === "calm";
+  /** Quiet motion: «Тихий», or the system asks for less and «Живой» was not chosen (§10). */
+  const actReduce = () => mode === "calm" || (reduceSys && mode !== "live");
+  const pixelReduce = () => reduceSys && mode !== "live";
   const phone = () => !wideLayout();
 
-  const slotCanvas = () => document.querySelector<HTMLCanvasElement>(".kayolo-slot canvas.kayolo-canvas");
+  /** The canvas in the window of the layout that is on (desktop niche or phone pill). */
+  const slotCanvas = () =>
+    slotPlace()?.el?.querySelector<HTMLCanvasElement>("canvas.kayolo-canvas") ??
+    document.querySelector<HTMLCanvasElement>(".kayolo-slot canvas.kayolo-canvas");
 
   /** Where the body is drawn now: his window at home, the layer on a path or away. */
   const canvasFor = (h: Hold): HTMLCanvasElement | null => {
@@ -166,12 +197,15 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
   };
 
   const homeHold = (): Hold | null => {
+    const s = slotPlace();
+    if (s) return { where: "nook", x: s.x, y: s.y, face: s.face };
     if (phone()) {
+      // No window in the pill (yet): the old park past the search word.
       const p = parkPoint();
       return p ? { where: "park", x: p.x, y: p.y, face: p.face } : null;
     }
-    const s = slotPlace() ?? nookPoint(readHome(local) ?? "r");
-    return s ? { where: "nook", x: s.x, y: s.y, face: s.face } : null;
+    const n = nookPoint(readHome(local) ?? "r");
+    return n ? { where: "nook", x: n.x, y: n.y, face: n.face } : null;
   };
 
   /* ---------------- the level and the resting pose ---------------- */
@@ -226,7 +260,11 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
   const targetFor = (name: ActName): Vec | null => {
     const body = bodyAt();
     if (!body) return null;
-    if (name === "poke1" || name === "notice" || name === "pleased") return null;
+    if (name === "poke1" || name === "notice" || name === "pleased" || name === "pet" || name === "wakeUp") return null;
+    if (name === "intro" || name === "welcome3") {
+      const t = document.querySelector('header [data-scout="title"]')?.getBoundingClientRect();
+      if (t && t.width > 2) return gazeTo(body, { x: t.left + t.width / 2, y: t.top + t.height / 2 });
+    }
     const tip = tipPoint();
     return tip ? gazeTo(body, tip) : null;
   };
@@ -255,9 +293,25 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
     startAct(name, now, "wake", 2);
   };
 
+  /** The introduction is over: the tour may follow (only if it ran to the end). */
+  const finishIntro = (whole: boolean) => {
+    if (!introRun) return;
+    introRun = false;
+    endIntro();
+    say({ k: "kayolo:intro-done", tour: whole });
+  };
+
+  const startIntro = (now: number) => {
+    introRun = true;
+    sched.offer({ key: "intro", prio: 2, ttlMs: 1000, ladder: [step("intro")] }, now);
+    sched.next(now);
+    startAct("intro", now, "intro", 2);
+  };
+
   /** Pull what the scheduler lets him do now. */
   const pump = (now: number) => {
     if (running && now - running.at >= running.act.ms) {
+      if (running.act.name === "intro") finishIntro(true);
       running = null;
       if (after) {
         const next = after;
@@ -269,6 +323,11 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
       const name = pokeQueued;
       pokeQueued = null;
       human(name, now, "poke");
+    }
+    if (welcome !== "none" && hold && !running && !introRun && bodyOwner() === "kayolo" && sched.sinceInput(now) >= WELCOME_PAUSE_MS) {
+      const name: ActName = welcome === "notice" ? "welcome1" : welcome === "hop" ? "welcome2" : "welcome3";
+      welcome = "none";
+      sched.offer({ key: "welcome", prio: 4, ttlMs: 8000, ladder: [step(name), step("welcome1")] }, now);
     }
     const play = running ? null : sched.next(now);
     if (play && hold) {
@@ -334,11 +393,16 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
 
   const nextDue = (now: number, ctx: CanvasRenderingContext2D | null): number => {
     if (!hold || hidden) return Infinity;
+    if (grow != null) return now;
     if (mode === "hidden") return Infinity;
     let due = sched.nextDue(now);
     if (running || after || pokeQueued || walk || fade) return now;
     if (handed) return now;
     if (gaze) due = Math.min(due, gazeUntil);
+    const quietFor = sched.sinceInput(now);
+    if (welcome !== "none" && quietFor < WELCOME_PAUSE_MS) due = Math.min(due, now + WELCOME_PAUSE_MS - quietFor);
+    // Dense pages start reading at 20 s, before the scheduler's own A2 edge (§2.2).
+    if (pageKind(path) === "d" && since(now) < 20_000) due = Math.min(due, now + 20_000 - since(now));
     const { lv, inLv } = levelNow(now);
     // Paced frames count from the last painted one, not from now: a timer that wakes early must
     // land on a frame, not push the frame forward again. Reading and dozing (A2–A3) are drawn at
@@ -408,7 +472,7 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
     if (walk) {
       const u = Math.min(1, (now - walk.at) / walk.ms);
       x = walk.fromX + (walk.toX - walk.fromX) * smooth(u);
-      y = walk.y;
+      y = walk.fromY == null ? walk.y : walk.fromY + (walk.y - walk.fromY) * smooth(u);
       roll = walk.roll0 + Math.abs(x - walk.fromX) * 0.55;
       face = walk.toX >= walk.fromX ? 1 : -1;
       if (u >= 1) walk = null;
@@ -450,6 +514,18 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
       ctx.fillRect(GX - 4, GY - 8, 8, 8);
       return;
     }
+    if (grow != null) {
+      // Back from «Спрятан»: the seed grows into his square, then the eyes open (420 ms).
+      const u = (now - grow) / GROW_MS;
+      if (u < 1) {
+        const side = 8 + (22.36 - 8) * smooth(u);
+        ctx.fillStyle = color;
+        ctx.fillRect(GX - side / 2, GY - side, side, side);
+        frame();
+        return;
+      }
+      grow = null;
+    }
     const sh = SHADOW[hold.where];
     ctx.save();
     ctx.globalAlpha = alpha;
@@ -463,7 +539,8 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
       gaze = null;
       gazePt = null;
     }
-    const calmHop = mode === "calm" && !reduceSys ? { hopScale: 0 } : phone() ? K.PHONE_HOP : {};
+    const calmHop = actReduce() || docked ? { hopScale: 0 } : phone() ? K.PHONE_HOP : {};
+    if (docked && !actReduce()) pose.squash = (pose.squash ?? 0) - 0.06;
     drawPixel(ctx, {
       ...pose,
       ...calmHop,
@@ -474,7 +551,7 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
       now,
       roll,
       alpha,
-      reduce: reduceSys,
+      reduce: pixelReduce(),
       id: "main",
     });
     schedule(nextDue(now, ctx), now);
@@ -510,7 +587,10 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
     hold = h;
     setOwner("kayolo");
     say({ k: "kayolo:took", where: h.where });
-    paint(performance.now());
+    const now = performance.now();
+    // The very first visit: he wakes up in his window and meets the person before the tour (§5).
+    if (introPendingNow() && arrivalOf(path)?.intro && mode === "live") startIntro(now);
+    paint(now);
   };
 
   const keeper: Keeper = {
@@ -527,10 +607,11 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
       if (ctx && p.state) adoptPixelState(ctx, "main", p.state);
       drawnOn = cv;
       if (h.where === "nook") {
-        // His window stands where the scout parked him.
+        // His window stands where the scout parked him (on the phone a few px higher, in the pill).
         const s = slotPlace();
-        if (s && Math.abs(s.x - p.x) > 1.5) {
-          walk = { fromX: p.x, toX: s.x, y: s.y, at: performance.now(), ms: (Math.abs(s.x - p.x) / K.STEP_PX_S) * 1000, roll0: roll };
+        if (s && (Math.abs(s.x - p.x) > 1.5 || Math.abs(s.y - p.y) > 0.5)) {
+          const ms = Math.max(Math.abs(s.y - p.y) > 0.5 ? 220 : 0, (Math.abs(s.x - p.x) / K.STEP_PX_S) * 1000);
+          walk = { fromX: p.x, toX: s.x, y: s.y, fromY: p.y, at: performance.now(), ms, roll0: roll };
           switchTo(layerCanvas);
         }
       }
@@ -561,7 +642,9 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
       if (walk) {
         const u = Math.min(1, (now - walk.at) / walk.ms);
         x = walk.fromX + (walk.toX - walk.fromX) * smooth(u);
+        if (walk.fromY != null) y = walk.fromY + (walk.y - walk.fromY) * smooth(u);
       }
+      if (introRun) finishIntro(false);
       const out = { x, y, face: hold.face, where: hold.where, state, color };
       drop();
       return out;
@@ -581,12 +664,16 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
       running = null;
       after = null;
       let from: Vec = { x: hold.x, y: hold.y };
-      const slotEl = hold.where === "nook" ? document.querySelector(".kayolo-slot") : null;
-      if (slotEl) {
-        const r = slotEl.getBoundingClientRect();
-        from = { x: r.left + 20, y: r.top + 42 };
+      let gone = false;
+      if (hold.where === "nook") {
+        // The window he leaves; after a layout change it is hidden (a zero rect): no fade-out there.
+        const el = drawnOn?.closest(".kayolo-slot");
+        const r = el?.getBoundingClientRect();
+        if (r && r.width > 0) from = { x: r.left + r.width / 2, y: r.bottom - 6 };
+        else gone = true;
       }
-      fade = { at: performance.now(), from, to: h };
+      const now = performance.now();
+      fade = { at: gone ? now - FADE_MS : now, from, to: h };
       frame();
     },
   };
@@ -645,6 +732,14 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
     } else if (ev.k === "ui:notice") {
       if (!hold || !ev.on || running) return;
       human("notice", now, "notice");
+    } else if (ev.k === "ui:pet") {
+      if (!hold || mode === "asleep" || mode === "hidden") return;
+      pageMemory().pet();
+      if (running?.key === "wake") after = "pet";
+      else {
+        after = null;
+        human("pet", now, "pet");
+      }
     } else return;
     kick();
   });
@@ -669,6 +764,12 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
     const was = levelNow(now).lv;
     sched.input(now);
     wokeAt = -Infinity;
+    if (introRun && e.type !== "focusin") {
+      // Any input cuts the introduction short (§5): he is simply awake, no tour.
+      running = null;
+      finishIntro(false);
+      kick();
+    }
     if (!hold || mode === "asleep" || mode === "hidden") return;
     if (was >= 2 && !(running && running.key === "wake")) {
       wakeFrom(was, now);
@@ -706,8 +807,19 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
   const inputs = ["pointermove", "pointerdown", "wheel", "keydown", "touchstart", "focusin"] as const;
   for (const n of inputs) window.addEventListener(n, onInput, { passive: true, capture: true });
   let parkRaf = 0;
+  /** Phone: a plate docked under the pill (square corners) — he sits down, no hops (§3.2). */
+  const checkDock = () => {
+    dockRaf = 0;
+    if (dead) return;
+    const now = !wideLayout() && !!document.querySelector('.feed-plate[data-stuck="dock"]');
+    if (now !== docked) {
+      docked = now;
+      if (hold) frame();
+    }
+  };
   const onScroll = (e: Event) => {
     onInput(e);
+    if (!dockRaf) dockRaf = requestAnimationFrame(checkDock);
     // The phone park rides the sticky pill: follow it while the page scrolls, once per frame
     // (capture also sees inner scrollers; parkPoint reads layout).
     if (hold?.where === "park" && !fade && !walk && !parkRaf) {
@@ -750,14 +862,10 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
   };
   window.addEventListener(INK_EVENT, onInk);
 
-  const onStorage = (e: StorageEvent) => {
-    if (e.key !== MODE_KEY) return;
-    refreshMode();
-  };
-  window.addEventListener("storage", onStorage);
-
+  /** A choice changed (his panel, /settings, another tab, the system motion setting). */
   const refreshMode = () => {
     reduceSys = window.matchMedia(REDUCE_QUERY).matches;
+    const was = mode;
     mode = currentMode();
     sched.mode(mode);
     if (!usable()) {
@@ -767,11 +875,39 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
       }
       return;
     }
-    if (hold) frame();
-    else requestAnimationFrame(takeHome);
+    if (!hold) {
+      requestAnimationFrame(takeHome);
+      return;
+    }
+    if (was === mode) {
+      frame();
+      return;
+    }
+    const now = performance.now();
+    if (mode === "asleep" || mode === "hidden") {
+      // Asleep or hidden: no act runs on, nothing waits.
+      running = null;
+      after = null;
+      pokeQueued = null;
+      grow = null;
+      if (introRun) finishIntro(false);
+    } else if (was === "hidden") {
+      sched.input(now);
+      wokeAt = -Infinity;
+      grow = now;
+    } else if (was === "asleep") {
+      // Woken by a person (a click, the panel, Enter): 900 ms, then awake (§4.6).
+      sched.input(now);
+      wokeAt = -Infinity;
+      sched.done();
+      sched.offer({ key: "wake", prio: 2, ttlMs: 1000, ladder: [step("wakeUp")] }, now);
+      sched.next(now);
+      after = null;
+      startAct("wakeUp", now, "wake", 2);
+    }
+    frame();
   };
-  const rm = window.matchMedia(REDUCE_QUERY);
-  rm.addEventListener("change", refreshMode);
+  const offChoice = onChoice(refreshMode);
   const wide = window.matchMedia(WIDE_QUERY);
   const onWide = () => {
     // Crossing 1024 px: the one «teleport» is a fade to the home of the new layout (§3.4).
@@ -780,14 +916,31 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
   wide.addEventListener("change", onWide);
 
   const offSlot = onSlotPlace((p, was) => {
-    if (!hold || hold.where !== "nook" || fade) return;
+    if (!hold) {
+      // A window came up (the other layout's, after crossing 1024 px): he moves in if nobody has him.
+      if (p && bodyOwner() === "none") requestAnimationFrame(takeHome);
+      return;
+    }
+    if (hold.where !== "nook" || fade) return;
     if (!p) {
       drop();
       setOwner("none");
       return;
     }
     const now = performance.now();
-    if (was && Math.abs(p.x - was.x) >= 1 && !reduceSys && mode === "live" && !hidden) {
+    const phoneEl = (s: typeof p) => !!s?.el?.classList.contains("is-phone");
+    if (was && phoneEl(p) !== phoneEl(was)) {
+      // The other layout's window (crossing 1024 px): the one «teleport», a fade (§3.4).
+      keeper.home();
+      return;
+    }
+    if (was && Math.abs(p.x - was.x) > 60) {
+      // A new home (/settings) or a far title edge: a fade, he does not walk under the title.
+      fade = { at: now, from: { x: was.x, y: was.y }, to: { where: "nook", x: p.x, y: p.y, face: p.face } };
+      frame();
+      return;
+    }
+    if (was && Math.abs(p.x - was.x) >= 1 && !actReduce() && mode === "live" && !hidden) {
       // A new title edge: a step over, ≤ 60 px at 140 px/s (§3.1).
       const fromX = walk ? walk.fromX + (walk.toX - walk.fromX) * smooth((now - walk.at) / walk.ms) : was.x;
       walk = { fromX, toX: p.x, y: p.y, at: now, ms: Math.max(120, (Math.abs(p.x - fromX) / K.STEP_PX_S) * 1000), roll0: roll };
@@ -827,8 +980,8 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
       if (parkRaf) cancelAnimationFrame(parkRaf);
       document.removeEventListener("visibilitychange", onVis);
       window.removeEventListener(INK_EVENT, onInk);
-      window.removeEventListener("storage", onStorage);
-      rm.removeEventListener("change", refreshMode);
+      offChoice();
+      if (dockRaf) cancelAnimationFrame(dockRaf);
       wide.removeEventListener("change", onWide);
       const had = hold != null;
       drop();
@@ -836,7 +989,7 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
     },
     debug() {
       const now = performance.now();
-      return { hold, level: levelNow(now).lv, running: running?.act.name ?? null, log: sched.log.slice(-20), mode };
+      return { hold, level: levelNow(now).lv, running: running?.act.name ?? null, log: sched.log.slice(-20), mode, docked };
     },
   };
 }

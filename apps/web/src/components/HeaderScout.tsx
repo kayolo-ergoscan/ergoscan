@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { addressIdOf, addressReturnGate, askWaitsForSlip, isAddressHome, rentScratch, SCOUT_CUES_EN, SCOUT_CUES_RU, scoutBeats, type ScoutBeat } from "@/lib/header-scout";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -12,14 +12,18 @@ import {
   arrive,
   bodyOwner,
   currentMode,
+  endIntro,
   handoff,
   hasKeeper,
+  introPendingNow,
   kayoloHolds,
   moveBody,
+  onChoice,
   onKeeper,
   reclaim,
   sendHome,
   setOwner,
+  slotPlace,
   type BodyPose,
 } from "@/lib/kayolo/body";
 import { nookPoint } from "@/lib/kayolo/anchors";
@@ -274,8 +278,22 @@ function nookNow() {
   return nookPoint(readHome(local) ?? "r");
 }
 
+/** Kayolo's home in viewport px: where his window stands (the niche, or the pill on the phone). */
+function homeNow(wide: boolean) {
+  const p = slotPlace();
+  if (p) return p;
+  return wide ? nookNow() : null;
+}
+
+/** First visit: the scout waits for the introduction in Kayolo's window (§5). Without the layer
+ *  (a chunk that failed to load) nobody takes the body, and the tour starts as before after this. */
+const INTRO_WAIT_MS = 5000;
+
 /** The tour already ran for this arrival: a locale change does not replay it. */
 let tourRanFor = "";
+/** The page whose tour is under way: a stored «ru» arrives after hydration and restarts the effect
+ *  while he is still falling in; the tour must go on, not end at home. */
+let tourLiveFor = "";
 
 /** A parked pose keeps drawing this long (the face eases, a glance lands), then the loop sleeps. */
 const SETTLE_MS = 900;
@@ -1508,6 +1526,9 @@ function runHeaderPass(
   let apart = 0;
   let lineA = 0;
   let lineTo = 0;
+  /** Phone: the last steps home rise onto his window's floor (4 px above the pill's foot, §3.2),
+   *  so the body never leaves the pill and the hand-over needs no step up. */
+  let homeRise = 0;
   let asking = false;
   let askAt = 0;
   let askQueued = false;
@@ -1534,11 +1555,13 @@ function runHeaderPass(
   window.addEventListener("pointermove", onMove, { passive: true });
   const offKeeper = onKeeper(() => wake());
 
-  /** Home in header coordinates: the niche (desktop) or the park past the search word (phone). */
+  /** Home in header coordinates: Kayolo's window (the niche, or the pill on the phone, Э2); without
+   *  the layer the park past the search word. */
   const homeX = (g: World) => {
     if (nook) {
-      const n = nookNow();
+      const n = homeNow(wide);
       if (n) return n.x - root.getBoundingClientRect().left;
+      if (!wide) return g.price ? g.price.left - 24 : g.w - 80;
       return g.title ? g.title.right + 25 : g.w * 0.5;
     }
     return travelTo("to-search", g) ?? g.searchEnd ?? 80;
@@ -2133,6 +2156,12 @@ function runHeaderPass(
       apart = 0;
       face = -1;
       x += (homeX(g) - x) * 0.3;
+      if (nook && !wide) {
+        const sp = slotPlace();
+        const to = sp ? clamp(floor - (sp.y - root.getBoundingClientRect().top), 0, 8) : 0;
+        homeRise += (to - homeRise) * 0.3;
+        if (Math.abs(to - homeRise) < 0.05) homeRise = to;
+      }
       if (restAt < 0) restAt = now;
     } else {
       // Parked past the search word: one look around, then he settles and the loop sleeps.
@@ -2152,10 +2181,11 @@ function runHeaderPass(
       return;
     }
 
-    const spriteY = floor - lift;
+    const ground = floor - homeRise;
+    const spriteY = ground - lift;
     const box = root.getBoundingClientRect();
     scoutPose = { x: box.left + x, y: box.top + spriteY, face, roll };
-    draw(ctx, root, g, x, spriteY, floor, lift, face, roll, apart, head, look, pick, eye, pupil, orbit, lineA, lineTo);
+    draw(ctx, root, g, x, spriteY, ground, lift, face, roll, apart, head, look, pick, eye, pupil, orbit, lineA, lineTo);
     // In the niche the slot is his button; the moving one goes (M1).
     if (beat === "home") placeHit(hit, false, 0, 0);
     else follow(spriteY);
@@ -2172,7 +2202,7 @@ function runHeaderPass(
         }
       }
       const pose = { look: clamp(look, -2.1, 2.1), head, pick, eyeLift: eye * 2.2, eyeScale: 1 + eye * 0.34, pupil, pupilOrbit: orbit };
-      if (giveBody(ctx, beat === "home" ? "nook" : "park", box.left + x, box.top + floor, face, pose)) {
+      if (giveBody(ctx, beat === "home" ? "nook" : "park", box.left + x, box.top + ground, face, pose)) {
         held = true;
         ctx.clearRect(0, 0, w, h);
       }
@@ -2230,7 +2260,7 @@ function runFavoritesErrand(canvas: HTMLCanvasElement, header: HTMLElement, wake
   type Phase = "home" | "rail" | "drop" | "rollin" | "write" | "live" | "retreat" | "rise";
   let phase: Phase = "home";
   const wide = window.matchMedia(WIDE_QUERY).matches;
-  const homeWhere: BodyWhere = wide ? "nook" : "park";
+  const homeWhere: BodyWhere = KAYOLO_LAYER || wide ? "nook" : "park";
   /** Kayolo holds the body at home or by the note (M1): the scout draws nothing. */
   let held = false;
   let owned = false;
@@ -2252,9 +2282,9 @@ function runFavoritesErrand(canvas: HTMLCanvasElement, header: HTMLElement, wake
   const headerHome = () => {
     const slip = searchSlip(header);
     const y0 = slip?.floorY ?? header.getBoundingClientRect().bottom - 6;
-    if (KAYOLO_LAYER && wide) {
-      // Home is Kayolo's niche (Э1b).
-      const n = nookNow();
+    if (KAYOLO_LAYER) {
+      // Home is Kayolo's window: the niche (Э1b), the pill on the phone (Э2).
+      const n = homeNow(wide);
       if (n) return { x: n.x, y: n.y };
     }
     const title = header.querySelector<HTMLElement>('[data-scout="title"]');
@@ -2592,6 +2622,15 @@ export function HeaderScout() {
   const reduceTick = useMediaTick(REDUCE_QUERY);
   const wideTick = useMediaTick(WIDE_QUERY);
   const perchTick = isAddressHome(path) ? wideTick : 0;
+  /** The mode this effect ran with: only a real change restarts him (§4.6). */
+  const modeRef = useRef<string | null>(null);
+  const [modeTick, setModeTick] = useState(0);
+  useEffect(() => {
+    if (!KAYOLO_LAYER) return;
+    return onChoice(() => {
+      if (modeRef.current != null && currentMode() !== modeRef.current) setModeTick((n) => n + 1);
+    });
+  }, []);
 
   useEffect(
     () =>
@@ -2627,6 +2666,7 @@ export function HeaderScout() {
     const canvas = ref.current;
     const root = canvas?.parentElement;
     if (!canvas || !root) return;
+    modeRef.current = KAYOLO_LAYER ? currentMode() : null;
     if (window.matchMedia(REDUCE_QUERY).matches || (KAYOLO_LAYER && currentMode() !== "live")) {
       // No scout under reduced motion (or in «Тихий» and the quieter modes): Kayolo keeps him at
       // home, still. Switched on live, the last frame must not stay behind.
@@ -2640,9 +2680,13 @@ export function HeaderScout() {
     // The gate (§7.1, §9.8 M1): a tour only when one is due, once per arrival.
     const arrival = layer ? arrive(path) : null;
     const tour = !!arrival && arrival.tour && tourRanFor !== path;
-    if (tour) tourRanFor = path;
+    if (tour) {
+      tourRanFor = path;
+      tourLiveFor = path;
+    }
     const midPass = layer && bodyOwner() === "scout" && scoutPose != null;
-    const kayolo = { nook: layer && wide, homeRef };
+    // Э2: the tour ends in his window on both layouts (the pill on the phone).
+    const kayolo = { nook: layer, homeRef };
     /** A machine that will draw says so now, in this effect: his window drops its still frame
      *  in the same task, so no frame shows the still and the scout together. */
     const claim = () => {
@@ -2699,6 +2743,37 @@ export function HeaderScout() {
       rentTold = "";
     }
     placeHit(hitRef.current, false, 0, 0);
+    if (layer && arrival?.intro && introPendingNow()) {
+      // The very first visit: he wakes up in his window and meets the person (§5); the tour follows
+      // only if the introduction ran to its end. Until then the scout draws nothing.
+      canvas.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
+      if (bodyOwner() === "scout") setOwner("none");
+      let stop = () => {};
+      let done = false;
+      const go = (from: PassFrom) => {
+        if (done) return;
+        done = true;
+        machineRef.current = "pass";
+        claim();
+        stop = runHeaderPass(canvas, root, hitRef.current, leaveRef, askLabel, { from }, wakeRef, isAddressHome(path), kayolo);
+      };
+      const off = onKayolo((ev) => {
+        if (ev.k !== "kayolo:intro-done") return;
+        if (ev.tour && tour) go("nook");
+        else done = true;
+      });
+      const fallback = window.setTimeout(() => {
+        if (done || bodyOwner() !== "none") return;
+        endIntro();
+        go("start");
+      }, INTRO_WAIT_MS);
+      return () => {
+        cancelRent = true;
+        off();
+        window.clearTimeout(fallback);
+        stop();
+      };
+    }
     if (path === "/favorites") {
       machineRef.current = "errand";
       claim();
@@ -2706,7 +2781,7 @@ export function HeaderScout() {
     }
     // Kayolo is held where this page does not keep him (the door after leaving Addresses): home.
     const holds = kayoloHolds();
-    if (layer && holds && holds !== (wide ? "nook" : "park") && !tour) sendHome();
+    if (layer && holds && holds !== "nook" && !tour) sendHome();
     machineRef.current = "pass";
     const local = (vx: number) => vx - root.getBoundingClientRect().left;
     let from: PassFrom;
@@ -2717,6 +2792,9 @@ export function HeaderScout() {
       // The first show in a session falls in; later tours start where he is.
       from = arrival?.first && !midPass && !holds ? "start" : "nook";
       if (midPass && scoutPose) x = local(scoutPose.x);
+    } else if (layer && tourLiveFor === path && bodyOwner() === "scout" && canvas.dataset.scoutBeat === "fall") {
+      // The language came in during the fall: fall in again, the tour goes on.
+      from = "start";
     } else if (midPass && scoutPose) {
       from = "walk-home";
       x = local(scoutPose.x);
@@ -2725,15 +2803,13 @@ export function HeaderScout() {
       // Nothing to draw: Kayolo has him at home (or takes him there). The last frame must go.
       canvas.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
       if (bodyOwner() === "scout") setOwner("none");
-      // The phone keeps drawing him at the park until the layer has loaded.
-      if (!wide && !hasKeeper()) claim();
     } else claim();
     return runHeaderPass(canvas, root, hitRef.current, leaveRef, askLabel, {
       from,
       x,
       markDone: isAddressHome(path) && wide,
     }, wakeRef, isAddressHome(path), kayolo);
-  }, [path, locale, t, reduceTick, perchTick]);
+  }, [path, locale, t, reduceTick, perchTick, modeTick]);
 
   if (path === "/") return null;
   return (

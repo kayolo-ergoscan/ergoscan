@@ -22,7 +22,11 @@ export type KayoloEvent =
   /** A click, a tap or Enter on his window. */
   | { k: "ui:poke" }
   /** The pointer rests on his window (250 ms), or it has focus. */
-  | { k: "ui:notice"; on: boolean };
+  | { k: "ui:notice"; on: boolean }
+  /** «Погладить» in his panel. */
+  | { k: "ui:pet" }
+  /** The introduction is over; `tour`: it ran to the end, so the tour follows. */
+  | { k: "kayolo:intro-done"; tour: boolean };
 
 export const KAYOLO_EVENT = "kayolo";
 

@@ -129,12 +129,9 @@
     top: calc(var(--feed-pin) + 8px);
   }
 
-  /* Pixel steps aside while the strip rides under the pill, as he does for a pinned plate. */
-  html:has(.detail-tabs[data-stuck]) .header-scout,
-  html:has(.detail-tabs[data-stuck]) .kayolo-layer {
-    opacity: 0;
+  /* Under the strip only the scout's moving hit spot steps aside (Kayolo stays in the pill, §12.3). */
+  html:has(.detail-tabs[data-stuck]) button.header-scout {
     visibility: hidden;
-    transition: opacity 120ms var(--ease), visibility 0s linear 120ms;
   }
 
   /* ── Summary card ── */
@@ -271,8 +268,6 @@
 }
 
 @media (max-width: 1023px) and (prefers-reduced-motion: reduce) {
-  html:has(.detail-tabs[data-stuck]) .header-scout,
-  html:has(.detail-tabs[data-stuck]) .kayolo-layer,
   .detail-tab {
     transition: none;
   }

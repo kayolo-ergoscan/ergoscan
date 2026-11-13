@@ -29,7 +29,14 @@ export type ActName =
   | "poke1"
   | "poke2"
   | "poke3"
-  | "blink2";
+  | "blink2"
+  /* Э2: his panel, the introduction, «welcome back», a wake from «Спит». */
+  | "pet"
+  | "intro"
+  | "welcome1"
+  | "welcome2"
+  | "welcome3"
+  | "wakeUp";
 
 export type Vec = { x: number; y: number };
 
@@ -90,6 +97,12 @@ export const ACT_MS: Record<ActName, number> = {
   poke2: 700,
   poke3: 640,
   blink2: 300,
+  pet: 2700,
+  intro: 2180,
+  welcome1: 800,
+  welcome2: 1420,
+  welcome3: 2900,
+  wakeUp: 900,
 };
 
 const TIER: Record<ActName, Tier> = {
@@ -113,6 +126,12 @@ const TIER: Record<ActName, Tier> = {
   poke2: 2,
   poke3: 2,
   blink2: 0,
+  pet: 1,
+  intro: 2,
+  welcome1: 0,
+  welcome2: 2,
+  welcome3: 3,
+  wakeUp: 1,
 };
 
 const VARIANTS: Partial<Record<ActName, number>> = { glance: 3, nod: 3, shrug: 2, pleased: 2 };
@@ -306,5 +325,48 @@ export function makeAct(name: ActName, input: ActInput): Act {
       }));
     case "blink2":
       return act(300, (t) => ({ eyeScale: 1 - 0.9 * Math.max(blinkAt(t, 0, 120), blinkAt(t, 170, 120)) }));
+    case "pet":
+      // ^ ^, then a purr: a 3 % squeeze wave at 2.5 Hz that fades out, then a happy blink (§4.3).
+      return act(2700, (t) => {
+        const purr = t < 600 ? 0 : t < 2100 ? 1 : 1 - smooth((t - 2100) / 300);
+        return {
+          mood: t < 2400 ? "pleased" : undefined,
+          squash: reduce ? 0 : 0.03 * purr * Math.sin(((t - 600) / 400) * Math.PI * 2),
+          eyeScale: t >= 2400 ? 1 - 0.9 * blinkAt(t, 2420, 160) : undefined,
+        };
+      });
+    case "intro":
+      // The introduction (§5): eyes open, the title, the person, ^ ^, a small hop. Without text.
+      return act(2180, (t) => ({
+        mood: t < 300 ? "sleepy" : t >= 1200 && t < 1620 ? "pleased" : t >= 1620 ? (reduce ? "pleased" : "happy") : "idle",
+        doze: t < 300 ? 0.92 * (1 - smooth(t / 300)) : undefined,
+        zzz: false,
+        gaze: t < 300 ? undefined : t < 700 ? look(t - 300, 220, 60, rest, to) : t < 1200 ? look(t - 700, 320, 60, rest, person) : undefined,
+      }));
+    case "welcome1":
+      // Back after 10 min – 8 h: «noticed», eyes +30 % for 300 ms and a look at the person.
+      return act(800, (t) => ({
+        eyeScale: 1 + 0.3 * bump(t, 0, 300),
+        gaze: t < 300 ? undefined : look(t - 300, 300, 80, rest, person),
+      }));
+    case "welcome2":
+      // Back after 8 h – 7 days: a happy hop, then ^ ^.
+      return act(1420, (t) => ({ mood: t < 860 ? (reduce ? "pleased" : "happy") : "pleased" }));
+    case "welcome3":
+      // Back after more than a week: two hops, a turn, ^ ^, a look at the title.
+      return act(2900, (t) => ({
+        mood: reduce ? (t < 2300 ? "pleased" : undefined) : t < 600 ? "happy" : t < 760 ? "pleased" : t < 1500 ? "happy" : t < 2300 ? "pleased" : undefined,
+        flip: !reduce && t >= 900 && t < 1300,
+        gaze: t < 2300 ? undefined : look(t - 2300, 380, 100, rest, to),
+      }));
+    case "wakeUp":
+      // A person woke him from «Спит»: squares pop, eyes open, a look at the person (900 ms).
+      return act(900, (t) => ({
+        mood: t < 240 ? "sleepy" : "idle",
+        zzz: false,
+        doze: t < 240 ? 0.92 * (1 - smooth(t / 240)) : undefined,
+        eyeScale: t < 240 ? 0.15 + 0.85 * smooth(t / 240) : 1 + (reduce ? 0.1 : 0.25) * bump(t, 240, 520),
+        gaze: t < 520 ? undefined : look(t - 520, 140, 118, rest, person),
+      }));
   }
 }
