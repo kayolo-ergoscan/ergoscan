@@ -418,7 +418,10 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
       if (inLv < K.ZZZ_MS) return paintedAt + 1000 / K.ZZZ_FPS;
       if (inLv < K.ZZZ_MS + 500) return paintedAt + 100;
       return due;
-    } else if (mode === "asleep") return due;
+    } else if (mode === "asleep") {
+      // The eyes finish closing, then not a frame more (§4.6).
+      return ctx ? Math.min(due, pixelWake(ctx, "main")) : due;
+    }
     if (ctx) due = Math.min(due, pixelWake(ctx, "main"));
     return lv >= 2 ? Math.max(due, slow) : due;
   };
