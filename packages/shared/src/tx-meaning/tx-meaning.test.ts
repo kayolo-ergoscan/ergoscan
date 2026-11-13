@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { describe, it } from "node:test";
 import {
+  TEMPLATES_WITH_REGISTERS,
+  roleByTemplate,
   MEANING_ACTION_IDS,
   MEANING_VOCAB,
   PROTOCOL_NAMES,
@@ -261,6 +263,16 @@ describe("tx meaning: list row", () => {
     const g = byId(p);
     return meaningRow(compactMeaning(classifyTxMeaning(txOf(g), ctxOf(g))), lang);
   };
+
+  it("an order that is not a swap gets its own word; a re-priced or closed order too", () => {
+    assert.equal(row("1a8e2c28").word, "Заявка на вклад в пул");
+    assert.equal(row("d02c4dde").word, "Заявка на вывод из пула");
+    assert.equal(row("a41cdeca").word, "Предложение форварда");
+    assert.equal(row("3d9333bc").word, "Отмена предложения");
+    assert.equal(row("4ea863f9").word, "Изменение заявки");
+    assert.equal(row("e0f9db41", "en").word, "Order closed");
+    assert.equal(row("62d69cf1").word, MEANING_VOCAB["order-place"].ru);
+  });
 
   it("the list form and the full form give the same row", () => {
     for (const g of GOLDEN) {
@@ -529,6 +541,31 @@ describe("tx meaning: page header", () => {
         if (m.why.length || m.conf !== "exact") assert.ok(how.length > 3, `${g.id} ${lang}`);
         assert.ok(!how.includes("undefined"), g.id);
       }
+    }
+  });
+});
+
+describe("tx meaning: registry", () => {
+  it("templates found on chain resolve to their protocol, role and name", () => {
+    const want: Array<[string, string, string, string]> = [
+      ["2a41119ab860801334d8ce2ab8b8010eb27e1330a8c242dea6e6a86063de5205", "lithos", "order", "Lithos difficulty forward offer"],
+      ["28027ccf9c2a5ac3d31178e97a387aae3207ddec642b5662e63af30bbe642c17", "lithosdex", "order", "LithosDex deposit order"],
+      ["4416343950a62147cb3b5c33435c7fa5c1459fb0a143799e51f37514f80c9837", "sigmafi", "loan-order", "SigmaFi V2 loan order"],
+      ["8e08343cd05a00e21199a48be40a74f772fadef231d3ab24af833368b476e608", "sigmafi", "payout", "SigmaFi V2 bond vault"],
+      ["e9d13195d73d90fde24ade268844724417323260456736559cf89a18a3eb696a", "ergo", "contract", "Miner tip box"],
+      ["f9f76671e416a0bb9e41d3c719ad4f5cc318f3fdd5df40b8a1d3c115c13835bd", "skyharbor", "contract", "SkyHarbor NFT sale v1"],
+    ];
+    for (const [hash, p, role, label] of want) {
+      const r = roleByTemplate(hash);
+      assert.deepEqual(r && [r.p, r.role, r.label], [p, role, label], hash);
+      assert.ok(PROTOCOL_NAMES[r!.p], r!.p);
+    }
+  });
+
+  it("every MachinaFi order template ships its registers to list views", () => {
+    for (const h of ["a16dfa919d97be53d3e1ed8ba769d189b96a05e3de9bcbdac6a6ab6f311a5479", "91ea9dc91c4a32501bd3bbb5303e7183b45b7bd74a27d547214c646d5ffb2443"]) {
+      assert.equal(roleByTemplate(h)?.p, "machinafi");
+      assert.ok(TEMPLATES_WITH_REGISTERS.includes(h), h);
     }
   });
 });

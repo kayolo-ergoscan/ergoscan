@@ -121,9 +121,8 @@ function extrasFrom(
     ? [...f.net.keys()].filter((a) => !except.has(a) && [...f.net.get(a)!.values()].some((v) => v > 0n)).sort()
     : walletGainers(f, except);
   for (const addr of to) {
-    for (const [key, amt] of f.net.get(addr) ?? new Map<AssetKey, bigint>()) {
-      if (amt > 0n) out.push({ to: addr, key, amount: amt });
-    }
+    // ERG first, then the largest: the same order as the actor's own sides, not the boxes' order.
+    for (const [key, amt] of sides(f.net.get(addr) ?? new Map<AssetKey, bigint>()).got) out.push({ to: addr, key, amount: amt });
   }
   return out;
 }
@@ -512,6 +511,7 @@ const rulePools: Rule = (f, ctx) => {
   for (const b of pools) tally.set(b.role!.p, (tally.get(b.role!.p) ?? 0) + 1);
   const protocol = [...tally].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))[0]![0];
   const why: WhyFact[] = pools.map((b) => ROLE_WHY(b));
+  if (filled.length) why.push(...filled.map((b) => ({ k: "order", v: b.role!.label })));
   if (orders.length) why.push(...orders.map((b) => ({ k: "order", v: b.role?.label ?? b.address })));
   if (noSigner != null) why.push(noSigner ? { k: "no-signer", v: noSigner } : { k: "no-signer" });
   return {
@@ -528,6 +528,15 @@ const rulePools: Rule = (f, ctx) => {
     why,
   };
 };
+
+/** What an order asks for, when it is not a swap: read off the registry label. */
+function orderSub(b: FBox): string | undefined {
+  const label = b.role!.label;
+  if (/ forward offer$/.test(label)) return "forward";
+  if (/ deposit order\b/.test(label)) return "deposit";
+  if (/ redeem order\b/.test(label)) return "redeem";
+  return undefined;
+}
 
 /** The order itself names the answer, not a companion box such as the v2 fee box. */
 function orderFirst(boxes: FBox[]): FBox[] {
@@ -548,6 +557,20 @@ const ruleOrders: Rule = (f) => {
   if (filled.length) {
     const actor = f.payer;
     const { gave, got } = actorSides(f, actor);
+    const owners = [...new Set(filled.map((b) => orderOwner(b)))];
+    if (!gave.length && owners.length === 1 && owners[0] != null) {
+      // The signer put nothing in: it closed someone's order and kept a fee; the owner got the rest.
+      const owner = owners[0];
+      return {
+        action: "order-cancel",
+        protocol: filled[0]!.role!.p,
+        conf: "exact",
+        actor: owner,
+        got: actorSides(f, owner).got,
+        sub: "closed",
+        why: filled.map((b) => ROLE_WHY(b)),
+      };
+    }
     return {
       action: "swap",
       protocol: filled[0]!.role!.p,
@@ -565,8 +588,15 @@ const ruleOrders: Rule = (f) => {
     // added or took out; the new boxes also hold what was already in the old ones.
     const { gave, got } = actorSides(f, f.payer);
     const p = placed[0]!.role!.p;
-    if (gave.length) return { action: "order-place", protocol: p, conf: "exact", actor: f.payer, gave, why: [ROLE_WHY(placed[0]!, "created")] };
-    return { action: "order-cancel", protocol: p, conf: "exact", actor: f.payer, got, why: [ROLE_WHY(orderFirst(spentOrders)[0]!)] };
+    if (gave.length) {
+      return { action: "order-place", protocol: p, conf: "exact", actor: f.payer, gave, sub: orderSub(placed[0]!), why: [ROLE_WHY(placed[0]!, "created")] };
+    }
+    const first = orderFirst(spentOrders)[0]!;
+    if (!got.length) {
+      // Same money back in the order, new terms (price, range).
+      return { action: "order-place", protocol: p, conf: "exact", actor: f.payer, sub: "update", why: [ROLE_WHY(placed[0]!, "created")] };
+    }
+    return { action: "order-cancel", protocol: p, conf: "exact", actor: f.payer, got, sub: orderSub(first), why: [ROLE_WHY(first)] };
   }
   if (placed.length && f.payer) {
     const p = placed[0]!.role!.p;
@@ -577,6 +607,8 @@ const ruleOrders: Rule = (f) => {
       actor: f.payer,
       // A token minted into the order (the v3 order NFT) is not something the owner gave.
       gave: positive(new Map([...sumBags(placed)].filter(([id]) => !f.minted.has(id)))),
+      extra: extrasFrom(f, f.payer),
+      sub: orderSub(placed[0]!),
       why: [ROLE_WHY(placed[0]!, "created")],
     };
   }
@@ -590,6 +622,7 @@ const ruleOrders: Rule = (f) => {
       conf: "exact",
       actor,
       got,
+      sub: orderSub(cancelled[0]!),
       why: [ROLE_WHY(cancelled[0]!)],
     };
   }
@@ -747,6 +780,14 @@ const ruleLithos: Rule = (f) => {
 const ruleLending: Rule = (f) => {
   const bondOut = createdWith(f, (r) => r.role === "bond");
   const bondIn = spentWith(f, (r) => r.role === "bond");
+  if (bondOut.length && !f.payer) {
+    // Matched by a bot (no wallet signed): told from the borrower's side, the one who got the loan.
+    const actor = bestGainer(f);
+    if (actor) {
+      const { got } = actorSides(f, actor);
+      return { action: "loan", protocol: bondOut[0]!.role!.p, conf: "exact", actor, got, sub: "borrow", why: [ROLE_WHY(bondOut[0]!, "created")] };
+    }
+  }
   if (bondOut.length) {
     const actor = f.payer;
     const extra = actor ? extrasFrom(f, actor) : [];
@@ -765,6 +806,19 @@ const ruleLending: Rule = (f) => {
   }
   if (bondIn.length) {
     const actor = f.payer ?? bestGainer(f);
+    // Repaid into the lender's vault: the vault holds the repayment, the collateral came back.
+    const vault = createdWith(f, (r) => r.role === "payout" && r.p === bondIn[0]!.role!.p);
+    if (vault.length) {
+      return {
+        action: "loan-repay",
+        protocol: bondIn[0]!.role!.p,
+        conf: "exact",
+        actor,
+        // The bond's own tokens move into the vault with the repayment; they are not paid.
+        gave: positive(new Map([...sumBags(vault)].filter(([k]) => k === ERG || !bondIn.some((x) => bagOf(x).has(k))))),
+        why: [ROLE_WHY(bondIn[0]!), ROLE_WHY(vault[0]!, "created")],
+      };
+    }
     const { gave, got } = actorSides(f, actor);
     return {
       action: gave.length ? "loan-repay" : "loan",
@@ -957,8 +1011,10 @@ const ruleDexyRest: Rule = (f) => {
 
 /** A known contract spent or paid into, no rule for its role: say so with its name. */
 const ruleKnownContract: Rule = (f) => {
-  const spent = stable(f.ins.filter((b) => b.role && b.role.p !== "ergo"))[0];
-  const created = stable(f.outs.filter((b) => b.role && b.role.p !== "ergo"))[0];
+  // Ergo's own contracts have their rules; one known by name only (the miner tip box) is said here.
+  const named = (b: FBox) => b.role != null && (b.role.p !== "ergo" || b.role.role === "contract");
+  const spent = stable(f.ins.filter(named))[0];
+  const created = stable(f.outs.filter(named))[0];
   const hit = spent ?? created;
   if (!hit) return null;
   const actor = f.payer;
