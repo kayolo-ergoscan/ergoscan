@@ -66,3 +66,70 @@ export function tipPoint(): { x: number; y: number } | null {
   }
   return null;
 }
+
+/* ---------------- header rects (read at rest, never per frame) ---------------- */
+
+function visible(el: Element | null | undefined): DOMRect | null {
+  if (!el) return null;
+  const r = el.getBoundingClientRect();
+  return r.width >= 2 && r.height >= 2 ? r : null;
+}
+
+/** The site header (the sticky bar on both layouts). */
+export function headerEl(): HTMLElement | null {
+  return typeof document === "undefined" ? null : document.querySelector<HTMLElement>("header");
+}
+
+/**
+ * The title on screen. While ChromeHeading crossfades, the old title is still in the DOM ahead of the
+ * new one: the last visible one is the page's.
+ */
+export function titleRect(): DOMRect | null {
+  const all = document.querySelectorAll<HTMLElement>('header [data-scout="title"]');
+  for (let i = all.length - 1; i >= 0; i--) {
+    const r = visible(all[i]);
+    if (r) return r;
+  }
+  return null;
+}
+
+/** Header floor in viewport px: the bottom of the bar less 6 (the scout's floor). */
+export function headerFloor(header: HTMLElement): number {
+  return header.getBoundingClientRect().top + header.clientHeight - 6;
+}
+
+/** The desktop layout is on (the phone toolbar is hidden). */
+export function wideLayout(): boolean {
+  return typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches;
+}
+
+/** Home on the desktop (§3.1), viewport px. Null on the phone layout or without a title. */
+export function nookPoint(home: Home): { x: number; y: number; face: 1 | -1 } | null {
+  const header = headerEl();
+  if (!header || !wideLayout()) return null;
+  const title = titleRect();
+  const label = visible(header.querySelector('[data-scout="price-label"]'));
+  const n = nookX(home, title, label);
+  if (!n) return null;
+  return { x: n.x, y: headerFloor(header), face: n.face };
+}
+
+/** The phone park past the longest search cue (HeaderScout `seek`), viewport px. */
+export function parkPoint(): { x: number; y: number; face: 1 | -1 } | null {
+  const header = headerEl();
+  if (!header) return null;
+  for (const el of header.querySelectorAll<HTMLElement>('[data-scout="search"]')) {
+    const r = visible(el);
+    if (!r) continue;
+    const host = header.getBoundingClientRect();
+    const text = el.querySelector("span");
+    const cs = getComputedStyle(text ?? el);
+    const font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} / ${cs.lineHeight} ${cs.fontFamily}`;
+    const icon = visible(el.querySelector("svg"));
+    const iconRight = icon ? icon.right : r.left + 18;
+    const end = iconRight + 12 + cueWidthFor(font) + 40;
+    const x = Math.max(host.left + 20, Math.min(end, host.left + header.clientWidth - 16));
+    return { x, y: headerFloor(header), face: -1 };
+  }
+  return null;
+}

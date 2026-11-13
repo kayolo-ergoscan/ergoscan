@@ -19,6 +19,7 @@ import { formatStamp } from "@/lib/format";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { getWsUrl } from "./config";
 import { feedRare } from "./kayolo/rare";
+import { chainSocket, feedChain } from "./kayolo/chain-sense";
 
 /** Cap stored pit seeds so home does not hold a full mempool dump in React. */
 const STREAM_BALL_CAP = 80;
@@ -318,9 +319,11 @@ export function PageSyncProvider({ children }: { children: ReactNode }) {
       try {
         ws = new WebSocket(getWsUrl());
         ws.onopen = () => {
+          chainSocket(true);
           if (!dead) setStreamLive(true);
         };
         ws.onclose = () => {
+          chainSocket(false);
           setStreamLive(false);
           if (!dead) retry = setTimeout(connect, 2000);
         };
@@ -328,8 +331,9 @@ export function PageSyncProvider({ children }: { children: ReactNode }) {
         ws.onmessage = (ev) => {
           try {
             const msg: unknown = JSON.parse(String(ev.data));
-            // Kayolo E20: rare heights from the same messages (no state, no renders).
+            // Kayolo E1–E3 and E20 from the same messages (no state, no renders).
             feedRare(msg);
+            feedChain(msg);
             applyStreamMessage(msg, {
               setTip,
               setMempoolCount,

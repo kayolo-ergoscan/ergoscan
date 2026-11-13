@@ -36,7 +36,38 @@ export type Keeper = {
   give(): BodyPose | null;
   /** Where he is while Kayolo holds him; null when the scout does. */
   where(): BodyWhere | null;
+  /** He is held at a place this page has no use for (the door after leaving Addresses): go home. */
+  home(): void;
 };
+
+/**
+ * Who draws the body right now. «none»: nobody (his window shows the still frame, or Kayolo takes
+ * him home by himself). The scout says «scout» when it starts drawing and «none» when it stops.
+ */
+export type Owner = "none" | "scout" | "kayolo";
+let owner: Owner = "none";
+const ownerSubs = new Set<(o: Owner) => void>();
+
+export function bodyOwner(): Owner {
+  return owner;
+}
+
+export function setOwner(o: Owner) {
+  if (o === owner) return;
+  owner = o;
+  for (const fn of [...ownerSubs]) {
+    try {
+      fn(o);
+    } catch {
+      /* a listener failed: the body still has one owner */
+    }
+  }
+}
+
+export function onOwner(fn: (o: Owner) => void): () => void {
+  ownerSubs.add(fn);
+  return () => ownerSubs.delete(fn);
+}
 
 let keeper: Keeper | null = null;
 const keeperWaiters = new Set<() => void>();
@@ -71,7 +102,10 @@ export function handoff(p: BodyPose): boolean {
   } catch {
     ok = false;
   }
-  if (ok) say({ k: "kayolo:took", where: p.where });
+  if (ok) {
+    setOwner("kayolo");
+    say({ k: "kayolo:took", where: p.where });
+  }
   return ok;
 }
 
@@ -84,7 +118,10 @@ export function reclaim(): BodyPose | null {
   } catch {
     p = null;
   }
-  if (p) say({ k: "kayolo:release", x: p.x, y: p.y, face: p.face, where: p.where });
+  if (p) {
+    setOwner("scout");
+    say({ k: "kayolo:release", x: p.x, y: p.y, face: p.face, where: p.where });
+  }
   return p;
 }
 
@@ -93,6 +130,45 @@ export function moveBody(p: { x: number; y: number; face?: 1 | -1 }) {
     keeper?.move(p);
   } catch {
     /* the layer went away: the scout keeps its own pose */
+  }
+}
+
+/* ---------------- his window's place ---------------- */
+
+/** Where his window puts the body at home, viewport px (ground point under his middle). */
+export type SlotPlace = { x: number; y: number; face: 1 | -1 };
+let slot: SlotPlace | null = null;
+const slotSubs = new Set<(p: SlotPlace | null, was: SlotPlace | null) => void>();
+
+export function slotPlace(): SlotPlace | null {
+  return slot;
+}
+
+/** The window moved to a new title edge (or went away). Listeners walk him over. */
+export function setSlotPlace(p: SlotPlace | null) {
+  const was = slot;
+  if (p && was && Math.abs(p.x - was.x) < 0.5 && Math.abs(p.y - was.y) < 0.5 && p.face === was.face) return;
+  slot = p;
+  for (const fn of [...slotSubs]) {
+    try {
+      fn(p, was);
+    } catch {
+      /* */
+    }
+  }
+}
+
+export function onSlotPlace(fn: (p: SlotPlace | null, was: SlotPlace | null) => void): () => void {
+  slotSubs.add(fn);
+  return () => slotSubs.delete(fn);
+}
+
+/** Kayolo holds him somewhere this page does not keep him: he goes home by himself. */
+export function sendHome() {
+  try {
+    keeper?.home();
+  } catch {
+    /* */
   }
 }
 
