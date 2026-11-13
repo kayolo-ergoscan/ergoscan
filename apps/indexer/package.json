@@ -9,7 +9,7 @@
     "start": "node dist/index.js",
     "migrate": "tsx src/migrate.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "npx tsx --test src/db.test.ts src/namesRegistry.test.ts src/tokenNamesFromRegs.test.ts src/tokenIssuance.test.ts src/addressTxLong.test.ts src/addressSummary.test.ts src/headerBackfill.test.ts src/sectionBackfill.test.ts src/inputProofBackfill.test.ts src/gix.test.ts src/tokenStats.test.ts src/packed/packed.test.ts src/rentClaim.test.ts src/scriptCount.test.ts src/mergeOutputAssets.test.ts src/tokenPassWindow.test.ts src/sameTipList.test.ts"
+    "test": "npx tsx --test src/db.test.ts src/namesRegistry.test.ts src/tokenNamesFromRegs.test.ts src/tokenIssuance.test.ts src/addressTxLong.test.ts src/addressSummary.test.ts src/headerBackfill.test.ts src/sectionBackfill.test.ts src/inputProofBackfill.test.ts src/gix.test.ts src/tokenStats.test.ts src/packed/packed.test.ts src/rentClaim.test.ts src/scriptCount.test.ts src/mergeOutputAssets.test.ts src/tokenPassWindow.test.ts src/sameTipList.test.ts src/lithosStats.test.ts"
   },
   "dependencies": {
     "@ergoscan/shared": "*",

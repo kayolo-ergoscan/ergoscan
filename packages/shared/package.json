@@ -17,7 +17,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx --test src/tx-shape.test.ts src/tx-action.test.ts src/registers.test.ts src/ipfs-url.test.ts src/eip4-nft.test.ts src/addr-flow.test.ts src/rent-tape.test.ts src/rent-series.test.ts src/rent.test.ts src/lock-overlay.test.ts src/ageusd.test.ts src/basis.test.ts src/rosen-event.test.ts src/ergo-decimals.test.ts src/oracle-pools.test.ts src/oracle-leader.test.ts src/market-cg.test.ts src/lithosdex.test.ts src/pool-tvl.test.ts src/tx-meaning/tx-meaning.test.ts",
+    "test": "tsx --test src/tx-shape.test.ts src/tx-action.test.ts src/registers.test.ts src/ipfs-url.test.ts src/eip4-nft.test.ts src/addr-flow.test.ts src/rent-tape.test.ts src/rent-series.test.ts src/rent.test.ts src/lock-overlay.test.ts src/ageusd.test.ts src/basis.test.ts src/rosen-event.test.ts src/ergo-decimals.test.ts src/oracle-pools.test.ts src/oracle-leader.test.ts src/market-cg.test.ts src/lithosdex.test.ts src/lithos-protocol.test.ts src/pool-tvl.test.ts src/tx-meaning/tx-meaning.test.ts",
     "dev": "tsc -p tsconfig.json --watch"
   },
   "dependencies": {

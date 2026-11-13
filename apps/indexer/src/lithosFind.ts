@@ -12,8 +12,11 @@ import {
   type LithosFindParts,
   type LithosLitOut,
 } from "@ergoscan/shared";
+import { readLithosStats, readPrevLithosStats } from "./lithosStats.js";
 
 const PER_TICK = 4;
+/** A stats pass slower than this is logged. Measured at ~60 ms on mainnet (13 Nov 2026). */
+const STATS_SLOW_MS = 1_000;
 
 type Queryable = { query: pg.Pool["query"] };
 
@@ -199,6 +202,7 @@ async function writeLithosSnapshot(db: Queryable): Promise<void> {
     items,
     hasMore: more,
     nextCursor: more && last ? String(last.height) : null,
+    stats: await lithosStatsInSavepoint(db),
   };
   const height = items[0]?.height ?? 0;
   await db.query(
@@ -210,6 +214,28 @@ async function writeLithosSnapshot(db: Queryable): Promise<void> {
        updated_at = now()`,
     [JSON.stringify(payload), height]
   );
+}
+
+/**
+ * Header figures (lithosStats.ts) under a savepoint: a failed or slow read never blocks the finds
+ * or the list. On failure the previous figures stay, with their own tip height and time.
+ */
+async function lithosStatsInSavepoint(db: Queryable): Promise<unknown> {
+  await db.query("SAVEPOINT lithos_stats");
+  let prev: unknown = null;
+  try {
+    prev = await readPrevLithosStats(db);
+    const t0 = Date.now();
+    const stats = await readLithosStats(db, prev);
+    const ms = Date.now() - t0;
+    if (ms > STATS_SLOW_MS) console.warn(`[indexer] lithos stats slow ${ms} ms`);
+    await db.query("RELEASE SAVEPOINT lithos_stats");
+    return stats ?? prev;
+  } catch (e) {
+    await db.query("ROLLBACK TO SAVEPOINT lithos_stats");
+    console.warn("[indexer] lithos stats", String(e));
+    return prev;
+  }
 }
 
 function mapSnapRow(row: SnapRow) {
