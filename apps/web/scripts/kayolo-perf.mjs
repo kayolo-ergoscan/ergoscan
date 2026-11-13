@@ -18,7 +18,8 @@
  *     [--gateway http://127.0.0.1:4400] [--pages /,/block/H,/address/A,/favorites] \
  *     [--vp 1771x891@1.5,390x844@3] [--warm 30] [--idle 60] [--clicks] [--out result.json] \
  *     [--shots DIR]   (one PNG per viewport and page after --warm s, at --idle 0 nothing is measured)
- *     [--tab]         (Э1b: Tab from the search goes to Kayolo's window, then to the price)
+ *     [--tab]         (Э1b: Tab from the search goes to Kayolo's window, then to the price; Э2: the
+ *                      same in the phone pill, Enter opens his panel, Esc closes it and gives focus back)
  *     [--bodies N]    (Э1b: N client-side transitions; every frame counts the bodies drawn: never 2)
  * Start the preview on a free port (not 4400/4401/4410) and stop it by its port PID only.
  */
@@ -358,23 +359,44 @@ async function bodyPoints(base, path) {
 
 /* ---------- Э1b: Tab order and one body ---------- */
 
-/** Desktop: focus the search, Tab twice. Kayolo's window must come between the search and the price. */
-async function tabOrder(base, path) {
+/**
+ * Focus the search, Tab twice: Kayolo's window must come between the search and the price, once
+ * (desktop header or phone pill). Then Enter on him opens his panel (focus inside it), Esc closes
+ * it and gives the focus back to his window (Э2).
+ */
+async function tabOrder(base, path, vpName = "1771x891@1.5") {
   const b = await browser();
+  const key = async (k, code, vk, mods = 0) => {
+    await b.send("Input.dispatchKeyEvent", { type: "keyDown", key: k, code, windowsVirtualKeyCode: vk, modifiers: mods });
+    await b.send("Input.dispatchKeyEvent", { type: "keyUp", key: k, code, windowsVirtualKeyCode: vk, modifiers: mods });
+    await sleep(250);
+  };
   try {
-    const vp = parseVp("1771x891@1.5");
+    const vp = parseVp(vpName);
     await openPage(b, base, path, vp, false);
     await sleep(4000);
-    const name = `(() => { const el = document.activeElement; if (!el) return "-"; if (el.closest(".kayolo-slot")) return "kayolo"; if (el.closest('[data-scout="search"]')) return "search"; if (el.querySelector && el.querySelector('[data-scout="price"]')) return "price"; return (el.tagName + " " + (el.getAttribute("aria-label") || el.textContent || "").trim().slice(0, 30)); })()`;
+    const name = `(() => { const el = document.activeElement; if (!el) return "-"; if (el.closest(".kayolo-panel")) return "panel"; if (el.closest(".kayolo-slot")) return "kayolo"; if (el.closest('[data-scout="search"]')) return "search"; if (el.querySelector && el.querySelector('[data-scout="price"]')) return "price"; return (el.tagName + " " + (el.getAttribute("aria-label") || el.textContent || "").trim().slice(0, 30)); })()`;
     await b.evaluate(`(() => { const s = [...document.querySelectorAll('[data-scout="search"]')].find((el) => el.getBoundingClientRect().width > 2); s?.focus(); return !!s; })()`);
     const seen = [await b.evaluate(name)];
     for (let i = 0; i < 2; i++) {
-      await b.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
-      await b.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
-      await sleep(250);
+      await key("Tab", "Tab", 9);
       seen.push(await b.evaluate(name));
     }
-    return { path, seen, ok: seen.join(" → ") === "search → kayolo → price" };
+    // Back to his window, Enter: the panel; Esc: closed, focus on his window again.
+    await key("Tab", "Tab", 9, 8);
+    const at = await b.evaluate(name);
+    await key("Enter", "Enter", 13);
+    const opened = await b.evaluate(`(() => ({ at: (${name}), open: !!document.querySelector(".kayolo-panel"), expanded: [...document.querySelectorAll(".kayolo-slot")].some((el) => el.getAttribute("aria-expanded") === "true") }))()`);
+    await key("Escape", "Escape", 27);
+    const closed = await b.evaluate(`(() => ({ at: (${name}), open: !!document.querySelector(".kayolo-panel") }))()`);
+    // Shift+K from the page body: focus on his window and the panel open.
+    await b.evaluate(`(() => { document.activeElement?.blur?.(); return true; })()`);
+    await key("K", "KeyK", 75, 8);
+    const shiftK = await b.evaluate(`(() => ({ at: (${name}), open: !!document.querySelector(".kayolo-panel") }))()`);
+    await key("Escape", "Escape", 27);
+    const panel = at === "kayolo" && opened.open && opened.expanded && opened.at === "panel" && !closed.open && closed.at === "kayolo";
+    const ok = seen.join(" → ") === "search → kayolo → price";
+    return { path, vp: vpName, seen, ok, panel: { at, opened, closed, shiftK, ok: panel && shiftK.open && shiftK.at === "panel" } };
   } finally {
     b.close();
   }
@@ -516,8 +538,12 @@ try {
   }
   if (TAB) {
     const block = pages.find((p) => p.startsWith("/block/")) ?? "/blocks";
-    result.tab = await tabOrder(base, block);
-    console.log(`tab on ${block}: ${result.tab.seen.join(" → ")} ${result.tab.ok ? "OK" : "WRONG"}`);
+    result.tab = [];
+    for (const vp of ["1771x891@1.5", "390x844@3"]) {
+      const r = await tabOrder(base, block, vp);
+      result.tab.push(r);
+      console.log(`tab ${vp} on ${block}: ${r.seen.join(" → ")} ${r.ok ? "OK" : "WRONG"}; panel ${r.panel.ok ? "OK" : "WRONG " + JSON.stringify(r.panel)}`);
+    }
   }
   if (BODIES > 0) {
     const route = opt("route", "/transactions,/addresses,/tokens,/blocks,/favorites,/mempool,/,/blocks,/tokens,/addresses").split(",").map((s) => s.trim());
