@@ -46,6 +46,8 @@ https://ergoscan.me/api/v1/epochs/params
 https://ergoscan.me/api/v1/tokens/bySymbol/SigUSD
 ```
 
+Each transaction also gets a one-line meaning — who swapped, lent, placed or closed an order, bridged or minted what. It is built by rules over that transaction's own boxes and a list of known contract templates, each with its source; when no rule fits, it is shown as a plain contract call, not a guess.
+
 Every claim painted on a page has a class: on-chain, rule-decoded, telemetry, live mempool, estimate, or an external source. The same classes are on [`/status`](https://ergoscan.me/status) and [`/learn`](https://ergoscan.me/learn).
 
 Contract names come from the open [ergo-names](https://github.com/kayolo-ergoscan/ergo-names) registry. Projects add their own contracts with a pull request; a merge is the approval, and ErgoScan loads it within the hour. An order or a position has an address of its own, so no book can list it: when ergo-names has no name, ErgoScan names it by its contract template, from the same contract list that explains transactions.
