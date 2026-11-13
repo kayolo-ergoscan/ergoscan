@@ -37,6 +37,7 @@ export * from "./stageGame.js";
 export * from "./registers.js";
 export * from "./ipfs-url.js";
 export * from "./eip4-nft.js";
+export * from "./ergodex-lp.js";
 export * from "./tx-shape.js";
 export * from "./tx-action.js";
 export * from "./ageusd.js";

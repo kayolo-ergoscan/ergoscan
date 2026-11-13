@@ -1,4 +1,10 @@
-import { ipfsPathFromHref, ipfsUrlFallbacks, preferIpfsUrl } from "@ergoscan/shared";
+import {
+  ERGODEX_LP_ART_PATH,
+  ipfsPathFromHref,
+  ipfsUrlFallbacks,
+  isErgodexLpArt,
+  preferIpfsUrl,
+} from "@ergoscan/shared";
 import { describeParty } from "./address-labels";
 import { shortId } from "./format";
 
@@ -32,6 +38,8 @@ export function safeMediaUrl(
 ): string | null {
   if (!url) return null;
   const t = url.trim();
+  // The ErgoDex logo ErgoScan shows for liquidity tokens: our own file, same origin.
+  if (isErgodexLpArt(t)) return kind === "image" || kind === "any" ? ERGODEX_LP_ART_PATH : null;
   if (!t || !kindOk(t, kind)) return null;
   if (/^data:/i.test(t)) return t;
   return preferIpfsUrl(t) ?? ( /^https?:\/\//i.test(t) ? t : null);
@@ -43,6 +51,7 @@ export function mediaUrlFallbacks(
   kind: "image" | "audio" | "video" | "any" = "image"
 ): string[] {
   if (!url?.trim()) return [];
+  if (isErgodexLpArt(url)) return kind === "image" || kind === "any" ? [ERGODEX_LP_ART_PATH] : [];
   const path = ipfsPathFromHref(url);
   const raw = path ? ipfsUrlFallbacks(url) : [url.trim()];
   const out: string[] = [];

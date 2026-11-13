@@ -117,6 +117,8 @@ export {
   roleByToken,
   knownTemplateCount,
   TEMPLATES_WITH_REGISTERS,
+  ERGODEX_V3_SHELL_TEMPLATES,
+  ERGODEX_CP_POOL_TEMPLATES,
   type ProtocolId,
   type ContractRole,
   type RoleEntry,

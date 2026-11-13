@@ -27,7 +27,7 @@ import {
 import { FeedHolderRow } from "@/components/feed/FeedHolderRow";
 import { MeaningPhraseField, MeaningTitle, meaningFacts, meaningLang, useMeaningRow } from "@/components/feed/FeedMeaning";
 import { meaningTile, parseMeaning } from "@/lib/tx-meaning-row";
-import { MEANING_VOCAB, type CompactMeaning } from "@ergoscan/shared";
+import { ERGODEX_LP_ART_SOURCE, MEANING_VOCAB, type CompactMeaning } from "@ergoscan/shared";
 import { compactFigure, KpiLabelMark, KpiNum, KpiTileRail } from "@/components/KpiGrid";
 import { KpiMark } from "@/components/kpi-marks";
 import { NameMarquee } from "@/components/NameMarquee";
@@ -83,6 +83,24 @@ type TokenNft = {
   mintHeight: number | null;
 };
 
+type TokenLpSide = { tokenId: string | null; name: string; decimals: number };
+
+/** ErgoDex liquidity token (gateway `lp`): recognised by its contract, position from the chain. */
+type TokenLp = {
+  kind: "cl-key" | "cp-lp" | "cp-pool-nft";
+  protocol: string;
+  position: {
+    boxId: string;
+    open: boolean;
+    height: number | null;
+    x: TokenLpSide | null;
+    y: TokenLpSide | null;
+    priceLow: number | null;
+    priceHigh: number | null;
+    feePercent: number | null;
+  } | null;
+};
+
 interface TokenData {
   tokenId: string;
   name: string | null;
@@ -92,6 +110,9 @@ interface TokenData {
   boxId: string | null;
   isNft?: boolean;
   artworkUrl?: string | null;
+  /** "ergoscan:ergodex-lp": artworkUrl is the ErgoDex logo ErgoScan shows, not the token's own. */
+  artworkSource?: string | null;
+  lp?: TokenLp | null;
   nft?: TokenNft | null;
   holders?: number | null;
   txCount?: number | null;
@@ -158,6 +179,7 @@ function catalogToTokenData(tokenId: string, row: TokenListItem | null): TokenDa
     boxId: null,
     isNft: row.emission != null && Number(row.emission) === 1 && row.decimals === 0,
     artworkUrl: row.artworkUrl,
+    artworkSource: row.artworkSource ?? null,
     holders: row.holders,
     txCount: row.txCount,
     unspentBoxes: row.unspentBoxes,
@@ -176,6 +198,8 @@ function mergeTokenData(prev: TokenData | null, next: TokenData): TokenData {
     boxId: next.boxId ?? prev?.boxId ?? null,
     isNft: next.isNft ?? prev?.isNft,
     artworkUrl: next.artworkUrl ?? prev?.artworkUrl,
+    artworkSource: next.artworkSource ?? prev?.artworkSource ?? null,
+    lp: next.lp ?? prev?.lp ?? null,
     nft: next.nft ?? prev?.nft ?? null,
     holders: next.holders ?? prev?.holders,
     txCount: next.txCount ?? prev?.txCount,
@@ -716,16 +740,24 @@ export function TokenView({
   const meta = resolveTokenMeta(tokenId, named, named);
   const sym = named ? meta.symbol : shortId(tokenId, 8);
   const nft = data?.nft ?? null;
-  const typeLabel = nft?.kind
-    ? t(`token.nft.kind.${nft.kind}`)
-    : data?.isNft
-      ? t("token.type.nft")
-      : t("token.type.token");
+  const lp = data?.lp ?? null;
+  const artworkSource = data?.artworkSource ?? catalog?.artworkSource ?? null;
+  const typeLabel =
+    lp?.kind === "cl-key"
+      ? t("token.lp.type")
+      : nft?.kind
+        ? t(`token.nft.kind.${nft.kind}`)
+        : data?.isNft
+          ? t("token.type.nft")
+          : t("token.type.token");
   const previewUrl = nft?.coverUrl || data?.artworkUrl || catalog?.artworkUrl || nft?.url;
   const settled = catalog != null || data != null;
   const dash = "—";
   const decimals = data?.decimals ?? catalog?.decimals ?? 0;
   const emission = data?.emissionAmount ?? catalog?.emission ?? null;
+  const nftLike = Boolean(data?.isNft || Number(emission) === 1 || nft?.kind || lp?.kind === "cl-key");
+  // An NFT's name is its title: the whole name (the marquee scrolls a long one), not a 16-char ticker.
+  const title = named && nftLike ? named : sym;
   const supplyGlance = (() => {
     if (emission == null || emission === "") return null;
     try {
@@ -817,7 +849,7 @@ export function TokenView({
                 label={typeLabel}
                 ink={INK.violet}
                 mark={
-                  (data?.isNft || Number(emission) === 1 || nft?.kind) &&
+                  (nftLike || artworkSource === ERGODEX_LP_ART_SOURCE) &&
                   previewUrl ? (
                     <span className="h-12 w-12 overflow-hidden rounded-[14px] bg-[var(--wash)]">
                       <NftThumb
@@ -835,7 +867,7 @@ export function TokenView({
                   className="mt-0.5 min-w-0 text-[17px] font-semibold leading-[1.15] tracking-tight"
                   style={{ color: tokenTickerInk(tokenId) }}
                 >
-                  <NameMarquee text={sym} fade pxPerSec={16} />
+                  <NameMarquee text={title} fade pxPerSec={16} />
                 </h1>
                 <p className="detail-sum-id mt-0.5 flex min-w-0 items-center gap-1">
                   <code className="min-w-0 truncate font-mono text-[12px] leading-[1.15] text-accent">
@@ -976,8 +1008,15 @@ export function TokenView({
             </AddrFactCard>
           </div>
 
-          {nft && (nft.kind || nft.url || nft.mintAddress || nft.collectionTokenId) ? (
-            <NftInfoPanel nft={nft} tokenId={tokenId} locale={locale} t={t} />
+          {nft && (nft.kind || nft.url || nft.mintAddress || nft.collectionTokenId || lp) ? (
+            <NftInfoPanel
+              nft={nft}
+              tokenId={tokenId}
+              locale={locale}
+              t={t}
+              lp={lp}
+              ourArt={artworkSource === ERGODEX_LP_ART_SOURCE ? data?.artworkUrl ?? catalog?.artworkUrl ?? null : null}
+            />
           ) : null}
 
           <DetailTabs tabs={phoneTabs} active={tab} onPick={onTab} label={t("detail.tabs")} />
@@ -1232,16 +1271,115 @@ function clipNftFact(value: string): string {
   return value.length <= 48 ? value : value.slice(0, 48);
 }
 
+/** A price for the range row: 5 significant digits, no exponent. */
+function lpPrice(v: number, locale: string): string {
+  return v.toLocaleString(loc(locale), { maximumSignificantDigits: 5 });
+}
+
+function LpSideName({ side }: { side: TokenLpSide }) {
+  if (!side.tokenId) return <span>{side.name}</span>;
+  return (
+    <Link prefetch={false} href={`/token/${encodeURIComponent(side.tokenId)}`} className="text-accent hover:underline">
+      {side.name}
+    </Link>
+  );
+}
+
+/** Rows of an ErgoDex V3 position key: what the position box on chain says. */
+function lpPositionRows(
+  lp: TokenLp,
+  nft: TokenNft,
+  locale: string,
+  t: (key: string) => string
+): { label: string; node: ReactNode }[] {
+  const rows: { label: string; node: ReactNode }[] = [
+    { label: t("token.lp.protocol"), node: <span>{t("token.lp.protocolV3")}</span> },
+  ];
+  const p = lp.position;
+  if (p?.x && p.y) {
+    const x = p.x;
+    const y = p.y;
+    rows.push({
+      label: t("token.lp.pair"),
+      node: (
+        <span className="flex min-w-0 items-center gap-1.5 truncate">
+          <LpSideName side={x} />
+          <span className="text-[var(--muted-2)]">/</span>
+          <LpSideName side={y} />
+        </span>
+      ),
+    });
+    if (p.priceLow != null && p.priceHigh != null) {
+      rows.push({
+        label: t("token.lp.range"),
+        node: (
+          <span className="truncate font-mono text-[12px] tabular-nums">
+            {`${lpPrice(p.priceLow, locale)} – ${lpPrice(p.priceHigh, locale)} `}
+            {t("token.lp.rangePer").replace("{y}", y.name).replace("{x}", x.name)}
+          </span>
+        ),
+      });
+    }
+  }
+  if (p?.feePercent != null) {
+    rows.push({
+      label: t("token.lp.fee"),
+      node: (
+        <span className="tabular-nums">
+          {`${p.feePercent.toLocaleString(loc(locale), { maximumFractionDigits: 4 })}%`}
+        </span>
+      ),
+    });
+  }
+  if (p) {
+    rows.push({
+      label: t("token.lp.box"),
+      node: (
+        <Link prefetch={false} href={`/box/${encodeURIComponent(p.boxId)}`} className="truncate font-mono text-accent hover:underline">
+          {clipNftFact(p.boxId)}
+        </Link>
+      ),
+    });
+    rows.push({
+      label: t("token.lp.status"),
+      node: p.open ? (
+        <span className="text-[var(--up)]">{t("token.lp.open")}</span>
+      ) : (
+        <span>
+          {t("token.lp.closed")}
+          <span className="text-[var(--muted-2)]">{` · ${t("token.lp.closedNote")}`}</span>
+        </span>
+      ),
+    });
+  }
+  if (nft.mintTxId) {
+    rows.push({
+      label: t("token.nft.mintTx"),
+      node: (
+        <Link prefetch={false} href={`/tx/${encodeURIComponent(nft.mintTxId)}`} className="truncate font-mono text-accent hover:underline">
+          {clipNftFact(nft.mintTxId)}
+        </Link>
+      ),
+    });
+  }
+  return rows;
+}
+
 function NftInfoPanel({
   nft,
   tokenId,
   locale,
   t,
+  lp,
+  ourArt,
 }: {
   nft: TokenNft;
   tokenId: string;
   locale: string;
   t: (key: string) => string;
+  lp?: TokenLp | null;
+  /** The ErgoDex logo ErgoScan shows in place of a picture the token does not have. */
+  ourArt?: string | null;
 }) {
   const audio = useMediaSrc(nft.kind === "audio" ? nft.url : null, "audio");
   const video = useMediaSrc(nft.kind === "video" ? nft.url : null, "video");
@@ -1251,14 +1389,18 @@ function NftInfoPanel({
       ? safeMediaUrl(nft.url, "any")
       : null;
   const mintParty = nft.mintAddress ? describeParty(nft.mintAddress) : null;
-  const rows: { label: string; node: ReactNode }[] = [];
-  if (nft.mintHeight != null) {
+  const pictureRow = ourArt
+    ? { label: t("token.nft.picture"), node: <span className="truncate">{t("token.nft.pictureErgodex")}</span> }
+    : null;
+  const position = lp?.kind === "cl-key";
+  const rows: { label: string; node: ReactNode }[] = position ? lpPositionRows(lp, nft, locale, t) : [];
+  if (!position && nft.mintHeight != null) {
     rows.push({
       label: t("token.nft.mintHeight"),
       node: <span className="tabular-nums">#{nft.mintHeight.toLocaleString(loc(locale))}</span>,
     });
   }
-  if (nft.mintAddress) {
+  if (!position && nft.mintAddress) {
     rows.push({
       label: t("token.nft.mintAddress"),
       node: (
@@ -1268,7 +1410,7 @@ function NftInfoPanel({
       ),
     });
   }
-  if (nft.mintTxId) {
+  if (!position && nft.mintTxId) {
     rows.push({
       label: t("token.nft.mintTx"),
       node: (
@@ -1298,7 +1440,8 @@ function NftInfoPanel({
       ),
     });
   }
-  if (nft.url) {
+  // The substituted logo is ours, not the token's: no URL, CID or hash rows for it.
+  if (nft.url && !ourArt) {
     const href = safeMediaUrl(nft.url, "any");
     rows.push({
       label: t("token.nft.url"),
@@ -1311,13 +1454,13 @@ function NftInfoPanel({
       ),
     });
   }
-  if (nft.ipfsCid) {
+  if (nft.ipfsCid && !ourArt) {
     rows.push({
       label: t("token.nft.cid"),
       node: <span className="truncate font-mono text-[12px]">{nft.ipfsCid}</span>,
     });
   }
-  if (nft.sha256) {
+  if (nft.sha256 && !ourArt) {
     rows.push({
       label: t("token.nft.sha256"),
       node: (
@@ -1328,7 +1471,8 @@ function NftInfoPanel({
       ),
     });
   }
-  const artUrl = nft.coverUrl || nft.url;
+  if (pictureRow) rows.push(pictureRow);
+  const artUrl = nft.coverUrl || nft.url || ourArt || null;
   const showArt = Boolean(artUrl) && nft.kind !== "audio" && nft.kind !== "video";
   const showFrame = nft.kind !== "audio" && nft.kind !== "video";
   return (
