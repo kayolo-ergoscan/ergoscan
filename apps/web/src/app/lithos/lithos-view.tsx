@@ -1,7 +1,7 @@
 "use client";
 
 import { Tip, TipRow, TipRows } from "@/components/Tip";
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
 import { Shell } from "@/components/Shell";
@@ -17,15 +17,13 @@ import {
   FeedRow,
   type FeedLead,
 } from "@/components/feed/Feed";
-import { compactFigure, KpiLabelMark, KpiNum, KpiTileRail } from "@/components/KpiGrid";
 import { RankWindow } from "@/components/RankWindow";
-import { KpiMark } from "@/components/kpi-marks";
 import { useT, useI18n } from "@/lib/i18n/I18nProvider";
 import { getGateway } from "@/lib/config";
 import { formatTokenAmount, formatTs, shortId, toEpochMs } from "@/lib/format";
 import { lookupAddress } from "@/lib/address-book";
-import { LITHOS_LINKS } from "@/lib/lithos-links";
-import { HOME, INK } from "@/lib/palette";
+import type { LithosProtocolStats } from "@ergoscan/shared";
+import { LithosHeader, type LithosClientRelease } from "./lithos-header";
 import { ENTER_MS, SNAPSHOT_FETCH, enteringIds, useEnterIds } from "@/lib/keyed-enter";
 
 const PACK = 25;
@@ -58,6 +56,10 @@ export type LithosProtocolSnap = {
   items: LithosFindItem[];
   hasMore: boolean;
   nextCursor: string | null;
+  /** Header figures from the snapshot pass; absent before the indexer has them. */
+  stats?: LithosProtocolStats | null;
+  client?: LithosClientRelease | null;
+  updatedAt?: string | null;
 };
 
 function loc(locale: string): string {
@@ -71,49 +73,6 @@ function lit(raw: string, locale: string): string {
 function keepAmt(next: string | undefined, prev: string | undefined): string {
   if (next && next !== "0") return next;
   return prev && prev !== "0" ? prev : "0";
-}
-
-function LithosKpi({
-  label,
-  value,
-  sub,
-  ink,
-  enter,
-  mark,
-  compact,
-}: {
-  label: string;
-  value: string;
-  /** Phone short form for big figures. */
-  compact?: string;
-  sub: string;
-  ink: string;
-  enter: number;
-  mark: ReactNode;
-}) {
-  return (
-    <div
-      className="kpi-tile kpi-tile--dense flex h-auto min-w-0 overflow-visible rounded-[20px] border border-[var(--border)] bg-[var(--module)] px-3 py-1.5"
-      style={{ "--kpi-ink": ink, "--enter": enter } as CSSProperties}
-    >
-      <KpiTileRail />
-      <div className="kpi-tile-row flex w-full min-w-0 flex-1 justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <div className="kpi-label-row">
-            <KpiLabelMark mark={mark} />
-            <p className="text-[13px] leading-[1.15]" style={{ color: HOME.forming }}>
-              {label}
-            </p>
-          </div>
-          <p className="kpi-value mt-0.5 truncate text-[17px] font-semibold leading-[1.15] tabular-nums tracking-tight">
-            <KpiNum compact={compact}>{value}</KpiNum>
-          </p>
-          <p className="kpi-sub mt-0.5 truncate text-[12px] leading-[1.15] text-[var(--muted-2)]">{sub}</p>
-        </div>
-        <div className="kpi-tile-mark">{mark}</div>
-      </div>
-    </div>
-  );
 }
 
 function bigOf(raw: string | null | undefined): bigint | null {
@@ -297,6 +256,10 @@ export function LithosProtocolView({ initial }: { initial: LithosProtocolSnap | 
             items: next,
             hasMore: body.hasMore === true,
             nextCursor: body.nextCursor,
+            // Cursor pages carry no header figures: keep the ones we have.
+            stats: body.stats ?? prev?.stats ?? null,
+            client: body.client ?? prev?.client ?? null,
+            updatedAt: body.updatedAt ?? prev?.updatedAt ?? null,
           };
         });
       } finally {
@@ -319,80 +282,18 @@ export function LithosProtocolView({ initial }: { initial: LithosProtocolSnap | 
   }, [items, enter.mark, packEnter.mark]);
 
 
-  const privateLine = t("lithosP.private")
-    .replace("{team}", lit(share?.teamLit ?? "0", locale))
-    .replace("{inv}", lit(share?.investorLit ?? "0", locale))
-    .replace("{aud}", lit(share?.auditorLit ?? "0", locale));
-  const miss = "—";
   const L = loc(locale);
 
   return (
     <Shell>
-      <div className="addr-drop lithos-hero mb-3 grid items-stretch gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
-        <div className="grid grid-cols-2 content-start gap-2">
-          <LithosKpi
-            label={t("lithosP.blocks")}
-            value={snap ? snap.finds.toLocaleString(L) : miss}
-            compact={snap ? compactFigure(snap.finds) : undefined}
-            sub={t("lithosP.blocksSub")}
-            ink={INK.violet}
-            enter={0}
-            mark={<KpiMark id="block" tone={INK.violet} />}
-          />
-          <LithosKpi
-            label={t("lithosP.finders")}
-            value={snap ? snap.finders.toLocaleString(L) : miss}
-            sub={t("lithosP.findersSub")}
-            ink={INK.cyan}
-            enter={1}
-            mark={<KpiMark id="miner" tone={INK.cyan} />}
-          />
-          <LithosKpi
-            label={t("lithosP.finderLit")}
-            value={snap ? lit(snap.finderLit, locale) : miss}
-            compact={snap ? compactFigure(Number(snap.finderLit) / 1e9) : undefined}
-            sub={t("lithosP.finderLitSub")}
-            ink={INK.gold}
-            enter={2}
-            mark={<KpiMark id="token" tone={INK.gold} />}
-          />
-          <LithosKpi
-            label={t("lithosP.holding")}
-            value={snap ? lit(snap.holdingLit, locale) : miss}
-            compact={snap ? compactFigure(Number(snap.holdingLit) / 1e9) : undefined}
-            sub={t("lithosP.holdingSub")}
-            ink={INK.teal}
-            enter={3}
-            mark={<KpiMark id="locked" tone={INK.teal} />}
-          />
-        </div>
-        <div className="relative min-w-0">
-        <article className="lithos-hero-copy flex min-w-0 flex-col rounded-[20px] border border-[var(--border)] bg-[var(--module)] px-4 py-2.5 lg:absolute lg:inset-0 lg:overflow-hidden">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <img src="/lithos-mark.png" alt="" width={28} height={28} className="h-7 w-7 shrink-0 object-contain" />
-            <h2 className="text-[15px] font-semibold leading-none">{t("nav.lithosProtocol")}</h2>
-            {LITHOS_LINKS.map((link) => (
-              <a
-                key={link.href}
-                href={link.href}
-                target="_blank"
-                rel="noreferrer"
-                className="text-[12px] leading-none text-accent hover:underline"
-              >
-                {t(link.key)}
-              </a>
-            ))}
-            <Link prefetch={false} href="/defi/lithos" className="text-[12px] leading-none text-accent hover:underline">
-              LithosDex
-            </Link>
-          </div>
-          <div className="mt-2 flex min-h-0 flex-1 flex-col justify-between gap-2">
-            <p className="text-[13px] leading-[1.45] text-[var(--text)]">{t("lithosP.body")}</p>
-            <p className="text-[12px] leading-[1.45] text-[var(--muted)]">{privateLine}</p>
-          </div>
-        </article>
-        </div>
-      </div>
+      <LithosHeader
+        stats={snap?.stats ?? null}
+        latest={share}
+        finds={snap?.finds ?? null}
+        holdingLit={snap?.holdingLit ?? null}
+        client={snap?.client ?? null}
+        updatedAt={snap?.updatedAt ?? null}
+      />
 
       {!listReady ? null : (
         <div className="feed-sheet">

@@ -2792,12 +2792,6 @@ html[data-ink="day"] {
 .addr-head.lithos-finds > .block-lane-pair:last-child {
   grid-template-columns: minmax(0, 1.15fr) minmax(9.25rem, 0.85fr);
 }
-@media (min-width: 1024px) {
-  .lithos-hero-copy {
-    height: 100%;
-    min-height: 0;
-  }
-}
 .block-lane-pair > .lane-id {
   grid-column: 1 / -1;
 }
