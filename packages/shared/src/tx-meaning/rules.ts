@@ -1131,8 +1131,9 @@ const ruleBurn: Rule = (f) => {
     protocol: null,
     conf: "exact",
     actor: f.payer,
-    gave: [...f.burned].map(([k, v]): [AssetKey, bigint] => [k, v]),
-    why: [...f.burned.keys()].map((id) => ({ k: "burned", v: id })),
+    // By token id: the box order is not trusted.
+    gave: [...f.burned].sort((a, b) => (a[0] < b[0] ? -1 : 1)),
+    why: [...f.burned.keys()].sort().map((id) => ({ k: "burned", v: id })),
   };
 };
 

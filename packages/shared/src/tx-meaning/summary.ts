@@ -265,8 +265,37 @@ export function sayLines(m: MeaningPhraseInput): Lines {
         en: `${en} minted NFT “${name}”${art ? ` (${art.en})` : ""}${toZ}`,
       };
     }
-    case "burn":
+    case "burn": {
+      const xs = m.gave ?? [];
+      const names = xs.map(assetLabel);
+      // «сжёг 11 × NETA Stake Key»: one name, one unit each.
+      if (xs.length >= 2 && names.every((x) => x === names[0]) && xs.every((a) => a.amount === "1")) {
+        return { ru: `${ru} сжёг ${xs.length} × ${names[0]}`, en: `${en} burned ${xs.length} × ${names[0]}` };
+      }
+      // Three kinds or more: the count and the two biggest names, no amounts. A name shared by
+      // several tokens is counted: «8 × NETA Stake Key» (one unit each), else «ClaimRSN.tech (3)».
+      if (xs.length >= 3) {
+        const groups = new Map<string, { n: number; units: boolean }>();
+        xs.forEach((a, i) => {
+          const g = groups.get(names[i]!) ?? { n: 0, units: true };
+          g.n += 1;
+          g.units &&= a.amount === "1";
+          groups.set(names[i]!, g);
+        });
+        // Bigger groups first; a tie keeps the token-id order the list came in.
+        const shown = [...groups].sort((a, b) => b[1].n - a[1].n).slice(0, 2);
+        const left = xs.length - shown.reduce((t, [, g]) => t + g.n, 0);
+        const label = ([name, g]: [string, { n: number; units: boolean }]) =>
+          g.n < 2 ? name : g.units ? `${g.n} × ${name}` : `${name} (${g.n})`;
+        const head = shown.map(label).join(", ");
+        const more = { ru: left > 0 ? ` и ещё ${left}` : "", en: left > 0 ? ` and ${left} more` : "" };
+        return {
+          ru: `${ru} сжёг ${ruCountWord(xs.length, "токен", "токена", "токенов")}: ${head}${more.ru}`,
+          en: `${en} burned ${many(xs.length, "token", "tokens")}: ${head}${more.en}`,
+        };
+      }
       return { ru: `${ru} сжёг${gaveS.ru || " токены"}`, en: `${en} burned${gaveS.en || " tokens"}` };
+    }
     case "name-register":
       if (m.sub === "commit") {
         return { ru: `${ru} подал заявку на имя · ${P.ru}`, en: `${en} requested a name on ${P.en}` };

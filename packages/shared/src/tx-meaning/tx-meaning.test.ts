@@ -267,6 +267,30 @@ describe("new tokens: issuer, kind, where they went", () => {
   });
 });
 
+describe("burns of many tokens", () => {
+  it("counts them and names the biggest groups, no amounts", () => {
+    const g = byId("6a60d22820");
+    const m = classifyTxMeaning(txOf(g), ctxOf(g));
+    assert.equal(m.gave.length, 11);
+    assert.ok(m.say.ru.endsWith("сжёг 11 токенов: 8 × NETA Stake Key, 2 × ergopad Stake Key и ещё 1"), m.say.ru);
+    // Token ids order the list, never the boxes.
+    const ids = m.gave.map((a) => a.token!);
+    assert.deepEqual(ids, [...ids].sort());
+  });
+  it("one name, one unit each: «11 × NAME»", () => {
+    const g = byId("6a60d22820");
+    const ctx: MeaningCtx = { ...ctxOf(g), token: () => ({ name: "NETA Stake Key", decimals: 0 }) };
+    const m = classifyTxMeaning(txOf(g), ctx);
+    assert.ok(m.say.ru.endsWith("сжёг 11 × NETA Stake Key"), m.say.ru);
+    assert.ok(m.say.en.endsWith("burned 11 × NETA Stake Key"), m.say.en);
+  });
+  it("a name shared by tokens of other amounts is counted in brackets", () => {
+    const g = byId("49ce119120");
+    const m = classifyTxMeaning(txOf(g), ctxOf(g));
+    assert.ok(m.say.ru.includes("сжёг 14 токенов: ClaimRSN.tech (3), MiGoreng и ещё 10"), m.say.ru);
+  });
+});
+
 describe("tx meaning: rules", () => {
   it("box order and token order never change the answer", () => {
     for (const g of GOLDEN) {
