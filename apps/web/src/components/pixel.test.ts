@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { test } from "node:test";
-import { adoptPixelState, drawPixel, pixelState, pixelWake, type PixelMood, type PixelPose } from "./pixel";
+import { adoptPixelState, drawPixel, pixelSettling, pixelState, pixelWake, type PixelMood, type PixelPose } from "./pixel";
 
 /**
  * Golden log (design/brand/kayolo-life.md §9.7): with the default flags drawPixel makes exactly the
@@ -192,6 +192,31 @@ test("sleep's frozen frame: one still square and closed eyes, no frames asked", 
   assert.equal(squares.length, 1, "one square");
   assert.ok(log.slice(from).length > 0);
   assert.ok(pixelWake(ctx) > T0 + 2000);
+});
+
+test("pixelSettling: true while the eyes still close, false once settled (the next blink is not «now»)", () => {
+  const { ctx } = recorder();
+  const pose = (t: number): PixelPose => ({
+    x: 40,
+    y: 60,
+    scale: 0.86,
+    mood: "sleepy",
+    now: t,
+    face: -1,
+    wobble: 0,
+    nod: 0,
+    breath: 0,
+    glances: false,
+    zzz: "one",
+    eyeScale: 0.15,
+    gaze: { x: 0, y: 0.4 },
+  });
+  drawPixel(ctx, { ...pose(T0), mood: "idle", eyeScale: 1 });
+  drawPixel(ctx, pose(T0 + 16));
+  assert.equal(pixelSettling(ctx), true, "closing");
+  for (let t = T0 + 32; t < T0 + 2000; t += 16) drawPixel(ctx, pose(t));
+  assert.equal(pixelSettling(ctx), false, "settled");
+  assert.ok(Number.isFinite(pixelWake(ctx)), "a blink is still planned, but nobody has to paint it");
 });
 
 test("the phone hop stays at 6 px, the desktop hop as it was", () => {

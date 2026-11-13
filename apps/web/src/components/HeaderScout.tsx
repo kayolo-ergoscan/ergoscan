@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { addressIdOf, addressReturnGate, askWaitsForSlip, isAddressHome, rentScratch, SCOUT_CUES_EN, SCOUT_CUES_RU, scoutBeats, type ScoutBeat } from "@/lib/header-scout";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import { onApiHost, useSiteHost } from "@/lib/site-host";
 import { lookupScoutRent } from "@/lib/scout-rent";
 import { INK_EVENT } from "@/lib/skin-ink";
 import { REDUCE_QUERY, useMediaTick, WIDE_QUERY } from "@/lib/kayolo/motion";
@@ -2610,6 +2611,8 @@ function runFavoritesErrand(canvas: HTMLCanvasElement, header: HTMLElement, wake
 export function HeaderScout() {
   const path = usePathname();
   const { t, locale } = useI18n();
+  /** The API host has no Kayolo: no scout, no tour, nothing written to his memory there. */
+  const { api } = useSiteHost();
   const ref = useRef<HTMLCanvasElement>(null);
   const hitRef = useRef<HTMLButtonElement>(null);
   const leaveRef = useRef(false);
@@ -2655,12 +2658,18 @@ export function HeaderScout() {
     homeRef.current = false;
     machineRef.current = null;
     wakeRef.current = () => {};
-    if (path === "/") {
+    // The host straight from the URL: the context is still false in this first effect.
+    const apiHost = api || onApiHost();
+    if (path === "/" || apiHost) {
       perchedOnAddresses = false;
       returnedToHeader = false;
       addressPassed = false;
       rentTold = "";
       if (bodyOwner() === "scout") setOwner("none");
+      if (apiHost) {
+        ref.current?.getContext("2d")?.clearRect(0, 0, ref.current.width, ref.current.height);
+        placeHit(hitRef.current, false, 0, 0);
+      }
       return;
     }
     const canvas = ref.current;
@@ -2815,7 +2824,7 @@ export function HeaderScout() {
       x,
       markDone: isAddressHome(path) && wide,
     }, wakeRef, isAddressHome(path), kayolo);
-  }, [path, locale, t, reduceTick, perchTick, modeTick]);
+  }, [path, locale, t, reduceTick, perchTick, modeTick, api]);
 
   if (path === "/") return null;
   return (

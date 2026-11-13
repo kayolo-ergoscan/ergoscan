@@ -67,6 +67,15 @@ export function writeMode(store: () => Store | null, mode: Mode): void {
   set(store, MODE_KEY, mode);
 }
 
+/** No stored mode: the default rules again («Живой», or «Тихий» under reduced motion). */
+export function clearMode(store: () => Pick<Storage, "removeItem"> | null): void {
+  try {
+    store()?.removeItem(MODE_KEY);
+  } catch {
+    /* storage refused: the stored choice stays */
+  }
+}
+
 /** A person's choice only (/settings). */
 export function writeHome(store: () => Store | null, home: Home): void {
   set(store, HOME_KEY, home);

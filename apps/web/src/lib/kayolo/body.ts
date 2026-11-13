@@ -17,6 +17,7 @@ import type { PixelPose, PixelState } from "@/components/pixel";
 import { say, type BodyWhere } from "./events";
 import { KAYOLO_LAYER, TOUR_GAP_MS } from "./thresholds";
 import {
+  clearMode,
   HOME_KEY,
   familiar,
   KEY_KEY,
@@ -200,18 +201,14 @@ function local() {
   }
 }
 
-function reduceNow(): boolean {
+/** The system asks for less motion. */
+export function reduceNow(): boolean {
   return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
 /** The mode in force now (stored choice, else «Тихий» under reduced motion). */
 export function currentMode(): Mode {
   return modeOf(readMode(local), reduceNow());
-}
-
-/** The mode he wakes or comes back to: «Живой», or «Тихий» when the system asks for less motion. */
-export function wakeMode(): Mode {
-  return reduceNow() ? "calm" : "live";
 }
 
 /*
@@ -246,6 +243,16 @@ export function onChoice(fn: () => void): () => void {
 
 export function chooseMode(m: Mode) {
   writeMode(local, m);
+  tellChoice();
+}
+
+/**
+ * Wake him, bring him back, «Живее» in his panel: the stored choice goes and the default rules
+ * again — «Живой», or «Тихий» when the system asks for less motion. A stored «Живой» overrides the
+ * system setting, so only /settings writes it (§4.6, §10).
+ */
+export function chooseDefaultMode() {
+  clearMode(local);
   tellChoice();
 }
 

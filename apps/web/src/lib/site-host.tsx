@@ -4,11 +4,17 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 
 const SiteHostContext = createContext({ api: false });
 
+/** In an effect: on api.ergoscan.me now. Child effects run before the provider's own, so the
+ *  context still says false in a child's first effect. */
+export function onApiHost(): boolean {
+  return typeof window !== "undefined" && window.location.hostname === "api.ergoscan.me";
+}
+
 /** False during SSR, then true on api.ergoscan.me. Keeps the explorer's static HTML. */
 export function SiteHostProvider({ children }: { children: ReactNode }) {
   const [api, setApi] = useState(false);
   useEffect(() => {
-    setApi(window.location.hostname === "api.ergoscan.me");
+    setApi(onApiHost());
   }, []);
   return <SiteHostContext.Provider value={{ api }}>{children}</SiteHostContext.Provider>;
 }

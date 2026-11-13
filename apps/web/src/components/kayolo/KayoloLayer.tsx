@@ -8,6 +8,7 @@ import {
   drawPixel,
   pixelColor,
   pixelInkForPath,
+  pixelSettling,
   pixelState,
   pixelWake,
   type PixelMood,
@@ -419,8 +420,8 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
       if (inLv < K.ZZZ_MS + 500) return paintedAt + 100;
       return due;
     } else if (mode === "asleep") {
-      // The eyes finish closing, then not a frame more (§4.6).
-      return ctx ? Math.min(due, pixelWake(ctx, "main")) : due;
+      // The eyes finish closing, then not a frame more (§4.6): no idle blinks or glances asleep.
+      return ctx && pixelSettling(ctx, "main") ? Math.min(due, pixelWake(ctx, "main")) : due;
     }
     if (ctx) due = Math.min(due, pixelWake(ctx, "main"));
     return lv >= 2 ? Math.max(due, slow) : due;

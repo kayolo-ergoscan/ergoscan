@@ -12,15 +12,16 @@ import { isAddressHome } from "@/lib/header-scout";
 import { say, onKayolo } from "@/lib/kayolo/events";
 import {
   bodyOwner,
+  chooseDefaultMode,
   chooseMode,
   currentMode,
   introPendingNow,
   kayoloHolds,
   onChoice,
   onOwner,
+  reduceNow,
   setSlotPlace,
   slotPlace,
-  wakeMode,
 } from "@/lib/kayolo/body";
 import { pageMemory, readHome, readKeyOn, type Mode } from "@/lib/kayolo/memory";
 import { nookPoint } from "@/lib/kayolo/anchors";
@@ -47,6 +48,14 @@ function local() {
     return window.localStorage;
   } catch {
     return null;
+  }
+}
+
+function keyboardFocused(el: Element): boolean {
+  try {
+    return el.matches(":focus-visible");
+  } catch {
+    return false;
   }
 }
 
@@ -93,6 +102,8 @@ export function KayoloSlot({ phone = false }: { phone?: boolean }) {
   const ref = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const [mode, setMode] = useState<Mode>("live");
+  /** The system asks for less motion: «Живее» is only on /settings then (§10). */
+  const [reduce, setReduce] = useState(false);
   const [choiceTick, setChoiceTick] = useState(0);
   const [away, setAway] = useState<Away>(null);
   const [open, setOpen] = useState(false);
@@ -109,6 +120,7 @@ export function KayoloSlot({ phone = false }: { phone?: boolean }) {
   useEffect(() => {
     const read = () => {
       setMode(currentMode());
+      setReduce(reduceNow());
       setChoiceTick((n) => n + 1);
     };
     read();
@@ -265,12 +277,19 @@ export function KayoloSlot({ phone = false }: { phone?: boolean }) {
 
   /* ---------------- the panel (§4.5) ---------------- */
 
-  const openPanel = (focusIn: boolean) => {
-    // The hover tip would sit over the panel's status line: it goes (its blur handler only hides).
+  /** The hover tip and the tap tip would sit over the panel's rows: they go (blur only hides). */
+  const hideTips = () => {
     tip.onBlur(undefined as never);
     tapTip.hide();
+    setTipOn(false);
+  };
+  const openPanel = (focusIn: boolean) => {
+    hideTips();
     setOpen(true);
-    if (focusIn) window.requestAnimationFrame(() => panelRef.current?.querySelector<HTMLButtonElement>("button")?.focus());
+    if (focusIn) {
+      // Asleep or hidden, «Погладить» is disabled: the first row that works takes the focus.
+      window.requestAnimationFrame(() => panelRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus());
+    }
   };
   const closePanel = (refocus: boolean) => {
     setOpen(false);
@@ -282,7 +301,8 @@ export function KayoloSlot({ phone = false }: { phone?: boolean }) {
     window.requestAnimationFrame(() => setSaid(t(`kayolo.said.${what}`)));
   };
   const pick = (what: "home" | "pet" | "calm" | "asleep" | "hidden") => {
-    const back = wakeMode();
+    // Waking him, bringing him back and «Живее» drop the stored mode (the default rules again);
+    // a stored «Живой» would override reduced motion, and only /settings may write that (§10).
     if (what === "home") {
       say({ k: "kayolo:call-home" });
       announce("home");
@@ -290,38 +310,56 @@ export function KayoloSlot({ phone = false }: { phone?: boolean }) {
       say({ k: "ui:pet" });
       announce("pet");
     } else if (what === "calm") {
-      const next: Mode = mode === "calm" ? "live" : "calm";
-      chooseMode(next);
-      announce(next === "calm" ? "calm" : "live");
+      if (mode === "calm") chooseDefaultMode();
+      else chooseMode("calm");
+      announce(mode === "calm" ? "live" : "calm");
     } else if (what === "asleep") {
-      chooseMode(mode === "asleep" ? back : "asleep");
+      if (mode === "asleep") chooseDefaultMode();
+      else chooseMode("asleep");
       announce(mode === "asleep" ? "back" : "asleep");
     } else {
-      chooseMode(mode === "hidden" ? back : "hidden");
+      if (mode === "hidden") chooseDefaultMode();
+      else chooseMode("hidden");
       announce(mode === "hidden" ? "back" : "hidden");
     }
     closePanel(true);
   };
 
-  // Esc and a press outside close it; Esc gives the focus back to the window.
+  // Open: no tip over it; Esc (with the focus on him or in it) closes it and gives the focus back to
+  // his window; a press outside or the focus leaving (Tab past it) closes it; no system context
+  // menu over it (the context-menu key fires `contextmenu` on key up, after the focus moved in).
   useEffect(() => {
     if (!open) return;
+    hideTips();
+    const inside = (n: EventTarget | null) =>
+      n instanceof Node && !!(panelRef.current?.contains(n) || ref.current?.contains(n));
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        closePanel(true);
-      }
+      // Focus on him, in the panel, or nowhere (Safari does not focus a button on a mouse hold);
+      // an Esc meant for something else that has the focus is left alone.
+      const at = document.activeElement;
+      const free = !at || at === document.body;
+      if (e.key !== "Escape" || e.defaultPrevented || !(free || inside(at))) return;
+      e.preventDefault();
+      closePanel(true);
     };
     const onDown = (e: PointerEvent) => {
-      const tgt = e.target as Node | null;
-      if (tgt && (panelRef.current?.contains(tgt) || ref.current?.contains(tgt))) return;
-      closePanel(false);
+      if (!inside(e.target)) closePanel(false);
+    };
+    const onFocusIn = (e: FocusEvent) => {
+      if (!inside(e.target)) closePanel(false);
+    };
+    const onMenu = (e: MouseEvent) => {
+      if (inside(e.target)) e.preventDefault();
     };
     window.addEventListener("keydown", onKey);
     window.addEventListener("pointerdown", onDown, true);
+    document.addEventListener("focusin", onFocusIn);
+    window.addEventListener("contextmenu", onMenu, true);
     return () => {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("pointerdown", onDown, true);
+      document.removeEventListener("focusin", onFocusIn);
+      window.removeEventListener("contextmenu", onMenu, true);
     };
   }, [open]);
 
@@ -336,7 +374,9 @@ export function KayoloSlot({ phone = false }: { phone?: boolean }) {
     if (!shown || !active) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.code !== "KeyK" || !e.shiftKey || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
-      if (editable(e.target) || !readKeyOn(local)) return;
+      if (e.defaultPrevented || editable(e.target) || !readKeyOn(local)) return;
+      // A sheet, the search or any other modal is open: the focus is theirs.
+      if (document.querySelector('[aria-modal="true"], dialog[open]')) return;
       e.preventDefault();
       ref.current?.focus({ preventScroll: true });
       openPanel(true);
@@ -352,9 +392,24 @@ export function KayoloSlot({ phone = false }: { phone?: boolean }) {
   const pressedBy = useRef("");
   const holdFrom = useRef<{ x: number; y: number } | null>(null);
   const held = useRef(false);
+  /** When the press that the hold took ended (anywhere on the page); Infinity while still down. */
+  const heldUpAt = useRef(Infinity);
   const cancelHold = () => {
     window.clearTimeout(holdTimer.current);
     holdFrom.current = null;
+  };
+  /** A hold (or a finger stroke) took this press: the click of its release is not also a poke.
+   *  Released elsewhere, or ended by the system's long-press menu, it swallows nothing later. */
+  const holdOn = () => {
+    held.current = true;
+    heldUpAt.current = Infinity;
+    const up = () => {
+      heldUpAt.current = performance.now();
+      window.removeEventListener("pointerup", up, true);
+      window.removeEventListener("pointercancel", up, true);
+    };
+    window.addEventListener("pointerup", up, true);
+    window.addEventListener("pointercancel", up, true);
   };
 
   /* ---------------- petting (§4.3) ---------------- */
@@ -390,7 +445,7 @@ export function KayoloSlot({ phone = false }: { phone?: boolean }) {
     if (touch) {
       // The stroke is not also a tap or a hold.
       cancelHold();
-      held.current = true;
+      holdOn();
     }
     say({ k: "ui:pet" });
   };
@@ -401,7 +456,7 @@ export function KayoloSlot({ phone = false }: { phone?: boolean }) {
   /** A click, a tap, Enter: wake him, bring him back, call him home or poke him. */
   const act = (keyboard: boolean, touch: boolean) => {
     if (mode === "asleep" || mode === "hidden") {
-      chooseMode(wakeMode());
+      chooseDefaultMode();
       announce("back");
       return;
     }
@@ -443,8 +498,8 @@ export function KayoloSlot({ phone = false }: { phone?: boolean }) {
           tip.onPointerEnter(e);
           if (e.pointerType !== "touch") {
             notice(true);
-            countHint(true);
-            setTipOn(true);
+            countHint(!open);
+            setTipOn(!open);
           }
         }}
         onPointerLeave={(e) => {
@@ -456,7 +511,9 @@ export function KayoloSlot({ phone = false }: { phone?: boolean }) {
         }}
         onFocus={(e) => {
           tip.onFocus(e);
-          setTipOn(true);
+          // The tip (and its ticking age) only for keyboard focus, as the tip itself decides; the
+          // focus given back after a tap or a click shows nothing and ticks nothing.
+          setTipOn(!open && keyboardFocused(e.currentTarget));
           say({ k: "ui:notice", on: true });
         }}
         onBlur={(e) => {
@@ -473,7 +530,7 @@ export function KayoloSlot({ phone = false }: { phone?: boolean }) {
           window.clearTimeout(holdTimer.current);
           holdTimer.current = window.setTimeout(() => {
             if (!holdFrom.current) return;
-            held.current = true;
+            holdOn();
             holdFrom.current = null;
             openPanel(false);
           }, HOLD_MS);
@@ -488,7 +545,7 @@ export function KayoloSlot({ phone = false }: { phone?: boolean }) {
         onPointerCancel={cancelHold}
         onContextMenu={(e) => {
           // A long press on a phone must not bring up the system menu over his panel.
-          if (held.current || holdFrom.current) e.preventDefault();
+          if (open || held.current || holdFrom.current) e.preventDefault();
         }}
         onMouseDown={(e) => {
           // A double click pokes twice; it never selects the title next to him.
@@ -503,9 +560,10 @@ export function KayoloSlot({ phone = false }: { phone?: boolean }) {
         }}
         onClick={(e) => {
           if (held.current) {
-            // The press that opened the panel is not also a poke.
             held.current = false;
-            return;
+            // The release that opened the panel is not also a poke (its click comes at once);
+            // a later Enter or click is a new press.
+            if (e.detail !== 0 && performance.now() - heldUpAt.current < 1000) return;
           }
           if (open) {
             closePanel(false);
@@ -542,9 +600,11 @@ export function KayoloSlot({ phone = false }: { phone?: boolean }) {
           </button>
           {/* Each row names what it does next (Тише/Живее…), so no aria-pressed: a toggle's label
               must not change with its state. */}
-          <button type="button" className="kayolo-panel-row" onClick={() => pick("calm")}>
-            {t(mode === "calm" ? "kayolo.menu.live" : "kayolo.menu.calm")}
-          </button>
+          {mode === "calm" && reduce ? null : (
+            <button type="button" className="kayolo-panel-row" onClick={() => pick("calm")}>
+              {t(mode === "calm" ? "kayolo.menu.live" : "kayolo.menu.calm")}
+            </button>
+          )}
           <button type="button" className="kayolo-panel-row" onClick={() => pick("asleep")}>
             {t(mode === "asleep" ? "kayolo.menu.wake" : "kayolo.menu.sleep")}
           </button>

@@ -500,6 +500,15 @@ export function pixelWake(ctx: CanvasRenderingContext2D, id = "main"): number {
   return c.glances && !c.reduce ? Math.min(s.blinkNext, s.glanceNext) : s.blinkNext;
 }
 
+/**
+ * The face is still easing on its own (eyes closing, a blink or a glance under way): it needs the
+ * next frame now. False once it has settled, even with the next idle blink planned.
+ */
+export function pixelSettling(ctx: CanvasRenderingContext2D, id = "main"): boolean {
+  const s = states.get(ctx.canvas)?.get(id);
+  return !!s && pixelWake(ctx, id) <= s.t;
+}
+
 /** A copy of the face's running state on this canvas (null before its first frame). */
 export function pixelState(ctx: CanvasRenderingContext2D, id = "main"): PixelState | null {
   const s = states.get(ctx.canvas)?.get(id);
