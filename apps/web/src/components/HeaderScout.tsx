@@ -7,6 +7,7 @@ import { useI18n } from "@/lib/i18n/I18nProvider";
 import { lookupScoutRent } from "@/lib/scout-rent";
 import { INK_EVENT } from "@/lib/skin-ink";
 import { REDUCE_QUERY, useMediaTick, WIDE_QUERY } from "@/lib/kayolo/motion";
+import { onKayolo } from "@/lib/kayolo/events";
 import { drawPixel, pixelColor, pixelInkForPath, pixelWake, type PixelMood, type PixelPose } from "./pixel";
 
 /**
@@ -171,12 +172,29 @@ function scoutMood(beat: string | undefined): PixelMood {
   return "idle";
 }
 
+/**
+ * Kayolo E20 (a rare height, Э0): on pages other than home he hops once, happy, where he is parked.
+ * Mid-pass the call waits for the park, at most a minute (design/brand/kayolo-life.md §8.3).
+ */
+const CHEER_MS = 1300;
+const RARE_TTL_MS = 60_000;
+let rareCalledAt = -1e9;
+let cheerUntil = 0;
+
+/** Parked: play a waiting rare-height cheer. The hop itself comes with the switch to happy. */
+function cheerAtRest() {
+  const t = performance.now();
+  if (t - rareCalledAt > RARE_TTL_MS) return;
+  rareCalledAt = -1e9;
+  cheerUntil = t + CHEER_MS;
+}
+
 /** «Пиксель» in the header. The mood follows the beat unless the caller names one; he blinks on his own. */
 function drawScout(ctx: CanvasRenderingContext2D, pose: Omit<PixelPose, "color" | "now">) {
   const now = performance.now();
   drawPixel(ctx, {
     ...pose,
-    mood: pose.mood ?? scoutMood(ctx.canvas.dataset.scoutBeat),
+    mood: now < cheerUntil ? "happy" : (pose.mood ?? scoutMood(ctx.canvas.dataset.scoutBeat)),
     color: scoutColor(now),
     now,
   });
@@ -215,7 +233,8 @@ function frameLoop(paint: (now: number) => void): Loop {
 
 /** Parked long enough and his face is still: the frame just drawn can stay on the canvas. */
 function settled(ctx: CanvasRenderingContext2D, now: number, since: number) {
-  return now - since >= SETTLE_MS && pixelWake(ctx) > performance.now();
+  cheerAtRest();
+  return now - Math.max(since, cheerUntil) >= SETTLE_MS && pixelWake(ctx) > performance.now();
 }
 
 /**
@@ -2267,6 +2286,17 @@ export function HeaderScout() {
   const reduceTick = useMediaTick(REDUCE_QUERY);
   const wideTick = useMediaTick(WIDE_QUERY);
   const perchTick = isAddressHome(path) ? wideTick : 0;
+
+  useEffect(
+    () =>
+      onKayolo((ev) => {
+        // Home celebrates in the live-blocks yard; he is not in the bar there.
+        if (ev.k !== "chain:rare" || window.location.pathname === "/") return;
+        rareCalledAt = performance.now();
+        wakeRef.current();
+      }),
+    []
+  );
 
   useEffect(() => {
     leaveRef.current = false;

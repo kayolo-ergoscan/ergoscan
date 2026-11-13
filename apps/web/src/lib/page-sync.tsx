@@ -18,6 +18,7 @@ import type { SealEvent } from "@ergoscan/shared";
 import { formatStamp } from "@/lib/format";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { getWsUrl } from "./config";
+import { feedRare } from "./kayolo/rare";
 
 /** Cap stored pit seeds so home does not hold a full mempool dump in React. */
 const STREAM_BALL_CAP = 80;
@@ -327,6 +328,8 @@ export function PageSyncProvider({ children }: { children: ReactNode }) {
         ws.onmessage = (ev) => {
           try {
             const msg: unknown = JSON.parse(String(ev.data));
+            // Kayolo E20: rare heights from the same messages (no state, no renders).
+            feedRare(msg);
             applyStreamMessage(msg, {
               setTip,
               setMempoolCount,
