@@ -507,7 +507,7 @@ export const en: Record<string, string> = {
   "stable.gateOn": "open",
   "stable.gateOff": "locked",
   "defi.refresh": "Refresh",
-  "defi.edgePending": "Switch-over pending: still served by Crux",
+  "defi.edgePending": "Switch-over pending",
   "defi.health": "Health",
   "defi.tradesCount": "Trades",
   "defi.ranksAge": "Ranking age",
@@ -570,7 +570,7 @@ export const en: Record<string, string> = {
   "defi.legendGainers": "Δ% up / down (fills after price history)",
   "defi.legendUniverse": "full AMM catalog ≤200 (not just the 6 largest)",
   "defi.legendUpstream":
-    "Full ErgoDex/Crux heat — every list from the same token set.",
+    "Full ErgoDex heat — every list from the same token set.",
   "defi.ranksHint":
     "Click a row to load its trade tape.",
   "defi.tradesHint":

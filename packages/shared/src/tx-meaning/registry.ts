@@ -32,7 +32,6 @@ export type ProtocolId =
   | "ergo"
   | "oracle"
   | "ergodex"
-  | "crux"
   | "lithosdex"
   | "lithos"
   | "rosen"
@@ -52,7 +51,6 @@ export const PROTOCOL_NAMES: Readonly<Record<ProtocolId, { ru: string; en: strin
   ergo: { ru: "Ergo", en: "Ergo" },
   oracle: { ru: "Оракул", en: "Oracle" },
   ergodex: { ru: "ErgoDex", en: "ErgoDex" },
-  crux: { ru: "Crux", en: "Crux" },
   lithosdex: { ru: "LithosDex", en: "LithosDex" },
   lithos: { ru: "Lithos", en: "Lithos" },
   rosen: { ru: "Rosen", en: "Rosen" },
@@ -172,11 +170,11 @@ const TEMPLATE_ROWS: Row[] = [
   ["1ae21acb88ddc97279ae72fd9461e6f2cb13ad462dd4ca45c73e858bd68ebc23", "machinafi", "order", "MachinaFi grid order (token/token)", "code"],
   ["03ef002b73a894198c7c9a4332ba28ca000dc6c40cb801f0c719940d9a6a8f6b", "machinafi", "order", "MachinaFi limit order (ERG/token)", "code"],
 
-  // Crux limit orders (crux-contracts limit-order*.es, EIP-5 templates) and the v2 fee box.
-  ["5bf80359e972819567d53d443126d8cc58bed7e8fe57dfb3770b09a84fa68aae", "crux", "order", "Crux limit order v1", "code"],
-  ["7a55e3f4a0c195e5570de7832becda0d52b676d0a9a29a27b6e84b5a28b8106d", "crux", "order", "Crux limit order v2", "code"],
-  ["d33a869b6abd7d98a212a9657b27b8f0519eab950e6fb026849262f8e34f5438", "crux", "order", "Crux limit order fee", "code"],
-  ["cb3087cb229ef0ff020553ecf398908cff6de06cb21888a7cfc4565060ff4acd", "crux", "order", "Crux limit order v3", "code"],
+  // ErgoDex limit orders (source: crux-contracts limit-order*.es, EIP-5 templates) and the v2 fee box.
+  ["5bf80359e972819567d53d443126d8cc58bed7e8fe57dfb3770b09a84fa68aae", "ergodex", "order", "ErgoDex limit order v1", "code"],
+  ["7a55e3f4a0c195e5570de7832becda0d52b676d0a9a29a27b6e84b5a28b8106d", "ergodex", "order", "ErgoDex limit order v2", "code"],
+  ["d33a869b6abd7d98a212a9657b27b8f0519eab950e6fb026849262f8e34f5438", "ergodex", "order", "ErgoDex limit order fee", "code"],
+  ["cb3087cb229ef0ff020553ecf398908cff6de06cb21888a7cfc4565060ff4acd", "ergodex", "order", "ErgoDex limit order v3", "code"],
 
   // LithosDex pools (chain; tx-action LITHOS_SWAP) and provision (lithos.json).
   ["2de640e37a49cc9d95a08f2678da9f5e9aba56e08dfbc0662a64d225093156e3", "lithosdex", "pool", "LithosDex pool", "chain"],

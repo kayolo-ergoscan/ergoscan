@@ -508,7 +508,7 @@ export const ru: Record<string, string> = {
   "defi.subtitle":
     "Свопы AMM — покупки и продажи в пулах, а не обычные переводы токенов.",
   "defi.refresh": "Обновить",
-  "defi.edgePending": "Переход ещё не завершён: пока работает Crux",
+  "defi.edgePending": "Переход ещё не завершён",
   "defi.health": "Состояние",
   "defi.tradesCount": "Сделок",
   "defi.ranksAge": "Возраст рейтинга",
@@ -571,7 +571,7 @@ export const ru: Record<string, string> = {
   "defi.legendGainers": "Δ% вверх / вниз (после истории цен)",
   "defi.legendUniverse": "полный каталог AMM ≤200 (не только 6 крупнейших)",
   "defi.legendUpstream":
-    "Полный рейтинг ErgoDex/Crux — все списки из одного набора токенов.",
+    "Полный рейтинг ErgoDex — все списки из одного набора токенов.",
   "defi.ranksHint":
     "Клик по строке — лента сделок.",
   "defi.tradesHint":
