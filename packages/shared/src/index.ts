@@ -44,6 +44,7 @@ export * from "./ageusd.js";
 export * from "./basis.js";
 export * from "./lithosdex.js";
 export * from "./lithos-protocol.js";
+export * from "./lithos-home.js";
 export * from "./pool-tvl.js";
 export * from "./lock-overlay.js";
 export * from "./rosen-chains.js";

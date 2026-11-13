@@ -35,6 +35,8 @@ import {
 } from "./rentIndex.js";
 import { classifyTxShape, pickTxAction, txTapeFields, rentTapePaint, MINERS_FEE_ADDRESS, MINERS_FEE_TREE, fillRentWeekGaps, parseRentSeries, parseRentTape, parseRentEpochBoxes, parseRentEpochNano, pickTxLock, LITHOS_COLLAT_ADDRESS, LITHOS_COLLAT_TOKEN_ID, LITHOS_MINED_HEIGHTS_SQL, type RentTapeCategory, type RentTapeRow } from "@ergoscan/shared";
 import { blockHeaderFromRow, type BlockHeaderView } from "./blockHeader.js";
+import { LITHOS_HOME_SQL, lithosHomeCache } from "./lithosHome.js";
+import type { LithosHome } from "@ergoscan/shared";
 import { loadTxIo, meaningsFor, type TxIo } from "./txMeaning.js";
 import type { CompactMeaning, MeaningTx } from "@ergoscan/shared";
 
@@ -1203,7 +1205,15 @@ export type HomePage = {
   rentEpochNano?: string | null;
   /** Additive: tokens short on ERG, copied from snapshot_kv.rent.danger. Snapshot GET only. */
   rentDanger?: unknown[];
+  /** Additive: home «Lithos» card, a cut of snapshot_kv.lithos_protocol (held ~15 s in RAM). Null until it has stats. */
+  lithos?: LithosHome | null;
 };
+
+const lithosHome = lithosHomeCache(async () => {
+  const rows = await q<{ stats: unknown; finds: unknown }>(LITHOS_HOME_SQL);
+  if (rows == null) throw new Error("index db");
+  return rows[0] ?? null;
+});
 
 function parseSeries(raw: unknown): { t: number; v: number }[] {
   if (!Array.isArray(raw)) return [];
@@ -1387,7 +1397,7 @@ function homeKpisFromPayload(p: {
 }
 
 export async function getHomePage(): Promise<HomePage | null> {
-  const [snap, rentSnap] = await Promise.all([
+  const [snap, rentSnap, lithos] = await Promise.all([
     readSnapshot<{
       height?: number;
       blocks?: BlockListItem[];
@@ -1425,6 +1435,7 @@ export async function getHomePage(): Promise<HomePage | null> {
       thisEpoch?: { boxCount?: unknown; rentNano?: unknown };
       danger?: unknown;
     }>(SNAP_RENT),
+    lithosHome.get(),
   ]);
   const rentTape = parseRentTape(rentSnap?.payload?.addresses);
   const rentEpochBoxes = parseRentEpochBoxes(rentSnap?.payload?.thisEpoch);
@@ -1435,6 +1446,7 @@ export async function getHomePage(): Promise<HomePage | null> {
     ...(rentEpochBoxes != null ? { rentEpochBoxes } : {}),
     ...(rentEpochNano != null ? { rentEpochNano } : {}),
     ...(rentDanger != null ? { rentDanger } : {}),
+    lithos,
   };
   if (snap?.payload && Array.isArray(snap.payload.blocks)) {
     return {
