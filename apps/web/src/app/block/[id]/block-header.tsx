@@ -5,6 +5,7 @@ import { FeedPlate } from "@/components/feed/Feed";
 import { formatGroupedInt } from "@/lib/format";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { BlockHeaderFields } from "@/lib/list-snapshots";
+import { copyText } from "@/lib/copy-text";
 
 function grouped(raw: string | null, locale: string): string {
   if (!raw) return "";
@@ -29,7 +30,7 @@ function CopyChip({
     <button
       type="button"
       onClick={() => {
-        void navigator.clipboard?.writeText(text).then(() => {
+        void copyText(text)?.then(() => {
           setOk(true);
           window.setTimeout(() => setOk(false), 1200);
         });

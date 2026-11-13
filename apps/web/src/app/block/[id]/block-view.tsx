@@ -54,6 +54,7 @@ import {
   putBlockCard,
   putBlockWindow,
 } from "@/lib/block-list-cache";
+import { copyText } from "@/lib/copy-text";
 
 const BLOCK_TABS = ["txs", "header", "extension", "adproof"] as const;
 
@@ -870,7 +871,7 @@ function ProofPane({
           type="button"
           className="hdr-proof-copy chip-press"
           onClick={() => {
-            void navigator.clipboard?.writeText(hex).then(() => {
+            void copyText(hex)?.then(() => {
               setOk(true);
               window.setTimeout(() => setOk(false), 1200);
             });
@@ -967,7 +968,7 @@ function CopyChip({
     <button
       type="button"
       onClick={() => {
-        void navigator.clipboard?.writeText(text).then(() => {
+        void copyText(text)?.then(() => {
           setOk(true);
           window.setTimeout(() => setOk(false), 1200);
         });

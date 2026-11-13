@@ -60,6 +60,7 @@ import { useChainTipRefresh, useKeepFresh, usePageSync } from "@/lib/page-sync";
 import { ENTER_MS, enteringIds, useEnterIds } from "@/lib/keyed-enter";
 import { addrTapeHasMore, txKeysetCursor } from "@/lib/rank-window";
 import { cachedScoutRent, lookupScoutRent } from "@/lib/scout-rent";
+import { copyText } from "@/lib/copy-text";
 
 interface TokenRow {
   tokenId: string;
@@ -1129,7 +1130,7 @@ export function AddressView({
   return (
     <Shell>
       {scanWait.bar ? (
-        <ScanWait slow={scanWait.slow} label={t("common.loading")} />
+        <ScanWait label={t("common.loading")} />
       ) : null}
       {loading && !data && <AddressPageSkeleton />}
       {err && !data && (
@@ -1778,7 +1779,7 @@ function CopyChip({
     <button
       type="button"
       onClick={() => {
-        void navigator.clipboard?.writeText(text).then(() => {
+        void copyText(text)?.then(() => {
           setOk(true);
           window.setTimeout(() => setOk(false), 1200);
         });

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import clsx from "clsx";
 import { INK } from "@/lib/palette";
+import { copyText } from "@/lib/copy-text";
 
 function loc(locale: string): string {
   return locale === "ru" ? "ru-RU" : "en-US";
@@ -73,7 +74,7 @@ export function GixMark({
         <button
           type="button"
           onClick={() => {
-            void navigator.clipboard?.writeText(String(gix)).then(() => {
+            void copyText(String(gix))?.then(() => {
               setOk(true);
               window.setTimeout(() => setOk(false), 1200);
             });

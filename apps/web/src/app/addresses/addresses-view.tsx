@@ -26,6 +26,7 @@ import {
 import { HOLDER_BAND_IDS, bandCount, mergeBands, type HolderBandId } from "@/lib/holder-bands";
 import { mergeKinds, type ListEntityId } from "@/lib/address-pips";
 import { ENTER_MS, SNAPSHOT_FETCH, enteringIds, snapshotPath, useEnterIds } from "@/lib/keyed-enter";
+import { say } from "@/lib/kayolo/events";
 
 /** Sort chips, in the order a reader asks: who holds most, who is busiest. */
 const ADDRESS_SORTS: AddressListSort[] = ["erg", "txs", "tokens", "last", "first", "address"];
@@ -371,7 +372,11 @@ export function AddressesView({ initial }: { initial: AddressesPageData }) {
     setDir(key === "address" ? "asc" : "desc");
   };
 
+  // Kayolo answers a filter once its rows are in (a look and a nod, or a tilt at an empty list).
+  const told = () => say({ k: "ui:filter", el: document.activeElement });
+
   const onBand = (id: HolderBandId) => {
+    told();
     setOffset(0);
     const next = normalizeAddressListFilter(parseAddressListBands(toggleId(selBands, id)), selKinds);
     setSelBands(next.bands);
@@ -379,6 +384,7 @@ export function AddressesView({ initial }: { initial: AddressesPageData }) {
   };
 
   const onKind = (id: ListEntityId) => {
+    told();
     setOffset(0);
     const next = normalizeAddressListFilter(selBands, parseAddressListKinds(toggleId(selKinds, id)));
     setSelBands(next.bands);
@@ -386,6 +392,7 @@ export function AddressesView({ initial }: { initial: AddressesPageData }) {
   };
 
   const onAll = () => {
+    told();
     setOffset(0);
     setSelBands([]);
     setSelKinds([]);

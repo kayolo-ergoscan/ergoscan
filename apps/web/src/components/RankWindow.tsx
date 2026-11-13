@@ -5,6 +5,7 @@ import { Tip } from "./Tip";
 import clsx from "clsx";
 import { useT } from "@/lib/i18n/I18nProvider";
 import { usePaperPress } from "@/lib/use-paper-press";
+import { say } from "@/lib/kayolo/events";
 import {
   rankWindowNav,
   type RankWindowMode,
@@ -119,7 +120,10 @@ export function RankWindow({
           type="button"
           className={clsx("list-more-btn chip-press", paper.armed && "is-armed")}
           disabled={disabled}
-          onClick={() => commit(offset + pageSize)}
+          onClick={(e) => {
+            commit(offset + pageSize);
+            say({ k: "ui:page", el: e.currentTarget, step: "more" });
+          }}
           {...paper.bind}
         >
           {t("address.showMore")}
@@ -130,7 +134,10 @@ export function RankWindow({
       )}
       <div className="list-more-page">
         <span className="text-[12px] text-[var(--muted)]">{t("list.page")}</span>
-        <button type="button" className={stepBtn} aria-label={prevLabel} disabled={!canPrev} onClick={() => commit(offset - pageSize)}>
+        <button type="button" className={stepBtn} aria-label={prevLabel} disabled={!canPrev} onClick={(e) => {
+          commit(offset - pageSize);
+          say({ k: "ui:page", el: e.currentTarget, step: "prev" });
+        }}>
           <Chevron dir="left" />
         </button>
         <Tip content={hint}>
@@ -140,7 +147,10 @@ export function RankWindow({
             {ofText ? <span className="font-normal text-[var(--muted)]"> {ofText}</span> : null}
           </p>
         </Tip>
-        <button type="button" className={stepBtn} aria-label={nextLabel} disabled={!canNext} onClick={() => commit(offset + pageSize)}>
+        <button type="button" className={stepBtn} aria-label={nextLabel} disabled={!canNext} onClick={(e) => {
+          commit(offset + pageSize);
+          say({ k: "ui:page", el: e.currentTarget, step: "next" });
+        }}>
           <Chevron dir="right" />
         </button>
       </div>

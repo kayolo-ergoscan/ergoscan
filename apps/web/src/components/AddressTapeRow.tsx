@@ -10,6 +10,7 @@ import {
   relAgeTone,
   relAgeToneClass,
 } from "@/lib/format";
+import { copyText } from "@/lib/copy-text";
 
 export type AddressTapeData = {
   address: string;
@@ -58,7 +59,7 @@ export function AddressActivityWhen({
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                void navigator.clipboard?.writeText(txId).then(() => {
+                void copyText(txId)?.then(() => {
                   setCopied(true);
                   window.setTimeout(() => setCopied(false), 1200);
                 });

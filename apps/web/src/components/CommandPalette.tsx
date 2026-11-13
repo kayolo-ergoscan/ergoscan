@@ -31,6 +31,7 @@ import { rankTokenHits } from "@/lib/token-hit-rank";
 import { usePaperPress } from "@/lib/use-paper-press";
 import { tokenKnown } from "@/lib/token-meta";
 import { canReadClipboard, pasteTarget } from "@/lib/search-paste";
+import { say } from "@/lib/kayolo/events";
 import { sheetOnTop, useSheetHistory } from "./BottomSheet";
 import { KnownTokenMark } from "./KnownTokenMark";
 
@@ -332,12 +333,15 @@ export function CommandPalette() {
       const hit = pasteTarget(await navigator.clipboard.readText());
       if (!hit) {
         setPasteMiss(true);
+        say({ k: "ui:search-paste", ok: false, el: inputRef.current });
         return;
       }
       setQ(hit);
       inputRef.current?.focus();
+      say({ k: "ui:search-paste", ok: true, el: inputRef.current });
     } catch {
       setPasteMiss(true);
+      say({ k: "ui:search-paste", ok: false, el: inputRef.current });
     }
   }, []);
 
@@ -400,6 +404,35 @@ export function CommandPalette() {
       document.body.style.overflow = prev;
     };
   }, [open]);
+
+  // Kayolo (§6.2): the search opened and closed, the field, the list, no matches.
+  useEffect(() => {
+    if (!open) return;
+    let told = false;
+    const id = window.requestAnimationFrame(() => {
+      told = true;
+      say({ k: "ui:search-open", el: inputRef.current });
+    });
+    return () => {
+      window.cancelAnimationFrame(id);
+      if (told) say({ k: "ui:search-close" });
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (open && q) say({ k: "ui:search-type", el: inputRef.current });
+  }, [open, q]);
+
+  // Once per answered query: `searched` turns true when the answer is in (q is read, not watched,
+  // so typing on past an old answer does not tell him again).
+  const askedRef = useRef(q);
+  askedRef.current = q;
+  useEffect(() => {
+    const asked = askedRef.current.trim();
+    if (!open || !searched || pending || !asked) return;
+    if (hits.length) say({ k: "ui:search-hits", el: document.getElementById(listId) });
+    else say({ k: "ui:search-miss", el: inputRef.current, q: asked });
+  }, [open, searched, pending, hits.length, listId]);
 
   useEffect(() => {
     if (!open || q.trim().length < 1) {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ACT_MS, makeAct, resetVariants, type ActName } from "./acts";
+import { ACT_MS, makeAct, pokeAct, resetVariants, step, type ActName } from "./acts";
 
 const ALL = Object.keys(ACT_MS) as ActName[];
 
@@ -48,7 +48,7 @@ test("reduced motion: no tilts, no squash, no knock, no turn", () => {
     const a = makeAct(name, { reduce: true, rnd: seq(3), rest, target: { x: 0.5, y: 0.5 } });
     for (let t = 0; t <= a.ms; t += 10) {
       const d = a.at(t);
-      for (const k of ["head", "squash", "pick"] as const) assert.ok(!d[k], `${name}.${k} at ${t}`);
+      for (const k of ["head", "squash", "pick", "shift"] as const) assert.ok(!d[k], `${name}.${k} at ${t}`);
       assert.ok(!d.flip, `${name} turns`);
     }
   }
@@ -80,4 +80,44 @@ test("hops are the happy or surprised face; pleased never hops", () => {
   assert.ok(moods("bigBlock").has("surprised"));
   assert.ok(!moods("pleased").has("happy"));
   assert.ok(!moods("poke1").has("happy"));
+});
+
+test("the poke ladder (§4.2): 1–9, the secret's place as 7, then 7 again", () => {
+  const want: ActName[] = ["poke1", "poke2", "poke3", "poke4", "dizzy", "blink2", "enough", "blink1", "blink1", "enough", "enough", "enough"];
+  want.forEach((name, i) => assert.equal(pokeAct(i + 1), name, `poke ${i + 1}`));
+  assert.equal(pokeAct(0), "poke1");
+  assert.equal(pokeAct(40), "enough");
+});
+
+test("poke 4 is a lower hop (6 px at most); under RM it is the pleased face", () => {
+  const a = makeAct("poke4", { reduce: false, rnd: seq(2), rest });
+  assert.equal(a.at(10).mood, "happy");
+  assert.equal(a.at(10).hopMax, 6);
+  assert.equal(makeAct("poke4", { reduce: true, rnd: seq(2), rest }).at(10).mood, "pleased");
+});
+
+test("knock and the look back turn toward an anchor behind him, never under RM", () => {
+  const behind = { x: 0.8, y: 0 };
+  const k = makeAct("knock", { reduce: false, rnd: seq(4), rest, target: behind, face: -1 });
+  assert.ok(k.at(150).flip, "knock turns");
+  assert.ok((k.at(200).pick ?? 0) > 0.5, "and knocks");
+  const ahead = makeAct("knock", { reduce: false, rnd: seq(4), rest, target: { x: -0.8, y: 0 }, face: -1 });
+  assert.ok(!ahead.at(150).flip, "no turn when it is in front");
+  const back = makeAct("lookBack", { reduce: false, rnd: seq(4), rest, target: behind, face: -1 });
+  assert.ok(back.at(100).flip && !back.at(400).flip, "300 ms the other way");
+});
+
+test("the hug looks at the heart, then at the second anchor", () => {
+  const heart = { x: 0.4, y: 0.6 };
+  const fav = { x: -0.9, y: 0.4 };
+  const a = makeAct("hug", { reduce: false, rnd: seq(6), rest, target: heart, target2: fav, face: -1 });
+  assert.deepEqual(a.at(300).gaze, heart);
+  assert.deepEqual(a.at(800).gaze, fav);
+  assert.equal(a.at(300).mood, "pleased");
+});
+
+test("Э3 answers are gestures or eyes, never a hop or a big act", () => {
+  for (const name of ["lean", "knock", "hug", "sniff", "shrugBig", "tilt", "dizzy", "enough", "blink1", "blinkLong", "stretch", "lookBack", "here", "aside", "arrive", "sidestep", "railJolt", "readList", "runList", "tear", "tabLook"] as ActName[]) {
+    assert.ok(step(name).tier <= 1, `${name} is T0–T1`);
+  }
 });

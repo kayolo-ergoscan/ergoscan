@@ -42,6 +42,7 @@ import { meaningLang } from "@/components/feed/FeedMeaning";
 import { parseMeaning } from "@/lib/tx-meaning-row";
 import { meaningRow, type CompactMeaning } from "@ergoscan/shared";
 import type { BoxAsset, BoxRegisterTyped, BoxSnapshot } from "@/lib/list-snapshots";
+import { copyText } from "@/lib/copy-text";
 
 const BOX_TABS = ["summary", "tokens", "registers"] as const;
 type BoxTab = (typeof BOX_TABS)[number];
@@ -1085,7 +1086,7 @@ function CopyChip({
       type="button"
       onClick={(e) => {
         e.stopPropagation();
-        void navigator.clipboard?.writeText(text).then(() => {
+        void copyText(text)?.then(() => {
           setOk(true);
           window.setTimeout(() => setOk(false), 1200);
         });

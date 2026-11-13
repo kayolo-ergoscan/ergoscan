@@ -228,6 +228,11 @@ html[data-ink="day"] .kayolo-panel {
   pointer-events: none;
   contain: strict;
 }
+/* At the palette edge (§3.3) he stands above the panel's backdrop (z 60) and panel (z 70); the
+   layer still takes no pointer, so a click on him is a click on the backdrop. */
+.kayolo-layer.is-over {
+  z-index: 75;
+}
 .kayolo-body {
   position: absolute;
   left: 0;

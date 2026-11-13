@@ -15,7 +15,7 @@ import {
   type PixelPose,
 } from "@/components/pixel";
 import { INK_EVENT } from "@/lib/skin-ink";
-import { onKayolo, say, type BodyWhere } from "@/lib/kayolo/events";
+import { onKayolo, say, type BodyWhere, type KayoloEvent } from "@/lib/kayolo/events";
 import {
   arrivalOf,
   bodyOwner,
@@ -29,9 +29,11 @@ import {
   slotPlace,
   type Keeper,
 } from "@/lib/kayolo/body";
-import { createScheduler, levelAt, type Level, type Prio } from "@/lib/kayolo/scheduler";
-import { makeAct, step, type Act, type ActName, type PoseDelta, type Vec } from "@/lib/kayolo/acts";
-import { gazeTo, nookPoint, pageKind, parkPoint, tipPoint, wideLayout } from "@/lib/kayolo/anchors";
+import { createScheduler, levelAt, levelEdges, type Level, type Prio } from "@/lib/kayolo/scheduler";
+import { makeAct, pokeAct, step, type Act, type ActName, type PoseDelta, type Vec } from "@/lib/kayolo/acts";
+import { gazeTo, nookPoint, pageKind, parkPoint, tipPoint, titleRect, wideLayout } from "@/lib/kayolo/anchors";
+import { startNavSense } from "@/lib/kayolo/nav-sense";
+import { locKey } from "@/lib/route-nav";
 import { pageMemory, readHome, welcomeFor, type Mode, type Welcome } from "@/lib/kayolo/memory";
 import { COARSE_QUERY, REDUCE_QUERY, WIDE_QUERY } from "@/lib/kayolo/motion";
 import * as K from "@/lib/kayolo/thresholds";
@@ -44,6 +46,13 @@ import * as K from "@/lib/kayolo/thresholds";
  * calm → reads → dozes → sleeps after 3 min without input, and wakes with «noticed»; he answers
  * every block by the §8.3 matrix and is poked from his window. One rAF and one timer at most; a frame
  * only while something has to change (an act, a blink, a level edge); none in the frozen sleep.
+ *
+ * Э3 «Отвечает на всё» (§6.2, §7): copies, hearts, tabs, sorts, filters, pages, rows, the search
+ * (the palette edge), sheets, the Tip, the rail and the language each get an answer — a gesture, or
+ * only the eyes when such answers come too often; the arrival act and a recolour by a blink; he
+ * pushes the door while a page is slow; Back/Forward, the same URL and a link opened aside; the whole
+ * poke ladder; night and the morning stretch. None of it takes a click: the layer never takes
+ * pointer events, and the edge station is just a picture above the palette's backdrop.
  */
 
 /** Body canvas: 56×64 CSS px, ground point at (28, 58). */
@@ -61,6 +70,7 @@ const WELCOME_PAUSE_MS = 1200;
 const CONTENT_LIFT = -1.8;
 
 type Hold = { where: BodyWhere; x: number; y: number; face: 1 | -1 };
+type Walk = { fromX: number; toX: number; y: number; fromY?: number; at: number; ms: number; roll0: number; arc?: number };
 type Running = { act: Act; at: number; key: string; prio: Prio; flip: boolean };
 
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
@@ -82,7 +92,35 @@ const SHADOW: Record<BodyWhere, { a: number; rx: number; ry: number }> = {
   park: { a: 0.2, rx: 12, ry: 2.1 },
   door: { a: 0.16, rx: 11, ry: 2 },
   note: { a: 0.18, rx: 12, ry: 2.1 },
+  edge: { a: 0.14, rx: 11, ry: 2 },
 };
+
+/** Links and rows worth a look when the pointer rests on them (§2.6 №2). */
+const MEANINGFUL =
+  'a[href^="/tx/"],a[href^="/address/"],a[href^="/block/"],a[href^="/token/"],a[href^="/box/"],.feed-row,.nav-rail a,[data-kayolo-key]';
+
+type Aim = Vec | null;
+
+/** Centre of an element on screen (read once, when an answer starts), or null if it is not shown. */
+function centerOf(el: Element | null | undefined): Vec | null {
+  if (!el || !el.isConnected) return null;
+  const r = el.getBoundingClientRect();
+  if (r.width < 1 && r.height < 1) return null;
+  if (r.bottom < 0 || r.top > window.innerHeight || r.right < 0 || r.left > window.innerWidth) return null;
+  return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+}
+
+/** The first visible element for a selector. */
+function shown(sel: string): Element | null {
+  for (const el of document.querySelectorAll(sel)) if (centerOf(el)) return el;
+  return null;
+}
+
+/** The night (23:00–05:59 local, §2.3). */
+function nightHour(): boolean {
+  const h = new Date().getHours();
+  return h >= K.NIGHT_FROM_H || h < K.NIGHT_TO_H;
+}
 
 const HOP_MOODS: ReadonlySet<PixelMood> = new Set<PixelMood>(["happy", "surprised"]);
 
@@ -109,7 +147,7 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
   let gazePt: Vec | null = null;
   let shy = false;
   let lastMove: Vec | null = null;
-  let walk: { fromX: number; toX: number; y: number; fromY?: number; at: number; ms: number; roll0: number } | null = null;
+  let walk: Walk | null = null;
   /** The seed grows back into him (from «Спрятан»). */
   let grow: number | null = null;
   /** «С возвращением», once per load (§5). */
@@ -130,6 +168,52 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
   let hiddenSince = 0;
   let boxAt = { x: NaN, y: NaN };
   let dead = false;
+  /* ---- Э3 ---- */
+  /** Night (§2.3), read at most once a minute. */
+  let night = nightHour();
+  let nightAt = performance.now();
+  sched.night(night);
+  /** The morning stretch is due (once a day, 06:00–10:59, §2.3). */
+  let morning = pageMemory().morningDue();
+  /** «С возвращением» waits for the stretch to play first. */
+  let welcomeAfter = 0;
+  /** The eyes on something that means something (a hover, focus, the Tip, a sheet, the caret): T0. */
+  let eyes: { to: Vec; until: number; from: string } | null = null;
+  let eyesAt = -1e9;
+  /** The colour changes while the eyes are shut (§7.1). */
+  let recolor: { at: number; to: string } | null = null;
+  /** A route is pending (§7.1): think, then he pushes the door. */
+  let navWait: { at: number; shrugged: boolean } | null = null;
+  /** An in-page wait (the first pack of an address tab): think, eyes on the tabs. */
+  let pageWait: { at: number; to: Aim } | null = null;
+  /** The last link click, for the lean, a HopNav side step and «уже здесь». */
+  let lastClick: { kind: "go" | "here" | "aside"; el: Element | null; hop?: -1 | 1; at: number } | null = null;
+  /** A history step just happened: the arrival that follows is a look back (§7.2). */
+  let popNext: { dir: -1 | 1; seen: boolean; at: number; to: string } | null = null;
+  /** The answer after a wake-up, with its anchors. */
+  let afterAim: [Aim, Aim] | null = null;
+  /** Offers that look at a page anchor when they play (the arrival beat). */
+  const offerAim = new Map<string, () => Aim>();
+  /** Answers by kind: the last gesture, for «a gesture at most every N s, else the eyes». */
+  const answeredAt = new Map<string, number>();
+  /** Tab or filter: watch the page for its data (think on a skeleton, then a nod; empty → tilt). */
+  let awaitData: { kind: "tab" | "filter"; el: Element | null; next: number; until: number; thinking: boolean } | null = null;
+  /** No matches in the palette: sniff 600 ms after the last key, once per query. */
+  let missDue: { at: number; q: string; el: Element | null } | null = null;
+  let missQ = "";
+  let caretAt = -1e9;
+  let caretPt: Vec | null = null;
+  /** The palette or sheets are open (sheets stack, so a count): busy (§2.8), eyes on it. */
+  let paletteOpen = false;
+  let sheetOpen = 0;
+  /** A hovered thing waiting out its 300 ms. */
+  let hoverCand: { el: Element; at: number } | null = null;
+  let hoverAt = -1e9;
+  let focusAt = -1e9;
+  let tapAt = -1e9;
+  let lastPress: { el: Element; at: number } | null = null;
+  const nav = startNavSense();
+  const layerRoot = layerBody.parentElement;
 
   /** Quiet motion: «Тихий», or the system asks for less and «Живой» was not chosen (§10). */
   const actReduce = () => mode === "calm" || (reduceSys && mode !== "live");
@@ -213,14 +297,63 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
 
   const since = (now: number) => Math.min(sched.sinceInput(now), now - wokeAt);
 
+  /** Night or day, re-read at most once a minute (only while frames run). */
+  const nightNow = (now: number) => {
+    if (now - nightAt >= 60_000) {
+      nightAt = now;
+      const on = nightHour();
+      if (on !== night) {
+        night = on;
+        sched.night(on);
+      }
+    }
+    return night;
+  };
+
   const levelNow = (now: number): { lv: Level; inLv: number } => {
     if (mode === "asleep") return { lv: 4, inLv: Infinity };
+    const nt = nightNow(now);
+    const edges = levelEdges(nt);
     const s = since(now);
-    let lv = levelAt(s);
+    let lv = levelAt(s, nt);
     const dense = pageKind(path) === "d";
-    if (dense && lv < 2 && s >= 20_000) lv = 2;
-    const edge = [0, K.A1_MS, dense ? Math.min(20_000, K.A2_MS) : K.A2_MS, K.A3_MS, K.A4_MS][lv];
+    const a2 = dense ? Math.min(20_000, edges[1]) : edges[1];
+    if (dense && lv < 2 && s >= a2) lv = 2;
+    const edge = [0, edges[0], a2, edges[2], edges[3]][lv];
     return { lv, inLv: s - edge };
+  };
+
+  /** The eyes on a meaningful target, while it lasts (it wins over the cursor, §2.6). */
+  const eyesNow = (now: number): Vec | null => (eyes && now < eyes.until ? eyes.to : null);
+
+  /** The wait faces (§7.1, §7.3): they replace the rest pose while a page is coming. */
+  const waitPose = (now: number, face: 1 | -1): Partial<PixelPose> | null => {
+    if (navWait) {
+      const t = now - navWait.at;
+      if (t >= K.DOOR_SIT_MS) {
+        // He sits down to wait, sleepy lids.
+        return { mood: "idle", doze: 0.5, squash: actReduce() ? 0 : -0.06, eyeLift: CONTENT_LIFT, glances: false, breath: 0 };
+      }
+      const pose: Partial<PixelPose> = { mood: "think", wobble: 1, eyeLift: CONTENT_LIFT };
+      if (t >= K.DOOR_SHRUG_MS && t < K.DOOR_SHRUG_MS + 700) {
+        // Still nothing: a look at the person (the shrug itself is an act).
+        pose.gaze = { x: -face * 0.3, y: -0.05 };
+        return pose;
+      }
+      if (t >= K.DOOR_AFTER_MS) {
+        // He pushes the door: a knock on the title frame every 700 ms (RM: a blink instead).
+        const ph = (t - K.DOOR_AFTER_MS) % K.DOOR_KNOCK_MS;
+        const k = ph < 70 ? ph / 70 : ph < 160 ? 1 - (ph - 70) / 90 : 0;
+        if (actReduce()) pose.eyeScale = 1 - 0.9 * k;
+        else pose.pick = k;
+      }
+      return pose;
+    }
+    if (pageWait) {
+      return { mood: "think", wobble: now - pageWait.at < 2000 ? 1 : 0, gaze: pageWait.to, eyeLift: CONTENT_LIFT };
+    }
+    if (awaitData?.thinking) return { mood: "think", wobble: 0, gaze: eyesNow(now), eyeLift: CONTENT_LIFT };
+    return null;
   };
 
   /** A2: the eyes read the content, 4 sweeps of 2.4 s with pauses. */
@@ -235,16 +368,21 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
   };
 
   const restPose = (now: number, face: 1 | -1): Partial<PixelPose> => {
+    const wait = waitPose(now, face);
+    if (wait) return wait;
     const { lv, inLv } = levelNow(now);
     if (lv === 0) {
       return {
         mood: "idle",
         eyeLift: CONTENT_LIFT,
-        gaze: now < gazeUntil ? gaze : null,
+        gaze: eyesNow(now) ?? (now < gazeUntil ? gaze : null),
         head: shy ? -0.2 : 0,
       };
     }
-    if (lv === 1) return { mood: "idle", eyeLift: CONTENT_LIFT, glanceGap: 1.6, glanceRange: 0.86 };
+    if (lv === 1) {
+      const e = eyesNow(now);
+      return e ? { mood: "idle", eyeLift: CONTENT_LIFT, gaze: e } : { mood: "idle", eyeLift: CONTENT_LIFT, glanceGap: 1.6, glanceRange: 0.86 };
+    }
     if (lv === 2) {
       const r = reading(inLv);
       return { mood: "work", glances: false, look: face * r.look, eyeLift: -1 };
@@ -270,10 +408,69 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
     return tip ? gazeTo(body, tip) : null;
   };
 
-  const startAct = (name: ActName, now: number, key: string, prio: Prio) => {
+  /** `aim` overrides the act's default anchor (undefined keeps it); `aim2` is its second anchor. */
+  const startAct = (name: ActName, now: number, key: string, prio: Prio, aim?: Aim, aim2?: Aim) => {
     if (!hold) return;
-    const act = makeAct(name, { reduce: actReduce(), target: targetFor(name), rest: { x: 0, y: 0 }, face: hold.face, rnd: Math.random });
+    const target = aim !== undefined ? aim : targetFor(name);
+    const act = makeAct(name, { reduce: actReduce(), target, target2: aim2 ?? null, rest: { x: 0, y: 0 }, face: hold.face, rnd: Math.random });
     running = { act, at: now, key, prio, flip: true };
+  };
+
+  /** Screen-space gaze from his body toward a point. */
+  const aimAt = (pt: Vec | null): Aim => {
+    const b = bodyAt();
+    return b && pt ? gazeTo(b, pt) : null;
+  };
+  const aimEl = (el: Element | null | undefined): Aim => aimAt(centerOf(el));
+  const titleAim = (): Aim => {
+    const r = titleRect();
+    return r ? aimAt({ x: r.left + r.width / 2, y: r.top + r.height / 2 }) : null;
+  };
+
+  /** He answers only where he lives in the layer, awake and not hidden («Тихий» answers quietly). */
+  const answering = () => !!hold && !introRun && (mode === "live" || mode === "calm") && !hidden;
+
+  /** Only the eyes (T0): a look at `to` for `ms`. */
+  const look = (to: Aim, ms: number, now: number, from = "look") => {
+    if (!to || !answering()) return;
+    eyes = { to, until: now + ms, from };
+    eyesAt = now;
+    frame();
+  };
+
+  /**
+   * A person's action answered (P2, §2.8): the act at once, never cut by the budget. The same kind
+   * again within `gap` gets only the eyes; so does anything while a poke or the wake-up plays (the
+   * answer then follows the wake-up).
+   */
+  const answer = (kind: string, name: ActName, gap: number, now: number, aim: Aim, aim2: Aim = null) => {
+    if (!answering()) return;
+    const last = answeredAt.get(kind) ?? -1e9;
+    if (now - last < gap) {
+      look(aim, 700, now, kind);
+      return;
+    }
+    if (running?.key === "wake") {
+      after = name;
+      afterAim = [aim, aim2];
+      answeredAt.set(kind, now);
+      return;
+    }
+    if (running && running.prio <= 1) {
+      look(aim, 700, now, kind);
+      return;
+    }
+    answeredAt.set(kind, now);
+    sched.done();
+    sched.offer({ key: kind, prio: 2, ttlMs: 1000, ladder: [step(name)] }, now);
+    if (!sched.next(now)) {
+      look(aim, 700, now, kind);
+      return;
+    }
+    after = null;
+    eyes = null;
+    startAct(name, now, kind, 2, aim, aim2);
+    frame();
   };
 
   /** A person's action (a poke, a notice): at once, through the attention window. */
@@ -316,8 +513,10 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
       running = null;
       if (after) {
         const next = after;
+        const aims = afterAim;
         after = null;
-        startAct(next, now, "after", 4);
+        afterAim = null;
+        startAct(next, now, "after", 4, aims ? aims[0] : undefined, aims ? aims[1] : undefined);
       }
     }
     if (pokeQueued && (!running || (running.key === "poke" && now - running.at >= K.POKE_NEXT_AT * running.act.ms))) {
@@ -325,7 +524,20 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
       pokeQueued = null;
       human(name, now, "poke");
     }
-    if (welcome !== "none" && hold && !running && !introRun && bodyOwner() === "kayolo" && sched.sinceInput(now) >= WELCOME_PAUSE_MS) {
+    // An open palette or sheet keeps him busy (§2.8): spontaneous acts wait, the eyes stay on it.
+    if (paletteOpen || sheetOpen) sched.busy(now + 1000);
+    pumpE3(now);
+    const settled = hold && !running && !introRun && bodyOwner() === "kayolo" && sched.sinceInput(now) >= WELCOME_PAUSE_MS;
+    // The very first visit has the introduction instead.
+    if (morning && introPendingNow()) morning = false;
+    if (morning && settled && (mode === "live" || mode === "calm")) {
+      // The first visit of the morning: a stretch, once a day (§2.3); «welcome back» after it.
+      morning = false;
+      pageMemory().noteMorning();
+      welcomeAfter = now + 400 + K.MERGE_MS + 900;
+      sched.offer({ key: "morning", prio: 4, ttlMs: 8000, ladder: [step("stretch"), step("blink2")] }, now);
+    }
+    if (welcome !== "none" && settled && !morning && now >= welcomeAfter) {
       const name: ActName = welcome === "notice" ? "welcome1" : welcome === "hop" ? "welcome2" : "welcome3";
       welcome = "none";
       sched.offer({ key: "welcome", prio: 4, ttlMs: 8000, ladder: [step(name), step("welcome1")] }, now);
@@ -333,13 +545,71 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
     const play = running ? null : sched.next(now);
     if (play && hold) {
       const name = play.step.act as ActName;
+      const aim = offerAim.get(play.key);
+      offerAim.delete(play.key);
       if (play.wake) {
         wokeAt = now;
         // Awake now for the scheduler too: the next block reads A0, not A4 (no second "wake").
         sched.inputAt(now);
         startAct("wake", now, play.key, play.prio);
         after = name;
-      } else startAct(name, now, play.key, play.prio);
+      } else startAct(name, now, play.key, play.prio, aim ? aim() : undefined);
+    }
+  };
+
+  /** Э3 follow-ups that wait for the page: the door's shrug, data after a tab or filter, a miss, a hover. */
+  const pumpE3 = (now: number) => {
+    if (navWait && !navWait.shrugged && now - navWait.at >= K.DOOR_SHRUG_MS && hold) {
+      navWait.shrugged = true;
+      if (!running || running.prio > 1) startAct("shrugBig", now, "door", 2, null);
+    }
+    if (awaitData && now >= awaitData.next) {
+      const busy = !!document.querySelector('main [aria-busy="true"], main .feed-skeleton, main [data-skeleton]');
+      if (busy && now < awaitData.until) {
+        // A skeleton: he thinks until the data comes (§6.2).
+        if (!awaitData.thinking) {
+          awaitData.thinking = true;
+          frame();
+        }
+        awaitData.next = now + 400;
+      } else {
+        const a = awaitData;
+        awaitData = null;
+        if (a.kind === "tab") {
+          if (a.thinking && !busy) answer("tab-data", "nod", 0, now, null);
+          else frame();
+        } else {
+          const plate = a.el?.closest("section, .feed-plate, .feed-board") ?? document.querySelector("main");
+          const empty = !!(plate ?? document).querySelector?.(".feed-empty");
+          if (empty) answer("filter", "tilt", 0, now, aimEl(a.el));
+          else answer("filter", "nodGlance", 0, now, aimEl(plate?.querySelector(".feed-row") ?? a.el));
+        }
+      }
+    }
+    if (missDue && now >= missDue.at) {
+      const m = missDue;
+      missDue = null;
+      if (paletteOpen && m.q !== missQ) {
+        missQ = m.q;
+        answer("search-miss", "sniff", 0, now, aimEl(m.el));
+      }
+    }
+    if (beatDue != null && now >= beatDue) {
+      // The page's beat: a look at its key figure, if it has one (the figures come in Э6).
+      beatDue = null;
+      const key = shown("[data-kayolo-key]");
+      if (key && hold) {
+        offerAim.set("beat", () => aimEl(key));
+        sched.offer({ key: "beat", prio: 3, ttlMs: 3000, ladder: [step("glance")] }, now);
+      }
+    }
+    if (hoverCand && now - hoverCand.at >= K.HOVER_MS) {
+      const c = hoverCand;
+      hoverCand = null;
+      if (now - hoverAt >= K.HOVER_GAP_MS && !running && levelNow(now).lv === 0 && c.el.matches(":hover")) {
+        hoverAt = now;
+        look(aimEl(c.el), K.HOVER_HOLD_MS, now, "hover");
+      }
     }
   };
 
@@ -380,6 +650,12 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
       if (d.wink != null) pose.wink = d.wink;
       if (d.doze !== undefined) pose.doze = d.doze;
       if (d.zzz !== undefined) pose.zzz = d.zzz;
+      if (d.pupilOrbit != null) {
+        pose.pupil = d.pupil;
+        pose.pupilOrbit = d.pupilOrbit;
+      }
+      if (d.hopMax != null) pose.hopMax = d.hopMax;
+      if (d.shift) pose.x = GX + clamp(d.shift, -8, 8);
       flip = !!d.flip;
       if (d.mood && d.mood !== "sleepy") {
         pose.doze = d.doze;
@@ -397,7 +673,7 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
     if (grow != null) return now;
     if (mode === "hidden") return Infinity;
     let due = sched.nextDue(now);
-    if (running || after || pokeQueued || walk || fade) return now;
+    if (running || after || pokeQueued || walk || fade || recolor) return now;
     if (handed) return now;
     if (mode === "asleep") {
       // The eyes finish closing, then not a frame more (§4.6). No timer (a scheduler edge, a gaze,
@@ -405,9 +681,23 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
       // itself paints once (refreshMode → frame); waking goes through refreshMode too.
       return ctx && pixelSettling(ctx, "main") ? pixelWake(ctx, "main") : Infinity;
     }
+    if (navWait && now - navWait.at < K.DOOR_SIT_MS) {
+      // Pushing the door: every frame of a knock, 20 fps between them (the think face sways).
+      const t = now - navWait.at;
+      if (t >= K.DOOR_AFTER_MS && (t - K.DOOR_AFTER_MS) % K.DOOR_KNOCK_MS < 180) return now;
+      return Math.max(now, paintedAt + 1000 / K.GAZE_FPS);
+    }
     if (gaze) due = Math.min(due, gazeUntil);
+    if (eyes) due = Math.min(due, eyes.until);
+    // An in-page wait: the think face sways 2 s, then holds still (no frames however long it lasts).
+    if (pageWait && now < pageWait.at + 2000) due = Math.min(due, pageWait.at + 2000);
+    if (awaitData) due = Math.min(due, awaitData.next);
+    if (missDue) due = Math.min(due, missDue.at);
+    if (hoverCand) due = Math.min(due, hoverCand.at + K.HOVER_MS);
+    if (beatDue != null) due = Math.min(due, beatDue);
     const quietFor = sched.sinceInput(now);
-    if (welcome !== "none" && quietFor < WELCOME_PAUSE_MS) due = Math.min(due, now + WELCOME_PAUSE_MS - quietFor);
+    if ((welcome !== "none" || morning) && quietFor < WELCOME_PAUSE_MS) due = Math.min(due, now + WELCOME_PAUSE_MS - quietFor);
+    if (welcome !== "none" && now < welcomeAfter) due = Math.min(due, welcomeAfter);
     // Dense pages start reading at 20 s, before the scheduler's own A2 edge (§2.2).
     if (pageKind(path) === "d" && since(now) < 20_000) due = Math.min(due, now + 20_000 - since(now));
     const { lv, inLv } = levelNow(now);
@@ -480,7 +770,9 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
       const u = Math.min(1, (now - walk.at) / walk.ms);
       x = walk.fromX + (walk.toX - walk.fromX) * smooth(u);
       y = walk.fromY == null ? walk.y : walk.fromY + (walk.y - walk.fromY) * smooth(u);
-      roll = walk.roll0 + Math.abs(x - walk.fromX) * 0.55;
+      // A jump (to the palette edge and back) flies an arc and does not shuffle.
+      if (walk.arc) y -= walk.arc * Math.sin(Math.PI * u);
+      else roll = walk.roll0 + Math.abs(x - walk.fromX) * 0.55;
       face = walk.toX >= walk.fromX ? 1 : -1;
       if (u >= 1) walk = null;
     } else if (hold.where === "nook") {
@@ -507,6 +799,8 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
     }
     const cv = canvasFor(hold);
     if (!cv) return;
+    // Above the palette (z 75) while he is at its edge or jumping there; never takes a pointer.
+    layerRoot?.classList.toggle("is-over", hold.where === "edge" || !!walk?.arc);
     switchTo(cv);
     if (cv === layerCanvas) placeLayer(x, y);
     const dpr = size(cv);
@@ -541,18 +835,28 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
     ctx.ellipse(GX, GY + 1, sh.rx, sh.ry, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
+    if (recolor) {
+      // The recolour blink: the colour changes while the eyes are shut.
+      const u = (now - recolor.at) / K.RECOLOR_MS;
+      if (u >= 0.5) color = recolor.to;
+      if (u >= 1) recolor = null;
+    }
     const pose = poseAt(now, face, ctx);
+    if (recolor) pose.eyeScale = (pose.eyeScale ?? 1) * (1 - 0.92 * Math.sin(Math.PI * clamp((now - recolor.at) / K.RECOLOR_MS, 0, 1)));
     if (gaze && now >= gazeUntil) {
       gaze = null;
       gazePt = null;
     }
-    const calmHop = actReduce() || docked ? { hopScale: 0 } : phone() ? K.PHONE_HOP : {};
+    if (eyes && now >= eyes.until) eyes = null;
+    const calmHop: Partial<PixelPose> = actReduce() || docked ? { hopScale: 0 } : phone() ? { ...K.PHONE_HOP } : {};
+    if (pose.hopMax != null) calmHop.hopMax = Math.min(calmHop.hopMax ?? Infinity, pose.hopMax);
     if (docked && !actReduce()) pose.squash = (pose.squash ?? 0) - 0.06;
     drawPixel(ctx, {
       ...pose,
       ...calmHop,
-      x: GX,
+      x: pose.x,
       y: GY,
+      blinkGap: night ? K.NIGHT_BLINK_GAP : 1,
       scale: K.BODY_SCALE,
       color,
       now,
@@ -571,6 +875,10 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
     clear(slotCanvas());
     drawnOn = null;
     hold = null;
+    if (recolor) color = recolor.to;
+    recolor = null;
+    eyes = null;
+    layerRoot?.classList.remove("is-over");
     running = null;
     after = null;
     walk = null;
@@ -608,6 +916,7 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
       if (!cv) return false;
       drop();
       hold = h;
+      recolor = null;
       if (p.color) color = p.color;
       handed = p.pose ? { pose: p.pose, at: performance.now() } : null;
       const ctx = ctxOf(cv);
@@ -713,7 +1022,7 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
     if (gap >= K.POKE_RESET_MS) pokeN = 1;
     else if (gap <= K.POKE_CHAIN_MS) pokeN += 1;
     else pokeN = Math.max(1, pokeN);
-    const name: ActName = pokeN === 1 ? "poke1" : pokeN === 2 ? "poke2" : pokeN === 3 ? "poke3" : "blink2";
+    const name: ActName = pokeAct(pokeN);
     pageMemory().poke();
     if (running && (running.key === "wake" || (running.key === "poke" && now - running.at < K.POKE_NEXT_AT * running.act.ms))) {
       pokeQueued = name;
@@ -747,9 +1056,417 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
         after = null;
         human("pet", now, "pet");
       }
-    } else return;
+    } else {
+      onUi(ev, now);
+      return;
+    }
     kick();
   });
+
+  /* ---------------- Э3: answers to the page (§6.2) and to transitions (§7) ---------------- */
+
+  /** Where a copy came from: the focused control, else what was pressed last (Safari does not focus buttons). */
+  const pressedEl = (el: Element | null | undefined, now: number): Element | null => {
+    if (el && el !== document.body && el !== document.documentElement) return el;
+    return lastPress && now - lastPress.at < 2000 ? lastPress.el : null;
+  };
+
+  /** Recolour (§7.1): the same colour — nothing; another — a 240 ms blink, the colour changes inside it. */
+  const recolorTo = (to: string, now: number) => {
+    if ((recolor ? recolor.to : color) === to) return;
+    if (!hold || hidden || mode === "asleep" || mode === "hidden" || !drawnOn) {
+      recolor = null;
+      color = to;
+      if (hold) frame();
+      return;
+    }
+    recolor = { at: now, to };
+    frame();
+  };
+
+  /** The first and last list rows on screen near a control (for the eyes running a list). */
+  const rowsNear = (el: Element | null | undefined): [Vec | null, Vec | null] => {
+    const scope = el?.closest("section, .feed-board, .feed-plate")?.parentElement ?? document.querySelector("main");
+    let first: Vec | null = null;
+    let last: Vec | null = null;
+    let n = 0;
+    for (const row of scope?.querySelectorAll(".feed-row") ?? []) {
+      if (++n > 60) break;
+      const c = centerOf(row);
+      if (!c) {
+        if (first) break;
+        continue;
+      }
+      first ??= c;
+      last = c;
+    }
+    const at = centerOf(el);
+    return [first ?? (at ? { x: at.x, y: at.y + 60 } : null), last ?? (at ? { x: at.x, y: at.y + 300 } : null)];
+  };
+
+  const tabbed = (el: Element | null | undefined, now: number) => {
+    const c = centerOf(el);
+    // A look at the tab, then down into its panel; a skeleton there — think, the data — a nod.
+    answer("tab", "tabLook", 0, now, aimAt(c), c ? aimAt({ x: c.x, y: c.y + 160 }) : null);
+    // Asleep, «Тихий» parked or the intro: nothing waits for the data (no stale nod on waking).
+    if (answering()) awaitData = { kind: "tab", el: el ?? null, next: now + 500, until: now + 6000, thinking: false };
+  };
+
+  /** The palette edge (§3.3): left of the field outside the panel, only from 1280 px and clear of the rail. */
+  const edgePoint = (field: Element | null | undefined): Vec | null => {
+    if (!(field instanceof HTMLElement) || window.innerWidth < K.EDGE_MIN_W || !wideLayout()) return null;
+    const panel = field.closest<HTMLElement>(".search-panel");
+    const row = panel?.querySelector<HTMLElement>(".search-panel-inner > div");
+    if (!panel || !row) return null;
+    // Layout boxes, not rects: the panel is still easing in (a transform); this is where it lands.
+    const x = panel.offsetLeft - 30;
+    const y = panel.offsetTop + row.offsetTop + row.offsetHeight / 2 + 11;
+    const rail = document.querySelector(".nav-rail")?.getBoundingClientRect();
+    if (rail && rail.width > 0 && x - 14 < rail.right + 6) return null;
+    return { x, y };
+  };
+
+  /** Where the body stands now (mid-walk too), as a ground point. */
+  const standAt = (now: number): Vec | null => {
+    if (!hold) return null;
+    if (walk) {
+      const u = Math.min(1, (now - walk.at) / walk.ms);
+      const x = walk.fromX + (walk.toX - walk.fromX) * smooth(u);
+      const y = walk.fromY == null ? walk.y : walk.fromY + (walk.y - walk.fromY) * smooth(u);
+      return { x, y };
+    }
+    if (hold.where === "nook") {
+      const s = slotPlace();
+      if (s) return { x: s.x, y: s.y };
+    }
+    return { x: hold.x, y: hold.y };
+  };
+
+  /** Search opened on a wide screen in «Живой»: a jump to the edge (≤ 400 ms, §3.5). */
+  const toEdge = (field: Element | null | undefined, now: number): boolean => {
+    if (!hold || hold.where !== "nook" || fade || mode !== "live" || actReduce()) return false;
+    const p = edgePoint(field);
+    const from = standAt(now);
+    if (!p || !from) return false;
+    hold = { where: "edge", x: p.x, y: p.y, face: 1 };
+    walk = { fromX: from.x, toX: p.x, fromY: from.y, y: p.y, at: now, ms: K.EDGE_JUMP_MS, roll0: roll, arc: 18 };
+    frame();
+    return true;
+  };
+
+  /** The search closed: back home the same way (Esc or a pick alike; the arrival then follows). */
+  const fromEdge = (now: number) => {
+    if (!hold || hold.where !== "edge") return;
+    const h = homeHold();
+    const from = standAt(now);
+    if (!h || !from) {
+      drop();
+      setOwner("none");
+      return;
+    }
+    hold = h;
+    walk = { fromX: from.x, toX: h.x, fromY: from.y, y: h.y, at: now, ms: K.EDGE_JUMP_MS, roll0: roll, arc: 18 };
+    frame();
+  };
+
+  let meas: CanvasRenderingContext2D | null = null;
+  let caretFont = "";
+  /** Typing in the palette: the eyes follow the caret (a move ≥ 12 px or a 150 ms pause, §6.2). */
+  const caret = (field: Element | null | undefined, now: number) => {
+    missDue = null;
+    if (!(field instanceof HTMLInputElement) || !answering()) return;
+    const r = field.getBoundingClientRect();
+    if (!caretFont) {
+      const cs = getComputedStyle(field);
+      caretFont = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+    }
+    meas ??= document.createElement("canvas").getContext("2d");
+    let w = 0;
+    if (meas) {
+      meas.font = caretFont;
+      w = meas.measureText(field.value.slice(0, field.selectionStart ?? field.value.length)).width;
+    }
+    const pt = { x: Math.min(r.right - 2, r.left + w - field.scrollLeft), y: r.top + r.height / 2 };
+    if (caretPt && Math.abs(pt.x - caretPt.x) < K.CARET_PX && now - caretAt < K.CARET_PAUSE_MS) return;
+    caretPt = pt;
+    caretAt = now;
+    look(aimAt(pt), Infinity, now, "caret");
+  };
+
+  const searchOpen = (field: Element | null | undefined, now: number) => {
+    paletteOpen = true;
+    missQ = "";
+    caretPt = null;
+    caretFont = "";
+    if (!answering()) return;
+    if (toEdge(field, now)) return;
+    // 1024–1279, «Тихий», the phone: he stays home and looks at the field.
+    look(aimEl(field), Infinity, now, "palette");
+  };
+
+  const searchClose = (now: number) => {
+    paletteOpen = false;
+    missDue = null;
+    if (eyes && (eyes.from === "palette" || eyes.from === "caret")) eyes = null;
+    if (hold?.where === "edge") fromEdge(now);
+    else if (hold) frame();
+  };
+
+  /** Arrival (§7.1, §7.2), 2 rAF after the path changed: the act by how he came. */
+  let beatDue: number | null = null;
+  const arrival = (pop: { dir: -1 | 1; seen: boolean } | null, hop: -1 | 1 | undefined) => {
+    if (dead || !answering() || bodyOwner() !== "kayolo") return;
+    const now = performance.now();
+    if (pop) {
+      // Back / Forward: facing that way 300 ms, then «I was here»; a page seen before has no beat.
+      answer("arrive", "lookBack", 0, now, { x: pop.dir * 0.9, y: -0.05 }, titleAim());
+      if (pop.seen) return;
+    } else if (hop) {
+      // HopNav: a little step to that side; the colour is the same.
+      answer("arrive", "sidestep", 0, now, { x: hop, y: 0 });
+      return;
+    } else answer("arrive", "arrive", 0, now, titleAim(), titleAim());
+    beatDue = now + K.ARRIVE_BEAT_MS;
+    kick();
+  };
+
+  const onUi = (ev: KayoloEvent, now: number) => {
+    switch (ev.k) {
+      case "ui:copy":
+      case "ui:copy-fail":
+        answer("copy", ev.k === "ui:copy" ? "nodGlance" : "shrugBig", K.COPY_GAP_MS, now, aimEl(pressedEl(ev.el, now)));
+        return;
+      case "ui:fav-on":
+        answer("fav", "hug", K.FAV_GAP_MS, now, aimEl(ev.el), aimEl(shown('.nav-rail a[href="/favorites"]')));
+        return;
+      case "ui:fav-off":
+        answer("fav", "nod", K.FAV_GAP_MS, now, aimEl(ev.el));
+        return;
+      case "ui:tab":
+        tabbed(ev.el, now);
+        return;
+      case "ui:sort": {
+        const [first, last] = rowsNear(ev.el);
+        const [a, b] = ev.dir === "asc" ? [last, first] : [first, last];
+        answer("sort", "runList", 0, now, aimAt(a), aimAt(b));
+        return;
+      }
+      case "ui:filter": {
+        const el = pressedEl(ev.el, now);
+        look(aimEl(el), 600, now, "filter");
+        if (!answering()) return;
+        awaitData = { kind: "filter", el, next: now + 700, until: now + 6000, thinking: false };
+        kick();
+        return;
+      }
+      case "ui:page":
+        if (ev.step === "more") {
+          // «Показать ещё»: a look at the new rows coming in above the button.
+          const c = centerOf(ev.el);
+          look(c ? aimAt({ x: c.x, y: c.y - 80 }) : null, 900, now, "page");
+        } else answer("page", "knock", K.PAGE_GAP_MS, now, aimEl(ev.el));
+        return;
+      case "ui:expand":
+        if (ev.open) answer("expand", "nod", K.ANSWER_GAP_MS, now, aimEl(ev.el));
+        else look(aimEl(ev.el), 500, now, "expand");
+        return;
+      case "ui:search-open":
+        searchOpen(ev.el, now);
+        return;
+      case "ui:search-type":
+        caret(ev.el, now);
+        return;
+      case "ui:search-hits": {
+        missDue = null;
+        const r = ev.el?.getBoundingClientRect();
+        if (!r || r.height < 4) return;
+        const x = r.left + Math.min(120, r.width / 3);
+        answer("search-hits", "readList", 0, now, aimAt({ x, y: r.top + 12 }), aimAt({ x, y: Math.min(r.bottom, r.top + 240) - 12 }));
+        return;
+      }
+      case "ui:search-miss":
+        // Sniff 600 ms after the last key, once per query (§6.2).
+        missDue = { at: now + 600, q: ev.q, el: ev.el ?? null };
+        kick();
+        return;
+      case "ui:search-paste":
+        answer("search-paste", ev.ok ? "nod" : "shrugBig", 0, now, aimEl(ev.el));
+        return;
+      case "ui:search-close":
+        searchClose(now);
+        return;
+      case "ui:sheet-open":
+        sheetOpen += 1;
+        // He stays home under the scrim, eyes on the sheet (§3.5).
+        look(aimAt({ x: window.innerWidth / 2, y: window.innerHeight - 160 }), Infinity, now, "sheet");
+        return;
+      case "ui:sheet-close":
+        sheetOpen = Math.max(0, sheetOpen - 1);
+        if (!sheetOpen && eyes?.from === "sheet") {
+          eyes = null;
+          frame();
+        }
+        return;
+      case "ui:tip-open": {
+        if (!answering() || now - eyesAt < K.FOCUS_GAP_MS) return;
+        const el = ev.el ?? null;
+        // His own Tip is under him: the eyes go down to it (§2.6).
+        if (el?.closest(".kayolo-slot")) {
+          look({ x: 0, y: 0.9 }, Infinity, now, "tip");
+          return;
+        }
+        const c = el ? centerOf(el) : ev.rect ? { x: ev.rect.left + ev.rect.width / 2, y: ev.rect.top + ev.rect.height / 2 } : null;
+        look(aimAt(c), K.HOVER_HOLD_MS, now, "tip");
+        return;
+      }
+      case "ui:tip-close":
+        if (eyes?.from === "tip") {
+          eyes = null;
+          frame();
+        }
+        return;
+      case "ui:wait":
+        pageWait = ev.on ? { at: now, to: aimEl(shown(".seg-paper, .detail-tabs")) } : null;
+        if (hold) kick();
+        return;
+      case "nav:start":
+        if (!answering()) return;
+        if (!navWait) {
+          navWait = { at: now, shrugged: false };
+          // A lean toward the link that was clicked, if it is on screen (§7.1).
+          const el = lastClick?.kind === "go" && now - lastClick.at < 600 ? lastClick.el : null;
+          const aim = aimEl(el);
+          if (aim && running?.key === "rail-press" && !after) {
+            // The rail row's knock first (in time with the press), the lean right after it.
+            after = "lean";
+            afterAim = [aim, null];
+          } else if (aim) answer("nav", "lean", 0, now, aim);
+        }
+        kick();
+        return;
+      case "nav:end":
+        if (!navWait) return;
+        navWait = null;
+        // 15 s and the page has not come: one tear, and he stays on the old page.
+        if (!ev.ok) answer("nav-kill", "tear", 0, now, null);
+        if (hold) frame();
+        return;
+      case "nav:click":
+        lastClick = { kind: ev.kind, el: ev.el ?? null, hop: ev.hop, at: now };
+        if (ev.kind === "here") answer("here", "here", K.ANSWER_GAP_MS, now, titleAim());
+        else if (ev.kind === "aside") answer("aside", "aside", 0, now, aimEl(ev.el));
+        return;
+      case "nav:pop":
+        popNext = { dir: ev.dir, seen: ev.seen, at: now, to: ev.to };
+        return;
+    }
+  };
+
+  /* ---------------- Э3: what the page does not tell the bus (delegated, passive) ---------------- */
+
+  const onPress = (e: PointerEvent) => {
+    const t = e.target instanceof Element ? e.target : null;
+    if (!t || dead) return;
+    const now = performance.now();
+    lastPress = { el: t, at: now };
+    if (t.closest(".kayolo-slot, .kayolo-panel")) return;
+    const rail = e.button === 0 ? t.closest(".nav-rail a, .nav-rail button") : null;
+    if (rail && !rail.classList.contains("rail-toggle")) {
+      // A rail row: a knock in time with the press (§6.2).
+      answer("rail-press", "knock", K.ANSWER_GAP_MS, now, aimEl(rail));
+    } else if (e.pointerType === "touch" && phone() && now - tapAt >= K.TAP_GAP_MS) {
+      // A tap on the phone: the tap goes to its control, the eyes to the point for 1.5 s (§4.4).
+      tapAt = now;
+      look(aimAt({ x: e.clientX, y: e.clientY }), K.TAP_HOLD_MS, now, "tap");
+    }
+  };
+
+  const onDocClick = (e: MouseEvent) => {
+    const t = e.target instanceof Element ? e.target : null;
+    if (!t || dead || t.closest(".kayolo-slot, .kayolo-panel")) return;
+    const now = performance.now();
+    const toggle = t.closest(".rail-toggle");
+    if (toggle) {
+      // The rail folds (§3.5): a start, eyes on the rail, then on the button.
+      answer("rail", "railJolt", K.ANSWER_GAP_MS, now, aimEl(shown(".nav-rail")), aimEl(toggle));
+      return;
+    }
+    const branch = t.closest(".nav-rail [aria-expanded]");
+    if (branch) {
+      // A branch opened (eyes down) or closed (eyes up), read once React has applied it.
+      requestAnimationFrame(() => {
+        const c = centerOf(branch);
+        const open = branch.getAttribute("aria-expanded") === "true";
+        look(c ? aimAt({ x: c.x, y: c.y + (open ? 90 : -60) }) : null, 700, performance.now(), "rail");
+      });
+      return;
+    }
+    // A tab of this page (a hash or a button); a seg link to another URL (HopNav sits in a seg bar too)
+    // is a transition: the lean and the arrival answer it.
+    const tab = t.closest('.seg-paper a[href^="#"], .seg-paper button, [role="tab"]');
+    if (tab) tabbed(tab, now);
+  };
+
+  const onOver = (e: PointerEvent) => {
+    if (e.pointerType === "touch" || dead || !hold || phone()) return;
+    const t = e.target instanceof Element ? e.target.closest(MEANINGFUL) : null;
+    if (!t || t === hoverCand?.el || t.closest(".kayolo-slot")) return;
+    hoverCand = { el: t, at: performance.now() };
+    kick();
+  };
+
+  const onFocus = (e: FocusEvent) => {
+    const t = e.target instanceof Element ? e.target : null;
+    if (!t || dead || editable(t) || t.closest(".kayolo-slot, .kayolo-panel")) return;
+    const now = performance.now();
+    if (now - focusAt < K.FOCUS_GAP_MS) return;
+    let keyboard = false;
+    try {
+      keyboard = t.matches(":focus-visible");
+    } catch {
+      keyboard = false;
+    }
+    if (!keyboard) return;
+    focusAt = now;
+    // Focus on anything: a look at it, if it is on screen (§4.5).
+    look(aimEl(t), K.HOVER_HOLD_MS, now, "focus");
+  };
+
+  const onCopy = () => {
+    if (dead) return;
+    const now = performance.now();
+    const node = document.getSelection()?.anchorNode ?? null;
+    const el = node ? (node instanceof Element ? node : node.parentElement) : null;
+    answer("copy", "nodGlance", K.COPY_GAP_MS, now, aimEl(el));
+  };
+
+  const onPaletteKey = (e: KeyboardEvent) => {
+    if (!paletteOpen || dead || (e.key !== "ArrowDown" && e.key !== "ArrowUp")) return;
+    // ↑↓ in the palette: the eyes on the active row.
+    requestAnimationFrame(() => {
+      const opt = document.querySelector('[role="listbox"] [role="option"][aria-selected="true"]');
+      look(aimEl(opt), Infinity, performance.now(), "caret");
+    });
+  };
+
+  let lang = document.documentElement.lang;
+  const langObs = new MutationObserver(() => {
+    const l = document.documentElement.lang;
+    if (l === lang) return;
+    lang = l;
+    const now = performance.now();
+    // A person's choice (on /settings), not the dictionary arriving on load: a long blink (§6.2).
+    if (sched.sinceInput(now) > 3000) return;
+    answer("locale", "blinkLong", 0, now, null);
+  });
+  langObs.observe(document.documentElement, { attributes: true, attributeFilter: ["lang"] });
+
+  document.addEventListener("pointerdown", onPress, { passive: true, capture: true });
+  document.addEventListener("click", onDocClick, { passive: true });
+  document.addEventListener("pointerover", onOver, { passive: true });
+  document.addEventListener("focusin", onFocus, { passive: true });
+  document.addEventListener("copy", onCopy, { passive: true });
+  document.addEventListener("keydown", onPaletteKey, { passive: true });
 
   /* ---------------- input (§2.2) ---------------- */
 
@@ -786,7 +1503,7 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
 
   /** A0: the eyes jump after the pointer within 240 px, at most 20 frames a second (§2.6). */
   const follow = (pt: Vec, now: number, kind: string) => {
-    if (!hold || kind === "touch" || phone() || running || reduceSys) return;
+    if (!hold || kind === "touch" || phone() || running || reduceSys || eyesNow(now)) return;
     if (levelNow(now).lv !== 0) return;
     const b = bodyAt();
     if (!b) return;
@@ -855,7 +1572,7 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
     }
     hidden = false;
     if (now - hiddenAt >= K.AWAY_WAKE_MS) {
-      const was = levelAt(hiddenSince + (now - hiddenAt));
+      const was = levelAt(hiddenSince + (now - hiddenAt), nightNow(now));
       sched.input(now);
       if (hold) wakeFrom(Math.max(2, was) as Level, now);
     } else sched.inputAt(now - hiddenSince);
@@ -863,9 +1580,10 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
   };
   document.addEventListener("visibilitychange", onVis);
 
+  /** The skin's ink changed (or a query rewrote the URL): a blink only if the colour really changed (§6.2). */
   const onInk = () => {
-    color = pixelColor(pixelInkForPath(path));
-    frame();
+    if (path === "/") return;
+    recolorTo(pixelColor(pixelInkForPath(path)), performance.now());
   };
   window.addEventListener(INK_EVENT, onInk);
 
@@ -897,7 +1615,13 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
       after = null;
       pokeQueued = null;
       grow = null;
+      navWait = null;
+      awaitData = null;
+      eyes = null;
+      if (recolor) color = recolor.to;
+      recolor = null;
       if (introRun) finishIntro(false);
+      if (hold.where === "edge") keeper.home();
     } else if (was === "hidden") {
       sched.input(now);
       wokeAt = -Infinity;
@@ -960,20 +1684,46 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
   return {
     keeper,
     arrive(next: string) {
+      const prev = path;
       path = next;
-      color = pixelColor(pixelInkForPath(next));
       const now = performance.now();
       sched.busy(now + K.NAV_BUSY_MS);
+      navWait = null;
+      awaitData = null;
+      beatDue = null;
+      const hop = lastClick?.kind === "go" && now - lastClick.at < 5000 ? lastClick.hop : undefined;
+      // One click, one arrival: a later push by the router (a pick in the palette) is not a hop.
+      lastClick = null;
       if (next === "/") {
+        recolor = null;
+        color = pixelColor(pixelInkForPath(next));
         if (hold) {
           drop();
           setOwner("none");
         }
         return;
       }
+      // A new colour comes with a blink (§7.1); the scout's own body keeps its colour until he has it.
+      recolorTo(pixelColor(pixelInkForPath(next)), now);
       if (hold) frame();
       // After the scout has decided for this page: nobody has him, so he is just at home.
       requestAnimationFrame(takeHome);
+      // The arrival act, 2 rAF after the path changed: the new title is on screen (§7.1), and a
+      // Back/Forward has been heard (Next re-renders inside its own popstate listener, before ours).
+      if (prev !== next) {
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            if (dead) return;
+            const t = performance.now();
+            const key = locKey(window.location.pathname, window.location.search);
+            // Only a pop that landed here: a sheet closing pops its own entry first (§7.2).
+            const pop = popNext && t - popNext.at < 2000 && popNext.to === key ? popNext : null;
+            popNext = null;
+            nav.note(key);
+            arrival(pop, hop);
+          })
+        );
+      }
     },
     start() {
       requestAnimationFrame(takeHome);
@@ -987,6 +1737,14 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
       if (parkRaf) cancelAnimationFrame(parkRaf);
       document.removeEventListener("visibilitychange", onVis);
       window.removeEventListener(INK_EVENT, onInk);
+      nav.stop();
+      langObs.disconnect();
+      document.removeEventListener("pointerdown", onPress, { capture: true });
+      document.removeEventListener("click", onDocClick);
+      document.removeEventListener("pointerover", onOver);
+      document.removeEventListener("focusin", onFocus);
+      document.removeEventListener("copy", onCopy);
+      document.removeEventListener("keydown", onPaletteKey);
       offChoice();
       if (dockRaf) cancelAnimationFrame(dockRaf);
       wide.removeEventListener("change", onWide);
@@ -996,7 +1754,19 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
     },
     debug() {
       const now = performance.now();
-      return { hold, level: levelNow(now).lv, running: running?.act.name ?? null, log: sched.log.slice(-20), mode, docked };
+      return {
+        hold,
+        level: levelNow(now).lv,
+        running: running?.act.name ?? null,
+        log: sched.log.slice(-20),
+        mode,
+        docked,
+        night,
+        eyes: eyes ? { from: eyes.from, to: eyes.to } : null,
+        wait: navWait ? Math.round(now - navWait.at) : pageWait ? "page" : null,
+        color,
+        over: !!layerRoot?.classList.contains("is-over"),
+      };
     },
   };
 }
