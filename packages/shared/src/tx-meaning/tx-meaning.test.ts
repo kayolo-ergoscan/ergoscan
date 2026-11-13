@@ -18,12 +18,14 @@ import {
   sayHow,
   isFoldedAction,
   multisigOf,
+  rentMarkOf,
   sayMeaning,
   ERGODEX_CP_POOL_TEMPLATES,
   ERGODEX_V3_SHELL_TEMPLATES,
   type MeaningBox,
   type MeaningCtx,
   type MeaningTx,
+  type RentSpendTx,
 } from "./index.js";
 
 describe("ErgoDex LP templates (ErgoScan's logo for liquidity tokens)", () => {
@@ -47,13 +49,17 @@ type Golden = {
   height: number;
   coinbase?: boolean;
   rent?: string;
+  /** Read as the mempool reads it: no rent mark, inputs carry spendingProof (rentMarkOf decides). */
+  mempool?: boolean;
   inputCount: number;
   outputCount: number;
   inputs: Packed[];
   outputs: Packed[];
   dataInputs?: Packed[];
-  tokens: Record<string, [string | null, number | null]>;
-  names: Record<string, string>;
+  /** [name, decimals, nft kind (tokens.nft_kind) when known]. */
+  tokens: Record<string, [string | null, number | null, string?]>;
+  /** A display name, or [name, names-book category]. */
+  names: Record<string, string | [string, string]>;
   expect: { action: string; protocol: string | null; conf: string; ru: string; en: string };
 };
 
@@ -71,7 +77,7 @@ function txOf(g: Golden): MeaningTx {
   return {
     id: g.id,
     coinbase: g.coinbase,
-    rent: g.rent,
+    rent: g.mempool ? rentMarkOf(g as unknown as RentSpendTx) : g.rent,
     inputCount: g.inputCount,
     outputCount: g.outputCount,
     inputs: g.inputs.map(unpack),
@@ -84,9 +90,13 @@ function ctxOf(g: Golden): MeaningCtx {
   return {
     token: (id) => {
       const t = g.tokens[id];
-      return t ? { name: t[0], decimals: t[1] } : null;
+      return t ? { name: t[0], decimals: t[1], kind: t[2] ?? null } : null;
     },
-    nameOf: (a) => (g.names[a] ? { name: g.names[a]! } : null),
+    nameOf: (a) => {
+      const n = g.names[a];
+      if (!n) return null;
+      return typeof n === "string" ? { name: n } : { name: n[0], category: n[1] };
+    },
   };
 }
 
@@ -115,6 +125,216 @@ describe("tx meaning: golden set", () => {
       assert.equal(m.family, MEANING_VOCAB[m.action].family);
     });
   }
+});
+
+describe("storage rent read off a mempool tx (rentMarkOf)", () => {
+  const W1 = "9fRw3bMzSNBu5ZDGnJBS4ARNhrPhKCjZRXeQnc3eTCWzBnpkC9e";
+  const W2 = "9eipEgK4eo3fZ1ZJWZUdPpRDkC2QtiPFpXGvcgb99WR8hhRNYsZ3";
+  const rentIn = (value: string, ext = "0300") => ({ value, address: W1, spendingProof: { proofBytes: "", extension: { "127": ext } } });
+  it("an empty proof with extension 127 and a smaller recreated box is rent; the P2PK that kept it makes it «rent»", () => {
+    assert.equal(rentMarkOf({ inputs: [rentIn("1000000")], outputs: [{ value: "900000", address: W1 }, { value: "100000", address: W2 }] }), "rent");
+  });
+  it("no P2PK kept the rent (only the box back to its owner): a renewal", () => {
+    assert.equal(rentMarkOf({ inputs: [rentIn("1000000")], outputs: [{ value: "900000", address: W1 }, { value: "100000", address: "88dhgzEuTXaQ2HPU" }] }), "rent-renew");
+  });
+  it("a signed input, or a box recreated whole, is not rent", () => {
+    const signed = { value: "1000000", address: W1, spendingProof: { proofBytes: "ab12", extension: { "127": "0300" } } };
+    assert.equal(rentMarkOf({ inputs: [signed], outputs: [{ value: "900000", address: W1 }] }), null);
+    assert.equal(rentMarkOf({ inputs: [rentIn("1000000")], outputs: [{ value: "1000000", address: W1 }] }), null);
+    assert.equal(rentMarkOf({ inputs: [{ value: "1000000", address: W1 }], outputs: [] }), null);
+  });
+  it("mainnet node txs get the mark the rent writer gave their block", () => {
+    const writer: Record<string, string> = { "021d6be7": "rent-renew", "31f1a135": "rent", "02dcce10": "rent" };
+    for (const [id, mark] of Object.entries(writer)) {
+      const g = byId(id);
+      assert.ok(g.mempool, id);
+      assert.equal(rentMarkOf(g as unknown as RentSpendTx), mark, id);
+      // Without the read the same tx is a plain move, as the mempool said before.
+      const plain = classifyTxMeaning({ ...txOf(g), rent: null }, ctxOf(g));
+      assert.notEqual(plain.action, "rent", id);
+    }
+  });
+  it("index -1 (zigzag 01): the whole box was taken", () => {
+    assert.equal(rentMarkOf({ inputs: [rentIn("1000000", "0301")], outputs: [{ value: "1000000", address: W2 }] }), "rent");
+  });
+});
+
+describe("ERG dust next to tokens", () => {
+  it("goes behind the token in the phrase, and the row figure is the token", () => {
+    for (const id of ["326af71b", "03b3db46", "0ec5a047"]) {
+      const g = byId(id);
+      const m = classifyTxMeaning(txOf(g), ctxOf(g));
+      const side = m.got.length ? m.got : m.gave;
+      assert.ok(side[0]!.token, id);
+      assert.equal(side[side.length - 1]!.token, null, id);
+      assert.ok(meaningRow(compactMeaning(m), "ru").big?.token, id);
+    }
+  });
+  it("more than 0.0011 ERG a box stays first", () => {
+    // 0.002 ERG into one forward offer box: not dust.
+    const g = byId("a41cdecad6");
+    const m = classifyTxMeaning(txOf(g), ctxOf(g));
+    assert.equal(m.gave[0]!.token, null);
+  });
+});
+
+describe("multi-send kinds", () => {
+  const sub = (id: string) => {
+    const g = byId(id);
+    const m = classifyTxMeaning(txOf(g), ctxOf(g));
+    return { m, row: meaningRow(compactMeaning(m), "ru") };
+  };
+  it("names the kind from the names book or from what the receivers got", () => {
+    const cases: [string, string, string][] = [
+      ["cf1b8c98", "exchange", "Выводы с биржи"],
+      ["a3db25cb", "batch", "Пакетная выплата"],
+      ["5747e52d", "split", "Выплата поровну"],
+      ["1a61da96", "airdrop", "Раздача токена"],
+      ["bb45dda5", "airdrop", "Раздача токена"],
+    ];
+    for (const [id, want, word] of cases) {
+      const { m, row } = sub(id);
+      assert.equal(m.action, "multisend", id);
+      assert.equal(m.sub, want, id);
+      assert.equal(m.conf, "flow", id);
+      assert.equal(row.word, word, id);
+    }
+  });
+  it("«по …» only when every share is the same", () => {
+    assert.ok(sub("5747e52d").m.each);
+    assert.ok(sub("bb45dda5").m.each);
+    assert.equal(sub("1a61da96").m.each, undefined);
+    assert.equal(sub("a3db25cb").m.each, undefined);
+  });
+  it("a payout another wallet paid into keeps the plain words", () => {
+    // 9gsb… and 9hys… both funded it: «выплатил» would credit one of them with all of it.
+    const { m } = sub("df4cf912");
+    assert.equal(m.action, "multisend");
+    assert.equal(m.sub, undefined);
+  });
+  it("the token handout leads with the token, ERG dust goes last", () => {
+    const { m, row } = sub("1a61da96");
+    assert.ok(m.gave[0]!.token);
+    assert.equal(m.gave[m.gave.length - 1]!.token, null);
+    assert.ok(row.big?.token);
+  });
+});
+
+describe("new tokens: issuer, kind, where they went", () => {
+  const run = (id: string, ctx?: MeaningCtx, strip = false) => {
+    const g = byId(id);
+    const tx = txOf(g);
+    const bare = (b: MeaningTx["outputs"][number]) => ({ ...b, additionalRegisters: null });
+    const t = strip ? { ...tx, inputs: tx.inputs.map(bare), outputs: tx.outputs.map(bare) } : tx;
+    return classifyTxMeaning(t, ctx ?? ctxOf(g));
+  };
+  it("no wallet signed: the contract whose box id the token took is the subject", () => {
+    const m = run("0031153bad");
+    assert.equal(m.byContract, true);
+    assert.ok(m.say.ru.startsWith("Контракт 27Ms…4uiE "), m.say.ru);
+    assert.ok(m.say.en.startsWith("Contract 27Ms…4uiE "), m.say.en);
+    assert.ok(m.say.ru.endsWith("→ 9enr…wwww"), m.say.ru);
+    assert.equal(sayMeaning(compactMeaning(m), "ru"), m.say.ru);
+  });
+  it("a whole-Long supply is a service token, no number in the phrase", () => {
+    const m = run("070efb6d6e");
+    assert.equal(m.sub, "service");
+    assert.ok(!/\d{4}/.test(m.say.ru.replace(/2Jow…iws5/, "")), m.say.ru);
+    assert.equal(meaningRow(compactMeaning(m), "ru").word, "Служебный токен");
+  });
+  it("an unnamed single unit kept by a script is the contract's id token, not an NFT", () => {
+    const m = run("00f23065a7");
+    assert.equal(m.sub, "id");
+    assert.ok(!m.say.ru.includes("NFT"), m.say.ru);
+    assert.equal(meaningRow(compactMeaning(m), "ru").word, "Токен-идентификатор");
+  });
+  it("kind from the index (lists) or from R7 (tx page); neither = plain words", () => {
+    assert.equal(run("6e60572ddc").sub, "collection");
+    assert.equal(run("52e35d6c80").sub, "audio");
+    // ErgoNames: kind only in R7 of the mint box.
+    assert.equal(run("ad0a0ebd16").sub, "collection");
+    const bare = run("ad0a0ebd16", undefined, true);
+    assert.equal(bare.sub, undefined);
+    assert.ok(bare.say.ru.includes("выпустил 1 000 000 000 ErgoNames"), bare.say.ru);
+    const noKind = run("0031153bad", { ...ctxOf(byId("0031153bad")), token: () => ({ name: "BFT Rally 0839", decimals: 0 }) }, true);
+    assert.equal(noKind.sub, undefined);
+    assert.ok(!noKind.say.ru.includes("изображение"), noKind.say.ru);
+  });
+  it("a wallet's mint into one other address says where it went", () => {
+    const m = run("02166684ed");
+    assert.equal(m.byContract, undefined);
+    assert.ok(m.say.ru.endsWith("→ 26DF…bvzY"), m.say.ru);
+  });
+});
+
+describe("burns of many tokens", () => {
+  it("counts them and names the biggest groups, no amounts", () => {
+    const g = byId("6a60d22820");
+    const m = classifyTxMeaning(txOf(g), ctxOf(g));
+    assert.equal(m.gave.length, 11);
+    assert.ok(m.say.ru.endsWith("сжёг 11 токенов: 8 × NETA Stake Key, 2 × ergopad Stake Key и ещё 1"), m.say.ru);
+    // Token ids order the list, never the boxes.
+    const ids = m.gave.map((a) => a.token!);
+    assert.deepEqual(ids, [...ids].sort());
+  });
+  it("one name, one unit each: «11 × NAME»", () => {
+    const g = byId("6a60d22820");
+    const ctx: MeaningCtx = { ...ctxOf(g), token: () => ({ name: "NETA Stake Key", decimals: 0 }) };
+    const m = classifyTxMeaning(txOf(g), ctx);
+    assert.ok(m.say.ru.endsWith("сжёг 11 × NETA Stake Key"), m.say.ru);
+    assert.ok(m.say.en.endsWith("burned 11 × NETA Stake Key"), m.say.en);
+  });
+  it("a name shared by tokens of other amounts is counted in brackets", () => {
+    const g = byId("49ce119120");
+    const m = classifyTxMeaning(txOf(g), ctxOf(g));
+    assert.ok(m.say.ru.includes("сжёг 14 токенов: ClaimRSN.tech (3), MiGoreng и ещё 10"), m.say.ru);
+  });
+});
+
+describe("a contract nobody knows paid wallets that did not sign", () => {
+  const run = (id: string) => {
+    const g = byId(id);
+    return classifyTxMeaning(txOf(g), ctxOf(g));
+  };
+  it("the contract is the subject, the signer only set it off", () => {
+    const m = run("fff50ff7ab");
+    assert.equal(m.action, "contract-call");
+    assert.equal(m.sub, "payout");
+    assert.equal(m.conf, "unknown");
+    assert.ok(m.say.ru.startsWith("Контракт 2x45…VsAy выплатил 167.60 NETA"), m.say.ru);
+    assert.ok(m.say.ru.endsWith("→ 9h6Q…P79T; запустил 9gUi…cGoU"), m.say.ru);
+    assert.equal(sayMeaning(compactMeaning(m), "ru"), m.say.ru);
+    assert.equal(sayMeaning(compactMeaning(m), "en"), m.say.en);
+  });
+  it("what the signer funded is not the contract's payout", () => {
+    // 9hod… put the receivers' box ERG in: only the SPF is the contract's.
+    const m = run("0152716536");
+    assert.equal(m.gave.length, 1);
+    assert.ok(m.gave[0]!.token);
+    assert.equal(m.count, 10);
+  });
+  it("only what the paying contract itself lost; no signer = an ERG-only taker is left out", () => {
+    // The ERG came from another script, and 9gqr… took only ERG: the NETA withdrawal alone.
+    const m = run("9aa4cd69ba");
+    assert.equal(m.gave.length, 1);
+    assert.equal(m.count, 1);
+    assert.ok(m.say.ru.endsWith("выплатил 20 634.62 NETA → 9htS…nyeT"), m.say.ru);
+    // A bare tip to whoever built a contract-only tx stays a plain contract call.
+    assert.equal(run("3f8a9d6918").sub, undefined);
+  });
+  it("the receiver's own page says «Получено» from the contract; the trigger's does not", () => {
+    const m = compactMeaning(run("fff50ff7ab"));
+    const to = m.counterparty!;
+    const own = meaningOwnerRow(m, to, "ru");
+    assert.equal(own.word, "Получено");
+    assert.equal(own.from?.addr, m.actor);
+    const trig = meaningOwnerRow(m, m.feePayer!, "ru", "5000000");
+    assert.notEqual(trig.word, "Получено");
+    // Three receivers: no counterparty, a gain on the address page is enough.
+    const many = compactMeaning(run("03084dd1ba"));
+    const rcv = byId("03084dd1ba").outputs.find((b) => b.address?.startsWith("9fFnJT"))!.address!;
+    assert.equal(meaningOwnerRow(many, rcv, "ru", "1000000").word, "Получено");
+  });
 });
 
 describe("tx meaning: rules", () => {

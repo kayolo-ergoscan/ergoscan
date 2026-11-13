@@ -32,7 +32,8 @@ export type MeaningTx = {
   outputCount?: number | null;
 };
 
-export type MeaningTokenMeta = { name?: string | null; decimals?: number | null };
+/** kind: the EIP-4 type the indexer read off the mint (tokens.nft_kind: image, audio, video, collection…). */
+export type MeaningTokenMeta = { name?: string | null; decimals?: number | null; kind?: string | null };
 
 /** A display name for a wallet or service address (exchange, mining pool, foundation). */
 export type MeaningName = { name: string; category?: string | null };
@@ -105,8 +106,12 @@ export type TxMeaning = {
   label?: string;
   /** Oracle pair, or the pool pair of a new pool. */
   pair?: string;
-  /** Second number for the phrase (boxes out on a consolidation). */
+  /** Second number for the phrase (boxes out on a consolidation, addresses that shared the rent). */
   count2?: number;
+  /** The one amount each receiver got, present only when all got the same («по 1.00»). */
+  each?: MeaningAsset;
+  /** The actor is a contract (no wallet signed): the phrase says «Контракт 2Bgo…». */
+  byContract?: boolean;
   /** Which rule answered (consensus, oracle, pools, wallets…), for «Как определили». */
   rule: string;
   say: { ru: string; en: string };
@@ -141,6 +146,11 @@ export type MeaningPhraseInput = {
   label?: string;
   pair?: string | null;
   sub?: string;
+  each?: MeaningAssetLike;
+  byContract?: boolean;
+  /** Who paid the network fee: the full form has fee, the list form feePayer (only when not the actor). */
+  fee?: { payer: string | null };
+  feePayer?: string | null;
 };
 
 /**
@@ -175,4 +185,8 @@ export type CompactMeaning = {
   sub?: string;
   label?: string;
   pair?: string;
+  /** The one amount each receiver got, when all got the same. */
+  each?: MeaningAssetLike;
+  /** The actor is a contract, not a wallet that signed. Present only when true. */
+  byContract?: true;
 };

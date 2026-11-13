@@ -8,7 +8,7 @@ import { sayLines, toAsset } from "./summary.js";
 import type { CompactMeaning, MeaningAssetLike, MeaningCtx, MeaningTx, TxMeaning } from "./types.js";
 import { MEANING_VOCAB, isServiceAction } from "./vocab.js";
 
-export const TX_MEANING_VERSION = 4;
+export const TX_MEANING_VERSION = 5;
 
 export function classifyTxMeaning(tx: MeaningTx, ctx: MeaningCtx = {}): TxMeaning {
   const f = readFacts(tx);
@@ -56,6 +56,8 @@ export function classifyTxMeaning(tx: MeaningTx, ctx: MeaningCtx = {}): TxMeanin
   if (d.label) m.label = d.label;
   if (d.pair) m.pair = d.pair;
   if (d.count2 != null) m.count2 = d.count2;
+  if (d.each) m.each = toAsset(d.each[0], d.each[1], ctx);
+  if (d.byContract) m.byContract = true;
   // The phrase is built from the meaning alone, so lists (CompactMeaning) get the same words.
   m.say = sayLines(m);
   return m;
@@ -104,10 +106,13 @@ export function compactMeaning(m: TxMeaning): CompactMeaning {
   if (m.sub) c.sub = m.sub;
   if (m.label) c.label = m.label;
   if (m.pair) c.pair = m.pair;
+  if (m.each) c.each = compactAsset(m.each);
+  if (m.byContract) c.byContract = true;
   return c;
 }
 
 export { readFacts, multisigOf, shortAddr } from "./facts.js";
+export { rentMarkOf, rentOutIndex, type RentSpendTx } from "./rent-spend.js";
 export { assetLabel, assetText, extraNote, formatAmount, sayLines, sayMeaning } from "./summary.js";
 export { meaningOwnerRow, meaningView, type MeaningOwnerRow, type MeaningView, type MeaningViewRole } from "./perspective.js";
 export {

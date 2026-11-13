@@ -8,6 +8,7 @@
  * 5. wallet moves: send / multisend / self / consolidate;
  * 6. fallback: contract call / sent to contract.
  */
+import { nftKindFromR7 } from "../eip4-nft.js";
 import { p2pkAddressFromCompressedPubkey } from "../oracle-pools.js";
 import { chainLabel } from "../rosen-chains.js";
 import { extractEventFromRegisters, parseCollCollByte } from "../rosen-event.js";
@@ -54,8 +55,12 @@ export type Draft = {
   sub?: string;
   /** Second number for the phrase (boxes out on a consolidation, blocks on a payout). */
   count2?: number;
+  /** The one amount every receiver got, when all got the same (a split, a token handout). */
+  each?: [AssetKey, bigint];
   /** The fee was paid by someone the phrase does not name (executor). */
   feeHidden?: boolean;
+  /** The actor is a contract, not a wallet that signed («Контракт 2Bgo…»). */
+  byContract?: boolean;
 };
 
 type Rule = (f: Facts, ctx: MeaningCtx) => Draft | null;
@@ -168,26 +173,43 @@ const ruleConsensus: Rule = (f, ctx) => {
     };
   }
   if (f.tx.rent) {
-    // Old boxes spent by the miner; the one who ends up with more ERG collected the rent.
+    // Old boxes spent by the miner; whoever ends up with more ERG took the rent. Several takers
+    // (a shared payout group) are said as a group: the sum, and the share when all are equal.
+    const takers = [...f.net]
+      .filter(([, bag]) => (bag.get(ERG) ?? 0n) > 0n)
+      .sort((a, b) => (a[0] < b[0] ? -1 : 1));
     let collector: string | null = null;
     let gain = 0n;
-    for (const [addr, bag] of [...f.net].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
-      const g = bag.get(ERG) ?? 0n;
+    let total = 0n;
+    for (const [addr, bag] of takers) {
+      const g = bag.get(ERG)!;
+      total += g;
       if (g > gain) {
         gain = g;
         collector = addr;
       }
     }
-    return {
+    // Tokens swept out of the old boxes: what any address ended up with more of.
+    const swept: Bag = new Map();
+    for (const [, bag] of f.net) for (const [k, v] of bag) if (k !== ERG && v > 0n) addInto(swept, k, v);
+    const tokens = positive(swept);
+    const split = takers.length >= 2;
+    const shares = new Set(takers.map(([, bag]) => bag.get(ERG)!));
+    const d: Draft = {
       action: "rent",
       protocol: "ergo",
       conf: "exact",
-      actor: collector,
+      actor: split ? null : collector,
       count: f.ins.length,
-      got: gain ? [[ERG, gain]] : [],
+      got: [...((split ? total : gain) ? [[ERG, split ? total : gain] as [AssetKey, bigint]] : []), ...tokens],
       sub: f.tx.rent === "rent-renew" ? "renew" : "collect",
       why: [{ k: "rent", v: f.tx.rent, n: f.ins.length }],
     };
+    if (split) {
+      d.count2 = takers.length;
+      if (shares.size === 1) d.each = [ERG, [...shares][0]!];
+    }
+    return d;
   }
   const locks = f.ins.filter((b) => b.role?.role === "reward-lock");
   if (locks.length && f.ins.every((b) => !b.role || b.role.p === "ergo")) {
@@ -1037,23 +1059,64 @@ const ruleKnownContract: Rule = (f) => {
 
 // ── 4. issue and burn ───────────────────────────────────────────────────────
 
+/** The whole supply a Long holds: a contract's service token, not something to count. */
+const LONG_MAX = 9_223_372_036_854_775_807n;
+const ART_KINDS: ReadonlySet<string> = new Set(["image", "audio", "video"]);
+
+/**
+ * The EIP-4 kind of a new token: the index's tokens.nft_kind (lists have it), else R7 of a box
+ * that carries the token (the tx page has registers). R7 counts only as the exact 2-byte EIP-4 tag.
+ */
+function mintKind(f: Facts, ctx: MeaningCtx, id: string): string | null {
+  const known = ctx.token?.(id)?.kind;
+  if (known) return known;
+  for (const b of stable(f.outs.filter((o) => o.assets.has(id)))) {
+    const r7 = regHex(b.raw.additionalRegisters?.["R7"]);
+    const kind = r7.length === 8 && r7.startsWith("0e02") ? nftKindFromR7(r7) : null;
+    if (kind) return kind;
+  }
+  return null;
+}
+
 const ruleIssue: Rule = (f, ctx) => {
   if (!f.minted.size) return null;
   const [id, amt] = [...f.minted].sort((a, b) => (a[1] > b[1] ? -1 : a[1] < b[1] ? 1 : a[0] < b[0] ? -1 : 1))[0]!;
-  const dec = ctx.token?.(id)?.decimals ?? 0;
+  const meta = ctx.token?.(id);
+  const dec = meta?.decimals ?? 0;
   const nft = amt === 1n && !dec;
   const unknownScript = stable(f.ins.filter((b) => !b.wallet && !b.fee && !b.role))[0];
-  // Where the new token landed: the issuer, unless it went straight to someone else.
+  // The issuer is the wallet that signed. Without one, the contract whose box id the token took.
+  const mintBox = f.ins.find((b) => b.boxId === id && !b.fee);
   let actor = f.payer;
+  let byContract = false;
+  if (!actor && mintBox) {
+    actor = mintBox.address;
+    byContract = !mintBox.wallet;
+  }
   if (!actor) for (const [addr, bag] of f.net) if ((bag.get(id) ?? 0n) > 0n) actor = addr;
+  // «→ Z»: one other address holds all of the new token.
+  const holders = [...f.net].filter(([, bag]) => (bag.get(id) ?? 0n) > 0n);
+  const only = holders.length === 1 && holders[0]![0] !== actor && holders[0]![1].get(id) === amt ? holders[0]![0] : null;
+  const kind = mintKind(f, ctx, id);
+  let sub: string | undefined;
+  if (amt === LONG_MAX) sub = "service";
+  else if (kind === "collection") sub = "collection";
+  else if (nft && kind && ART_KINDS.has(kind)) sub = kind;
+  else if (nft && !kind && !meta?.name?.trim()) {
+    // An unnamed single unit kept by a script: the id token of that contract's box.
+    const keptByScript = f.outs.some((b) => b.assets.has(id) && !b.wallet && !b.fee);
+    if (keptByScript) sub = "id";
+  }
   return {
     action: nft ? "nft-mint" : "token-issue",
     protocol: null,
     conf: "exact",
     actor,
     got: [[id, amt]],
-    secondary: unknownScript ? ["contract-call"] : [],
-    counterparty: unknownScript?.address ?? null,
+    secondary: unknownScript && unknownScript.address !== actor ? ["contract-call"] : [],
+    counterparty: only,
+    ...(sub ? { sub } : {}),
+    ...(byContract ? { byContract: true } : {}),
     why: [{ k: "minted", v: id }],
   };
 };
@@ -1068,16 +1131,79 @@ const ruleBurn: Rule = (f) => {
     protocol: null,
     conf: "exact",
     actor: f.payer,
-    gave: [...f.burned].map(([k, v]): [AssetKey, bigint] => [k, v]),
-    why: [...f.burned.keys()].map((id) => ({ k: "burned", v: id })),
+    // By token id: the box order is not trusted.
+    gave: [...f.burned].sort((a, b) => (a[0] < b[0] ? -1 : 1)),
+    why: [...f.burned.keys()].sort().map((id) => ({ k: "burned", v: id })),
   };
 };
 
 // ── 5–6. contracts nobody knows, wallet moves ───────────────────────────────
 
+/**
+ * A contract nobody knows paid wallets that did not sign: «Контракт 2x45… выплатил … → 9hPC…».
+ * An asset counts only when the signer put none of it in (ERG: beyond the fee) and the paying
+ * contract itself lost at least what the receivers got; no receiver may have given anything.
+ * A wallet that got a token the signer paid in, or more than box ERG the signer paid in, is the
+ * signer's receiver (a contract only covered the fee). With no signer at all, a wallet that took
+ * only ERG is likely whoever built the tx: not a payout.
+ */
+function contractPayout(f: Facts, payer: string | null): Draft | null {
+  if (f.truncated) return null;
+  const gainers = walletGainers(f, new Set(payer ? [payer] : []));
+  const bagOfAddr = (a: string) => f.net.get(a) ?? new Map<AssetKey, bigint>();
+  if (gainers.some((a) => [...bagOfAddr(a).values()].some((v) => v < 0n))) return null;
+  const tokenTaker = (a: string) => [...bagOfAddr(a)].some(([k, v]) => k !== ERG && v > 0n);
+  const payerNet = payer ? netOf(f, payer) : new Map<AssetKey, bigint>();
+  const funded = (k: AssetKey) => -(payerNet.get(k) ?? 0n) - (k === ERG ? f.feeNano : 0n) > 0n;
+  const signersOwn = (a: string) =>
+    [...bagOfAddr(a)].some(([k, v]) => {
+      if (v <= 0n || !funded(k)) return false;
+      if (k !== ERG) return true;
+      const boxes = BigInt(Math.max(1, f.outs.filter((b) => b.address === a).length));
+      return v > DUST_PER_BOX * boxes;
+    });
+  const receivers = (payer ? gainers : gainers.filter(tokenTaker)).filter((a) => !signersOwn(a));
+  if (!receivers.length) return null;
+  const total: Bag = new Map();
+  for (const a of receivers) for (const [k, v] of bagOfAddr(a)) if (v > 0n) total.set(k, (total.get(k) ?? 0n) + v);
+  const scripts = [...new Set(f.ins.filter((b) => !b.wallet && !b.fee && !b.role).map((b) => b.address))].sort();
+  const lossOf = (addr: string, k: AssetKey) => {
+    const v = f.net.get(addr)?.get(k) ?? 0n;
+    return v < 0n ? -v : 0n;
+  };
+  // Assets the signer did not fund, by id (tokens first is the dust order's job).
+  const open = [...total].filter(([k]) => !funded(k)).sort((a, b) => (a[0] < b[0] ? -1 : 1));
+  if (!open.length) return null;
+  // The payer: the contract that lost the most of the first token paid (else of ERG).
+  const lead = (open.find(([k]) => k !== ERG) ?? open[0]!)[0];
+  const actor = [...scripts].sort((a, b) => {
+    const d = lossOf(b, lead) - lossOf(a, lead);
+    return d > 0n ? 1 : d < 0n ? -1 : a < b ? -1 : 1;
+  })[0];
+  if (!actor) return null;
+  const paid: Amounts = open.filter(([k, v]) => lossOf(actor, k) >= v);
+  if (!paid.length) return null;
+  const keys = new Set(paid.map(([k]) => k));
+  const to = receivers.filter((a) => [...bagOfAddr(a)].some(([k, v]) => keys.has(k) && v > 0n));
+  return {
+    action: "contract-call",
+    protocol: null,
+    conf: "unknown",
+    actor,
+    byContract: true,
+    sub: "payout",
+    count: to.length,
+    counterparty: to.length === 1 ? to[0]! : null,
+    gave: paid,
+    why: [{ k: "spent-unknown", v: f.ins.find((b) => b.address === actor)?.raw.templateHash ?? actor }],
+  };
+}
+
 const ruleUnknownContract: Rule = (f) => {
   const script = stable(f.ins.filter((b) => !b.wallet && !b.fee && !b.role))[0];
   if (!script) return null;
+  const payout = contractPayout(f, f.payer);
+  if (payout) return payout;
   const actor = f.payer;
   const { gave, got } = actorSides(f, actor);
   return {
@@ -1091,6 +1217,60 @@ const ruleUnknownContract: Rule = (f) => {
     why: [{ k: "spent-unknown", v: script.raw.templateHash ?? script.address }],
   };
 };
+
+/**
+ * What kind of multi-send, from facts only: the payer's names-book entry (an exchange, a pool's
+ * payout wallet), else what the receivers got: NFTs one each, one token with ERG dust, the same
+ * ERG to all, different ERG amounts. Anything mixed keeps the plain words. Never a purpose.
+ */
+function multisendKind(
+  f: Facts,
+  ctx: MeaningCtx,
+  payer: string,
+  receivers: string[]
+): Partial<Draft> {
+  const category = ctx.nameOf?.(payer)?.category;
+  if (category === "exchange") return { sub: "exchange" };
+  if (category === "mining-pool") return { sub: "pool" };
+  // Cut short, or something also went into a contract: the receivers' amounts are not the whole story.
+  const scriptGained = f.outs.some(
+    (b) => !b.wallet && !b.fee && [...(f.net.get(b.address) ?? new Map<AssetKey, bigint>()).values()].some((v) => v > 0n)
+  );
+  // Another address paid in as well: the payout is not the payer's alone.
+  const coFunded = [...f.net].some(([a, bag]) => a !== payer && [...bag.values()].some((v) => v < 0n));
+  if (f.truncated || scriptGained || coFunded) return {};
+  const bags = receivers.map((a) => f.net.get(a) ?? new Map<AssetKey, bigint>());
+  const ergOf = (bag: Bag) => {
+    const v = bag.get(ERG) ?? 0n;
+    return v > 0n ? v : 0n;
+  };
+  const tokenSet = new Set<AssetKey>();
+  for (const bag of bags) for (const [k, v] of bag) if (k !== ERG && v > 0n) tokenSet.add(k);
+  const tokens = [...tokenSet].sort();
+  let ergTotal = 0n;
+  for (const bag of bags) ergTotal += ergOf(bag);
+  if (tokens.length) {
+    // Tokens to every receiver and only the ERG their boxes need: a token handout.
+    const dust = receivers.every((a, i) => {
+      const boxes = Math.max(1, f.outs.filter((b) => b.address === a && b.tokenIds.length).length);
+      return ergOf(bags[i]!) <= DUST_PER_BOX * BigInt(boxes);
+    });
+    const each = (k: AssetKey) => bags.map((bag) => bag.get(k) ?? 0n);
+    if (!dust || !bags.every((bag) => tokens.some((k) => (bag.get(k) ?? 0n) > 0n))) return {};
+    const totals: Amounts = tokens.map((k) => [k, each(k).reduce((s, v) => s + (v > 0n ? v : 0n), 0n)]);
+    const tail: Amounts = ergTotal ? [[ERG, ergTotal]] : [];
+    const nft = totals.every(([k, v]) => v === 1n && !(ctx.token?.(k)?.decimals ?? 0));
+    if (nft && tokens.length >= 2) return { sub: "nft", count2: tokens.length, gave: [...totals, ...tail] };
+    if (tokens.length !== 1) return {};
+    const [k] = tokens as [AssetKey];
+    const shares = new Set(each(k));
+    return { sub: "airdrop", gave: [...totals, ...tail], ...(shares.size === 1 ? { each: [k, [...shares][0]!] as [AssetKey, bigint] } : {}) };
+  }
+  const shares = new Set(bags.map(ergOf));
+  if (!ergTotal || shares.has(0n)) return {};
+  if (shares.size === 1) return { sub: "split", gave: [[ERG, ergTotal]], each: [ERG, [...shares][0]!] };
+  return { sub: "batch", gave: [[ERG, ergTotal]] };
+}
 
 const ruleWallets: Rule = (f, ctx) => {
   const payer = f.payer;
@@ -1129,7 +1309,8 @@ const ruleWallets: Rule = (f, ctx) => {
   const { gave } = sides(net);
   if (receivers.length >= 3 || (f.truncated && (f.tx.outputCount ?? 0) > 4)) {
     const count = f.truncated ? Math.max(receivers.length, (f.tx.outputCount ?? 0) - 2) : receivers.length;
-    return { action: "multisend", protocol: null, conf: "flow", actor: payer, count, gave, secondary: burnt, why };
+    const base: Draft = { action: "multisend", protocol: null, conf: "flow", actor: payer, count, gave, secondary: burnt, why };
+    return { ...base, ...multisendKind(f, ctx, payer, receivers) };
   }
   // The receiver with the most ERG is the counterparty; a second one is listed apart.
   const sorted = [...receivers].sort((a, b) => {
@@ -1177,11 +1358,59 @@ export const RULES: ReadonlyArray<[string, Rule]> = [
   ["wallets", ruleWallets],
 ];
 
+/**
+ * ERG a token box carries just to exist: a wallet puts 0.001–0.0011 ERG next to a token. At or
+ * under this per box, the ERG is not what moved; the token is.
+ */
+export const DUST_PER_BOX = 1_100_000n;
+
+/** Boxes that carry any of these tokens, to `owner` (or to anyone but `owner`), at least one. */
+function tokenBoxes(f: Facts, tokens: AssetKey[], owner: string | null, toOwner: boolean): number {
+  const n = f.outs.filter(
+    (b) => !b.fee && (owner == null || (b.address === owner) === toOwner) && tokens.some((t) => b.assets.has(t))
+  ).length;
+  return Math.max(1, n);
+}
+
+/** ERG dust next to tokens goes to the tail: «24.10 rpnADA и 0.0003 ERG», not the other way round. */
+function dustLast(list: Amounts | undefined, boxes: (tokens: AssetKey[]) => number): Amounts | undefined {
+  if (!list || list.length < 2) return list;
+  const erg = list.find(([k]) => k === ERG);
+  const tokens = list.filter(([k]) => k !== ERG).map(([k]) => k);
+  if (!erg || !tokens.length || erg[1] > DUST_PER_BOX * BigInt(boxes(tokens))) return list;
+  return [...list.filter(([k]) => k !== ERG), erg];
+}
+
+function dustOrder(f: Facts, d: Draft): Draft {
+  const out: Draft = { ...d };
+  // Rent is ERG taken from old boxes: the ERG is the point, not dust.
+  if (d.action !== "rent") out.got = dustLast(d.got, (t) => tokenBoxes(f, t, d.actor, true));
+  out.gave = dustLast(d.gave, (t) => tokenBoxes(f, t, d.actor, false));
+  if (d.extra?.length) {
+    // Per receiver, in the receivers' own order: only the ERG entry moves behind its tokens.
+    const by = new Map<string, NonNullable<Draft["extra"]>>();
+    for (const e of d.extra) {
+      const k = `${e.role ?? ""}|${e.to}`;
+      by.set(k, [...(by.get(k) ?? []), e]);
+    }
+    out.extra = [...by.values()].flatMap((rows) => {
+      const to = rows[0]!.to;
+      const order = dustLast(
+        rows.map((e) => [e.key, e.amount] as [AssetKey, bigint]),
+        (t) => tokenBoxes(f, t, to, true)
+      )!;
+      return order.map(([k]) => rows.find((e) => e.key === k)!);
+    });
+  }
+  return out;
+}
+
 /** First rule that answers wins; a mint under another action is added as secondary. */
 export function runRules(f: Facts, ctx: MeaningCtx): Draft & { rule: string } {
   for (const [name, rule] of RULES) {
-    const d = rule(f, ctx);
-    if (!d) continue;
+    const found = rule(f, ctx);
+    if (!found) continue;
+    const d = dustOrder(f, found);
     const secondary = new Set(d.secondary ?? []);
     if (f.minted.size && !["token-issue", "nft-mint", "pool-create", "name-register", "block-reward"].includes(d.action)) {
       const [id, amt] = [...f.minted].sort((a, b) => (a[0] < b[0] ? -1 : 1))[0]!;

@@ -28,7 +28,7 @@ import {
 } from "@ergoscan/shared";
 import { laterTs } from "../lib/later-ts.js";
 import { stampTemplateHashes } from "../lib/txTemplateHash.js";
-import { meaningForPage, meaningsByIds, mempoolMeaningSlim, type CompactMeaning, type TxMeaning } from "../lib/txMeaning.js";
+import { meaningForPage, meaningsByIds, mempoolMeaningSlim, mempoolRentMark, type CompactMeaning, type TxMeaning } from "../lib/txMeaning.js";
 import { boxMeaningFields, loadBoxMeanings } from "../lib/boxMeaning.js";
 import { pageLimit } from "../lib/page-limit.js";
 import { addressFromErgoTree, ergoTreeFromAddress, normErgoTree } from "../lib/ergoAddress.js";
@@ -825,7 +825,7 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
       const tokenMeta = await tokenMetaForIo(inputs, outputs);
       const lock = lockFromIo(inputs, outputs, mem.dataInputs);
       const meaning = await meaningForPage(
-        { id, inputs: inputs.map(meaningBox), outputs: outputs.map(meaningBox) },
+        { id, inputs: inputs.map(meaningBox), outputs: outputs.map(meaningBox), rent: mempoolRentMark(mem) },
         tokenMeta
       );
       return res.json({
