@@ -9,6 +9,8 @@
  *   chain   = read from live boxes that hold the protocol's NFT or sit at its published address;
  *   derived = seen spent beside a known pool and paying the order owner (evidence, not a publication);
  *   guess   = shape and token names only; the rule marks the answer conf "guess".
+ *   code    = compiled from the protocol's own contract source (cruxfinance/crux-contracts at
+ *             677a2ed, compiled/ and verification/contracts/) and seen on live mainnet boxes.
  */
 import { LOCK_BY_ADDRESS } from "../lock-addresses.js";
 import {
@@ -112,7 +114,7 @@ export type ContractRole =
   | "payout"
   | "upkeep";
 
-export type RoleSource = "names" | "chain" | "derived" | "guess";
+export type RoleSource = "names" | "chain" | "derived" | "guess" | "code";
 
 export type RoleEntry = {
   p: ProtocolId;
@@ -148,11 +150,25 @@ const TEMPLATE_ROWS: Row[] = [
   ["3c09deff3b5f49329149d18e02aab675ef6957bf6559a5c7dba817fee883fb3e", "ergodex", "pool", "ErgoDex AMM Pool (token/token)", "names"],
   ["83d0e88be351507dde3d6adef042c380af82072fb791ae5c5d4e3b711fd3b4cd", "ergodex", "pool", "ErgoDex AMM Pool (older)", "chain"],
   ["64607fe0fe3c0e5fd7c41ca1f1d65e48270da2f98e9a17049bfb2172356b5b5f", "ergodex", "pool", "ErgoDex V3 position", "chain", "ErgoDex V3"],
+  // Earlier CL shell generation (crux-contracts compiled/cl-shell.ergotree.hex), retired; boxes h1879687–1904117.
+  ["3711297e58fc65a14db87166ed19d5c1202a5484990066b417c165aa842c6e88", "ergodex", "pool", "ErgoDex V3 position (earlier shell)", "code", "ErgoDex V3"],
   ["36d1944fe6d743312e93541a1daf5592519772310ce924b2ec10e3f9b450e13a", "ergodex", "order", "ErgoDex swap order", "derived"],
   ["03ef002b73a894198c7c9a4332ba28ca000dc6c40cb801f0c719940d9a6a8f6b", "ergodex", "order", "ErgoDex swap order", "derived"],
 
-  // Crux pool (chain: spent and recreated with the pool NFT in routed swaps).
-  ["c3c45fea8455be2bc91785cbcaa4a41913e9866e1604aee135e283381e6ef3b1", "crux", "pool", "Crux pool", "chain"],
+  // ErgoDex constant-product pools with a fee tier in R4 (crux-contracts cp-pool-n2t.es /
+  // cp-pool-t2t.es, mainnet-staging trees). Their NFT and LP tokens are named "ErgoDex Pool …" / "ErgoDex LP …".
+  ["c3c45fea8455be2bc91785cbcaa4a41913e9866e1604aee135e283381e6ef3b1", "ergodex", "pool", "ErgoDex CP pool (ERG/token)", "code", "ErgoDex CP"],
+  ["d685202ad30554f9a0b0b32b0b3cab866f8786a14f87b91b1fbfbab422674d0c", "ergodex", "pool", "ErgoDex CP pool (token/token)", "code", "ErgoDex CP"],
+  // CL governance (crux-contracts cl-config.es, cl-config-source.es, cl-config-approval.es).
+  ["a2c854d1d54f0d71ecf922f3c465dfd4de9afda46b178f60a382df4d882cb364", "ergodex", "upkeep", "ErgoDex CL config", "code"],
+  ["b8c7239f3f5f1f9bcc5223fb62c17c1dd6dd00875537b6aef6a31c149eb81715", "ergodex", "upkeep", "ErgoDex CL config source", "code"],
+  ["1a50aab5451337b8dea00c3fde51069f0b07f9ab988e47325db9719f78a28332", "ergodex", "upkeep", "ErgoDex governance approval", "code"],
+
+  // Crux limit orders (crux-contracts limit-order*.es, EIP-5 templates) and the v2 fee box.
+  ["5bf80359e972819567d53d443126d8cc58bed7e8fe57dfb3770b09a84fa68aae", "crux", "order", "Crux limit order v1", "code"],
+  ["7a55e3f4a0c195e5570de7832becda0d52b676d0a9a29a27b6e84b5a28b8106d", "crux", "order", "Crux limit order v2", "code"],
+  ["d33a869b6abd7d98a212a9657b27b8f0519eab950e6fb026849262f8e34f5438", "crux", "order", "Crux limit order fee", "code"],
+  ["cb3087cb229ef0ff020553ecf398908cff6de06cb21888a7cfc4565060ff4acd", "crux", "order", "Crux limit order v3", "code"],
 
   // LithosDex pools (chain; tx-action LITHOS_SWAP) and provision (lithos.json).
   ["2de640e37a49cc9d95a08f2678da9f5e9aba56e08dfbc0662a64d225093156e3", "lithosdex", "pool", "LithosDex pool", "chain"],

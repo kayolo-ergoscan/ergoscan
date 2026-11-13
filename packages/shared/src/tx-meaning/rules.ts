@@ -314,7 +314,14 @@ function hasLpSupply(box: FBox): boolean {
 function poolMove(box: FBox, outs: FBox[]): PoolMove | null {
   const nfts = [...box.assets].filter(([, amt]) => amt === 1n).map(([id]) => id).sort();
   const next = outs.find((o) => o.role?.p === box.role?.p && nfts.some((id) => o.assets.get(id) === 1n));
-  if (!next) return null;
+  if (!next) {
+    // A CL position closed: the box is spent without a successor and its money leaves the contract.
+    if (hasLpSupply(box) || box.value === 0n) return null;
+    const delta = minus(new Map(), bagOf(box));
+    for (const id of nfts) delta.delete(id);
+    const venue = box.role!.venue ?? PROTOCOL_NAMES[box.role!.p].en;
+    return { box, venue, kind: "lp-remove", delta, lp: null };
+  }
   const nft = nfts.find((id) => next.assets.get(id) === 1n)!;
   const delta = minus(bagOf(next), bagOf(box));
   delta.delete(nft);
@@ -349,9 +356,16 @@ const rulePoolCreate: Rule = (f, ctx) => {
   for (const out of stable(f.outs)) {
     if (out.role?.role !== "pool") continue;
     const born = [...out.assets].find(([id, amt]) => amt === 1n && f.minted.has(id));
-    if (!born && !out.tokenIds.some((id) => ctx.poolNftIds?.has(id) && f.inputIds.has(id))) continue;
+    // Or the NFT came from an earlier tx and this one mints the LP supply into the new pool.
+    const lpBorn = born ? undefined : [...out.assets].find(([id, amt]) => amt >= 1_000_000_000_000_000n && f.minted.has(id));
+    if (!born && !lpBorn && !out.tokenIds.some((id) => ctx.poolNftIds?.has(id) && f.inputIds.has(id))) continue;
     if (f.ins.some((b) => b.role?.role === "pool" && b.role.p === out.role!.p)) continue;
-    const nft = born?.[0] ?? out.tokenIds.find((id) => ctx.poolNftIds?.has(id)) ?? null;
+    const nft =
+      born?.[0] ??
+      (lpBorn ? [...out.assets].find(([, amt]) => amt === 1n)?.[0] : undefined) ??
+      out.tokenIds.find((id) => ctx.poolNftIds?.has(id)) ??
+      null;
+    const mintedId = born?.[0] ?? lpBorn?.[0] ?? null;
     // Left in the pool: the LP supply (largest amount) and the reserves.
     const rest = [...out.assets].filter(([id]) => id !== nft).sort((a, b) => (a[1] > b[1] ? -1 : 1));
     const tokens = rest.length >= 2 ? rest.slice(1).map(([id]) => id) : rest.map(([id]) => id);
@@ -368,7 +382,7 @@ const rulePoolCreate: Rule = (f, ctx) => {
       venues: [out.role.venue ?? PROTOCOL_NAMES[out.role.p].en],
       pair: pairName(reserves, ctx),
       secondary: [],
-      why: [{ k: "created", v: out.role.label }, ...(nft ? [{ k: "minted", v: nft }] : [])],
+      why: [{ k: "created", v: out.role.label }, ...(mintedId ? [{ k: "minted", v: mintedId }] : [])],
     };
   }
   return null;
@@ -450,8 +464,14 @@ const rulePools: Rule = (f, ctx) => {
   };
 };
 
+/** The order itself names the answer, not a companion box such as the v2 fee box. */
+function orderFirst(boxes: FBox[]): FBox[] {
+  const fee = (b: FBox) => Number(/ fee$/.test(b.role!.label));
+  return [...boxes].sort((a, b) => fee(a) - fee(b));
+}
+
 const ruleOrders: Rule = (f) => {
-  const placed = createdWith(f, (r) => r.role === "order");
+  const placed = orderFirst(createdWith(f, (r) => r.role === "order"));
   if (placed.length && f.payer) {
     const p = placed[0]!.role!.p;
     return {
@@ -459,11 +479,12 @@ const ruleOrders: Rule = (f) => {
       protocol: p,
       conf: "exact",
       actor: f.payer,
-      gave: positive(sumBags(placed)),
+      // A token minted into the order (the v3 order NFT) is not something the owner gave.
+      gave: positive(new Map([...sumBags(placed)].filter(([id]) => !f.minted.has(id)))),
       why: [ROLE_WHY(placed[0]!, "created")],
     };
   }
-  const cancelled = spentWith(f, (r) => r.role === "order");
+  const cancelled = orderFirst(spentWith(f, (r) => r.role === "order"));
   if (cancelled.length) {
     const actor = f.payer ?? bestGainer(f);
     const { got } = actorSides(f, actor);
@@ -847,8 +868,10 @@ const ruleKnownContract: Rule = (f) => {
   const actor = f.payer;
   const extra: NonNullable<Draft["extra"]> = [];
   const { gave, got } = actorSides(f, actor, extra);
+  // An upkeep contract (config, governance, vault) is protocol housekeeping, not a user call.
+  const upkeep = hit.role!.role === "upkeep";
   return {
-    action: spent ? "contract-call" : "to-contract",
+    action: upkeep ? "service" : spent ? "contract-call" : "to-contract",
     protocol: hit.role!.p,
     conf: hit.role!.src === "guess" ? "guess" : "exact",
     actor,
