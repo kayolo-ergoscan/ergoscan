@@ -1,3 +1,4 @@
+import { roleByTemplate } from "@ergoscan/shared";
 import { shortId } from "./format";
 import {
   isFeeAddress,
@@ -30,9 +31,33 @@ export function isP2pkAddress(address: string | null | undefined): boolean {
   return address.startsWith("9") && address.length < 70;
 }
 
+/**
+ * What the page knows about the script at an address besides the book. One address is one
+ * ErgoTree, so a template hash seen on any of its boxes names the address.
+ */
+export type ContractHint = {
+  /** ErgoTree template hash of a box at the address (gateway `templateHash` / `ergoTreeTemplateHash`). */
+  templateHash?: string | null;
+  /** A contract name the gateway already looked up (list rows). */
+  name?: string | null;
+};
+
+/**
+ * The contract registry's name (the labels the tx meaning shows, roleByTemplate) for an address
+ * the book does not name: orders and positions have one address each. A guess is not a name.
+ */
+export function contractName(hint: ContractHint | null | undefined): string | null {
+  if (!hint) return null;
+  const given = hint.name?.trim();
+  if (given) return given;
+  const role = roleByTemplate(hint.templateHash);
+  return role && role.src !== "guess" ? role.label : null;
+}
+
 export function describeParty(
   address: string | null | undefined,
-  isFee = false
+  isFee = false,
+  hint?: ContractHint | null
 ): {
   kind: PartyKind;
   known: string | null;
@@ -67,5 +92,6 @@ export function describeParty(
   if (isP2pkAddress(address)) {
     return { kind: "wallet", known: null, short: shortId(address, 5), book: null };
   }
-  return { kind: "contract", known: null, short, book: null };
+  // A book name always wins; the registry only names a contract the book leaves bare.
+  return { kind: "contract", known: contractName(hint), short, book: null };
 }

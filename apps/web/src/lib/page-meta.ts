@@ -292,14 +292,17 @@ export function addressPageMeta(
   const path = `/address/${address}`;
   if (!data) return missMeta("Address", address, path);
   const book = lookupAddress(data.address);
-  const label = book?.name || shortId(data.address, 8);
-  const title = book?.name ? book.name : `Address ${shortId(data.address, 8)}`;
+  // The gateway's name (ergo-names, else the contract registry by template) when the book has none.
+  const named = book?.name || data.name?.name?.trim() || null;
+  const label = named || shortId(data.address, 8);
+  const title = named ? named : `Address ${shortId(data.address, 8)}`;
   const erg = formatErgFixed(data.balance?.confirmedNanoErg);
   const tokens = data.tokenCount ?? data.balance?.tokens?.length ?? 0;
-  const kind = book?.kind && book.kind !== "unknown" ? ` ${book.kind}` : "";
+  const kindOf = book ? book.kind : data.name?.kind;
+  const kind = kindOf && kindOf !== "unknown" ? ` ${kindOf}` : "";
   return pageMeta({
     title,
-    description: `Ergo${kind} address ${data.address}${book ? ` (${label})` : ""}. Confirmed ${erg}, ${tokens} token${tokens === 1 ? "" : "s"}.`,
+    description: `Ergo${kind} address ${data.address}${named ? ` (${label})` : ""}. Confirmed ${erg}, ${tokens} token${tokens === 1 ? "" : "s"}.`,
     path,
     image: `/og/address/${data.address}`,
   });

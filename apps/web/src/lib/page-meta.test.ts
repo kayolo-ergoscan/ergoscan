@@ -74,6 +74,31 @@ test("address meta prefers the address book name", () => {
   assert.equal(m.alternates?.canonical, `${SITE_URL}/address/${addr}`);
 });
 
+test("address meta takes the gateway's contract name when the book has none", () => {
+  const addr = `Gqst${"x".repeat(120)}`;
+  const m = addressPageMeta(addr, {
+    address: addr,
+    name: {
+      name: "Some position",
+      kind: "contract",
+      project: { id: "ergodex", name: "ErgoDex", category: "other" },
+      by: "ergoscan",
+      via: "template",
+      current: true,
+      until: null,
+      file: "",
+      fileUrl: "",
+      source: "contracts",
+    },
+    balance: { confirmedNanoErg: "0", unconfirmedNanoErg: "0", tokens: [] },
+    unspentBoxes: [],
+    recentTxs: [],
+    tokenCount: 0,
+  });
+  assert.equal(String(m.title).startsWith("Some position"), true);
+  assert.match(String(m.description), /^Ergo contract address .*\(Some position\)\./);
+});
+
 test("token miss is noindex", () => {
   const m = tokenPageMeta("ff".repeat(32), null);
   assert.deepEqual(m.robots, { index: false, follow: false });

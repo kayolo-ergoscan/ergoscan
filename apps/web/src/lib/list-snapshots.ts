@@ -1695,7 +1695,10 @@ export async function fetchAddressesList(opts?: {
   };
 }
 
-/** Name from the ergo-names registry: exact address, NFT anchor, or ErgoTree template. */
+/**
+ * Name from the ergo-names registry: exact address, NFT anchor, or ErgoTree template; else
+ * (source "contracts") the contract registry's name for the template, with no file.
+ */
 export type AddressRegistryName = {
   name: string;
   kind: string;
@@ -1706,6 +1709,8 @@ export type AddressRegistryName = {
   until: number | null;
   file: string;
   fileUrl: string;
+  /** Absent on gateways before the contract registry fallback: read as "ergo-names". */
+  source?: "ergo-names" | "contracts";
 };
 
 export type AddressPageData = {

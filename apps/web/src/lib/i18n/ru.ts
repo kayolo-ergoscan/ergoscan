@@ -1554,6 +1554,7 @@ export const ru: Record<string, string> = {
   "address.type.contract": "Контракт",
   "address.nameByProject": "Имя заявлено проектом",
   "address.nameByErgoscan": "Имя проверено ErgoScan",
+  "address.nameByContract": "Имя дал ErgoScan по шаблону контракта",
   "address.suggestName": "Предложить имя",
   "address.type.miner": "Майнер",
   "address.type.unknown": "Адрес",

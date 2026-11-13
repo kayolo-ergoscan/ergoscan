@@ -17,6 +17,8 @@ export type TxIo = {
   additionalRegisters?: Record<string, unknown> | null;
   creationHeight?: number | null;
   ergoTree?: string | null;
+  /** ErgoTree template hash (the gateway sets it on contract boxes; none on wallets). */
+  templateHash?: string | null;
   index?: number | null;
 };
 
@@ -37,6 +39,8 @@ export type Party = {
   erg: bigint;
   tokens: Map<string, bigint>;
   boxes: PartyBox[];
+  /** Template hash of the party's boxes (one address, one tree), for the contract name. */
+  templateHash?: string | null;
 };
 
 export type SettleKind = "erg" | "pass" | "mint" | "burn" | "mismatch";
@@ -130,6 +134,7 @@ export function groupParties(
       };
       map.set(key, p);
     }
+    if (!p.templateHash && io.templateHash) p.templateHash = io.templateHash;
     const box = boxOf(io);
     p.boxes.push(box);
     p.erg += box.value;
@@ -200,7 +205,25 @@ export type AddrFlow = {
   tokens: Map<string, bigint>;
   from: string[];
   to: string[];
+  /** Contract-registry names of parties the book does not name (gateway `fromNames` / `toNames`). */
+  names?: ReadonlyMap<string, string>;
 };
+
+/** Address → name from the gateway's arrays aligned with `from` / `to`; null when none is named. */
+export function partyNameMap(
+  lists: ReadonlyArray<readonly [unknown, unknown]>
+): Map<string, string> | null {
+  let out: Map<string, string> | null = null;
+  for (const [addrs, names] of lists) {
+    if (!Array.isArray(addrs) || !Array.isArray(names)) continue;
+    addrs.forEach((a, i) => {
+      const n = names[i];
+      if (typeof a !== "string" || !a || typeof n !== "string" || !n.trim()) return;
+      (out ??= new Map()).set(a, n.trim());
+    });
+  }
+  return out;
+}
 
 /** Classify a tx from one address's point of view. No fetch — caller supplies I/O. */
 export function addressFlow(
