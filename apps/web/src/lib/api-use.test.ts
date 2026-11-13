@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { parseApiUse } from "./api-use";
+import { isApiRoute, parseApiUse } from "./api-use";
 
 test("API use keeps counts and drops anything that is not a path total", () => {
   const use = parseApiUse(
@@ -39,4 +39,32 @@ test("a missing snapshot is an empty API card, not a crash", () => {
   assert.equal(use.height, null);
   assert.equal(use.hour, null);
   assert.equal(use.day, null);
+});
+
+test("probe paths from scanners are not listed as API paths", () => {
+  assert.equal(isApiRoute("/api/v1/info"), true);
+  assert.equal(isApiRoute("/v1/network/*"), true);
+  assert.equal(isApiRoute("/v1"), true);
+  assert.equal(isApiRoute("/api/graphql"), true);
+  assert.equal(isApiRoute("/api/v3/.env"), false);
+  assert.equal(isApiRoute("/api-keys.txt"), false);
+  assert.equal(isApiRoute("/v1/.git/config"), false);
+  assert.equal(isApiRoute("/v10/x"), false);
+  const use = parseApiUse(
+    {
+      apiHost: {
+        windows: {
+          "1h": {
+            paths: [
+              { path: "/api/v3/.env", hits: 50 },
+              { path: "/api-keys.txt", hits: 40 },
+              { path: "/api/v1/info", hits: 7 },
+            ],
+          },
+        },
+      },
+    },
+    null
+  );
+  assert.deepEqual(use.hour?.paths, [{ path: "/api/v1/info", hits: 7 }]);
 });

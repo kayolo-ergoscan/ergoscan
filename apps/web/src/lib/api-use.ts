@@ -24,6 +24,15 @@ export type ApiUse = {
   day: ApiUseWindow | null;
 };
 
+/**
+ * Only our own API routes are shown by name. Scanners probe the host for files such as
+ * `/.env` or `/api-keys.txt`; those hits still count in the totals but never appear as paths.
+ */
+export function isApiRoute(path: string): boolean {
+  if (!/^\/(api\/)?v1(\/|$)/.test(path) && path !== "/api/graphql") return false;
+  return !path.split("/").some((seg) => seg.startsWith("."));
+}
+
 function num(v: unknown): number {
   const n = typeof v === "number" ? v : Number(v);
   return Number.isFinite(n) && n >= 0 ? Math.round(n) : 0;
@@ -41,7 +50,7 @@ export function parseApiWindow(raw: unknown): ApiUseWindow | null {
           if (!path) return null;
           return { path, hits: num(r.hits) };
         })
-        .filter((row): row is { path: string; hits: number } => row != null)
+        .filter((row): row is { path: string; hits: number } => row != null && isApiRoute(row.path))
         .slice(0, 6)
     : [];
   return {
