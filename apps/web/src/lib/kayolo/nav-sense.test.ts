@@ -86,3 +86,13 @@ test("trail: a jump of two entries finds the side; an unknown URL is Back and no
   assert.deepEqual(t.pop("/elsewhere"), { dir: -1, seen: false });
   assert.equal(t.current(), "/elsewhere");
 });
+
+test("trail: from the very first entry a jump of two is Forward (nothing is behind it)", () => {
+  const t = createTrail("/a");
+  t.push("/b");
+  t.push("/c");
+  assert.deepEqual(t.pop("/a"), { dir: -1, seen: true });
+  assert.equal(t.current(), "/a");
+  assert.deepEqual(t.pop("/c"), { dir: 1, seen: true });
+  assert.equal(t.current(), "/c");
+});

@@ -22,7 +22,10 @@ export type ClickInput = {
   meta: boolean;
   shift: boolean;
   alt: boolean;
-  /** The click was already handled (a row that opens its own way, a sheet link). */
+  /**
+   * Already prevented when it is first heard. At window capture that is rare (Next's <Link> prevents
+   * later, in its own handler); a click swallowed later is caught by the end-of-dispatch check.
+   */
   prevented: boolean;
   href: string | null;
   target: string | null;
@@ -77,7 +80,8 @@ export function createTrail(start: string) {
         pos += 1;
         dir = 1;
       } else {
-        const back = stack.lastIndexOf(key, pos - 1);
+        // lastIndexOf(key, -1) would search the whole trail: at the start nothing is behind.
+        const back = pos > 0 ? stack.lastIndexOf(key, pos - 1) : -1;
         const fwd = stack.indexOf(key, pos + 1);
         if (fwd > pos && (back < 0 || fwd - pos < pos - back)) {
           pos = fwd;
@@ -122,7 +126,10 @@ function hopOf(a: Element): -1 | 1 | undefined {
 export function startNavSense(): { note(key: string): void; stop(): void } {
   const here = () => locKey(window.location.pathname, window.location.search);
   const trail = createTrail(here());
+  /** A «here» or «aside» click waits for the end of its own dispatch (see onClickEnd). */
+  let held: { e: MouseEvent; a: Element; kind: ClickKind } | null = null;
   const onClick = (e: MouseEvent) => {
+    held = null;
     const a = (e.target as Element | null)?.closest?.("a[href]");
     if (!a) return;
     const kind = clickKind(
@@ -140,7 +147,22 @@ export function startNavSense(): { note(key: string): void; stop(): void } {
       hereNow()
     );
     if (!kind) return;
-    say({ k: "nav:click", kind, el: a, hop: kind === "go" ? hopOf(a) : undefined });
+    // «go» is told at once: the route progress says nav:start inside this same dispatch, and a
+    // swallowed «go» costs nothing (no navigation follows, so no lean and no arrival).
+    if (kind === "go") say({ k: "nav:click", kind, el: a, hop: hopOf(a) });
+    else held = { e, a, kind };
+  };
+  /**
+   * The click's last stop (window, bubble): it got through. A handler that swallowed it (a Tip that
+   * shows itself on the first tap stops it in capture) never lets it reach here, so «уже здесь» and
+   * «aside» are not played for a click that did nothing. (defaultPrevented cannot tell: Next's
+   * <Link> prevents every click it routes.)
+   */
+  const onClickEnd = (e: MouseEvent) => {
+    const h = held;
+    held = null;
+    if (!h || h.e !== e) return;
+    say({ k: "nav:click", kind: h.kind, el: h.a });
   };
   const onPop = () => {
     const to = here();
@@ -152,6 +174,8 @@ export function startNavSense(): { note(key: string): void; stop(): void } {
   // progress (document capture) says `nav:start` from its listener, which must come after this one.
   window.addEventListener("click", onClick, { passive: true, capture: true });
   window.addEventListener("auxclick", onClick, { passive: true, capture: true });
+  window.addEventListener("click", onClickEnd, { passive: true });
+  window.addEventListener("auxclick", onClickEnd, { passive: true });
   window.addEventListener("popstate", onPop);
   return {
     note(key: string) {
@@ -160,6 +184,8 @@ export function startNavSense(): { note(key: string): void; stop(): void } {
     stop() {
       window.removeEventListener("click", onClick, { capture: true });
       window.removeEventListener("auxclick", onClick, { capture: true });
+      window.removeEventListener("click", onClickEnd);
+      window.removeEventListener("auxclick", onClickEnd);
       window.removeEventListener("popstate", onPop);
     },
   };

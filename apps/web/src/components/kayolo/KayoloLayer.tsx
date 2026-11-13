@@ -328,6 +328,8 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
 
   /** The wait faces (§7.1, §7.3): they replace the rest pose while a page is coming. */
   const waitPose = (now: number, face: 1 | -1): Partial<PixelPose> | null => {
+    // «Спит», «Спрятан»: no wait is shown (the eyes stay shut, nothing paints on).
+    if (mode !== "live" && mode !== "calm") return null;
     if (navWait) {
       const t = now - navWait.at;
       if (t >= K.DOOR_SIT_MS) {
@@ -544,7 +546,8 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
     }
     const play = running ? null : sched.next(now);
     if (play && hold) {
-      const name = play.step.act as ActName;
+      // A block offered before the door opened plays at the door as a glance too (13.11 №9).
+      const name: ActName = navWait && /^h\d/.test(play.key) ? "glance" : (play.step.act as ActName);
       const aim = offerAim.get(play.key);
       offerAim.delete(play.key);
       if (play.wake) {
@@ -682,15 +685,23 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
       return ctx && pixelSettling(ctx, "main") ? pixelWake(ctx, "main") : Infinity;
     }
     if (navWait && now - navWait.at < K.DOOR_SIT_MS) {
-      // Pushing the door: every frame of a knock, 20 fps between them (the think face sways).
       const t = now - navWait.at;
-      if (t >= K.DOOR_AFTER_MS && (t - K.DOOR_AFTER_MS) % K.DOOR_KNOCK_MS < 180) return now;
-      return Math.max(now, paintedAt + 1000 / K.GAZE_FPS);
+      if (pixelReduce()) {
+        // A still body (reduced motion): the think face is painted once; then the shrug, then the sit.
+        due = Math.min(due, navWait.at + (navWait.shrugged ? K.DOOR_SIT_MS : K.DOOR_SHRUG_MS));
+      } else {
+        // Pushing the door: every frame of a knock, 20 fps between them (the think face sways).
+        if (t >= K.DOOR_AFTER_MS && (t - K.DOOR_AFTER_MS) % K.DOOR_KNOCK_MS < 180) return now;
+        return Math.max(now, paintedAt + 1000 / K.GAZE_FPS);
+      }
+    }
+    // An in-page wait: the think face sways 2 s at 20 fps, then holds still (no frames however long).
+    if (pageWait && now - pageWait.at < 2000) {
+      if (!pixelReduce()) return Math.max(now, paintedAt + 1000 / K.GAZE_FPS);
+      due = Math.min(due, pageWait.at + 2000);
     }
     if (gaze) due = Math.min(due, gazeUntil);
     if (eyes) due = Math.min(due, eyes.until);
-    // An in-page wait: the think face sways 2 s, then holds still (no frames however long it lasts).
-    if (pageWait && now < pageWait.at + 2000) due = Math.min(due, pageWait.at + 2000);
     if (awaitData) due = Math.min(due, awaitData.next);
     if (missDue) due = Math.min(due, missDue.at);
     if (hoverCand) due = Math.min(due, hoverCand.at + K.HOVER_MS);
@@ -1013,6 +1024,11 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
     } else {
       ladder = page === "b" ? ["hopGlance", "nodGlance", "glance"] : page === "n" ? ["nodGlance", "glance"] : ["glance"];
     }
+    // At the door (a slow page) a block gets only a glance: no hop, and he stays sitting (13.11 №9).
+    if (navWait) {
+      ladder = ["glance"];
+      wakes = false;
+    }
     sched.offer({ key: `h${height}`, prio, ttlMs: ttl, ladder: ladder.map(step), wakes, stir: step("stir") }, now);
   };
 
@@ -1326,7 +1342,8 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
         }
         return;
       case "ui:wait":
-        pageWait = ev.on ? { at: now, to: aimEl(shown(".seg-paper, .detail-tabs")) } : null;
+        // Only while he answers: asleep he must not wake into a think face (and freeze in it).
+        pageWait = ev.on && answering() ? { at: now, to: aimEl(shown(".seg-paper, .detail-tabs")) } : null;
         if (hold) kick();
         return;
       case "nav:start":
@@ -1467,6 +1484,21 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
   document.addEventListener("focusin", onFocus, { passive: true });
   document.addEventListener("copy", onCopy, { passive: true });
   document.addEventListener("keydown", onPaletteKey, { passive: true });
+
+  /** A resize or a zoom with the palette open: the edge moves with the panel, or he goes home. */
+  const onEdgeResize = () => {
+    if (dead || hold?.where !== "edge") return;
+    const now = performance.now();
+    const p = edgePoint(document.querySelector(".search-panel input"));
+    if (!p) {
+      fromEdge(now);
+      return;
+    }
+    walk = null;
+    hold = { ...hold, x: p.x, y: p.y };
+    frame();
+  };
+  window.addEventListener("resize", onEdgeResize, { passive: true });
 
   /* ---------------- input (§2.2) ---------------- */
 
@@ -1616,6 +1648,7 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
       pokeQueued = null;
       grow = null;
       navWait = null;
+      pageWait = null;
       awaitData = null;
       eyes = null;
       if (recolor) color = recolor.to;
@@ -1745,6 +1778,7 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
       document.removeEventListener("focusin", onFocus);
       document.removeEventListener("copy", onCopy);
       document.removeEventListener("keydown", onPaletteKey);
+      window.removeEventListener("resize", onEdgeResize);
       offChoice();
       if (dockRaf) cancelAnimationFrame(dockRaf);
       wide.removeEventListener("change", onWide);
