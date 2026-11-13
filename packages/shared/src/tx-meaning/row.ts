@@ -95,7 +95,9 @@ function notesOf(m: MeaningRowInput, lang: Lang): string[] {
       if (m.sub === "own") say("между своими адресами", "between its own addresses");
       break;
     case "multisend":
-      if (n) say(ruTo(n, "адресу", "адресам"), `to ${enCount(n, "address", "addresses")}`);
+      if (m.sub === "pool" && n) say(ruTo(n, "майнеру", "майнерам"), `to ${enCount(n, "miner", "miners")}`);
+      else if (n) say(ruTo(n, "адресу", "адресам"), `to ${enCount(n, "address", "addresses")}`);
+      if (m.sub === "nft" && m.count2) say(`${m.count2} NFT`, enCount(m.count2, "NFT", "NFTs"));
       break;
     case "consolidate":
       say(`${ruCount(n, "бокс", "бокса", "боксов")} → ${m.count2 ?? 0}`, `${enCount(n, "box", "boxes")} → ${m.count2 ?? 0}`);
@@ -103,8 +105,16 @@ function notesOf(m: MeaningRowInput, lang: Lang): string[] {
     case "miner-payout":
       if (m.sub === "pool" && n) say(ruTo(n, "майнеру", "майнерам"), `to ${enCount(n, "miner", "miners")}`);
       break;
-    case "rent":
+    case "rent": {
       if (n) say(ruCount(n, "старый бокс", "старых бокса", "старых боксов"), enCount(n, "old box", "old boxes"));
+      const k = m.count2 ?? 0;
+      if (k >= 2) say(`забрали ${ruCount(k, "адрес", "адреса", "адресов")}`, `${enCount(k, "address", "addresses")} took it`);
+      break;
+    }
+    case "nft-mint":
+      if (m.sub === "image") say("изображение", "image");
+      else if (m.sub === "audio") say("аудио", "audio");
+      else if (m.sub === "video") say("видео", "video");
       break;
     case "name-register":
       if (m.sub === "commit") say("заявка на имя", "name request");
@@ -157,6 +167,8 @@ function notesOf(m: MeaningRowInput, lang: Lang): string[] {
     case "contract-call":
     case "to-contract":
       if (m.protocol && m.label) out.push(`«${m.label}»`);
+      // A contract's payout to several wallets: how many (one receiver is the row's «→»).
+      if (m.sub === "payout" && n >= 2) say(ruTo(n, "адресу", "адресам"), `to ${enCount(n, "address", "addresses")}`);
       break;
     default:
       break;
@@ -175,6 +187,7 @@ function phoneSubOf(m: MeaningRowInput, gave: MeaningAssetLike[], more: MeaningA
     case "miner-payout":
       return m.sub === "pool" && n ? (ru ? ruTo(n, "майнеру", "майнерам") : `to ${enCount(n, "miner", "miners")}`) : null;
     case "multisend":
+      if (m.sub === "pool" && n) return ru ? ruTo(n, "майнеру", "майнерам") : `to ${enCount(n, "miner", "miners")}`;
       return n ? (ru ? ruTo(n, "адресу", "адресам") : `to ${enCount(n, "address", "addresses")}`) : null;
     case "order-place":
       return ru ? "в заявку" : "into an order";
@@ -203,7 +216,7 @@ export function asset(a: MeaningAssetLike): MeaningAssetLike {
   return out;
 }
 
-/** An order that is not a swap keeps its action but gets its own word. */
+/** A variant inside one action keeps its action (colour, fold, filters) but gets its own word. */
 const SUB_WORD: Readonly<Record<string, { ru: string; en: string }>> = {
   "order-place/deposit": { ru: "Заявка на вклад в пул", en: "Pool deposit order" },
   "order-place/redeem": { ru: "Заявка на вывод из пула", en: "Pool withdrawal order" },
@@ -211,6 +224,16 @@ const SUB_WORD: Readonly<Record<string, { ru: string; en: string }>> = {
   "order-cancel/forward": { ru: "Отмена предложения", en: "Offer cancelled" },
   "order-place/update": { ru: "Изменение заявки", en: "Order updated" },
   "order-cancel/closed": { ru: "Заявка закрыта", en: "Order closed" },
+  "multisend/exchange": { ru: "Выводы с биржи", en: "Exchange withdrawals" },
+  "multisend/pool": { ru: "Выплата майнерам", en: "Miner payout" },
+  "multisend/batch": { ru: "Пакетная выплата", en: "Batch payout" },
+  "multisend/split": { ru: "Выплата поровну", en: "Equal payout" },
+  "multisend/airdrop": { ru: "Раздача токена", en: "Token distribution" },
+  "multisend/nft": { ru: "Рассылка NFT", en: "NFT distribution" },
+  "token-issue/service": { ru: "Служебный токен", en: "Service token" },
+  "token-issue/collection": { ru: "Коллекция NFT", en: "NFT collection" },
+  "nft-mint/collection": { ru: "Коллекция NFT", en: "NFT collection" },
+  "nft-mint/id": { ru: "Токен-идентификатор", en: "ID token" },
 };
 
 export function meaningRow(m: MeaningRowInput, lang: Lang): MeaningRow {
