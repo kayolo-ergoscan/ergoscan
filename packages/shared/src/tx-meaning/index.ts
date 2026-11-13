@@ -8,7 +8,7 @@ import { sayLines, toAsset } from "./summary.js";
 import type { CompactMeaning, MeaningAssetLike, MeaningCtx, MeaningTx, TxMeaning } from "./types.js";
 import { MEANING_VOCAB, isServiceAction } from "./vocab.js";
 
-export const TX_MEANING_VERSION = 3;
+export const TX_MEANING_VERSION = 4;
 
 export function classifyTxMeaning(tx: MeaningTx, ctx: MeaningCtx = {}): TxMeaning {
   const f = readFacts(tx);

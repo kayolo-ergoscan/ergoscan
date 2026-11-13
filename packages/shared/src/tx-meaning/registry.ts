@@ -11,7 +11,11 @@
  *   guess   = shape and token names only; the rule marks the answer conf "guess".
  *   code    = compiled from the protocol's own contract source and seen on live mainnet boxes:
  *             cruxfinance/crux-contracts at 677a2ed (compiled/, verification/contracts/);
- *             nautls/machinafi-sdk at 99608a9 (MIT; trees in src/grid-order.ts, src/limit-order.ts).
+ *             nautls/machinafi-sdk at 99608a9 (MIT; trees in src/grid-order.ts, src/limit-order.ts and
+ *             their earlier versions in git history);
+ *             Lithos-Protocol/Lithos-Client at 4d0de1f (lithos-lib: forwards/DFContracts.scala,
+ *             lithosdex/LDOrderContracts.scala, sigmafi/SigmaFiContracts.scala);
+ *             Lithos-Protocol/Sigma-Finance-V2 at 40515dd (src/main/resources/zc-standard/contracts.tsv).
  */
 import { LOCK_BY_ADDRESS } from "../lock-addresses.js";
 import {
@@ -44,7 +48,9 @@ export type ProtocolId =
   | "phoenix"
   | "basis"
   | "dexy"
-  | "machinafi";
+  | "machinafi"
+  | "skyharbor"
+  | "exle";
 
 /** Display names. Every former pool of the ErgoDex project is named ErgoDex. */
 export const PROTOCOL_NAMES: Readonly<Record<ProtocolId, { ru: string; en: string }>> = {
@@ -64,6 +70,8 @@ export const PROTOCOL_NAMES: Readonly<Record<ProtocolId, { ru: string; en: strin
   basis: { ru: "Basis", en: "Basis" },
   dexy: { ru: "Dexy", en: "Dexy" },
   machinafi: { ru: "MachinaFi", en: "MachinaFi" },
+  skyharbor: { ru: "SkyHarbor", en: "SkyHarbor" },
+  exle: { ru: "Exle", en: "Exle" },
 };
 
 export function protocolName(id: string | null | undefined, lang: "ru" | "en" = "en"): string | null {
@@ -113,7 +121,9 @@ export type ContractRole =
   | "reserve"
   | "stable-mint"
   | "payout"
-  | "upkeep";
+  | "upkeep"
+  // known by name only, no rule of its own: «вызвал «…»» / «отправил … в «…»»
+  | "contract";
 
 export type RoleSource = "names" | "chain" | "derived" | "guess" | "code";
 
@@ -137,6 +147,8 @@ const TEMPLATE_ROWS: Row[] = [
   ["707c363f0914aeff3554f5e69bbed62921135007caaa449e16d682a9240c5d81", "ergo", "emission-proxy", "Emission proxy", "names"],
   ["ae9ac8d914dcf12f94410683a5980dc2edb510920dbd83773e516cca5fd58681", "ergo", "reemission", "Reemission", "names"],
   ["5b710d70f207f03745a8bb713006f235446f0104f89e977ae066ae184c0494fa", "ergo", "miner-fee", "Miner fee", "names"],
+  // sigmaProp(OUTPUTS.size == 1): anyone may spend it into a single output, in practice the miner.
+  ["e9d13195d73d90fde24ade268844724417323260456736559cf89a18a3eb696a", "ergo", "contract", "Miner tip box", "chain"],
 
   // Oracle pools (oracle-pools.json). v2: pool, refresh, datapoint. v1: live epoch, epoch prep, datapoint.
   ["fcbf6946412dbc9528b24d134c58c8f06c15cb84b13f38e59caf9fe1bd9ba764", "oracle", "datapoint", "Oracle datapoint", "names"],
@@ -169,6 +181,8 @@ const TEMPLATE_ROWS: Row[] = [
   ["a68900b67ff5d74f74e7907aca83680adfc8ba01c1925430339d9e4c3f5dd0a3", "machinafi", "order", "MachinaFi grid order (ERG/token)", "code"],
   ["1ae21acb88ddc97279ae72fd9461e6f2cb13ad462dd4ca45c73e858bd68ebc23", "machinafi", "order", "MachinaFi grid order (token/token)", "code"],
   ["03ef002b73a894198c7c9a4332ba28ca000dc6c40cb801f0c719940d9a6a8f6b", "machinafi", "order", "MachinaFi limit order (ERG/token)", "code"],
+  ["91ea9dc91c4a32501bd3bbb5303e7183b45b7bd74a27d547214c646d5ffb2443", "machinafi", "order", "MachinaFi limit order (ERG/token, interim)", "code"],
+  ["a16dfa919d97be53d3e1ed8ba769d189b96a05e3de9bcbdac6a6ab6f311a5479", "machinafi", "order", "MachinaFi limit order (ERG/token, earliest)", "code"],
 
   // ErgoDex limit orders (source: crux-contracts limit-order*.es, EIP-5 templates) and the v2 fee box.
   ["5bf80359e972819567d53d443126d8cc58bed7e8fe57dfb3770b09a84fa68aae", "ergodex", "order", "ErgoDex limit order v1", "code"],
@@ -183,6 +197,16 @@ const TEMPLATE_ROWS: Row[] = [
   ["1253a7f2c8fe3c687d16ffe2a296acb826bc2abac6d1c0dfb95f246e438c773c", "lithosdex", "pool", "LithosDex pool", "chain"],
   ["ec8631e580566f40740ba55c010432955c8539a74e9f60d40a65007c354849d6", "lithosdex", "pool", "LithosDex pool", "chain"],
   ["938b8ae08a1675558e8177b21524f95758ae0217ca41327492fae472c80466c9", "lithosdex", "provision", "LithosDex provision", "names"],
+  // LithosDex orders and fee vaults (code: LDOrderContracts.scala); the batcher spends an order beside the pool.
+  ["b4fd5d9be2ed32a5cc516e431bf317033d1033078026bb04baf7ae355c665dfc", "lithosdex", "order", "LithosDex swap order (ERG→token)", "code"],
+  ["7122d56978cf08f66ff5168a160e9e750002c62e79a6d985503da8ad02f11a98", "lithosdex", "order", "LithosDex swap order (token→ERG)", "code"],
+  ["82bb41e3bb51b99f1be206b6fcf7dd3804c1ecd4be0d2f8c18ca34e944cab8c9", "lithosdex", "order", "LithosDex swap order (token/token)", "code"],
+  ["28027ccf9c2a5ac3d31178e97a387aae3207ddec642b5662e63af30bbe642c17", "lithosdex", "order", "LithosDex deposit order", "code"],
+  ["b3469ef5dcac7bf6c241aa0f7fcb6f7dc3723374bc8cc4574ed9d3966aab0e0b", "lithosdex", "order", "LithosDex deposit order (token/token)", "code"],
+  ["d67c6f6e4dfaba9b7aefce23c63add22dbc5fdd34a27946771965be943baeb04", "lithosdex", "order", "LithosDex redeem order", "code"],
+  ["5d170be2017f155c069a65390d3e942f9db12f12a69ac3932a1ed70c4f36f625", "lithosdex", "order", "LithosDex redeem order (token/token)", "code"],
+  ["29956fe5b9d86caf63ea7c63dede95091e1e4bdfa3d3641540706e829b383d9c", "lithosdex", "upkeep", "LithosDex fee vault", "code"],
+  ["ce654c7c7638ea56e93f1b13a7797e574f2ae526f4efc7da477a0c56c0dcf1bb", "lithosdex", "upkeep", "LithosDex fee vault (token/token)", "code"],
 
   // Rosen bridge (rosen-bridge.json).
   ["0416175ab49d6089cbb9f7e04407fad171d4807985953f11438d2b61b04d3891", "rosen", "bridge-permit", "Rosen Watcher Permit", "names"],
@@ -206,6 +230,7 @@ const TEMPLATE_ROWS: Row[] = [
   ["09d67ac30249ac79de61d1a9a91d8c63749f99016512d42c5c606108469e5f3b", "lithos", "upkeep", "Lithos evaluation", "names"],
   ["b260eaf725ad4c43fd14108ef4a0c85439e6b79891ac368e27005bd77d771913", "lithos", "upkeep", "Lithos miner data", "names"],
   ["73848daf47ae3eb1d6f8a53ed06d4aea86281516740452ed80404bade4f36c34", "lithos", "upkeep", "Lithos difficulty forwards", "names"],
+  ["2a41119ab860801334d8ce2ab8b8010eb27e1330a8c242dea6e6a86063de5205", "lithos", "order", "Lithos difficulty forward offer", "code"],
   ["5a0f7e9f1c93a358da0733bc5aad9918aa775683a98fe2dc90ccc7ef15bac1b7", "lithos", "payout", "Lithos payout", "names"],
 
   // SigmaUSD bank (sigmausd.json; tx-action SIGMAUSD).
@@ -214,10 +239,28 @@ const TEMPLATE_ROWS: Row[] = [
   // SigmaFi (chain: borrower order and the bond it turns into).
   ["cd8636b877e7ff1a634dd2c2a7ee961ae66039bc616ba517ee9511723126dac7", "sigmafi", "loan-order", "SigmaFi loan order", "chain"],
   ["9ed98deca6a6546ff0be8f8c2f66b60d2d6e58bab1a2ce93d97df76c39198909", "sigmafi", "bond", "SigmaFi bond", "chain"],
+  ["f3971d8d72579c9af041ce09cbede48c417f6d674c9cd816f0a8553501b91526", "sigmafi", "payout", "SigmaFi bond vault", "code"],
+  // SigmaFi V2 (code: zc-standard/contracts.tsv). Sale, ask, vaults and mint requests have no rule of
+  // their own: a fill by a taker cannot be told from a cancel without decoding them, so they are named only.
+  ["4416343950a62147cb3b5c33435c7fa5c1459fb0a143799e51f37514f80c9837", "sigmafi", "loan-order", "SigmaFi V2 loan order", "code"],
+  ["c5a42ef98b98b35bfbc7f6ff9b1eca24bb407df0c02e23d59b8e936159ffec16", "sigmafi", "bond", "SigmaFi V2 bond", "code"],
+  ["69e02cb1957413ef839790c1e6693e360b7707b00d1e6ab6d3cee9509a4e125c", "sigmafi", "contract", "SigmaFi V2 lend offer", "code"],
+  ["8e08343cd05a00e21199a48be40a74f772fadef231d3ab24af833368b476e608", "sigmafi", "payout", "SigmaFi V2 bond vault", "code"],
+  ["b23a69f63cfd1fb6c70314874157f0391d3a5eb26d8828bf41b645411bdb2c9c", "sigmafi", "contract", "SigmaFi V2 sale order", "code"],
+  ["6f00d4c2afcea13e29cabad54200b99893e7ec493dee0fb1634ad024743ce834", "sigmafi", "contract", "SigmaFi V2 NAV ask", "code"],
+  ["b6a997d026af68e2643595741ab3adeac4f7dbbb0ad1b2eb1a53e2d3f88e9d44", "sigmafi", "contract", "SigmaFi V2 share vault", "code"],
+  ["b733a48e8d42791fab9d2cf94835d4498e1710e44f848ac061f0172ba7dc79ad", "sigmafi", "contract", "SigmaFi V2 share mint request", "code"],
+  ["c2b372ea65f37ef91e41d79de6fa4f602f52f33c377f3a493339bd60311a8759", "sigmafi", "contract", "SigmaFi V2 Dutch auction vault", "code"],
+  ["f370aaac13ecb637555c515ad9116555387c118314b1385e987f77d4bea3df48", "sigmafi", "contract", "SigmaFi V2 auction-share mint request", "code"],
 
   // Duckpools (duckpools.json for the ERG pool; the loan box is a guess).
   ["93cd1a009168a06a02f5adb09dd9e88a82aca7c43b7818998d7b2b3f9aac856a", "duckpools", "lending-pool", "Duckpools ERG Lending Pool", "names"],
   ["db697243c2c862454a4be4c7cebf5cdb75a9d360e9297cb1543acfb0a32c5bd0", "duckpools", "loan-box", "Duckpools loan", "guess"],
+  ["59477dc17079f1a64a83e7e0953352a78487a78435c950532ee0600b29bc6ef9", "duckpools", "contract", "Duckpools borrow request", "guess"],
+
+  // SkyHarbor (its published sale address, v1) and an Exle service box (shape only).
+  ["f9f76671e416a0bb9e41d3c719ad4f5cc318f3fdd5df40b8a1d3c115c13835bd", "skyharbor", "contract", "SkyHarbor NFT sale v1", "chain"],
+  ["3568d494489771f87193b9aaba250ca09d528d93b1e2bd0b8a4a9d6519dd5b42", "exle", "upkeep", "Exle service box", "guess"],
 
   // Auction House, ErgoMixer, ErgoNames, Phoenix, Basis (their project files).
   ["3d578e5cfa4a4314f18d7f716e442c79709e36bd861a7ebc1617fa0b122a0d68", "auction", "lot", "Auction House", "names"],
@@ -299,7 +342,8 @@ const BY_TEMPLATE = index(TEMPLATE_ROWS);
 
 /**
  * Templates whose registers the rules read, so list views load registers for these boxes only:
- * Rosen lock and event trigger (chain name); MachinaFi orders (R4 owner, R6/R7 parent binding).
+ * Rosen lock and event trigger (chain name); MachinaFi orders (R4 owner, R6/R7 parent binding; the
+ * earliest limit order pays its owner a box tagged R4 = order id).
  */
 export const TEMPLATES_WITH_REGISTERS: readonly string[] = [
   "7df7d49c680505ae413376e59e9970df4429741b33f095676bec3e4126de846d",
@@ -307,6 +351,8 @@ export const TEMPLATES_WITH_REGISTERS: readonly string[] = [
   "a68900b67ff5d74f74e7907aca83680adfc8ba01c1925430339d9e4c3f5dd0a3",
   "1ae21acb88ddc97279ae72fd9461e6f2cb13ad462dd4ca45c73e858bd68ebc23",
   "03ef002b73a894198c7c9a4332ba28ca000dc6c40cb801f0c719940d9a6a8f6b",
+  "a16dfa919d97be53d3e1ed8ba769d189b96a05e3de9bcbdac6a6ab6f311a5479",
+  "91ea9dc91c4a32501bd3bbb5303e7183b45b7bd74a27d547214c646d5ffb2443",
 ];
 const BY_TOKEN = index(TOKEN_ROWS);
 

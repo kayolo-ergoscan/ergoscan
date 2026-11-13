@@ -211,8 +211,24 @@ export function sayLines(m: MeaningPhraseInput): Lines {
     case "pool-create":
       return { ru: `${ru} создал пул${pair} · ${V.ru}`, en: `${en} created a${pair} pool on ${V.en}` };
     case "order-place":
-      return { ru: `${ru} создал заявку на обмен ${gave.ru} · ${P.ru}`, en: `${en} placed a swap order with ${gave.en} on ${P.en}` };
+      if (m.sub === "update") return { ru: `${ru} изменил заявку · ${P.ru}`, en: `${en} updated an order on ${P.en}` };
+      if (m.sub === "forward") {
+        return { ru: `${ru} выставил предложение форварда на сложность, внёс ${gave.ru} · ${P.ru}${tail.ru}`, en: `${en} posted a difficulty forward offer with ${gave.en} on ${P.en}${tail.en}` };
+      }
+      if (m.sub === "deposit") {
+        return { ru: `${ru} создал заявку на вклад ${gave.ru} в пул · ${P.ru}${tail.ru}`, en: `${en} placed an order to add ${gave.en} to a pool on ${P.en}${tail.en}` };
+      }
+      if (m.sub === "redeem") {
+        return { ru: `${ru} создал заявку на вывод из пула, отдал ${gave.ru} · ${P.ru}${tail.ru}`, en: `${en} placed an order to withdraw from a pool with ${gave.en} on ${P.en}${tail.en}` };
+      }
+      return { ru: `${ru} создал заявку на обмен ${gave.ru} · ${P.ru}${tail.ru}`, en: `${en} placed a swap order with ${gave.en} on ${P.en}${tail.en}` };
     case "order-cancel":
+      if (m.sub === "closed") {
+        return { ru: `Заявка ${ru} закрыта, вернулось ${got.ru} · ${P.ru}`, en: `${en}'s order was closed, ${got.en} returned · ${P.en}` };
+      }
+      if (m.sub === "forward") {
+        return { ru: `${ru} отменил предложение форварда, вернулось ${got.ru} · ${P.ru}`, en: `${en} cancelled a difficulty forward offer, ${got.en} returned · ${P.en}` };
+      }
       if (m.sub === "loan") {
         return { ru: `${ru} отменил заявку на заём, вернулось ${got.ru} · ${P.ru}`, en: `${en} cancelled a loan request, ${got.en} returned · ${P.en}` };
       }
@@ -288,7 +304,8 @@ export function sayLines(m: MeaningPhraseInput): Lines {
       }
     case "contract-call":
       if (m.protocol && m.label) {
-        return { ru: `${ru} вызвал «${m.label}» · ${P.ru}`, en: `${en} called “${m.label}” · ${P.en}` };
+        const g = m.got?.length ? { ru: `, получил ${got.ru}`, en: ` and got ${got.en}` } : { ru: "", en: "" };
+        return { ru: `${ru} вызвал «${m.label}»${g.ru} · ${P.ru}`, en: `${en} called “${m.label}”${g.en} · ${P.en}` };
       }
       return m.got?.length
         ? { ru: `${ru} вызвал контракт ${to}, получил ${got.ru}`, en: `${en} called contract ${to} and got ${got.en}` }
