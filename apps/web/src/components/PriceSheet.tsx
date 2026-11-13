@@ -5,8 +5,8 @@ import { BottomSheet, SheetNavLink } from "./BottomSheet";
 import { TokenAvatar } from "./TokenBadge";
 import { PrettyUsd } from "./PrettyNum";
 import { fetchChainStats } from "@/lib/chain-stats";
-import { formatCompact } from "@/lib/format";
-import { useT } from "@/lib/i18n/I18nProvider";
+import { formatCompact, formatUsdPrice } from "@/lib/format";
+import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import type { SpectrumTapeRow } from "@/lib/list-snapshots";
 
 function fmtChange(n: number): string {
@@ -58,6 +58,7 @@ export function PriceSheet({
   usd: number | null;
 }) {
   const t = useT();
+  const { locale } = useI18n();
   const [circulating, setCirculating] = useState<number | null>(null);
 
   useEffect(() => {
@@ -85,7 +86,7 @@ export function PriceSheet({
         <div className="min-w-0">
           <p className="m-0 text-[12px] text-[var(--muted)]">{t("header.ergPrice")}</p>
           <p className="m-0 text-[24px] font-semibold leading-tight tabular-nums">
-            {usd != null ? <PrettyUsd n={usd} digits={4} /> : "—"}
+            {usd != null ? formatUsdPrice(usd, locale) : "—"}
           </p>
         </div>
         <div className="min-w-0 text-right">

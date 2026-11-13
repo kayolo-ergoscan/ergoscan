@@ -4,7 +4,7 @@ import Link from "next/link";
 import { FavoriteHeart } from "@/components/FavoriteHeart";
 import { TokenLogo } from "@/components/TokenBadge";
 import { defiVenueCaption, isErgBase, type PoolBoardRow, type PoolBoardSort } from "@/lib/defi-pools";
-import { formatCompact, formatRelTime, formatTs, shortId } from "@/lib/format";
+import { formatCompact, formatGroupedNumber, formatPct, formatRelTime, formatTs, shortId } from "@/lib/format";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { noteRouteNavigation } from "@/lib/route-nav";
 import { resolveTokenMeta } from "@/lib/token-meta";
@@ -20,7 +20,7 @@ export function poolLabel(p: PoolBoardRow): string {
 
 function ergText(n: number | null | undefined, tag: string): string | null {
   if (n == null || !Number.isFinite(n)) return null;
-  return n.toLocaleString(tag, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return formatGroupedNumber(n, 2, 2, tag);
 }
 
 /** Board sort key → the label under the figure. */
@@ -63,7 +63,7 @@ export function FeedPoolRow({
   const day24 =
     row.vol24h != null && row.vol24h > 0
       ? Math.abs(row.vol24h) >= 10_000
-        ? formatCompact(row.vol24h, 2)
+        ? formatCompact(row.vol24h, 2, tag)
         : ergText(row.vol24h, tag)
       : null;
   return (
@@ -189,7 +189,7 @@ export function FeedLpRow({ row, rank, enterClass }: { row: FeedLpHolder; rank: 
   const href = `/address/${encodeURIComponent(row.address)}`;
   const share =
     row.share != null && Number.isFinite(row.share)
-      ? `${row.share.toLocaleString(tag, { maximumFractionDigits: 2 })}%`
+      ? formatPct(row.share, tag)
       : null;
   const erg = row.tvlErg != null && row.tvlErg > 0 ? ergText(row.tvlErg, tag) : null;
   const first = row.firstTs && row.firstTs > 0 ? formatRelTime(row.firstTs, locale) : null;

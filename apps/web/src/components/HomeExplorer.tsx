@@ -27,7 +27,8 @@ import {
   formatErgPrecise,
   formatH24,
   formatHashrate,
-  formatUsd,
+  formatInt,
+  formatUsdPrice,
 } from "@/lib/format";
 import { useReducedMotion } from "framer-motion";
 import { lineChange, type LinePoint } from "@lumen/amm-chart";
@@ -579,7 +580,7 @@ export function HomeExplorer({
             </div>
             <div className="flex shrink-0 items-baseline justify-between gap-2">
               <KpiValue flush>
-                <ReelText text={formatUsd(spotPrice, 4)} />
+                <ReelText text={formatUsdPrice(spotPrice, locale)} />
               </KpiValue>
               {priceAt != null ? (
                 <span key={priceAt} className="hover-stamp shrink-0 text-[12px] font-medium leading-none tabular-nums text-[var(--muted)]">
@@ -600,7 +601,7 @@ export function HomeExplorer({
                   showTip={false}
                   color={changePct != null && changePct < 0 ? PRICE_DOWN : PRICE_UP}
                   lineWidth={2}
-                  formatValue={(v) => formatUsd(v, 4)}
+                  formatValue={(v) => formatUsdPrice(v, locale)}
                   onHover={(v, t) => {
                     const on = v != null && v > 0;
                     setPriceHover(on ? v : null);
@@ -626,7 +627,7 @@ export function HomeExplorer({
             </div>
             <KpiValue flush full muted={mcap == null}>
               {mcap != null ? (
-                <ReelText text={`$${formatGroupedNumber(Math.round(mcap), 0, 0)}`} />
+                <ReelText text={`$${formatGroupedNumber(Math.round(mcap), 0, 0, locale)}`} />
               ) : (
                 mcapMiss
               )}
@@ -635,7 +636,7 @@ export function HomeExplorer({
               <TileName>{t("home.volume24h")}</TileName>
               <KpiValue flush full muted={vol24 == null}>
                 {vol24 != null ? (
-                  <ReelText text={`$${formatGroupedNumber(Math.round(vol24), 0, 0)}`} />
+                  <ReelText text={`$${formatGroupedNumber(Math.round(vol24), 0, 0, locale)}`} />
                 ) : (
                   "—"
                 )}
@@ -677,7 +678,7 @@ export function HomeExplorer({
             >
               <KpiNum>
                 {stats?.circulating != null ? (
-                  <SupplyFlip from={stats.circulating} to={stats.maxSupply} />
+                  <SupplyFlip from={stats.circulating} to={stats.maxSupply} locale={locale} />
                 ) : (
                   miss
                 )}
@@ -716,7 +717,7 @@ export function HomeExplorer({
                   compact
                   fill
                   caption={false}
-                  formatValue={(v, pct) => `${v.toLocaleString()} · ${pctLabel(pct)}`}
+                  formatValue={(v, pct) => `${formatInt(v, locale)} · ${pctLabel(pct)}`}
                   onHover={(s) => setPoolHover(s ? { label: s.label, pct: s.pct } : null)}
                 />
               </div>
@@ -797,7 +798,7 @@ export function HomeExplorer({
                 nameTxs={t("home.txs")}
                 nameFees={t("home.txChartFees")}
                 locale={loc}
-                formatTxs={(v) => formatCompact(v, 1)}
+                formatTxs={(v) => formatCompact(v, 1, locale)}
                 formatFees={formatFeeAxis}
               />
             ) : (
@@ -834,7 +835,7 @@ export function HomeExplorer({
                 nameTxs={t("home.txs")}
                 nameFees={t("home.txChartFees")}
                 locale={loc}
-                formatTxs={(v) => formatCompact(v, 1)}
+                formatTxs={(v) => formatCompact(v, 1, locale)}
                 formatFees={formatFeeAxis}
               />
             ) : (
@@ -1028,8 +1029,8 @@ function KpiValue({
 const SWAP =
   "transition-opacity duration-[350ms] ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:duration-0";
 
-function SupplyFlip({ from, to }: { from: number; to: number }) {
-  const glyphs = zipSupplyGlyphs(from, to);
+function SupplyFlip({ from, to, locale }: { from: number; to: number; locale: string }) {
+  const glyphs = zipSupplyGlyphs(from, to, locale);
   const idle = glyphs.map((g) => g.idle).join("");
   return (
     <span className="inline-flex items-baseline">
@@ -1153,13 +1154,15 @@ function EpochFlag() {
   );
 }
 
-function formatRemain(ms: number): string {
+/** Time left in the epoch: `13h 29m` / `13 ч 29 мин` (the same units as the relative ages). */
+function formatRemain(ms: number, locale: string): string {
   const totalMin = Math.max(0, Math.round(ms / 60_000));
   const h = Math.floor(totalMin / 60);
   const m = totalMin % 60;
-  if (h >= 48) return `${Math.round(h / 24)}d`;
-  if (h >= 1) return `${h}h ${m}m`;
-  return `${m}m`;
+  const ru = locale === "ru";
+  if (h >= 48) return ru ? `${Math.round(h / 24)}\u00a0дн.` : `${Math.round(h / 24)}d`;
+  if (h >= 1) return ru ? `${h}\u00a0ч ${m}\u00a0мин` : `${h}h ${m}m`;
+  return ru ? `${m}\u00a0мин` : `${m}m`;
 }
 
 function EpochBar({
@@ -1188,7 +1191,8 @@ function EpochBar({
       className={clsx("mod rounded-[20px] border border-[var(--border)] bg-[var(--module)] px-3.5 py-3", className)}
       style={style}
     >
-      <div className="flex items-center justify-between gap-3">
+      {/* The figures drop under the label when the row does not fit (a 360 px phone in Russian). */}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <p className="shrink-0 text-[13px] leading-none tabular-nums" style={{ color: HOME.forming }}>
           {t("home.epoch")} <ReelText text={n.toLocaleString(loc)} />
         </p>
@@ -1204,7 +1208,7 @@ function EpochBar({
           </span>
           <span className="epoch-left inline-flex shrink-0 items-center gap-1 whitespace-nowrap font-medium">
             <EpochFlag />
-            <ReelText text={formatRemain(leftMs)} />
+            <ReelText text={formatRemain(leftMs, locale)} />
             <span className="font-normal opacity-80">{t("home.epochLeft")}</span>
           </span>
         </div>

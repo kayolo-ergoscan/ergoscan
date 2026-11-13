@@ -12,8 +12,28 @@ export function visibleAddress(address: string): string {
   return `${address.slice(0, n)}…${address.slice(-n)}`;
 }
 
-function numberLocale(locale?: string): string {
-  return locale === "ru" ? "ru-RU" : "en-US";
+/**
+ * One number policy per UI language. Every helper in this file follows it. Call sites pass
+ * the UI locale ("en" / "ru", or the "en-US" / "ru-RU" tags the feed rows use); no locale
+ * means English, the language the server renders.
+ *
+ * - EN: `1,234,567.89`, `$14.87M`, `$0.1779`.
+ * - RU: `1 234 567.89`. Groups are split by a no-break space (U+00A0, the same separator
+ *   `toLocaleString("ru-RU")` prints, so helper output and plain counts match). The decimal
+ *   point stays: amounts are copied into wallets, and the Russian UI has always shown a point.
+ * - Both: `$` in front; compact `1.34M`, `141.9k` with latin suffixes and a point.
+ *
+ * Ids, hashes and heights in links are never formatted here.
+ */
+export const GROUP_SEP_EN = ",";
+export const GROUP_SEP_RU = " ";
+
+export function isRuNumbers(locale?: string): boolean {
+  return isRuLocale(locale);
+}
+
+export function groupSeparator(locale?: string): string {
+  return isRuNumbers(locale) ? GROUP_SEP_RU : GROUP_SEP_EN;
 }
 
 /** Gateway amounts arrive as strings to keep nanoERG / token units exact. */
@@ -53,33 +73,91 @@ export function splitBlockOutput(
   return { user, emission: total > user ? total - user : 0n };
 }
 
-/** NBSP — looks like a space, never wraps, never a decimal comma. */
-export function groupIntDigits(digits: string): string {
-  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, "\u00a0");
+/** Whole digits in groups of three: `1,234,567` / `1 234 567` (RU: no-break space, never wraps). */
+export function groupIntDigits(digits: string, locale?: string): string {
+  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, groupSeparator(locale));
 }
 
-export function formatGroupedInt(n: bigint, _locale?: string): string {
+export function formatGroupedInt(n: bigint, locale?: string): string {
   const sign = n < 0n ? "-" : "";
   const digits = (n < 0n ? -n : n).toString();
-  return `${sign}${groupIntDigits(digits)}`;
+  return `${sign}${groupIntDigits(digits, locale)}`;
 }
 
-/** Finite number → `1 234 567.89` (spaces, `.` decimal). */
+/** A count or a height in text: `1,915,364` / `1 915 364`. Fractions are rounded away. */
+export function formatInt(n: number | bigint | null | undefined, locale?: string): string {
+  if (n == null) return "—";
+  if (typeof n === "bigint") return formatGroupedInt(n, locale);
+  if (!Number.isFinite(n)) return "—";
+  return formatGroupedInt(BigInt(Math.round(n)), locale);
+}
+
+/** Finite number → `1,234,567.89` / `1 234 567.89` (decimal point in both languages). */
 export function formatGroupedNumber(
   n: number,
   minFrac = 0,
-  maxFrac = 2
+  maxFrac = 2,
+  locale?: string
 ): string {
   if (!Number.isFinite(n)) return "—";
-  const sign = n < 0 ? "-" : "";
   const body = Math.abs(n).toLocaleString("en-US", {
     useGrouping: false,
     minimumFractionDigits: minFrac,
     maximumFractionDigits: maxFrac,
   });
+  // -0.001 at two decimals is "0", not "-0".
+  const sign = n < 0 && /[1-9]/.test(body) ? "-" : "";
   const [w, f] = body.split(".");
-  const grouped = groupIntDigits(w ?? "0");
+  const grouped = groupIntDigits(w ?? "0", locale);
   return f != null ? `${sign}${grouped}.${f}` : `${sign}${grouped}`;
+}
+
+/** Share or ratio: `12.34%`, `1,250%` / `1 250%`. */
+export function formatPct(
+  n: number | null | undefined,
+  locale?: string,
+  minFrac = 0,
+  maxFrac = 2
+): string {
+  if (n == null || !Number.isFinite(n)) return "—";
+  return `${formatGroupedNumber(n, minFrac, maxFrac, locale)}%`;
+}
+
+const COMPACT_STEPS: readonly (readonly [number, string])[] = [
+  [1e12, "T"],
+  [1e9, "B"],
+  [1e6, "M"],
+  [1e3, "k"],
+];
+
+function compactBody(x: number, maxFrac: number): string {
+  const whole = x >= 100 ? 3 : x >= 10 ? 2 : 1;
+  const frac = Math.max(0, Math.min(maxFrac, 4 - whole));
+  const fixed = x.toFixed(frac);
+  return fixed.includes(".") ? fixed.replace(/\.?0+$/, "") : fixed;
+}
+
+/**
+ * Short form of a large figure, the same in both languages: `1.34M`, `14.87M`, `148.7M`,
+ * `141.9k`, `2.5B`. At most four significant digits and `maxFrac` decimals, trailing zeros
+ * dropped. A value that rounds up to 1000 of a step moves to the next one (999 999 → `1M`).
+ * Below 1 000 the figure is printed whole, grouped by the locale.
+ */
+export function formatCompactNumber(n: number, locale?: string, maxFrac = 2): string {
+  if (!Number.isFinite(n)) return "—";
+  const sign = n < 0 ? "-" : "";
+  const abs = Math.abs(n);
+  for (let i = 0; i < COMPACT_STEPS.length; i++) {
+    const [step, suffix] = COMPACT_STEPS[i]!;
+    if (abs < step) continue;
+    const body = compactBody(abs / step, maxFrac);
+    if (Number(body) >= 1000 && i > 0) {
+      const [up, upSuffix] = COMPACT_STEPS[i - 1]!;
+      return `${sign}${compactBody(abs / up, maxFrac)}${upSuffix}`;
+    }
+    return `${sign}${body}${suffix}`;
+  }
+  return formatGroupedNumber(n, 0, maxFrac, locale);
 }
 
 /** Max digits after the decimal. Tiny values use 0.0₄xx instead. */
@@ -247,7 +325,8 @@ export type RentErgView = {
  * A long run of zeros folds to `0.0(n)45` (n is how many zeros).
  */
 export function describeRentErg(
-  nano: number | string | bigint | null | undefined
+  nano: number | string | bigint | null | undefined,
+  locale?: string
 ): RentErgView {
   const raw = toBigIntAmt(nano);
   if (raw === 0n) return { sign: "", text: "0.0000 ERG", tiny: null };
@@ -273,7 +352,7 @@ export function describeRentErg(
   const headStr = head.toString().padStart(MAX_FRAC_DIGITS, "0");
   return {
     sign,
-    text: `${sign}${formatGroupedInt(w)}.${headStr} ERG`,
+    text: `${sign}${formatGroupedInt(w, locale)}.${headStr} ERG`,
     tiny: null,
   };
 }
@@ -300,7 +379,7 @@ export function formatTokenAmount(
 const GLANCE_FROM = 1_000_000n;
 /** Token-card emission: millions stay grouped (`21 000 000`); compact from 1B. */
 const EMISSION_GLANCE_FROM = 1_000_000_000n;
-/** Past trillions, ICU compact becomes `1000T` / scientific `1E15`. Show the grouped amount. */
+/** Past trillions a suffix becomes `1000T`; print a power of ten from here on. */
 const GLANCE_GROUPED_FROM = 10n ** 15n;
 
 function scaledWhole(abs: bigint, decimals: number): bigint {
@@ -319,22 +398,14 @@ function scaledToCompactNumber(abs: bigint, decimals: number): number | null {
   return Number(whole) + Number(frac) / Number(base);
 }
 
-function intlCompact(n: number, locale?: string): string {
-  return new Intl.NumberFormat(numberLocale(locale), {
-    notation: "compact",
-    compactDisplay: "short",
-    maximumFractionDigits: 2,
-  }).format(n);
-}
-
 const SUPERSCRIPT = "⁰¹²³⁴⁵⁶⁷⁸⁹";
 
-/** Past trillions ICU compact turns into `1000T` / `1E15`; print a power of ten instead: 1×10¹⁸, 2,5×10¹⁵. */
-function powerGlance(whole: bigint, locale?: string): string {
+/** Past trillions a suffix turns into `1000T`; print a power of ten instead: 1×10¹⁸, 2.5×10¹⁵. */
+function powerGlance(whole: bigint): string {
   const digits = whole.toString();
   const exp = digits.length - 1;
   const mantissa = Number(digits.slice(0, 4)) / 1000;
-  const head = new Intl.NumberFormat(numberLocale(locale), { maximumSignificantDigits: 3 }).format(mantissa);
+  const head = String(Number(mantissa.toPrecision(3)));
   const sup = String(exp)
     .split("")
     .map((d) => SUPERSCRIPT[Number(d)])
@@ -343,7 +414,7 @@ function powerGlance(whole: bigint, locale?: string): string {
 }
 
 /**
- * Tight-column token amounts: 1.01B / 1,01 млрд via ICU compact; from a
+ * Tight-column token amounts: `1.01B` in both languages (`formatCompactNumber`); from a
  * quadrillion on, a power of ten (1×10¹⁸).
  * Exact grouped string stays on title / aria-label.
  */
@@ -358,14 +429,12 @@ export function formatScaledGlance(
   const whole = scaledWhole(abs, decimals);
   if (whole < from) return { text: exact, exact };
   if (whole >= GLANCE_GROUPED_FROM) {
-    return { text: `${raw < 0n ? "-" : ""}${powerGlance(whole, locale)}`, exact };
+    return { text: `${raw < 0n ? "-" : ""}${powerGlance(whole)}`, exact };
   }
-  if (scaledToCompactNumber(abs, decimals) == null) {
-    return { text: exact, exact };
-  }
+  const n = scaledToCompactNumber(abs, decimals);
+  if (n == null) return { text: exact, exact };
   const sign = raw < 0n ? "-" : "";
-  const n = scaledToCompactNumber(abs, decimals)!;
-  return { text: `${sign}${intlCompact(n, locale)}`, exact };
+  return { text: `${sign}${formatCompactNumber(n, locale)}`, exact };
 }
 
 /** Emission on the token name tile: full through millions, compact from 1B. */
@@ -416,11 +485,8 @@ export function describeUsd(
   const sign = n < 0 ? "-" : "";
   const a = Math.abs(n);
   if (a === 0) return { text: "$0", sign: "", tiny: null };
-  if (a >= 1_000_000) {
-    return { text: `${sign}$${(a / 1_000_000).toFixed(2)}M`, sign, tiny: null };
-  }
   if (a >= 1_000) {
-    return { text: `${sign}$${(a / 1_000).toFixed(2)}k`, sign, tiny: null };
+    return { text: `${sign}$${formatCompactNumber(a)}`, sign, tiny: null };
   }
   if (a < 0.01) {
     const { tiny, body } = unsignedDecimal(a, MAX_FRAC_DIGITS);
@@ -429,16 +495,29 @@ export function describeUsd(
   return { text: `${sign}$${a.toFixed(digits)}`, sign, tiny: null };
 }
 
+/**
+ * A market price in dollars, four significant digits: `$0.1779`, `$1.234`, `$12.34`,
+ * `$1,234` / `$1 234`. The header and the home price tile print ERG with it, so they agree.
+ */
+export function formatUsdPrice(n: number | null | undefined, locale?: string): string {
+  if (n == null || !Number.isFinite(n)) return "—";
+  const a = Math.abs(n);
+  if (a < 0.01) return formatUsd(n, MAX_FRAC_DIGITS);
+  const sign = n < 0 ? "-" : "";
+  if (a >= 1_000) return `${sign}$${formatGroupedNumber(a, 0, 0, locale)}`;
+  return `${sign}$${a.toFixed(a >= 10 ? 2 : a >= 1 ? 3 : 4)}`;
+}
+
 /** ERG-per-token: at most 4 glyphs after the point (`0.0039` or `0.0₇22`). */
-export function describePrice(n: number | null | undefined): UsdView | null {
+export function describePrice(n: number | null | undefined, locale?: string): UsdView | null {
   if (n == null || !Number.isFinite(n) || n <= 0) return null;
   const sign = "";
   const a = n;
   if (a >= 1_000_000) {
-    return { text: `${(a / 1_000_000).toFixed(2)}M`, sign, tiny: null };
+    return { text: formatCompactNumber(a, locale), sign, tiny: null };
   }
   if (a >= 1_000) {
-    return { text: formatGroupedNumber(a, 0, 2), sign, tiny: null };
+    return { text: formatGroupedNumber(a, 0, 2, locale), sign, tiny: null };
   }
   if (a >= 1) {
     const body = a.toLocaleString("en-US", {
@@ -479,10 +558,10 @@ export function formatNano(n: number): string {
   return `${n} nano`;
 }
 
+/** Chart ticks and tight ERG figures: `1.34M ERG`, `12.5k ERG`, `12.50 ERG`. */
 export function formatErg(n: number, digits = 2): string {
   if (!Number.isFinite(n)) return "—";
-  if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M ERG`;
-  if (Math.abs(n) >= 1_000) return `${(n / 1_000).toFixed(2)}k ERG`;
+  if (Math.abs(n) >= 1_000) return `${formatCompactNumber(n)} ERG`;
   return `${n.toFixed(digits)} ERG`;
 }
 
@@ -490,13 +569,16 @@ export function formatUsd(n: number | null | undefined, digits = 2): string {
   return describeUsd(n, digits)?.text ?? "—";
 }
 
-export function formatCompact(n: number | null | undefined, digits = 2): string {
+/**
+ * Whole figure up to 9 999 (`9,275` / `9 275`), compact from 10 000 (`12.3k`, `1.34M`).
+ * Thousands keep one decimal; `digits` caps the decimals from a million on.
+ */
+export function formatCompact(n: number | null | undefined, digits = 2, locale?: string): string {
   if (n == null || !Number.isFinite(n)) return "—";
   const abs = Math.abs(n);
-  if (abs >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(digits)}B`;
-  if (abs >= 1_000_000) return `${(n / 1_000_000).toFixed(digits)}M`;
-  if (abs >= 10_000) return `${(n / 1_000).toFixed(1)}k`;
-  return formatGroupedNumber(Math.round(n), 0, 0);
+  if (abs >= 999_950) return formatCompactNumber(n, locale, digits);
+  if (abs >= 10_000) return formatCompactNumber(n, locale, 1);
+  return formatGroupedNumber(Math.round(n), 0, 0, locale);
 }
 
 export function formatHashrate(h: number | null | undefined): string {
@@ -523,8 +605,9 @@ export function formatPrice(n: number | null | undefined): string {
   return describePrice(n)?.text ?? "—";
 }
 
+/** Fee rate for tiles: `107 n/B`, `2.2k n/B`, `34.7k n/B` (the shared short form, one decimal). */
 export function formatFeeRate(r: number): string {
-  if (r >= 1000) return `${(r / 1000).toFixed(1)}k n/B`;
+  if (r >= 1000) return `${formatCompactNumber(r, undefined, 1)} n/B`;
   return `${Math.round(r)} n/B`;
 }
 

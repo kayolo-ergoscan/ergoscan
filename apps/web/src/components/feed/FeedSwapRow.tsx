@@ -79,9 +79,9 @@ function cap(s: string): string {
 }
 
 /** Fixed two decimals; from ten thousand the figure goes compact (the traders column rule). */
-function amt(n: number): string {
+function amt(n: number, tag: string): string {
   if (!Number.isFinite(n)) return "—";
-  return Math.abs(n) >= 10_000 ? formatCompact(n, 2) : formatGroupedNumber(n, 2, 2);
+  return Math.abs(n) >= 10_000 ? formatCompact(n, 2, tag) : formatGroupedNumber(n, 2, 2, tag);
 }
 
 function symOf(id: string | null | undefined, name: string | null | undefined): string {
@@ -147,8 +147,8 @@ export function FeedSwapRow({
         <>
           <span className="feed-kind">{word}</span>
           {row.tokenAmount > 0 ? (
-            <span className="tabular-nums" title={`${formatGroupedNumber(row.tokenAmount, 0, 9)} ${sym}`}>
-              {amt(row.tokenAmount)}{" "}
+            <span className="tabular-nums" title={`${formatGroupedNumber(row.tokenAmount, 0, 9, tag)} ${sym}`}>
+              {amt(row.tokenAmount, tag)}{" "}
               {row.tokenId ? (
                 <Link prefetch={false} href={`/token/${row.tokenId}`} className="hover:underline">
                   {sym}
@@ -176,7 +176,7 @@ export function FeedSwapRow({
           <span className="tabular-nums" suppressHydrationWarning>
             {price != null ? (
               <span className="feed-sub-opt">
-                <PrettyPrice n={price} />
+                <PrettyPrice n={price} locale={tag} />
                 {ago ? " · " : null}
               </span>
             ) : null}
@@ -201,19 +201,19 @@ export function FeedSwapRow({
           ) : null}
           <FeedField label={t("defi.amount")}>
             <span className="tabular-nums">
-              {formatGroupedNumber(row.tokenAmount, 0, 9)} {sym}
+              {formatGroupedNumber(row.tokenAmount, 0, 9, tag)} {sym}
             </span>
           </FeedField>
           <FeedField label={t("defi.paid")}>
             <span className="tabular-nums">
-              {row.baseAmount > 0 ? `${formatGroupedNumber(row.baseAmount, 0, 9)} ${baseSym}` : "—"}
+              {row.baseAmount > 0 ? `${formatGroupedNumber(row.baseAmount, 0, 9, tag)} ${baseSym}` : "—"}
             </span>
           </FeedField>
           <FeedField label={t("defi.price")}>
             <span className="tabular-nums">
               {price != null ? (
                 <>
-                  <PrettyPrice n={price} /> {baseSym}
+                  <PrettyPrice n={price} locale={tag} /> {baseSym}
                 </>
               ) : (
                 "—"
@@ -256,7 +256,7 @@ export function FeedTraderRow({
   const { t, locale } = useI18n();
   const tag = feedLoc(locale);
   const href = `/address/${encodeURIComponent(trader)}`;
-  const figure = formatCompact(erg, 2);
+  const figure = formatCompact(erg, 2, tag);
   return (
     <FeedRow
       k="addr"
@@ -270,7 +270,7 @@ export function FeedTraderRow({
       }
       facts={deals != null ? <FeedCount k="feed.trades" n={deals} /> : undefined}
       value={
-        <span className="feed-amt tabular-nums" title={`${formatGroupedNumber(erg, 2, 9)} ERG`}>
+        <span className="feed-amt tabular-nums" title={`${formatGroupedNumber(erg, 2, 9, tag)} ERG`}>
           {figure}
           <span className="feed-unit">ERG</span>
         </span>
@@ -281,7 +281,7 @@ export function FeedTraderRow({
             <FeedIdLine href={href} id={trader} />
           </FeedField>
           <FeedField label={t("stable.topSum")}>
-            <span className="tabular-nums">{formatGroupedNumber(erg, 2, 9)} ERG</span>
+            <span className="tabular-nums">{formatGroupedNumber(erg, 2, 9, tag)} ERG</span>
           </FeedField>
           {deals != null ? (
             <FeedField label={t("spectrum.trades")}>

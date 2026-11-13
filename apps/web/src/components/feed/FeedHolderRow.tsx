@@ -7,7 +7,7 @@ import { FavoriteHeart } from "@/components/FavoriteHeart";
 import { prefetchAddressPage } from "@/lib/address-page-cache";
 import { listPip, type ListPipId } from "@/lib/address-pips";
 import { useI18n } from "@/lib/i18n/I18nProvider";
-import { formatEmissionGlance, formatRelTime, formatScaledAmount, formatScaledGlance, formatTs, shortId, toBigIntAmt } from "@/lib/format";
+import { formatEmissionGlance, formatPct, formatRelTime, formatScaledAmount, formatScaledGlance, formatTs, shortId, toBigIntAmt } from "@/lib/format";
 import { FeedAmount, FeedCount, FeedField, FeedFields, FeedIdLine, FeedMeter, FeedPhrase, FeedRow, feedLoc, type FeedKind } from "./Feed";
 import type { FeedGlyphId } from "./FeedGlyph";
 
@@ -34,8 +34,7 @@ export type FeedHolder = {
 };
 
 function shareText(pct: number | null | undefined, tag: string): string {
-  if (pct == null || !Number.isFinite(pct)) return "—";
-  return `${pct.toLocaleString(tag, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+  return formatPct(pct, tag, 2, 2);
 }
 
 /** One address on a ranked holder list: what it is, how much it holds, its share as a level. */

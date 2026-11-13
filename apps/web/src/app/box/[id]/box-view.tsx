@@ -24,6 +24,7 @@ import { fetchErgUsd } from "@/lib/list-snapshots";
 import {
   formatBytes,
   formatErgPrecise,
+  formatUsdPrice,
   nanoToUsd,
   shortId,
   toBigIntAmt,
@@ -481,7 +482,7 @@ export function BoxView({
                     party.known ? shortId(data.address ?? "", 8) : typeLabel,
                     lockLabel,
                     issuance ? t("box.issuance") : null,
-                    oracleUsd != null ? `$${oracleUsd.toFixed(4)}` : null,
+                    oracleUsd != null ? formatUsdPrice(oracleUsd, locale) : null,
                   ]
                     .filter(Boolean)
                     .join(" · ")}

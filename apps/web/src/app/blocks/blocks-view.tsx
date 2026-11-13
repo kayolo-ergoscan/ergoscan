@@ -34,6 +34,7 @@ import {
   shortId,
   toEpochMs,
   splitBlockOutput,
+  formatPct,
   toBigIntAmt,
 } from "@/lib/format";
 import { lookupAddress } from "@/lib/address-book";
@@ -516,10 +517,7 @@ export function FeedBlockRow({
 }
 
 function sizePctLabel(pct: number, locale: string): string {
-  const ru = locale === "ru";
-  if (pct <= 0) return ru ? "0 %" : "0%";
-  const body =
-    pct < 0.1 ? pct.toFixed(2) : pct < 10 ? pct.toFixed(1) : String(Math.round(pct));
-  const n = ru ? body.replace(".", ",") : body;
-  return ru ? `${n} %` : `${n}%`;
+  if (pct <= 0) return "0%";
+  const d = pct < 0.1 ? 2 : pct < 10 ? 1 : 0;
+  return formatPct(pct, locale, d, d);
 }

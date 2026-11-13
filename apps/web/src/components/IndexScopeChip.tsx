@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { Tip } from "./Tip";
 import Link from "next/link";
 import { getGateway } from "@/lib/config";
-import { useT } from "@/lib/i18n/I18nProvider";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import { formatInt } from "@/lib/format";
 import clsx from "clsx";
 
 type St = {
@@ -18,7 +19,7 @@ type St = {
 
 /** Ambient trust: show indexed window next to partial data (NFT/holders/rent). */
 export function IndexScopeChip({ className }: { className?: string }) {
-  const t = useT();
+  const { t, locale } = useI18n();
   const [st, setSt] = useState<St | null>(null);
 
   useEffect(() => {
@@ -59,7 +60,7 @@ export function IndexScopeChip({ className }: { className?: string }) {
       </span>
       {st.span != null && (
         <span className="text-[var(--muted-2)]">
-          ({st.span.toLocaleString()} {t("ux.scope.blocks")})
+          ({formatInt(st.span, locale)} {t("ux.scope.blocks")})
         </span>
       )}
       <span className="text-[var(--muted-2)]">
