@@ -9,6 +9,7 @@
  * the tx page computes its own copy with registers and data inputs and does not write here.
  */
 import {
+  TEMPLATES_WITH_REGISTERS,
   TX_MEANING_VERSION,
   classifyTxMeaning,
   compactMeaning,
@@ -163,11 +164,8 @@ export async function meaningForPage(
 
 // ── boxes from the index, by tx id (indexed creation_tx_id / spent_tx_id) ───
 
-/** Registers are read only where a phrase needs them: Rosen lock and event trigger (chain name). */
-const REG_TEMPLATES = [
-  "7df7d49c680505ae413376e59e9970df4429741b33f095676bec3e4126de846d",
-  "856c43fe0610c87b0759abeb83c7999980eb750d711e75ef7d326f5bda89cda9",
-];
+/** Registers are read only where a rule needs them (the list lives with the registry). */
+const REG_TEMPLATES = [...TEMPLATES_WITH_REGISTERS];
 
 type BoxRow = {
   box_id: string;

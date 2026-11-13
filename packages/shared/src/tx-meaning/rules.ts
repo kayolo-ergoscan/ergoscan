@@ -8,6 +8,7 @@
  * 5. wallet moves: send / multisend / self / consolidate;
  * 6. fallback: contract call / sent to contract.
  */
+import { p2pkAddressFromCompressedPubkey } from "../oracle-pools.js";
 import { chainLabel } from "../rosen-chains.js";
 import { extractEventFromRegisters, parseCollCollByte } from "../rosen-event.js";
 import {
@@ -394,12 +395,46 @@ function isOrderBox(f: Facts, b: FBox): boolean {
   return !b.role && !b.wallet && !b.fee && !f.outs.some((o) => o.address === b.address);
 }
 
+function regHex(v: unknown): string {
+  const hex = typeof v === "string" ? v : (v as { serializedValue?: string } | null)?.serializedValue;
+  return (hex ?? "").toLowerCase();
+}
+
+/**
+ * The order box recreated in this tx and bound to its parent by the parent's id in a register
+ * (MachinaFi grid R6 / limit R7: Coll[Byte] = SELF.id). Present = the order was filled, not closed.
+ */
+function boundChild(f: Facts, b: FBox): FBox | null {
+  if (b.role?.role !== "order" || !b.boxId) return null;
+  const tag = `0e20${b.boxId.toLowerCase()}`;
+  return (
+    f.outs.find(
+      (o) => o.address === b.address && Object.values(o.raw.additionalRegisters ?? {}).some((v) => regHex(v) === tag)
+    ) ?? null
+  );
+}
+
+/** The owner of a MachinaFi order: R4 is the owner's SigmaProp; only a plain key is read. */
+function orderOwner(b: FBox): string | null {
+  if (b.role?.p !== "machinafi") return null;
+  const r4 = regHex(b.raw.additionalRegisters?.["R4"]);
+  if (!/^08cd(02|03)[0-9a-f]{64}$/.test(r4)) return null;
+  return p2pkAddressFromCompressedPubkey(r4.slice(4));
+}
+
+/** What the filled orders' owners got (positive) and gave (negative): child minus parent. */
+function fillBag(f: Facts, filled: FBox[]): Bag {
+  let bag: Bag = new Map();
+  for (const b of filled) bag = plus(bag, minus(bagOf(boundChild(f, b)!), bagOf(b)));
+  return bag;
+}
+
 const rulePools: Rule = (f, ctx) => {
   const pools = stable(f.ins.filter((b) => b.role?.role === "pool"));
   if (!pools.length) return null;
   const moves = pools.map((b) => poolMove(b, f.outs)).filter((m): m is PoolMove => m != null);
   // Sorted: input order is not trusted, so the list must not depend on it.
-  const venues = [...new Set(pools.map((b) => b.role!.venue ?? PROTOCOL_NAMES[b.role!.p].en))].sort();
+  let venues = [...new Set(pools.map((b) => b.role!.venue ?? PROTOCOL_NAMES[b.role!.p].en))].sort();
   if (!moves.some((m) => m.kind !== "other")) {
     // The pool box was drained or rebuilt, not traded against.
     const actor = f.payer ?? bestGainer(f);
@@ -419,18 +454,48 @@ const rulePools: Rule = (f, ctx) => {
   if (moves.some((m) => m.kind === "lp-add")) action = "lp-add";
   else if (moves.some((m) => m.kind === "lp-remove")) action = "lp-remove";
 
-  // What the user put in / took out is the pools' move, turned around.
+  // What the user put in / took out is the pools' move, turned around. An order filled next to
+  // them (recreated and bound to itself) is one more venue the signer traded against.
+  const filled = f.ins.filter((b) => !pools.includes(b) && boundChild(f, b));
   let poolDelta: Bag = new Map();
   for (const m of moves) poolDelta = plus(poolDelta, m.delta);
+  poolDelta = plus(poolDelta, fillBag(f, filled));
   const user: Bag = new Map();
   for (const [k, v] of poolDelta) addInto(user, k, -v);
   const { gave, got } = sides(user);
+  if (filled.length && (!f.payer || !gave.length)) {
+    // A matcher filled an order that trades on its own (grid, partial limit) through the pools and
+    // only kept the spread (no signer, or the signer gave nothing): the story is the order's, from
+    // its owner's side.
+    const owners = [...new Set(filled.map((b) => orderOwner(b)))];
+    const sidesOf = sides(fillBag(f, filled));
+    const orderVenues = filled.map((b) => b.role!.venue ?? PROTOCOL_NAMES[b.role!.p].en);
+    const tallyP = new Map<ProtocolId, number>();
+    for (const b of pools) tallyP.set(b.role!.p, (tallyP.get(b.role!.p) ?? 0) + 1);
+    return {
+      action: "swap",
+      protocol: [...tallyP].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))[0]![0],
+      conf: "exact",
+      actor: owners.length === 1 ? owners[0]! : null,
+      gave: sidesOf.gave,
+      got: sidesOf.got,
+      venues: [...new Set([...venues, ...orderVenues])].sort(),
+      viaOrder: true,
+      feeHidden: true,
+      why: [...pools.map((b) => ROLE_WHY(b)), ...filled.map((b) => ({ k: "order", v: b.role!.label }))],
+    };
+  }
+  if (filled.length) venues = [...new Set([...venues, ...filled.map((b) => b.role!.venue ?? PROTOCOL_NAMES[b.role!.p].en)])].sort();
 
-  const orders = f.ins.filter((b) => !pools.includes(b) && isOrderBox(f, b));
+  const orders = f.ins.filter((b) => !pools.includes(b) && !filled.includes(b) && isOrderBox(f, b));
   let actor: string | null;
   let noSigner: string | null = null;
   let extra: NonNullable<Draft["extra"]> = [];
-  if (orders.length) {
+  if (filled.length && f.payer) {
+    // The signer traded against pools and orders; an order completed on the way is a counterparty.
+    actor = f.payer;
+    extra = extrasFrom(f, actor);
+  } else if (orders.length) {
     actor = bestGainer(f, new Set(f.ins.filter((b) => b.wallet).map((b) => b.address)));
     if (!actor) actor = bestGainer(f);
   } else if (f.payer) {
@@ -471,7 +536,38 @@ function orderFirst(boxes: FBox[]): FBox[] {
 }
 
 const ruleOrders: Rule = (f) => {
+  const spentOrders = spentWith(f, (r) => r.role === "order");
+  // A taker filled the order: recreated and bound to it, or (MachinaFi) completed and paid to its
+  // owner by someone who is not the owner. The owner reshaping its own order is not a fill.
+  const filled = spentOrders.filter((b) => {
+    const owner = orderOwner(b);
+    if (owner != null && owner === f.payer) return false;
+    if (boundChild(f, b)) return true;
+    return owner != null && f.payer != null;
+  });
+  if (filled.length) {
+    const actor = f.payer;
+    const { gave, got } = actorSides(f, actor);
+    return {
+      action: "swap",
+      protocol: filled[0]!.role!.p,
+      conf: "exact",
+      actor,
+      gave,
+      got,
+      venues: [...new Set(filled.map((b) => b.role!.venue ?? PROTOCOL_NAMES[b.role!.p].en))].sort(),
+      why: filled.map((b) => ROLE_WHY(b)),
+    };
+  }
   const placed = orderFirst(createdWith(f, (r) => r.role === "order"));
+  if (placed.length && f.payer && spentOrders.length) {
+    // The payer rebuilt its orders (top-up, new prices, regrouping): its own net says what it
+    // added or took out; the new boxes also hold what was already in the old ones.
+    const { gave, got } = actorSides(f, f.payer);
+    const p = placed[0]!.role!.p;
+    if (gave.length) return { action: "order-place", protocol: p, conf: "exact", actor: f.payer, gave, why: [ROLE_WHY(placed[0]!, "created")] };
+    return { action: "order-cancel", protocol: p, conf: "exact", actor: f.payer, got, why: [ROLE_WHY(orderFirst(spentOrders)[0]!)] };
+  }
   if (placed.length && f.payer) {
     const p = placed[0]!.role!.p;
     return {

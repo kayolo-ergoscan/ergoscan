@@ -8,7 +8,7 @@ import { sayLines, toAsset } from "./summary.js";
 import type { CompactMeaning, MeaningAssetLike, MeaningCtx, MeaningTx, TxMeaning } from "./types.js";
 import { MEANING_VOCAB, isServiceAction } from "./vocab.js";
 
-export const TX_MEANING_VERSION = 1;
+export const TX_MEANING_VERSION = 2;
 
 export function classifyTxMeaning(tx: MeaningTx, ctx: MeaningCtx = {}): TxMeaning {
   const f = readFacts(tx);
@@ -116,6 +116,7 @@ export {
   roleByTemplate,
   roleByToken,
   knownTemplateCount,
+  TEMPLATES_WITH_REGISTERS,
   type ProtocolId,
   type ContractRole,
   type RoleEntry,
