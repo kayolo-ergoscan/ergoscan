@@ -32,6 +32,8 @@ export const MOVE_MIN_PX = 4;
 /* Eyes (§2.6). */
 export const GAZE_RADIUS = 240;
 export const GAZE_FPS = 20;
+/** Reading and dozing (A2–A3) at rest: at most this many frames a second (§9.10: ≤ 300 a minute). */
+export const REST_FPS = 20;
 export const GAZE_JUMP_PX = 24;
 export const SHY_PX = 48;
 

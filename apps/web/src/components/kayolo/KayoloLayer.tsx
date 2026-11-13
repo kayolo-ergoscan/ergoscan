@@ -95,6 +95,7 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
   let fade: { at: number; from: Vec; to: Hold } | null = null;
   let roll = 0;
   let raf = 0;
+  let paintedAt = -Infinity;
   let timer = 0;
   let timerAt = Infinity;
   let hidden = document.visibilityState === "hidden";
@@ -337,18 +338,23 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
     if (handed) return now;
     if (gaze) due = Math.min(due, gazeUntil);
     const { lv, inLv } = levelNow(now);
+    // Paced frames count from the last painted one, not from now: a timer that wakes early must
+    // land on a frame, not push the frame forward again. Reading and dozing (A2–A3) are drawn at
+    // 20 fps: ≤ 300 frames a minute (§9.10). The face eases by time, so the sweeps, blinks and the
+    // sleepy nod keep their speed.
+    const slow = paintedAt + 1000 / K.REST_FPS;
     if (lv === 2) {
       const r = reading(inLv);
-      if (r.moving) return now + 1000 / K.GAZE_FPS;
+      if (r.moving) return Math.max(paintedAt + 1000 / K.GAZE_FPS, slow);
       due = Math.min(due, now + r.next);
-    } else if (lv === 3 && inLv < 4200) return now;
+    } else if (lv === 3 && inLv < 4200) return slow;
     else if (lv === 4 && mode !== "asleep") {
-      if (inLv < K.ZZZ_MS) return now + 1000 / K.ZZZ_FPS;
-      if (inLv < K.ZZZ_MS + 500) return now + 100;
+      if (inLv < K.ZZZ_MS) return paintedAt + 1000 / K.ZZZ_FPS;
+      if (inLv < K.ZZZ_MS + 500) return paintedAt + 100;
       return due;
     } else if (mode === "asleep") return due;
     if (ctx) due = Math.min(due, pixelWake(ctx, "main"));
-    return due;
+    return lv >= 2 ? Math.max(due, slow) : due;
   };
 
   const frame = () => {
@@ -391,6 +397,7 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
   function paint(now: number) {
     raf = 0;
     if (dead || !hold || hidden) return;
+    paintedAt = now;
     pump(now);
     let x = hold.x;
     let y = hold.y;
