@@ -32,6 +32,7 @@ import {
 } from "@/lib/address-page-cache";
 import { RankWindow } from "@/components/RankWindow";
 import { SegBar, segItem } from "@/components/SegBar";
+import { DetailTabs, tabCount, type DetailTabItem } from "@/components/DetailTabs";
 import { PrettyUsd } from "@/components/PrettyNum";
 import { getGateway, getWsUrl } from "@/lib/config";
 import {
@@ -1072,6 +1073,49 @@ export function AddressView({
     (tab === "activity" && activityFirstWait);
   const scanWait = useScanWait(tabScanWait);
 
+  /** One switch for both bars: the desktop segments and the phone strip. */
+  const pickAddrTab = (idTab: AddrTab) => {
+    if (idTab === tab) {
+      setHashTab(idTab);
+      return;
+    }
+    if (idTab === "activity") {
+      txEnter.mark((data ? activityRows(data) : []).map((tx) => String(tx.id)));
+    } else if (idTab === "boxes") {
+      boxEnter.mark((data?.unspentBoxes ?? []).map((b) => b.boxId));
+    } else if (idTab === "nfts") {
+      nftEnter.mark(nfts.map((row) => row.tokenId));
+    } else {
+      tokenEnter.mark(
+        tokenRows.slice(tokenOffset, tokenOffset + TOKEN_PAGE).map((row) => row.tokenId)
+      );
+    }
+    setTab(idTab);
+    setHashTab(idTab);
+  };
+  const txsKnown =
+    data?.pagination?.txs?.total ??
+    (data?.pagination && !data.pagination.txs?.hasMore ? (data.recentTxs?.length ?? null) : null);
+  const phoneTabs: DetailTabItem<AddrTab>[] = ADDR_TABS.map((idTab) => ({
+    id: idTab,
+    label: t(`address.tab.${idTab}`),
+    count:
+      idTab === "activity"
+        ? tabCount(txsKnown, locale)
+        : idTab === "tokens"
+          ? (data?.balance?.tokens?.length ?? 0) > 0
+            ? tabCount(tokenRows.length, locale)
+            : null
+          : idTab === "nfts"
+            ? tabCount(nftTotal, locale)
+            : tabCount(
+                boxCount,
+                locale,
+                Boolean(data?.pagination?.boxes?.hasMore && data?.pagination?.boxes?.total == null)
+              ),
+  }));
+  const lastFresh = lastTs != null && Date.now() - lastTs < 86_400_000;
+
   return (
     <Shell>
       {scanWait.bar ? (
@@ -1090,7 +1134,7 @@ export function AddressView({
             <div className="addr-lane">
             <div className="col-span-2 flex min-h-0 flex-col gap-2 lg:col-span-1 lg:row-span-2">
               <AddrFactCard
-                className="min-h-0 h-auto flex-1"
+                className="detail-sum min-h-0 h-auto flex-1"
                 enter={0}
                 label={typeLabel}
                 ink={INK.violet}
@@ -1120,7 +1164,7 @@ export function AddressView({
                     <NameMarquee text={name} fade />
                   )}
                 </h1>
-                <p className="mt-0.5 flex min-w-0 items-center gap-1">
+                <p className="detail-sum-id mt-0.5 flex min-w-0 items-center gap-1">
                   <code className="min-w-0 truncate font-mono text-[12px] leading-[1.15] text-[var(--muted-2)]">
                     {shortId(address, 8)}
                   </code>
@@ -1132,6 +1176,11 @@ export function AddressView({
                     onToggle={fav.toggle}
                   />
                 </p>
+                {lastTs != null ? (
+                  <p className={clsx("detail-sum-status lg:hidden", lastFresh && "is-ok")}>
+                    {t("detail.lastActivity").replace("{t}", formatRelTime(lastTs, locale))}
+                  </p>
+                ) : null}
                 <AddressNameSource
                   address={address}
                   name={data.name ?? null}
@@ -1139,36 +1188,14 @@ export function AddressView({
                   t={t}
                 />
               </AddrFactCard>
-              <SegBar cols={4} className="addr-seg shrink-0">
+              <SegBar cols={4} className="addr-seg detail-desk-tabs shrink-0">
                 {ADDR_TABS.map((idTab) => (
                   <a
                     key={idTab}
                     href={`#${idTab}`}
                     onClick={(e) => {
                       e.preventDefault();
-                      if (idTab === tab) {
-                        setHashTab(idTab);
-                        return;
-                      }
-                      if (idTab === "activity") {
-                        txEnter.mark(
-                          (data ? activityRows(data) : []).map((tx) => String(tx.id))
-                        );
-                      } else if (idTab === "boxes") {
-                        boxEnter.mark(
-                          (data.unspentBoxes ?? []).map((b) => b.boxId)
-                        );
-                      } else if (idTab === "nfts") {
-                        nftEnter.mark(nfts.map((row) => row.tokenId));
-                      } else {
-                        tokenEnter.mark(
-                          tokenRows
-                            .slice(tokenOffset, tokenOffset + TOKEN_PAGE)
-                            .map((row) => row.tokenId)
-                        );
-                      }
-                      setTab(idTab);
-                      setHashTab(idTab);
+                      pickAddrTab(idTab);
                     }}
                     className={segItem(tab === idTab)}
                   >
@@ -1210,7 +1237,7 @@ export function AddressView({
                     className="mt-2 text-[13px] font-medium tabular-nums"
                     style={{ color: INK.violet }}
                   >
-                    ${formatGroupedNumber(usd, 2, 2)}
+                    ${formatGroupedNumber(usd, 2, 2, locale)}
                   </p>
                 )}
                 {unconfirmed !== 0n && (
@@ -1306,6 +1333,8 @@ export function AddressView({
               copiedLabel={t("address.qrCopied")}
             />
           </div>
+
+          <DetailTabs tabs={phoneTabs} active={tab} onPick={pickAddrTab} label={t("detail.tabs")} />
 
           {tab === "activity" && (
             <div className="addr-facts-body mt-2">

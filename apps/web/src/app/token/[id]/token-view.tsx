@@ -37,6 +37,7 @@ import { safeMediaUrl } from "@/lib/nft-art";
 import { useMediaSrc } from "@/lib/use-media-src";
 import { TokenAvatar } from "@/components/TokenBadge";
 import { SegBar, segItem } from "@/components/SegBar";
+import { DetailTabs, tabCount, type DetailTabItem } from "@/components/DetailTabs";
 import { RankWindow } from "@/components/RankWindow";
 import { addrTapeHasMore, holderKeysetCursor, txKeysetCursor } from "@/lib/rank-window";
 import { getGateway } from "@/lib/config";
@@ -277,15 +278,30 @@ function DescCard({
   empty: string;
   enter?: number;
 }) {
+  const t = useT();
   const lines = useMemo(
     () => (description ? tokenDescLines(description) : []),
     [description]
   );
+  /* Phone: three lines, then «More». The desk tile keeps its own scroll. */
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [over, setOver] = useState(false);
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el || open) return;
+    const sync = () => setOver(el.scrollHeight > el.clientHeight + 1);
+    sync();
+    const ro = new ResizeObserver(sync);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [open, lines]);
 
   return (
     <article
       className={clsx(
         "kpi-tile supply-card token-desc-card relative col-span-2 flex h-full min-h-0 min-w-0 items-stretch gap-2 overflow-hidden rounded-[20px] border border-[var(--border)] bg-[var(--module)] px-3 py-1.5 lg:col-span-1 lg:row-span-2",
+        open && "is-more",
         enter != null && "home-tile-enter"
       )}
       style={{
@@ -305,11 +321,26 @@ function DescCard({
           </p>
         </div>
         {description ? (
-          <div className="token-desc-body scrollbar-none">
-            <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
-              <DescPaint lines={lines} />
+          <>
+            <div
+              ref={bodyRef}
+              className={clsx("token-desc-body scrollbar-none", over && !open && "is-clamped")}
+            >
+              <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
+                <DescPaint lines={lines} />
+              </div>
             </div>
-          </div>
+            {over || open ? (
+              <button
+                type="button"
+                className="token-desc-more chip-press lg:hidden"
+                aria-expanded={open}
+                onClick={() => setOpen((v) => !v)}
+              >
+                {open ? t("detail.less") : t("detail.more")}
+              </button>
+            ) : null}
+          </>
         ) : (
           <p className="supply-tile-copy is-empty">{empty}</p>
         )}
@@ -756,6 +787,16 @@ export function TokenView({
     setTab(idTab);
     setHashTab(idTab);
   };
+  const phoneTabs: DetailTabItem<Tab>[] = TOKEN_TABS.map((idTab) => ({
+    id: idTab,
+    label: t(`token.tab.${idTab}`),
+    count:
+      idTab === "holders"
+        ? tabCount(holderTotal || holderN, locale)
+        : idTab === "txs"
+          ? tabCount(txN, locale)
+          : null,
+  }));
 
   return (
     <Shell>
@@ -771,7 +812,7 @@ export function TokenView({
           <div className="addr-lane">
             <div className="col-span-2 flex min-h-0 flex-col gap-2 lg:col-span-1 lg:row-span-2">
               <AddrFactCard
-                className="min-h-0 h-auto flex-1"
+                className="detail-sum min-h-0 h-auto flex-1"
                 enter={0}
                 label={typeLabel}
                 ink={INK.violet}
@@ -796,7 +837,7 @@ export function TokenView({
                 >
                   <NameMarquee text={sym} fade pxPerSec={16} />
                 </h1>
-                <p className="mt-0.5 flex min-w-0 items-center gap-1">
+                <p className="detail-sum-id mt-0.5 flex min-w-0 items-center gap-1">
                   <code className="min-w-0 truncate font-mono text-[12px] leading-[1.15] text-accent">
                     {shortId(tokenId, 8)}
                   </code>
@@ -808,7 +849,7 @@ export function TokenView({
                     onToggle={tokenFav.toggle}
                   />
                   {decimals ? (
-                    <span className="ml-auto shrink-0 text-[12px] leading-[1.15] text-[var(--muted-2)]">
+                    <span className="ml-auto shrink-0 text-[12px] leading-[1.15] text-[var(--muted-2)] max-lg:hidden">
                       {decimals} {t("token.cap.decimals")}
                     </span>
                   ) : null}
@@ -824,9 +865,15 @@ export function TokenView({
                   >
                     <span className="tabular-nums">{supplyGlance?.text ?? dash}</span>
                   </Tip>
+                  {decimals ? (
+                    <span className="lg:hidden">
+                      {" · "}
+                      {decimals} {t("token.cap.decimals")}
+                    </span>
+                  ) : null}
                 </p>
               </AddrFactCard>
-              <SegBar cols={4} className="tab-fit shrink-0">
+              <SegBar cols={4} className="tab-fit detail-desk-tabs shrink-0">
                 {TOKEN_TABS.map((idTab) => (
                   <a
                     key={idTab}
@@ -932,6 +979,8 @@ export function TokenView({
           {nft && (nft.kind || nft.url || nft.mintAddress || nft.collectionTokenId) ? (
             <NftInfoPanel nft={nft} tokenId={tokenId} locale={locale} t={t} />
           ) : null}
+
+          <DetailTabs tabs={phoneTabs} active={tab} onPick={onTab} label={t("detail.tabs")} />
 
           {tab === "holders" && (
             <div className="mt-2">

@@ -20,6 +20,7 @@ import "./looks.css";
 import "./feed.css";
 import "./phone-shell.css";
 import "./tip.css";
+import "./detail-phone.css";
 
 /** T1 default — Plex Sans has Cyrillic and `tnum`. */
 const sans = IBM_Plex_Sans({
