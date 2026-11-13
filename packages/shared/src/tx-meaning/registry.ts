@@ -341,7 +341,7 @@ function index(rows: Row[]): Map<string, RoleEntry> {
 const BY_TEMPLATE = index(TEMPLATE_ROWS);
 
 function templatesOfVenue(venue: string): readonly string[] {
-  return Object.freeze(TEMPLATE_ROWS.filter((r) => r[5] === venue).map((r) => r[0].toLowerCase()));
+  return Object.freeze(TEMPLATE_ROWS.filter((r) => r[5] === venue && r[2] === "pool").map((r) => r[0].toLowerCase()));
 }
 
 /** ErgoDex V3 position shells, current and earlier: a position box holds one unit of its key. */

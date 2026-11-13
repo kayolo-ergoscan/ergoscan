@@ -768,7 +768,7 @@ export const ru: Record<string, string> = {
   "token.lp.protocol": "Протокол",
   "token.lp.protocolV3": "ErgoDex V3 · концентрированная ликвидность",
   "token.lp.pair": "Пара",
-  "token.lp.range": "Диапазон",
+  "token.lp.range": "Диапазон сейчас",
   "token.lp.rangePer": "{y} за 1 {x}",
   "token.lp.fee": "Комиссия",
   "token.lp.box": "Бокс позиции",

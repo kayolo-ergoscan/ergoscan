@@ -766,7 +766,7 @@ export const en: Record<string, string> = {
   "token.lp.protocol": "Protocol",
   "token.lp.protocolV3": "ErgoDex V3 · concentrated liquidity",
   "token.lp.pair": "Pair",
-  "token.lp.range": "Range",
+  "token.lp.range": "Range now",
   "token.lp.rangePer": "{y} per 1 {x}",
   "token.lp.fee": "Fee",
   "token.lp.box": "Position box",
