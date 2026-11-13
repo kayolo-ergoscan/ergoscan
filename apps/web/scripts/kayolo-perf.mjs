@@ -89,7 +89,12 @@ function startProxy() {
 /** Profiles still on disk; removed on exit too, so a run that ends right after a close leaves nothing. */
 const profiles = new Set();
 process.on("exit", () => {
-  for (const dir of profiles) rmSync(dir, { recursive: true, force: true });
+  // Chromium may still be writing the profile as it dies: retry, and never fail the run over it.
+  for (const dir of profiles) {
+    try {
+      rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    } catch {}
+  }
 });
 
 async function browser() {
