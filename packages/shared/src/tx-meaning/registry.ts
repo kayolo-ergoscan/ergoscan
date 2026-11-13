@@ -340,6 +340,16 @@ function index(rows: Row[]): Map<string, RoleEntry> {
 
 const BY_TEMPLATE = index(TEMPLATE_ROWS);
 
+function templatesOfVenue(venue: string): readonly string[] {
+  return Object.freeze(TEMPLATE_ROWS.filter((r) => r[5] === venue && r[2] === "pool").map((r) => r[0].toLowerCase()));
+}
+
+/** ErgoDex V3 position shells, current and earlier: a position box holds one unit of its key. */
+export const ERGODEX_V3_SHELL_TEMPLATES: readonly string[] = templatesOfVenue("ErgoDex V3");
+
+/** ErgoDex constant-product pools (ERG/token, token/token): pool NFT, LP token, then the reserves. */
+export const ERGODEX_CP_POOL_TEMPLATES: readonly string[] = templatesOfVenue("ErgoDex CP");
+
 /**
  * Templates whose registers the rules read, so list views load registers for these boxes only:
  * Rosen lock and event trigger (chain name); MachinaFi orders (R4 owner, R6/R7 parent binding; the

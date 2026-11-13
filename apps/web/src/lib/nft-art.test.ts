@@ -30,3 +30,11 @@ test("mediaUrlFallbacks: keep each IPFS gate, ipfs.io last", () => {
   assert.ok(urls.includes("https://ipfs.io/ipfs/bafyabc"));
   assert.ok(urls.indexOf("https://nftstorage.link/ipfs/bafyabc") < urls.indexOf("https://ipfs.io/ipfs/bafyabc"));
 });
+
+test("the ErgoDex logo ErgoScan substitutes loads from the site itself", () => {
+  const api = "https://ergoscan.me/ergodex-lp-640.webp";
+  assert.deepEqual(mediaUrlFallbacks(api, "image"), ["/ergodex-lp-640.webp"]);
+  assert.equal(safeArtUrl(api), "/ergodex-lp-640.webp");
+  assert.equal(safeMediaUrl(api, "audio"), null);
+  assert.deepEqual(mediaUrlFallbacks(api, "video"), []);
+});

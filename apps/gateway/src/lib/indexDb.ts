@@ -12,6 +12,10 @@ import {
   eip4MediaFromRegs,
   eip4MintOfOutputs,
   eip4PreviewUrl,
+  ERGODEX_CP_POOL_TEMPLATES,
+  ERGODEX_LP_ART_URL,
+  ERGODEX_V3_GROUP_SLUG,
+  ERGODEX_V3_SHELL_TEMPLATES,
   isAgeUsdBankNft,
   MINERS_FEE_ADDRESS,
   isNftKind,
@@ -25,6 +29,19 @@ import {
   type NftKind,
 } from "@ergoscan/shared";
 import { GIX_STREAM_TIMEOUT_MS, GIX_STREAM_WINDOW, gixMaxFromNext } from "./gix.js";
+import {
+  classifyLpRows,
+  clCurveFromBox,
+  ergodexClKeyIds,
+  ergodexLpEntry,
+  ergodexLpMap,
+  lpArtSource,
+  setErgodexLpMap,
+  wholePrice,
+  withLpArt,
+  type ErgodexLpKind,
+  type LpBoxAssetRow,
+} from "./ergodexLp.js";
 import {
   isHex64,
   PACKED_ASSETS_BY_IDS_SQL,
@@ -228,6 +245,97 @@ export function refreshSpectrumPoolNfts(): Promise<void> {
     poolNftInflight = null;
   })();
   return poolNftInflight;
+}
+
+const LP_TTL_MS = 60_000;
+/** A full rescan drops what a reorg took back and picks up tokens rows that came late. */
+const LP_FULL_MS = 30 * 60_000;
+/** Incremental scans look back this many blocks (tokens rows can trail their boxes). */
+const LP_OVERLAP_BLOCKS = 20;
+const LP_TEMPLATES = [...ERGODEX_V3_SHELL_TEMPLATES, ...ERGODEX_CP_POOL_TEMPLATES].map((h) =>
+  Buffer.from(h, "hex")
+);
+let lpAt = 0;
+let lpFullAt = 0;
+let lpMaxHeight = 0;
+let lpInflight: Promise<void> | null = null;
+
+/**
+ * Assets of the ErgoDex template boxes (V3 position shells, CP pools) above a height, with the
+ * token's emission and whether the box's creating tx minted it. MATERIALIZED keeps the planner off
+ * tokens_emission_idx (2.5 s → 20 ms full, <1 ms incremental); the OFFSET 0 laterals keep it on the
+ * primary keys (it overestimates the template rows ×30 and would seq-scan box_assets); JIT off
+ * saves ~250 ms of compile.
+ */
+export const ERGODEX_LP_ROWS_SQL = `
+  WITH b AS MATERIALIZED (
+    SELECT bt.box_id, bt.template_hash, bt.creation_height
+      FROM packed.box_template bt
+     WHERE bt.template_hash = ANY($1::bytea[])
+       AND bt.creation_height > $2
+  ),
+  r AS MATERIALIZED (
+    SELECT b.box_id, b.template_hash, b.creation_height, a.token_id, a.asset_index,
+           EXISTS (SELECT 1 FROM packed.boxes m
+                    WHERE m.box_id = a.token_id AND m.spent_tx_id = pb.creation_tx_id) AS minted_here
+      FROM b
+      CROSS JOIN LATERAL (
+        SELECT x.creation_tx_id FROM packed.boxes x WHERE x.box_id = b.box_id OFFSET 0
+      ) pb
+      CROSS JOIN LATERAL (
+        SELECT y.token_id, y.asset_index FROM packed.box_assets y WHERE y.box_id = b.box_id OFFSET 0
+      ) a
+  )
+  SELECT encode(r.box_id, 'hex') AS box_id,
+         encode(r.template_hash, 'hex') AS template,
+         r.creation_height::text AS height,
+         encode(r.token_id, 'hex') AS token_id,
+         r.asset_index,
+         r.minted_here,
+         t.emission,
+         t.decimals
+    FROM r
+    LEFT JOIN LATERAL (
+      SELECT tt.emission::text AS emission, tt.decimals
+        FROM public.tokens tt
+       WHERE tt.token_id = encode(r.token_id, 'hex')
+       LIMIT 1
+    ) t ON true`;
+
+/** ErgoDex liquidity tokens in memory (TTL 60 s, incremental by height). Soft: errors keep the last set. */
+export function refreshErgodexLp(): Promise<void> {
+  if (lpInflight) return lpInflight;
+  if (lpAt > 0 && Date.now() - lpAt < LP_TTL_MS) return Promise.resolve();
+  lpInflight = (async () => {
+    const full = lpFullAt === 0 || Date.now() - lpFullAt >= LP_FULL_MS;
+    const from = full ? 0 : Math.max(0, lpMaxHeight - LP_OVERLAP_BLOCKS);
+    const rows = await qSlow<LpBoxAssetRow>(ERGODEX_LP_ROWS_SQL, [LP_TEMPLATES, from], 8000, [
+      "SET LOCAL jit = off",
+    ]);
+    if (rows) {
+      setErgodexLpMap(classifyLpRows(rows, full ? undefined : ergodexLpMap()));
+      for (const r of rows) {
+        const h = Number(r.height);
+        if (Number.isFinite(h) && h > lpMaxHeight) lpMaxHeight = h;
+      }
+      if (full) lpFullAt = Date.now();
+    }
+    lpAt = Date.now();
+    lpInflight = null;
+  })().catch(() => {
+    lpAt = Date.now();
+    lpInflight = null;
+  });
+  return lpInflight;
+}
+
+/** First call waits for the set; later calls refresh in the background. */
+export async function ensureErgodexLp(): Promise<void> {
+  if (lpFullAt === 0) {
+    await refreshErgodexLp();
+    return;
+  }
+  void refreshErgodexLp();
 }
 
 /**
@@ -2061,22 +2169,63 @@ export type AddrNft = {
   boxId: string | null;
   height: number | null;
   boxes: number;
+  /** Set when the shown picture is ErgoScan's substitute (the ErgoDex logo). */
+  artworkSource?: string;
+  /** ErgoDex liquidity token: its kind and, for a V3 position, the pair ("ERG/SigRSV"). */
+  lp?: { kind: ErgodexLpKind; pair: string | null };
 };
 
-/** EIP-4 NFT, or 1-unit 0-decimal while emission is still unknown. */
-const NFT_HELD = `t.emission = 1
+/**
+ * What the address «NFT» tab holds: an EIP-4 NFT, or 1 unit with 0 decimals while emission is
+ * still unknown, or an ErgoDex V3 position key (emission 2; ids in `$keysParam`, from memory).
+ * `on` is the balance row (token_balances tb) or the grouped unspent assets (box_assets ba).
+ */
+export function nftHeldSql(on: "balance" | "boxes", keysParam: number): string {
+  const one = on === "balance" ? "tb.amount = 1" : "SUM(ba.amount) = 1";
+  const id = on === "balance" ? "tb.token_id" : "ba.token_id";
+  return `t.emission = 1
       OR (
         coalesce(t.emission, 1) = 1
         AND coalesce(t.decimals, 0) = 0
-        AND SUM(ba.amount) = 1
-      )`;
+        AND ${one}
+      )
+      OR ${id} = ANY($${keysParam}::text[])`;
+}
 
-const NFT_HELD_BAL = `t.emission = 1
-      OR (
-        coalesce(t.emission, 1) = 1
-        AND coalesce(t.decimals, 0) = 0
-        AND tb.amount = 1
-      )`;
+/** `lp` for the ErgoDex liquidity tokens among ids: kind and, for a V3 key, «ERG/SigRSV». */
+async function lpTags(
+  ids: string[]
+): Promise<Map<string, { kind: ErgodexLpKind; pair: string | null }>> {
+  const out = new Map<string, { kind: ErgodexLpKind; pair: string | null }>();
+  const pairIds = ids.flatMap((id) => {
+    const p = ergodexLpEntry(id)?.pair;
+    return p ? [p.x, p.y].filter((x): x is string => !!x) : [];
+  });
+  const names = pairIds.length ? await tokenMetaMany(pairIds) : new Map<string, IdxTokenMeta>();
+  const label = (id: string | null) => (id ? names.get(id)?.name || id.slice(0, 6) : "ERG");
+  for (const id of ids) {
+    const lp = ergodexLpEntry(id);
+    if (!lp) continue;
+    out.set(id, {
+      kind: lp.kind,
+      pair: lp.kind === "cl-key" && lp.pair ? `${label(lp.pair.x)}/${label(lp.pair.y)}` : null,
+    });
+  }
+  return out;
+}
+
+/** Address «NFT» tab: own artwork (mint registers) first, then the ErgoDex logo and the pair. */
+async function lpArtAddrNfts(items: AddrNft[]): Promise<AddrNft[]> {
+  if (!items.some((it) => ergodexLpEntry(it.tokenId))) return items;
+  const tags = await lpTags(items.map((it) => it.tokenId));
+  return items.map((it) => {
+    const lp = tags.get(it.tokenId);
+    if (!lp) return it;
+    const artworkUrl = withLpArt(it.tokenId, it.artworkUrl);
+    const source = lpArtSource(it.tokenId, artworkUrl);
+    return { ...it, artworkUrl, ...(source ? { artworkSource: source } : {}), lp };
+  });
+}
 
 function mapAddrNftRows(
   rows: {
@@ -2133,14 +2282,16 @@ async function addressNftsFromBalances(
   limit: number,
   offset: number
 ): Promise<{ items: AddrNft[]; total: number } | null> {
+  await ensureErgodexLp();
+  const keys = ergodexClKeyIds();
   const tot = await qSlow<{ c: string }>(
     `SELECT count(*)::text AS c
        FROM token_balances tb
        LEFT JOIN tokens t ON t.token_id = tb.token_id
       WHERE tb.address = $1
         AND tb.amount > 0
-        AND (${NFT_HELD_BAL})`,
-    [address]
+        AND (${nftHeldSql("balance", 2)})`,
+    [address, keys]
   );
   if (!tot) return null;
   const rows = await qSlow<{
@@ -2167,18 +2318,18 @@ async function addressNftsFromBalances(
        LEFT JOIN tokens t ON t.token_id = tb.token_id
       WHERE tb.address = $1
         AND tb.amount > 0
-        AND (${NFT_HELD_BAL})
+        AND (${nftHeldSql("balance", 4)})
       ORDER BY
-        CASE WHEN NULLIF(t.artwork_url, '') IS NOT NULL THEN 0 ELSE 1 END,
+        CASE WHEN NULLIF(t.artwork_url, '') IS NOT NULL OR tb.token_id = ANY($4::text[]) THEN 0 ELSE 1 END,
         tb.last_height DESC NULLS LAST,
         tb.token_id
       LIMIT $2 OFFSET $3`,
-    [address, limit, offset]
+    [address, limit, offset, keys]
   );
   if (!rows) return null;
   return {
     total: Number(tot[0]?.c ?? 0),
-    items: await paintAddrNftMedia(mapAddrNftRows(rows)),
+    items: await lpArtAddrNfts(await paintAddrNftMedia(mapAddrNftRows(rows))),
   };
 }
 
@@ -2201,6 +2352,8 @@ async function addressNftsFromUnspentBoxes(
   offset: number
 ): Promise<{ items: AddrNft[]; total: number } | null> {
   const where = boxesUnspentWhere(address, "b");
+  await ensureErgodexLp();
+  const keys = ergodexClKeyIds();
   const tot = await qSlow<{ c: string }>(
     `SELECT count(*)::text AS c FROM (
        SELECT ba.token_id
@@ -2209,9 +2362,9 @@ async function addressNftsFromUnspentBoxes(
        LEFT JOIN tokens t ON t.token_id = ba.token_id
        WHERE ${where}
        GROUP BY ba.token_id, t.emission, t.decimals
-       HAVING ${NFT_HELD}
+       HAVING ${nftHeldSql("boxes", 2)}
      ) x`,
-    [address]
+    [address, keys]
   );
   if (!tot) return null;
   const rows = await qSlow<{
@@ -2239,17 +2392,17 @@ async function addressNftsFromUnspentBoxes(
      LEFT JOIN tokens t ON t.token_id = ba.token_id
      WHERE ${where}
      GROUP BY ba.token_id, t.name, t.decimals, t.emission, t.artwork_url
-     HAVING ${NFT_HELD}
+     HAVING ${nftHeldSql("boxes", 4)}
      ORDER BY
-       CASE WHEN NULLIF(t.artwork_url, '') IS NOT NULL THEN 0 ELSE 1 END,
+       CASE WHEN NULLIF(t.artwork_url, '') IS NOT NULL OR ba.token_id = ANY($4::text[]) THEN 0 ELSE 1 END,
        MAX(b.creation_height) DESC NULLS LAST
      LIMIT $2 OFFSET $3`,
-    [address, limit, offset]
+    [address, limit, offset, keys]
   );
   if (!rows) return null;
   return {
     total: Number(tot[0]?.c ?? 0),
-    items: await paintAddrNftMedia(mapAddrNftRows(rows)),
+    items: await lpArtAddrNfts(await paintAddrNftMedia(mapAddrNftRows(rows))),
   };
 }
 
@@ -3588,7 +3741,7 @@ export async function tokenMetaMany(
       decimals: r.decimals != null ? Number(r.decimals) : null,
       emission: r.emission != null ? Number(r.emission) : null,
       emissionText: r.emission ?? null,
-      artworkUrl: r.artwork_url,
+      artworkUrl: withLpArt(r.token_id, r.artwork_url),
     });
   }
   return map;
@@ -4348,6 +4501,8 @@ export type IdxNft = {
   sha256: string | null;
   collection: string;
   slug: string;
+  /** ErgoDex V3 position key in the «ErgoDex V3 positions» group: kind and pair. */
+  lp?: { kind: ErgodexLpKind; pair: string | null };
 };
 
 function cleanNftName(s: string | null): string | null {
@@ -4413,8 +4568,21 @@ async function artworkByTokenIds(ids: string[]): Promise<Map<string, string>> {
   return out;
 }
 
-/** Page-sized PK joins. Fills name/art/kind from mint output registers already in PG. */
+/** Own picture first (tokens row, then mint registers); an ErgoDex liquidity token without one gets the logo. */
+function lpArtFill<T extends { tokenId: string; artworkUrl: string | null }>(items: T[]): T[] {
+  return items.map((it) => {
+    const art = withLpArt(it.tokenId, it.artworkUrl);
+    return art === it.artworkUrl ? it : { ...it, artworkUrl: art };
+  });
+}
+
 async function fillNftMetaFromMint(items: IdxNft[]): Promise<IdxNft[]> {
+  const [filled] = await Promise.all([fillNftMetaFromMintRegs(items), ensureErgodexLp()]);
+  return lpArtFill(filled);
+}
+
+/** Page-sized PK joins. Fills name/art/kind from mint output registers already in PG. */
+async function fillNftMetaFromMintRegs(items: IdxNft[]): Promise<IdxNft[]> {
   const need = items
     .filter((it) => !it.name || !it.artworkUrl || !it.kind)
     .map((it) => it.tokenId);
@@ -4447,6 +4615,11 @@ async function fillNftMetaFromMint(items: IdxNft[]): Promise<IdxNft[]> {
 }
 
 async function fillTokenHitArt(items: IdxTokenHit[]): Promise<IdxTokenHit[]> {
+  const [filled] = await Promise.all([fillTokenHitArtRegs(items), ensureErgodexLp()]);
+  return lpArtFill(filled);
+}
+
+async function fillTokenHitArtRegs(items: IdxTokenHit[]): Promise<IdxTokenHit[]> {
   const need = items
     .filter((it) => !it.artworkUrl || !it.kind)
     .map((it) => it.tokenId);
@@ -4663,12 +4836,11 @@ export async function nftNameGroupsFromIndex(
     }
     return ids;
   });
-  const arts = await artworkByTokenIds(need);
-  if (!arts.size) return groups;
-  return groups.map((g) => {
+  const [arts, v3] = await Promise.all([artworkByTokenIds(need), ergodexV3Group()]);
+  const named = groups.map((g) => {
     const sample = g.sample.map((s) => ({
       ...s,
-      artworkUrl: s.artworkUrl || arts.get(s.tokenId) || null,
+      artworkUrl: withLpArt(s.tokenId, s.artworkUrl || arts.get(s.tokenId) || null),
     }));
     return {
       ...g,
@@ -4679,6 +4851,79 @@ export async function nftNameGroupsFromIndex(
         (g.tokenIds[0] ? arts.get(g.tokenIds[0]) ?? null : null),
     };
   });
+  if (!v3) return named;
+  return [v3, ...named.slice(0, Math.max(0, limit - 1))].map((g, i) => ({ ...g, rank: i + 1 }));
+}
+
+/** «ErgoDex V3 positions»: every V3 position key, from memory (by contract, not by name). */
+async function ergodexV3Group(): Promise<NftNameGroup | null> {
+  await ensureErgodexLp();
+  const ids = ergodexClKeyIds();
+  if (!ids.length) return null;
+  const head = ids.slice(0, 6);
+  const meta = await tokenMetaMany(head);
+  return {
+    rank: 1,
+    slug: ERGODEX_V3_GROUP_SLUG,
+    name: "ErgoDex V3 positions",
+    count: ids.length,
+    tokenIds: ids,
+    sample: head.map((id) => ({
+      tokenId: id,
+      name: meta.get(id)?.name ?? null,
+      artworkUrl: meta.get(id)?.artworkUrl ?? ERGODEX_LP_ART_URL,
+    })),
+    latestHeight: ergodexLpEntry(ids[0])?.height ?? null,
+    coverUrl: ERGODEX_LP_ART_URL,
+  };
+}
+
+async function ergodexV3GroupDetail(
+  limit: number,
+  offset: number
+): Promise<{ name: string; items: IdxNft[]; total: number } | null> {
+  await ensureErgodexLp();
+  const ids = ergodexClKeyIds();
+  const page = ids.slice(offset, offset + Math.max(1, limit));
+  if (!page.length) return { name: "ErgoDex V3 positions", items: [], total: ids.length };
+  const rows = await q<{
+    token_id: string;
+    name: string | null;
+    decimals: string | null;
+    emission: string | null;
+    t_box_id: string | null;
+    first_height: string | null;
+    creation_height: string | null;
+    creation_tx_id: string | null;
+    issuer_address: string | null;
+    address: string | null;
+    amount: string;
+    box_id: string;
+    artwork_url: string | null;
+  }>(
+    `SELECT ${NFT_ROW_SQL}
+       FROM (
+         SELECT t.token_id, t.name, t.decimals, t.emission, t.box_id,
+                t.first_height, t.artwork_url, t.last_height
+           FROM tokens t
+          WHERE t.token_id = ANY($1::text[])
+       ) t
+       LEFT JOIN packed.boxes spent ON spent.box_id = decode(t.token_id, 'hex')
+       LEFT JOIN packed.addr ad ON ad.id = spent.addr_id`,
+    [page]
+  );
+  if (!rows) return null;
+  const at = new Map(page.map((id, i) => [id, i]));
+  rows.sort((a, b) => (at.get(a.token_id) ?? 0) - (at.get(b.token_id) ?? 0));
+  const [items, tags] = await Promise.all([fillNftMetaFromMint(rows.map(mapNftRow)), lpTags(page)]);
+  return {
+    name: "ErgoDex V3 positions",
+    items: items.map((it) => {
+      const lp = tags.get(it.tokenId);
+      return lp ? { ...it, lp } : it;
+    }),
+    total: ids.length,
+  };
 }
 
 export async function nftNameGroupDetailFromIndex(
@@ -4686,6 +4931,7 @@ export async function nftNameGroupDetailFromIndex(
   limit: number,
   offset: number
 ): Promise<{ name: string; items: IdxNft[]; total: number } | null> {
+  if (slug === ERGODEX_V3_GROUP_SLUG) return ergodexV3GroupDetail(limit, offset);
   const groups = await nftNameGroupsFromIndex(80);
   if (!groups) return null;
   const group = groups.find((g) => g.slug === slug);
@@ -4859,6 +5105,104 @@ export async function nftIssuerItemsFromIndex(
   };
 }
 
+export type TokenLpSide = { tokenId: string | null; name: string; decimals: number };
+
+/** ErgoDex liquidity token facts for the token page. `position` only for a V3 key. */
+export type TokenLpFacts = {
+  kind: ErgodexLpKind;
+  protocol: "ergodex-v3" | "ergodex-cp";
+  position: {
+    /** Unspent position box, else the last one (closed position). */
+    boxId: string;
+    open: boolean;
+    height: number | null;
+    x: TokenLpSide | null;
+    y: TokenLpSide | null;
+    /** Whole Y for 1 whole X at the ends of the range, from the box's curve. */
+    priceLow: number | null;
+    priceHigh: number | null;
+    /** Only where the validator generation names the unit (see ergodexLp.clFeeUnit). */
+    feePercent: number | null;
+  } | null;
+};
+
+const V3_SHELLS = ERGODEX_V3_SHELL_TEMPLATES.map((h) => Buffer.from(h, "hex"));
+
+/** Latest position box of a V3 key (the open one when there is one) and its curve. */
+async function tokenLpFacts(tokenId: string, kind: ErgodexLpKind): Promise<TokenLpFacts> {
+  const protocol = kind === "cl-key" ? "ergodex-v3" : "ergodex-cp";
+  if (kind !== "cl-key") return { kind, protocol, position: null };
+  const boxes = await q<{
+    box_id: string;
+    height: string | null;
+    value: string;
+    unspent: boolean;
+    regs: unknown;
+    ergo_tree: string | null;
+  }>(
+    `SELECT encode(b.box_id, 'hex') AS box_id,
+            b.creation_height::text AS height,
+            b.value_nano::text AS value,
+            (b.spent_tx_id IS NULL) AS unspent,
+            b.additional_registers AS regs,
+            s.ergo_tree
+       FROM packed.box_assets a
+       JOIN packed.box_template bt ON bt.box_id = a.box_id AND bt.template_hash = ANY($2::bytea[])
+       JOIN packed.boxes b ON b.box_id = a.box_id
+       LEFT JOIN packed.script s ON s.id = b.script_id
+      WHERE a.token_id = decode($1, 'hex')
+      ORDER BY (b.spent_tx_id IS NULL) DESC, b.creation_height DESC NULLS LAST
+      LIMIT 1`,
+    [tokenId, V3_SHELLS]
+  );
+  const box = boxes?.[0];
+  if (!box) return { kind, protocol, position: null };
+  const assets = await q<{ token_id: string; amount: string; asset_index: number | null }>(
+    `SELECT encode(token_id, 'hex') AS token_id, amount::text AS amount, asset_index
+       FROM packed.box_assets WHERE box_id = decode($1, 'hex')`,
+    [box.box_id]
+  );
+  const regs = regsAsHexMap(box.regs);
+  const curve = clCurveFromBox(
+    {
+      boxId: box.box_id,
+      valueNano: box.value,
+      assets: (assets ?? []).map((a) => ({
+        tokenId: a.token_id,
+        amount: a.amount,
+        index: a.asset_index != null ? Number(a.asset_index) : null,
+      })),
+      r4: regs.R4 ?? null,
+      r5: regs.R5 ?? null,
+      ergoTree: box.ergo_tree,
+    },
+    tokenId
+  );
+  const ids = curve ? [curve.x, curve.y].filter((x): x is string => !!x) : [];
+  const meta = ids.length ? await tokenMetaMany(ids) : new Map<string, IdxTokenMeta>();
+  const side = (id: string | null): TokenLpSide => {
+    if (!id) return { tokenId: null, name: "ERG", decimals: 9 };
+    const m = meta.get(id);
+    return { tokenId: id, name: m?.name || id.slice(0, 8), decimals: m?.decimals ?? 0 };
+  };
+  const x = curve ? side(curve.x) : null;
+  const y = curve ? side(curve.y) : null;
+  return {
+    kind,
+    protocol,
+    position: {
+      boxId: box.box_id,
+      open: box.unspent === true,
+      height: box.height != null ? Number(box.height) : null,
+      x,
+      y,
+      priceLow: curve && x && y ? wholePrice(curve.lowRaw, x.decimals, y.decimals) : null,
+      priceHigh: curve && x && y ? wholePrice(curve.highRaw, x.decimals, y.decimals) : null,
+      feePercent: curve?.fee?.percent ?? null,
+    },
+  };
+}
+
 export async function tokenMetaFromIndex(
   tokenId: string
 ): Promise<{
@@ -4875,6 +5219,9 @@ export async function tokenMetaFromIndex(
   txCount: number | null;
   unspentBoxes: number | null;
   artworkUrl: string | null;
+  /** "ergoscan:ergodex-lp" when artworkUrl is ErgoScan's substitute, not the token's own. */
+  artworkSource: string | null;
+  lp: TokenLpFacts | null;
   registers: Record<string, string>;
   issuerAddress: string | null;
   mintTxId: string | null;
@@ -4936,9 +5283,17 @@ export async function tokenMetaFromIndex(
   }
   const firstHeight = r.first_height != null ? Number(r.first_height) : null;
   const emission = r.emission != null ? Number(r.emission) : null;
-  const artworkUrl = r.artwork_url ?? eip4PreviewUrl(media) ?? pickArtworkUrl(decoded);
+  await ensureErgodexLp();
+  const lpEntry = ergodexLpEntry(tokenId);
+  const artworkUrl = withLpArt(
+    tokenId,
+    r.artwork_url ?? eip4PreviewUrl(media) ?? pickArtworkUrl(decoded)
+  );
+  const artworkSource = lpArtSource(tokenId, artworkUrl);
+  const lp = lpEntry ? await tokenLpFacts(tokenId, lpEntry.kind) : null;
   const showNft =
     emission === 1 ||
+    lpEntry?.kind === "cl-key" ||
     media.kind != null ||
     media.url != null ||
     eip24.royaltyPercent != null ||
@@ -4959,6 +5314,8 @@ export async function tokenMetaFromIndex(
     txCount: r.tx_count != null ? Number(r.tx_count) : null,
     unspentBoxes: r.unspent_boxes != null ? Number(r.unspent_boxes) : null,
     artworkUrl,
+    artworkSource,
+    lp,
     registers,
     issuerAddress: ctx?.issuerAddress ?? null,
     mintTxId: ctx?.mintTxId ?? null,
@@ -5109,6 +5466,8 @@ export type TokenCatalogItem = {
   decimals: number;
   emission: string | null;
   artworkUrl: string | null;
+  /** Present when artworkUrl is ErgoScan's substitute (the ErgoDex logo). */
+  artworkSource?: string;
   holders: number | null;
   unspentBoxes: number | null;
   txCount: number | null;
@@ -5266,24 +5625,32 @@ export async function listTokensCatalog(opts: {
     }
 
     const needName = listR.rows.filter((r) => !String(r.name ?? "").trim()).map((r) => r.token_id);
-    const mintRegs = needName.length ? await mintOutputRegsByTokenIds(needName) : new Map();
-    const items: TokenCatalogItem[] = listR.rows.map((r) => ({
-      tokenId: r.token_id,
-      name:
-        displayErgoTokenName(r.token_id, r.name) ||
-        eip4TextNameFromRegs(mintRegs.get(r.token_id)) ||
-        r.name,
-      decimals: nInt(r.decimals) ?? eip4DecimalsFromRegs(mintRegs.get(r.token_id)) ?? 0,
-      emission: r.emission,
-      artworkUrl: r.artwork_url,
-      holders: nInt(r.holders),
-      unspentBoxes: nInt(r.unspent_boxes),
-      txCount: nInt(r.tx_count),
-      firstHeight: nInt(r.first_height),
-      lastHeight: nInt(r.last_height),
-      firstTs: nInt(r.first_ts),
-      lastTs: nInt(r.last_ts),
-    }));
+    const [mintRegs] = await Promise.all([
+      needName.length ? mintOutputRegsByTokenIds(needName) : Promise.resolve(new Map<string, unknown>()),
+      ensureErgodexLp(),
+    ]);
+    const items: TokenCatalogItem[] = listR.rows.map((r) => {
+      const artworkUrl = withLpArt(r.token_id, r.artwork_url);
+      const artworkSource = lpArtSource(r.token_id, artworkUrl);
+      return {
+        tokenId: r.token_id,
+        name:
+          displayErgoTokenName(r.token_id, r.name) ||
+          eip4TextNameFromRegs(mintRegs.get(r.token_id)) ||
+          r.name,
+        decimals: nInt(r.decimals) ?? eip4DecimalsFromRegs(mintRegs.get(r.token_id)) ?? 0,
+        emission: r.emission,
+        artworkUrl,
+        ...(artworkSource ? { artworkSource } : {}),
+        holders: nInt(r.holders),
+        unspentBoxes: nInt(r.unspent_boxes),
+        txCount: nInt(r.tx_count),
+        firstHeight: nInt(r.first_height),
+        lastHeight: nInt(r.last_height),
+        firstTs: nInt(r.first_ts),
+        lastTs: nInt(r.last_ts),
+      };
+    });
 
     if (/^[0-9a-fA-F]{64}$/.test(qraw) && items.length === 1) {
       const move = await tokenTransferLast(qraw.toLowerCase());

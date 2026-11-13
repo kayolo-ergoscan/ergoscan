@@ -61,6 +61,7 @@ import {
   cachedDexLockHints,
   cachedSpectrumPoolNfts,
   readGixWatermark,
+  refreshErgodexLp,
   refreshSpectrumPoolNfts,
 } from "./lib/indexDb.js";
 import { warmErgoTreeParser } from "./lib/ergoTree.js";
@@ -1159,6 +1160,7 @@ server.listen(PORT, BIND, () => {
     `[ergoscan-gateway] ${BIND}:${PORT} node=${ERGO_NODE_URL} mock=${FORCE_MOCK} fallback=${MOCK_FALLBACK}`
   );
   void refreshSpectrumPoolNfts();
+  void refreshErgodexLp();
   warmErgoTreeParser();
   // The site gateway (ergoscan_gateway, UPDATE on script.template_hash) fills template hashes.
   // The public API process has no write grant and only repeated the work every 5 s (audit 12 Nov).

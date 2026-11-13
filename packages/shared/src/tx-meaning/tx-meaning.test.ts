@@ -19,10 +19,27 @@ import {
   isFoldedAction,
   multisigOf,
   sayMeaning,
+  ERGODEX_CP_POOL_TEMPLATES,
+  ERGODEX_V3_SHELL_TEMPLATES,
   type MeaningBox,
   type MeaningCtx,
   type MeaningTx,
 } from "./index.js";
+
+describe("ErgoDex LP templates (ErgoScan's logo for liquidity tokens)", () => {
+  it("come from the registry rows: V3 position shells and CP pools", () => {
+    assert.equal(ERGODEX_V3_SHELL_TEMPLATES.length, 2);
+    assert.equal(ERGODEX_CP_POOL_TEMPLATES.length, 2);
+    for (const h of ERGODEX_V3_SHELL_TEMPLATES) {
+      assert.equal(roleByTemplate(h)?.venue, "ErgoDex V3", h);
+      assert.match(roleByTemplate(h)?.label ?? "", /^ErgoDex V3 position/);
+    }
+    for (const h of ERGODEX_CP_POOL_TEMPLATES) {
+      assert.equal(roleByTemplate(h)?.venue, "ErgoDex CP", h);
+      assert.equal(roleByTemplate(h)?.role, "pool");
+    }
+  });
+});
 
 type Packed = Omit<MeaningBox, "assets"> & { assets?: Array<[string, string]> };
 type Golden = {

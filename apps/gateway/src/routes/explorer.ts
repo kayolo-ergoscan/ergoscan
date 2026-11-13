@@ -96,6 +96,7 @@ function catalogNftRow(it: IdxNft, ready: Set<string>) {
     slug: it.slug,
     emission: it.emission,
     decimals: it.decimals,
+    ...(it.lp ? { lp: it.lp } : {}),
     confirmed: true,
     source: "indexer",
   };
@@ -733,6 +734,9 @@ export function registerExplorerRoutes(app: Express, deps: ExplorerDeps) {
       registersDecoded: decoded,
       isNft,
       artworkUrl,
+      // "ergoscan:ergodex-lp": the ErgoDex logo shown by ErgoScan, not the token's own picture.
+      ...(idx?.artworkSource && artworkUrl === idx.artworkUrl ? { artworkSource: idx.artworkSource } : {}),
+      ...(idx?.lp ? { lp: idx.lp } : {}),
       nft,
       issuerAddress: idx?.issuerAddress ?? null,
       mintTxId: idx?.mintTxId ?? null,

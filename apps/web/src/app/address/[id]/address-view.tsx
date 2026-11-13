@@ -90,6 +90,8 @@ interface AddrNftRow {
   boxId: string | null;
   height: number | null;
   boxes: number;
+  /** ErgoDex liquidity token (gateway): kind and, for a V3 position, the pair. */
+  lp?: { kind: string; pair: string | null };
 }
 
 interface BoxRow {
@@ -1498,10 +1500,15 @@ export function AddressView({
                           item={{
                             tokenId: row.tokenId,
                             name: row.name,
-                            collection: row.collection,
                             artworkUrl: row.artworkUrl,
-                            kind: row.kind,
-                            kindLabel: row.kind ? t(`nfts.kind.${row.kind}`) : null,
+                            // An ErgoDex V3 position: «LP · ERG/SigRSV».
+                            ...(row.lp?.kind === "cl-key"
+                              ? { collection: null, kind: "lp", kindLabel: t("nfts.kind.lp"), meta: row.lp.pair }
+                              : {
+                                  collection: row.collection,
+                                  kind: row.kind,
+                                  kindLabel: row.kind ? t(`nfts.kind.${row.kind}`) : null,
+                                }),
                           }}
                           enterClass={nftEnter.enterClass(row.tokenId)}
                         />

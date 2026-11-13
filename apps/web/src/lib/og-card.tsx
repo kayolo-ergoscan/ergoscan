@@ -71,6 +71,19 @@ export async function tokenLogoData(tokenId: string): Promise<string | null> {
   return out;
 }
 
+let ergodexLpLogo: Promise<string | null> | null = null;
+
+/** The ErgoDex logo ErgoScan shows for liquidity tokens, as PNG (satori cannot draw webp). */
+export function ergodexLpLogoData(): Promise<string | null> {
+  ergodexLpLogo ??= readFile(path.join(process.cwd(), "public", "ergodex-lp-og.png"))
+    .then((buf) => `data:image/png;base64,${buf.toString("base64")}`)
+    .catch(() => {
+      ergodexLpLogo = null;
+      return null;
+    });
+  return ergodexLpLogo;
+}
+
 /** 1 234 567.8 → "1,234,567.8"; small values keep up to `maxDec` decimals; big ones go compact. */
 export function ogNumber(value: number, maxDec = 4): string {
   if (!Number.isFinite(value)) return "—";

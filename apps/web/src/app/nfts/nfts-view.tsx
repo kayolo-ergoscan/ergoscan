@@ -12,6 +12,7 @@ import { RankWindow } from "@/components/RankWindow";
 import { Feed, FeedCount, FeedEmpty, FeedPlate, FeedSort } from "@/components/feed/Feed";
 import { SegBar, segItem } from "@/components/SegBar";
 import { getGateway } from "@/lib/config";
+import { ERGODEX_V3_GROUP_SLUG } from "@ergoscan/shared";
 import { describeParty } from "@/lib/address-labels";
 import { INK } from "@/lib/palette";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
@@ -494,10 +495,10 @@ export function NftsView({ initial }: { initial: NftHomeSnap }) {
                       <NftGroupCard
                         key={c.slug}
                         href={`/nfts/collection/${encodeURIComponent(c.slug)}`}
-                        name={c.name}
+                        name={c.slug === ERGODEX_V3_GROUP_SLUG ? t("nfts.group.ergodexV3") : c.name}
                         coverUrl={c.coverUrl}
                         count={c.count}
-                        hint={null}
+                        hint={c.slug === ERGODEX_V3_GROUP_SLUG ? t("nfts.kind.lp") : null}
                         sheetEnter={sheetOn ? 5 + i : undefined}
                         enterClass={sheetOn ? undefined : enter.enterClass(c.slug)}
                       />

@@ -1257,6 +1257,8 @@ export type TokenListItem = {
   decimals: number;
   emission: string | null;
   artworkUrl: string | null;
+  /** "ergoscan:ergodex-lp" when artworkUrl is the ErgoDex logo ErgoScan shows for an LP token. */
+  artworkSource?: string;
   holders: number | null;
   unspentBoxes: number | null;
   txCount: number | null;
@@ -1843,6 +1845,8 @@ export type NftCardSnap = {
   txId?: string | null;
   source?: string;
   confirmed?: boolean;
+  /** ErgoDex V3 position key: kind and pair («ERG/SigRSV»). */
+  lp?: { kind: string; pair: string | null };
 };
 
 export type NftSeriesSnap = {

@@ -15,6 +15,7 @@ import {
 import {
   BigFigure,
   Chips,
+  ergodexLpLogoData,
   Gap,
   Mono,
   OG,
@@ -39,7 +40,14 @@ import { tokenSymbol } from "@/lib/token-meta";
 import { groupParties, markFeeOutputIndexes, type TxIo } from "@/lib/tx-flow";
 import { toBigIntAmt } from "@/lib/format";
 import { parseFullMeaning } from "@/lib/tx-meaning-row";
-import { assetLabel, formatAmount, meaningPage, type MeaningAssetLike, type TxMeaning } from "@ergoscan/shared";
+import {
+  assetLabel,
+  ERGODEX_LP_ART_SOURCE,
+  formatAmount,
+  meaningPage,
+  type MeaningAssetLike,
+  type TxMeaning,
+} from "@ergoscan/shared";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -373,7 +381,10 @@ async function tokenCard(tokenId: string) {
   if (!row) return null;
   const symbol = ogText(tokenSymbol(row.tokenId, row.name), 20) || ogText(row.name, 20) || ogShort(row.tokenId, 6);
   const fullName = ogText(row.name, 40);
-  const logo = await tokenLogoData(row.tokenId);
+  // A catalog logo first; an ErgoDex liquidity token without art of its own gets the ErgoDex logo.
+  const logo =
+    (await tokenLogoData(row.tokenId)) ??
+    (row.artworkSource === ERGODEX_LP_ART_SOURCE ? await ergodexLpLogoData() : null);
   const supply = row.emission != null ? ogNumber(scaled(row.emission, row.decimals ?? 0), 2) : null;
   const n = (v: number | null) => (v != null ? v.toLocaleString("en-US") : "—");
   const tiles: OgTile[] = [

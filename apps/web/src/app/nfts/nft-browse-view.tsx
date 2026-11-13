@@ -15,6 +15,7 @@ import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { SNAPSHOT_FETCH, enteringIds, useEnterIds } from "@/lib/keyed-enter";
 import { useKeepFresh, usePageSync } from "@/lib/page-sync";
 import { NFT_PACK, type NftCardSnap } from "@/lib/list-snapshots";
+import { ERGODEX_V3_GROUP_SLUG } from "@ergoscan/shared";
 
 function loc(locale: string): string {
   return locale === "ru" ? "ru-RU" : "en-US";
@@ -125,6 +126,9 @@ export function NftBrowseView({
   useKeepFresh(() => load(true));
 
   const party = address ? describeParty(address) : null;
+  // «ErgoDex V3 positions»: grouped by contract, not by name.
+  const v3 = kind === "series" && slug === ERGODEX_V3_GROUP_SLUG;
+  const shownName = v3 ? t("nfts.group.ergodexV3") : name;
 
   return (
     <Shell>
@@ -134,7 +138,7 @@ export function NftBrowseView({
           ...(kind === "series"
             ? [{ href: "/nfts#series", label: t("nfts.tab.series") }]
             : []),
-          { label: name },
+          { label: shownName },
         ]}
       />
 
@@ -153,7 +157,7 @@ export function NftBrowseView({
             className="truncate text-[22px] font-semibold tracking-tight"
             style={{ color: INK.coral }}
           >
-            {name}
+            {shownName}
           </h1>
           {address ? (
             <p className="mt-1 truncate font-mono text-[12px] text-accent">
@@ -163,12 +167,11 @@ export function NftBrowseView({
             </p>
           ) : null}
           <p className="mt-1 text-[13px] text-[var(--muted)]">
-            {t(kind === "series" ? "nfts.collection.count" : "nfts.issuer.count").replace(
-              "{n}",
-              String(total)
-            )}
+            {t(
+              v3 ? "nfts.group.ergodexV3Count" : kind === "series" ? "nfts.collection.count" : "nfts.issuer.count"
+            ).replace("{n}", String(total))}
           </p>
-          <p className="mt-1 text-[12px] text-[var(--muted-2)]">{t(hintKey)}</p>
+          <p className="mt-1 text-[12px] text-[var(--muted-2)]">{t(v3 ? "nfts.group.ergodexV3Hint" : hintKey)}</p>
         </div>
       </div>
 
@@ -177,7 +180,7 @@ export function NftBrowseView({
           {!items.length ? (
             <FeedEmpty
               k="nft"
-              plate={<FeedPlate tag={name} />}
+              plate={<FeedPlate tag={shownName} />}
               title={
                 !ready ? t("nfts.readyPreview") : kind === "series" ? t("nfts.empty.series") : t("nfts.empty.issuers")
               }
@@ -195,10 +198,14 @@ export function NftBrowseView({
                     item={{
                       tokenId: row.tokenId,
                       name: row.name,
-                      collection: row.collection,
                       artworkUrl: row.artworkUrl,
-                      kind: row.kind,
-                      kindLabel: row.kind ? t(`nfts.kind.${row.kind}`) : null,
+                      ...(row.lp?.kind === "cl-key"
+                        ? { collection: null, kind: "lp", kindLabel: t("nfts.kind.lp"), meta: row.lp.pair }
+                        : {
+                            collection: row.collection,
+                            kind: row.kind,
+                            kindLabel: row.kind ? t(`nfts.kind.${row.kind}`) : null,
+                          }),
                     }}
                     enterClass={enter.enterClass(row.tokenId)}
                   />
