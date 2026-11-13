@@ -127,7 +127,7 @@ describe("tx meaning: rules", () => {
     assert.equal(m.fee.payer, m.actor);
   });
 
-  it("pools carry only our protocol names: ErgoDex, ErgoDex CP, ErgoDex V3, LithosDex and the rest of the registry", () => {
+  it("pools carry only the registry's protocol names (ErgoDex, ErgoDex CP, ErgoDex V3, LithosDex, MachinaFi …)", () => {
     const names = new Set(Object.values(PROTOCOL_NAMES).map((n) => n.en));
     const venues = new Set([...names, "ErgoDex CP", "ErgoDex V3"]);
     for (const g of GOLDEN) {
