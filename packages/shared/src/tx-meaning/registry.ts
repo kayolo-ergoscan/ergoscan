@@ -9,8 +9,9 @@
  *   chain   = read from live boxes that hold the protocol's NFT or sit at its published address;
  *   derived = seen spent beside a known pool and paying the order owner (evidence, not a publication);
  *   guess   = shape and token names only; the rule marks the answer conf "guess".
- *   code    = compiled from the protocol's own contract source (cruxfinance/crux-contracts at
- *             677a2ed, compiled/ and verification/contracts/) and seen on live mainnet boxes.
+ *   code    = compiled from the protocol's own contract source and seen on live mainnet boxes:
+ *             cruxfinance/crux-contracts at 677a2ed (compiled/, verification/contracts/);
+ *             nautls/machinafi-sdk at 99608a9 (MIT; trees in src/grid-order.ts, src/limit-order.ts).
  */
 import { LOCK_BY_ADDRESS } from "../lock-addresses.js";
 import {
@@ -43,7 +44,8 @@ export type ProtocolId =
   | "ergonames"
   | "phoenix"
   | "basis"
-  | "dexy";
+  | "dexy"
+  | "machinafi";
 
 /** Display names. Every former pool of the ErgoDex project is named ErgoDex. */
 export const PROTOCOL_NAMES: Readonly<Record<ProtocolId, { ru: string; en: string }>> = {
@@ -63,6 +65,7 @@ export const PROTOCOL_NAMES: Readonly<Record<ProtocolId, { ru: string; en: strin
   phoenix: { ru: "Phoenix", en: "Phoenix" },
   basis: { ru: "Basis", en: "Basis" },
   dexy: { ru: "Dexy", en: "Dexy" },
+  machinafi: { ru: "MachinaFi", en: "MachinaFi" },
 };
 
 export function protocolName(id: string | null | undefined, lang: "ru" | "en" = "en"): string | null {
@@ -153,7 +156,6 @@ const TEMPLATE_ROWS: Row[] = [
   // Earlier CL shell generation (crux-contracts compiled/cl-shell.ergotree.hex), retired; boxes h1879687–1904117.
   ["3711297e58fc65a14db87166ed19d5c1202a5484990066b417c165aa842c6e88", "ergodex", "pool", "ErgoDex V3 position (earlier shell)", "code", "ErgoDex V3"],
   ["36d1944fe6d743312e93541a1daf5592519772310ce924b2ec10e3f9b450e13a", "ergodex", "order", "ErgoDex swap order", "derived"],
-  ["03ef002b73a894198c7c9a4332ba28ca000dc6c40cb801f0c719940d9a6a8f6b", "ergodex", "order", "ErgoDex swap order", "derived"],
 
   // ErgoDex constant-product pools with a fee tier in R4 (crux-contracts cp-pool-n2t.es /
   // cp-pool-t2t.es, mainnet-staging trees). Their NFT and LP tokens are named "ErgoDex Pool …" / "ErgoDex LP …".
@@ -163,6 +165,12 @@ const TEMPLATE_ROWS: Row[] = [
   ["a2c854d1d54f0d71ecf922f3c465dfd4de9afda46b178f60a382df4d882cb364", "ergodex", "upkeep", "ErgoDex CL config", "code"],
   ["b8c7239f3f5f1f9bcc5223fb62c17c1dd6dd00875537b6aef6a31c149eb81715", "ergodex", "upkeep", "ErgoDex CL config source", "code"],
   ["1a50aab5451337b8dea00c3fde51069f0b07f9ab988e47325db9719f78a28332", "ergodex", "upkeep", "ErgoDex governance approval", "code"],
+
+  // MachinaFi orders (machinafi-sdk src/contracts): two-way grid ERG/token and token/token, and the
+  // ERG/token limit order with partial fills. A fill recreates the box bound to it by id (R6 / R7).
+  ["a68900b67ff5d74f74e7907aca83680adfc8ba01c1925430339d9e4c3f5dd0a3", "machinafi", "order", "MachinaFi grid order (ERG/token)", "code"],
+  ["1ae21acb88ddc97279ae72fd9461e6f2cb13ad462dd4ca45c73e858bd68ebc23", "machinafi", "order", "MachinaFi grid order (token/token)", "code"],
+  ["03ef002b73a894198c7c9a4332ba28ca000dc6c40cb801f0c719940d9a6a8f6b", "machinafi", "order", "MachinaFi limit order (ERG/token)", "code"],
 
   // Crux limit orders (crux-contracts limit-order*.es, EIP-5 templates) and the v2 fee box.
   ["5bf80359e972819567d53d443126d8cc58bed7e8fe57dfb3770b09a84fa68aae", "crux", "order", "Crux limit order v1", "code"],
@@ -290,6 +298,18 @@ function index(rows: Row[]): Map<string, RoleEntry> {
 }
 
 const BY_TEMPLATE = index(TEMPLATE_ROWS);
+
+/**
+ * Templates whose registers the rules read, so list views load registers for these boxes only:
+ * Rosen lock and event trigger (chain name); MachinaFi orders (R4 owner, R6/R7 parent binding).
+ */
+export const TEMPLATES_WITH_REGISTERS: readonly string[] = [
+  "7df7d49c680505ae413376e59e9970df4429741b33f095676bec3e4126de846d",
+  "856c43fe0610c87b0759abeb83c7999980eb750d711e75ef7d326f5bda89cda9",
+  "a68900b67ff5d74f74e7907aca83680adfc8ba01c1925430339d9e4c3f5dd0a3",
+  "1ae21acb88ddc97279ae72fd9461e6f2cb13ad462dd4ca45c73e858bd68ebc23",
+  "03ef002b73a894198c7c9a4332ba28ca000dc6c40cb801f0c719940d9a6a8f6b",
+];
 const BY_TOKEN = index(TOKEN_ROWS);
 
 /** Which pair an oracle box serves, by the pool NFT or the operator token it carries. */
