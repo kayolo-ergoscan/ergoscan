@@ -24,6 +24,8 @@ import { formatDottedDate, formatDottedDay } from "@/lib/format";
 import { pickRentChartTip } from "@/lib/rent-chart-tip";
 import { TX_ACTIVITY_TZ } from "@/lib/tx-activity-bin";
 import { useInk } from "@/lib/use-ink";
+import { usePhoneChart } from "@/lib/use-phone-chart";
+import { PHONE_X_LABELS, insideTicks, labelGutter, thinTicks, tickStep, tickText } from "@/lib/chart-axis";
 import { TipHead, TipRow, TipRows, useFloatTip } from "@/components/Tip";
 import { pointRect } from "@/lib/tip-place";
 
@@ -40,6 +42,8 @@ echarts.use([
 ]);
 
 const ERG = "#5ee0a0";
+/** Phone plot: y labels inside on the right, so the line keeps the full width. */
+const PHONE_GRID = { top: 6, right: 4, bottom: 18, left: 4 };
 const DAY_MS = RENT_SERIES_DAY_MS;
 const Y_FOLLOW = 0.2;
 const Y_EPS = 1e-4;
@@ -49,6 +53,9 @@ export type RentChartPoint = {
   boxes: number;
   rentErg: number;
 };
+
+/** The day a phone reading points at; `due` marks a day still ahead. */
+export type RentChartPick = RentChartPoint & { due: boolean };
 
 function utcTicks(cutStart: number, cutEnd: number): number[] {
   const spanDays = Math.max(1, (cutEnd - cutStart) / DAY_MS);
@@ -61,6 +68,14 @@ function utcTicks(cutStart: number, cutEnd: number): number[] {
     if (t >= cutStart - step && t <= cutEnd + step) out.push(t);
   }
   return out.length ? out : [cutStart, cutEnd];
+}
+
+/** Phone: only the days inside the window, at most four. */
+function phoneDays(start: number, end: number): number[] {
+  return thinTicks(
+    utcTicks(start, end).filter((t) => t >= start && t <= end),
+    PHONE_X_LABELS
+  );
 }
 
 function formatTick(t: number, _locale: string | undefined): string {
@@ -124,6 +139,7 @@ export function RentHistoryChart({
   formatErg,
   formatBoxes,
   locale,
+  onPick,
 }: {
   past: RentChartPoint[];
   ahead?: RentChartPoint[];
@@ -133,6 +149,11 @@ export function RentHistoryChart({
   formatErg: (v: number) => string;
   formatBoxes: (v: number) => string;
   locale?: string;
+  /**
+   * Phone: a tap writes its day into the chart header through this instead of a floating tip.
+   * null clears the reading (a pan, or a tap elsewhere).
+   */
+  onPick?: (p: RentChartPick | null) => void;
 }) {
   const el = useRef<HTMLDivElement>(null);
   const chart = useRef<echarts.ECharts | null>(null);
@@ -153,6 +174,26 @@ export function RentHistoryChart({
   loc.current = locale;
   const ink = useInk();
   series.current = { past, ahead };
+  const phone = usePhoneChart();
+  const phoneRef = useRef(phone);
+  phoneRef.current = phone;
+  const pickRef = useRef(onPick);
+  pickRef.current = onPick;
+  /** Phone y labels: about three round figures inside the plot, no unit (the header has it). */
+  const yLabels = (
+    y: { min: number; max: number }
+  ): { axisTick?: { show: false; customValues: number[] }; axisLabel?: { customValues: number[]; formatter: (v: number) => string } } => {
+    if (!phoneRef.current) return {};
+    const plot = Math.max(60, (el.current?.clientHeight || 160) - PHONE_GRID.top - PHONE_GRID.bottom);
+    const ticks = insideTicks(y.min, y.max, 3, plot);
+    const step = tickStep(ticks);
+    return {
+      axisTick: { show: false, customValues: ticks },
+      axisLabel: { customValues: ticks, formatter: (v: number) => tickText(v, step, loc.current) },
+    };
+  };
+  const yLabelsRef = useRef(yLabels);
+  yLabelsRef.current = yLabels;
 
   const fitY = (start: number, end: number) => {
     const pts = [...series.current.past, ...series.current.ahead];
@@ -192,15 +233,16 @@ export function RentHistoryChart({
       if (snapY || reduced()) yPainted.current = { ...target };
       else yPainted.current = mixRentExtent(yPainted.current, target, Y_FOLLOW);
       const y = yPainted.current;
+      const xs = utcTicks(win.current.start, win.current.end);
       c.setOption({
         animationDurationUpdate: 0,
         dataZoom: [{ startValue: win.current.start, endValue: win.current.end }],
         xAxis: {
           axisLabel: {
-            customValues: utcTicks(win.current.start, win.current.end),
+            customValues: phoneRef.current ? phoneDays(win.current.start, win.current.end) : xs,
           },
         },
-        yAxis: { min: y.min, max: y.max },
+        yAxis: { min: y.min, max: y.max, ...yLabelsRef.current(y) },
       });
     };
 
@@ -257,6 +299,13 @@ export function RentHistoryChart({
         dayTip.hide();
         return;
       }
+      if (phoneRef.current && pickRef.current) {
+        // Phone: the day goes to the chart header, the hair stands on it.
+        pickRef.current({ ...picked.src, due: picked.due });
+        reading = true;
+        c.dispatchAction({ type: "showTip", x: px[0], y: px[1] });
+        return;
+      }
       const { nameErg: nE, nameAhead: nA, nameBoxes: nB } = labels.current;
       dayTip.show(
         pointRect(rect.left + px[0]!, rect.top + px[1]!, 6),
@@ -275,6 +324,16 @@ export function RentHistoryChart({
       );
     };
     let downAt: { x: number; y: number } | null = null;
+    /** A phone reading is in the header; a pan or a tap elsewhere clears it. */
+    let reading = false;
+    const unread = () => {
+      reading = false;
+      pickRef.current?.(null);
+      c.dispatchAction({ type: "hideTip" });
+    };
+    const away = (e: PointerEvent) => {
+      if (reading && e.target instanceof Node && !node.contains(e.target)) unread();
+    };
     const onHover = (e: PointerEvent) => {
       if (dragging || e.pointerType === "touch") return;
       showDay(e);
@@ -287,6 +346,7 @@ export function RentHistoryChart({
       if (e.button !== 0) return;
       downAt = { x: e.clientX, y: e.clientY };
       if (e.pointerType !== "touch") dayTip.hide();
+      if (reading) unread();
       dragging = true;
       lastX = e.clientX;
       lastTs = performance.now();
@@ -326,6 +386,7 @@ export function RentHistoryChart({
     };
 
     node.addEventListener("pointerdown", onDown);
+    document.addEventListener("pointerdown", away, true);
     node.addEventListener("pointermove", onMove);
     node.addEventListener("pointermove", onHover);
     node.addEventListener("pointerleave", onLeave);
@@ -334,6 +395,7 @@ export function RentHistoryChart({
     return () => {
       cancelAnimationFrame(loop);
       node.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("pointerdown", away, true);
       node.removeEventListener("pointermove", onMove);
       node.removeEventListener("pointermove", onHover);
       node.removeEventListener("pointerleave", onLeave);
@@ -361,14 +423,13 @@ export function RentHistoryChart({
     const cut = rentChartCut("day", tMin, lastT, lastT);
     const end = lastT;
     const start = Math.min(cut.start, end);
-    const sig = `${ink}:${locale}:${past.map((p) => `${p.t}:${p.rentErg}`).join(",")}|${peek.map((p) => `${p.t}:${p.rentErg}`).join(",")}`;
+    const sig = `${ink}:${locale}:${phone}:${past.map((p) => `${p.t}:${p.rentErg}`).join(",")}|${peek.map((p) => `${p.t}:${p.rentErg}`).join(",")}`;
     if (paintedSig.current === sig) return;
     paintedSig.current = sig;
     win.current = { start, end, min: tMin, max: end };
     const reduced =
       typeof window !== "undefined" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const xTicks = utcTicks(start, end);
     const pastErg = past.map((p) => [p.t, p.rentErg] as [number, number]);
     const peekErg = peek.map((p) => [p.t, p.rentErg] as [number, number]);
     const firstPeek = peek[0];
@@ -377,6 +438,17 @@ export function RentHistoryChart({
     const y = fitY(start, end);
     yTarget.current = y;
     yPainted.current = y;
+    const phoneY = yLabels(y);
+    // Phone: the line stops where the y labels start, so the newest day never sits under a figure.
+    let viewEnd = end;
+    if (phone) {
+      const ticks = phoneY.axisLabel?.customValues ?? [];
+      const step = tickStep(ticks);
+      const plotW = Math.max(60, (el.current?.clientWidth || 300) - PHONE_GRID.left - PHONE_GRID.right);
+      viewEnd = end + (end - start) * labelGutter(ticks.map((v) => tickText(v, step, locale)), plotW, 0, 22);
+      win.current = { start, end: viewEnd, min: tMin, max: viewEnd };
+    }
+    const xTicks = phone ? phoneDays(start, viewEnd) : utcTicks(start, end);
     c.setOption(
       {
         ...(chrome.font ? { textStyle: { fontFamily: chrome.font } } : {}),
@@ -384,14 +456,14 @@ export function RentHistoryChart({
         animationDuration: reduced ? 0 : 480,
         animationDurationUpdate: 0,
         animationEasing: "cubicOut",
-        grid: { top: 8, right: 8, bottom: 24, left: 48 },
+        grid: phone ? PHONE_GRID : { top: 8, right: 8, bottom: 24, left: 48 },
         dataZoom: [
           {
             type: "inside",
             xAxisIndex: 0,
             filterMode: "none",
             startValue: start,
-            endValue: end,
+            endValue: viewEnd,
             zoomLock: true,
             moveOnMouseMove: false,
             moveOnMouseWheel: false,
@@ -402,6 +474,8 @@ export function RentHistoryChart({
         tooltip: {
           trigger: "axis",
           showContent: false,
+          // A phone reading moves the hair itself; a finger on the plot pans.
+          triggerOn: phone && onPick ? ("none" as const) : ("mousemove|click" as const),
           axisPointer: {
             type: "line",
             snap: false,
@@ -411,33 +485,61 @@ export function RentHistoryChart({
         xAxis: {
           type: "time",
           min: tMin,
-          max: end,
+          max: viewEnd,
           boundaryGap: false,
           axisLine: { show: false },
           axisTick: { show: false },
           splitLine: { show: false },
           axisLabel: {
             color: chrome.muted,
-            fontSize: 11,
+            fontSize: phone ? 10 : 11,
             hideOverlap: true,
             customValues: xTicks,
             formatter: (value: number) => formatTick(value, loc.current),
           },
         },
-        yAxis: {
-          type: "value",
-          min: y.min,
-          max: y.max,
-          splitNumber: 4,
-          axisLine: { show: false },
-          axisTick: { show: false },
-          splitLine: { show: false },
-          axisLabel: {
-            color: chrome.muted,
-            fontSize: 11,
-            formatter: (v: number) => fmtErg.current(v),
-          },
-        },
+        yAxis: phone
+          ? {
+              type: "value",
+              position: "right",
+              min: y.min,
+              max: y.max,
+              axisLine: { show: false },
+              axisTick: { show: false, ...phoneY.axisTick },
+              splitLine: {
+                show: true,
+                lineStyle: { color: chrome.hair, opacity: ink === "day" ? 0.16 : 0.2, width: 1 },
+              },
+              axisLabel: {
+                inside: true,
+                align: "right",
+                verticalAlign: "bottom",
+                margin: 0,
+                padding: [0, 0, 2, 0],
+                color: chrome.muted,
+                fontSize: 10,
+                textBorderColor: chrome.module,
+                textBorderWidth: 3,
+                ...phoneY.axisLabel,
+              },
+            }
+          : {
+              type: "value",
+              min: y.min,
+              max: y.max,
+              splitNumber: 4,
+              axisLine: { show: false },
+              axisTick: { show: false },
+              splitLine: { show: false },
+              axisLabel: {
+                color: chrome.muted,
+                fontSize: 11,
+                // The padded floor and ceiling are not round ticks (102.92, 209.10); they crowd the next label.
+                showMinLabel: false,
+                showMaxLabel: false,
+                formatter: (v: number) => fmtErg.current(v),
+              },
+            },
         series: [
           {
             type: "line",
@@ -480,12 +582,16 @@ export function RentHistoryChart({
       },
       { notMerge: true }
     );
-  }, [past, ahead, locale, ink]);
+  }, [past, ahead, locale, ink, phone]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div
       ref={el}
-      className="h-full w-full cursor-grab touch-none select-none active:cursor-grabbing"
+      className={
+        phone
+          ? "h-full w-full touch-pan-y select-none"
+          : "h-full w-full cursor-grab touch-none select-none active:cursor-grabbing"
+      }
     />
   );
 }

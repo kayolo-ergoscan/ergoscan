@@ -179,6 +179,7 @@ export const ru: Record<string, string> = {
   "oracles.doorXau": "XAU / ERG",
   "oracles.doorUsdHint": "ERG / USD",
   "oracles.doorXauHint": "Официальный золотой пул",
+  "oracles.doorSpark": "Ответ пула за 7 дней",
   "oracles.kpiPair": "Пара",
   "oracles.kpiPairSub": "USD v2",
   "oracles.kpiPairSubOfficial": "USD v1",
@@ -1156,6 +1157,8 @@ export const ru: Record<string, string> = {
   "fees.economy": "Эконом",
   "fees.normal": "Норма",
   "fees.turbo": "Турбо",
+  "fees.pillNext": "в след. блоке",
+  "fees.pillBlocks": "~{n} бл.",
   "fees.distribution": "Распределение",
   "metrics.title": "Сетевые метрики",
   "metrics.subtitle":
@@ -1345,6 +1348,11 @@ export const ru: Record<string, string> = {
   "status.title": "Статус ErgoScan",
   "status.lead":
     "Публично проверяемое состояние индекса цепи и данных протоколов в реальном времени — DeFi, Rosen, оракулы и рента хранения. Каждая карточка ведёт на исходный JSON.",
+  "status.banner.ok": "Все {n} система работает|Все {n} системы работают|Все {n} систем работают",
+  "status.banner.some": "{n} из {total} систем требует внимания|{n} из {total} систем требуют внимания|{n} из {total} систем требуют внимания",
+  "status.row.behind": "отставание {n}",
+  "status.row.requests": "{n} запр./ч",
+  "status.legend": "Откуда каждое число",
   "status.state.operational": "работает",
   "status.state.catching-up": "догоняет",
   "status.state.degraded": "есть проблемы",

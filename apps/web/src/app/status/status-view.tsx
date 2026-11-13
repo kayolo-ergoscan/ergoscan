@@ -5,7 +5,7 @@ import Link from "next/link";
 import clsx from "clsx";
 import { AddrFactCard } from "@/components/AddrFactCard";
 import { KpiMark } from "@/components/kpi-marks";
-import { EvidenceBadge } from "@/components/EvidenceBadge";
+import { EvidenceBadge, EvidenceDot, EVIDENCE_TONE } from "@/components/EvidenceBadge";
 import { Shell } from "@/components/Shell";
 import { publicGatewayHref } from "@/lib/config";
 import { INK } from "@/lib/palette";
@@ -26,7 +26,9 @@ import {
   FeedSection,
 } from "@/components/feed/Feed";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
-import { formatStamp } from "@/lib/format";
+import { formatGroupedNumber, formatH24, formatInt, formatPct, formatStamp } from "@/lib/format";
+import { countText } from "@/lib/i18n/messages";
+import type { EvidenceKind, TrustState } from "@/lib/trust-board";
 import type { ApiUse } from "@/lib/api-use";
 import { useKeepFresh, usePageSync } from "@/lib/page-sync";
 
@@ -49,6 +51,149 @@ function ageText(ms: number, locale: string): string {
 function utcText(ms: number, _locale: string): string {
   const stamp = formatStamp(ms, "UTC");
   return stamp === "—" ? stamp : `${stamp} UTC`;
+}
+
+/** Status tokens: green when operational, amber while catching up or degraded, red when unreachable. */
+function stateTone(state: TrustState): string {
+  return state === "operational"
+    ? "var(--up)"
+    : state === "unavailable"
+      ? "var(--down)"
+      : "var(--warning)";
+}
+
+/** The worst of the states: one red system makes the whole banner red. */
+function worstState(states: TrustState[]): TrustState {
+  if (states.includes("unavailable")) return "unavailable";
+  if (states.includes("degraded")) return "degraded";
+  if (states.includes("catching-up")) return "catching-up";
+  return "operational";
+}
+
+type SystemLine = { id: string; name: string; state: TrustState };
+
+/** «All 7 systems operational · 23:24 UTC», or which systems are not. */
+function StatusBanner({ systems, checkedAtMs }: { systems: SystemLine[]; checkedAtMs: number }) {
+  const t = useT();
+  const { locale } = useI18n();
+  const off = systems.filter((s) => s.state !== "operational");
+  const state = worstState(systems.map((s) => s.state));
+  const tone = stateTone(state);
+  const n = systems.length;
+  const head = off.length
+    ? countText(t, locale, "status.banner.some", off.length).replace("{total}", formatInt(n, locale))
+    : countText(t, locale, "status.banner.ok", n);
+  return (
+    <div
+      className="mt-2.5 flex min-h-[44px] flex-wrap items-center gap-x-2.5 gap-y-1 rounded-[14px] px-3 py-2"
+      style={{ background: `color-mix(in srgb, ${tone} 12%, transparent)` }}
+      role="status"
+    >
+      <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: tone }} aria-hidden />
+      <span className="min-w-0 flex-1 text-[14px] font-semibold leading-snug text-[var(--text)]">
+        {head}
+        {off.length ? (
+          <span className="block text-[12px] font-normal text-[var(--muted)]">
+            {off.map((s) => `${s.name} · ${t(`status.state.${s.state}`)}`).join(", ")}
+          </span>
+        ) : null}
+      </span>
+      <span className="shrink-0 font-mono text-[12px] tabular-nums text-[var(--muted)]">
+        {formatH24(checkedAtMs, "UTC", false)} UTC
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Phone: the row a system folds to — status dot, name, its key figure. A tap opens the card.
+ * Desktop never shows it; the card is always open there.
+ */
+function SystemRow({
+  name,
+  state,
+  figure,
+  open,
+  onToggle,
+  controls,
+}: {
+  name: string;
+  state: TrustState;
+  figure: string;
+  open: boolean;
+  onToggle: () => void;
+  controls: string;
+}) {
+  const t = useT();
+  return (
+    <button
+      type="button"
+      aria-expanded={open}
+      aria-controls={controls}
+      onClick={onToggle}
+      className="flex min-h-[52px] w-full items-center gap-3 px-4 text-left md:hidden"
+    >
+      <span
+        className="h-2.5 w-2.5 shrink-0 rounded-full"
+        style={{ background: stateTone(state) }}
+        role="img"
+        aria-label={t(`status.state.${state}`)}
+      />
+      <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-[var(--text)]">{name}</span>
+      <span className="shrink-0 font-mono text-[13px] tabular-nums text-[var(--muted)]">{figure}</span>
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        aria-hidden
+        className={clsx(
+          "shrink-0 text-[var(--muted-2)] transition-transform duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
+          open && "rotate-180"
+        )}
+      >
+        <path d="m6 9 6 6 6-6" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </button>
+  );
+}
+
+/** A slice's figure for its phone row: the network height, or how many blocks it is behind. */
+function sliceFigure(slice: TrustSlice, t: (k: string) => string, locale: string): string {
+  const value = (id: string) => slice.metrics.find((m) => m.id === id)?.value;
+  if (slice.id === "gateway") {
+    const h = value("height");
+    if (typeof h === "number") return `#${formatInt(h, locale)}`;
+  }
+  const lag = value("lag");
+  if (typeof lag === "number") return t("status.row.behind").replace("{n}", formatInt(lag, locale));
+  return t(`status.state.${slice.state}`);
+}
+
+/** Phone: the evidence badges become dots on each figure; this says once what each dot means. */
+function EvidenceLegend({ kinds }: { kinds: EvidenceKind[] }) {
+  const t = useT();
+  if (!kinds.length) return null;
+  return (
+    <section className="mod rounded-[20px] border border-[var(--border)] bg-[var(--module)] px-4 py-3 md:hidden">
+      <h2 className="text-[12px] font-medium text-[var(--muted)]">{t("status.legend")}</h2>
+      <ul className="mt-2 flex flex-col gap-1.5">
+        {kinds.map((kind) => (
+          <li key={kind} className="flex items-start gap-2 text-[12px] leading-snug">
+            <span
+              className="mt-[5px] h-1.5 w-1.5 shrink-0 rounded-full"
+              style={{ backgroundColor: EVIDENCE_TONE[kind] }}
+              aria-hidden
+            />
+            <span>
+              <span className="font-medium text-[var(--text)]">{t(`trust.evidence.${kind}`)}</span>
+              <span className="text-[var(--muted)]"> — {t(`trust.evidence.${kind}.hint`)}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
 }
 
 export function StatusView({
@@ -94,6 +239,28 @@ export function StatusView({
 
   useKeepFresh(() => load(true));
 
+  const [openIds, setOpenIds] = useState<Set<string>>(() => new Set());
+  const toggle = useCallback((id: string) => {
+    setOpenIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+  const apiState: TrustState = api?.ok ? "operational" : "unavailable";
+  const systems: SystemLine[] = [
+    ...board.slices.map((slice) => ({
+      id: slice.id,
+      name: t(`status.service.${slice.id}`),
+      state: slice.state,
+    })),
+    { id: "api", name: t("status.api.title"), state: apiState },
+  ];
+  const kinds = Array.from(
+    new Set(board.slices.flatMap((slice) => slice.metrics.map((m) => m.evidence)))
+  );
+
   return (
     <Shell>
       <div className="flex flex-col gap-3">
@@ -108,16 +275,16 @@ export function StatusView({
             <h1 className="text-[17px] font-semibold leading-none tracking-tight">
               {t("status.title")}
             </h1>
-            <StatePill state={board.state} />
           </div>
-          <p className="mt-1.5 max-w-3xl text-[12px] leading-snug text-[var(--muted-2)]">
+          <StatusBanner systems={systems} checkedAtMs={board.checkedAtMs} />
+          <p className="mt-2 max-w-3xl text-[12px] leading-snug text-[var(--muted-2)]">
             {t("status.lead")}
           </p>
         </AddrFactCard>
 
         <div
           className={clsx(
-            "grid gap-3 transition-opacity duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] md:grid-cols-2",
+            "grid gap-2 transition-opacity duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] md:grid-cols-2 md:gap-3",
             pending && "opacity-60"
           )}
         >
@@ -128,11 +295,20 @@ export function StatusView({
               locale={locale}
               wide={slice.id === "oracle"}
               enter={i + 1}
+              open={openIds.has(slice.id)}
+              onToggle={() => toggle(slice.id)}
             />
           ))}
+          <ApiUseCard
+            api={api}
+            locale={locale}
+            enter={board.slices.length + 1}
+            open={openIds.has("api")}
+            onToggle={() => toggle("api")}
+          />
         </div>
 
-        <ApiUseCard api={api} locale={locale} enter={board.slices.length + 1} />
+        <EvidenceLegend kinds={kinds} />
 
         <section
           className="home-tile-enter mod rounded-[20px] border border-[var(--border)] bg-[var(--module)] px-4 py-3.5"
@@ -178,10 +354,14 @@ function ApiUseCard({
   api,
   locale,
   enter,
+  open,
+  onToggle,
 }: {
   api: ApiUse | null;
   locale: string;
   enter: number;
+  open: boolean;
+  onToggle: () => void;
 }) {
   const t = useT();
   const loc = localeId(locale);
@@ -200,19 +380,34 @@ function ApiUseCard({
     { label: t("status.api.requests24h"), value: n(day?.requests) },
     { label: t("status.api.clients24h"), value: n(day?.clients) },
   ];
+  const state: TrustState = api?.ok ? "operational" : "unavailable";
+  const bodyId = "status-card-api";
   return (
     <article
-      className="home-tile-enter mod rounded-[20px] border border-[var(--border)] bg-[var(--module)] px-4 py-3.5"
+      className="home-tile-enter mod rounded-[20px] border border-[var(--border)] bg-[var(--module)] md:col-span-2 md:px-4 md:py-3.5"
       style={{ "--enter": enter } as CSSProperties}
     >
+      <SystemRow
+        name={t("status.api.title")}
+        state={state}
+        figure={
+          hour?.requests != null
+            ? t("status.row.requests").replace("{n}", formatInt(hour.requests, locale))
+            : t(`status.state.${state}`)
+        }
+        open={open}
+        onToggle={onToggle}
+        controls={bodyId}
+      />
+      <div id={bodyId} className={clsx("max-md:px-4 max-md:pb-3.5", !open && "max-md:hidden")}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--muted-2)]">
             {t("status.api.eyebrow")}
           </p>
-          <h2 className="mt-1 text-[15px] font-semibold text-[var(--text)]">{t("status.api.title")}</h2>
+          <h2 className="mt-1 text-[15px] font-semibold text-[var(--text)] max-md:hidden">{t("status.api.title")}</h2>
         </div>
-        <StatePill state={api?.ok ? "operational" : "unavailable"} />
+        <StatePill state={state} />
       </div>
       <p className="mt-1.5 max-w-3xl text-[12px] leading-snug text-[var(--muted)]">{t("status.api.lead")}</p>
       {hour || day ? (
@@ -261,6 +456,7 @@ function ApiUseCard({
           /api/v1/info
         </a>
       </div>
+      </div>
     </article>
   );
 }
@@ -270,27 +466,41 @@ function ServiceCard({
   locale,
   wide = false,
   enter,
+  open,
+  onToggle,
 }: {
   slice: TrustSlice;
   locale: string;
   wide?: boolean;
   enter: number;
+  open: boolean;
+  onToggle: () => void;
 }) {
   const t = useT();
+  const bodyId = `status-card-${slice.id}`;
   return (
     <article
       className={clsx(
-        "home-tile-enter mod rounded-[20px] border border-[var(--border)] bg-[var(--module)] px-4 py-3.5",
+        "home-tile-enter mod rounded-[20px] border border-[var(--border)] bg-[var(--module)] md:px-4 md:py-3.5",
         wide && "md:col-span-2"
       )}
       style={{ "--enter": enter } as CSSProperties}
     >
+      <SystemRow
+        name={t(`status.service.${slice.id}`)}
+        state={slice.state}
+        figure={sliceFigure(slice, t, locale)}
+        open={open}
+        onToggle={onToggle}
+        controls={bodyId}
+      />
+      <div id={bodyId} className={clsx("max-md:px-4 max-md:pb-3.5", !open && "max-md:hidden")}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--muted-2)]">
             {t(`status.service.${slice.id}.eyebrow`)}
           </p>
-          <h2 className="mt-1 text-[15px] font-semibold text-[var(--text)]">
+          <h2 className="mt-1 text-[15px] font-semibold text-[var(--text)] max-md:hidden">
             {t(`status.service.${slice.id}`)}
           </h2>
         </div>
@@ -360,6 +570,7 @@ function ServiceCard({
         >
           {slice.proofPath}
         </a>
+      </div>
       </div>
     </article>
   );
@@ -448,18 +659,17 @@ function Metric({ metric, locale }: { metric: TrustMetric; locale: string }) {
       metric.unit === "ms"
         ? ageText(metric.value, locale)
         : metric.id === "coverage"
-          ? `${metric.value.toLocaleString(localeId(locale), {
-              maximumFractionDigits: 2,
-            })}%`
-          : metric.value.toLocaleString(localeId(locale));
+          ? formatPct(metric.value, locale, 0, 2)
+          : formatGroupedNumber(metric.value, 0, 2, locale);
   } else if (typeof metric.value === "string") {
     value = metric.value;
   }
   return (
     <div>
       <dt className="flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--muted-2)]">
+        <EvidenceDot kind={metric.evidence} className="md:hidden" />
         <span>{t(`status.metric.${metric.id}`)}</span>
-        <EvidenceBadge kind={metric.evidence} compact />
+        <EvidenceBadge kind={metric.evidence} compact className="max-md:hidden" />
       </dt>
       <dd className="mt-0.5 font-mono text-[13px] font-medium text-[var(--text)]">
         {value}

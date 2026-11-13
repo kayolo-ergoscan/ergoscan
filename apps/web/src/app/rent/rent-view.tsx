@@ -22,12 +22,14 @@ import { compactFigure, KpiNum } from "@/components/KpiGrid";
 import { RankWindow } from "@/components/RankWindow";
 import {
   formatCompact,
+  formatDottedDate,
   formatErg,
   formatErgFixed,
   formatGroupedNumber,
   shortId,
   toEpochMs,
 } from "@/lib/format";
+import type { RentChartPick } from "@/components/RentHistoryChart";
 import { INK } from "@/lib/palette";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { countText } from "@/lib/i18n/messages";
@@ -597,10 +599,12 @@ function RentCollectedChart({
   const show = past.length >= 2;
   const years = yearCaption(past, locale);
   const lastErg = last ? rentNanoToErg(last.rentNano) : 0;
+  /** Phone: the day a tap on the chart points at, shown where «yesterday» stands. */
+  const [pick, setPick] = useState<RentChartPick | null>(null);
   return (
     <section
       className={clsx(
-        "mod flex h-full min-h-0 min-w-0 max-w-full flex-col overflow-hidden rounded-[20px] border border-[var(--border)] bg-[var(--module)] max-lg:min-h-[19.25rem]",
+        "mod flex h-full min-h-0 min-w-0 max-w-full flex-col overflow-hidden rounded-[20px] border border-[var(--border)] bg-[var(--module)] max-lg:min-h-[19.25rem] max-md:min-h-0",
         enter != null && "home-tile-enter"
       )}
       style={enter != null ? ({ "--enter": enter } as CSSProperties) : undefined}
@@ -634,7 +638,18 @@ function RentCollectedChart({
               )}
             </div>
           </div>
-          {last ? (
+          {pick ? (
+            <p className="m-0 flex h-[22px] shrink-0 flex-nowrap items-center justify-end gap-1.5 whitespace-nowrap" aria-live="polite">
+              <span className="font-mono text-[12px] leading-[1.15] text-[var(--muted)] tabular-nums">
+                {formatDottedDate(pick.t, "UTC")}
+                {` · ${t("rent.chartBoxes")} ${formatCompact(pick.boxes, 1, locale)}`}
+                {pick.due ? ` · ${t("rent.chartAhead")}` : ""}
+              </span>
+              <KpiNum className="max-w-none shrink-0 tabular-nums text-[22px] font-semibold leading-[1.15] tracking-tight text-[var(--text)]">
+                {`${formatGroupedNumber(pick.rentErg, 2, 2, locale)} ERG`}
+              </KpiNum>
+            </p>
+          ) : last ? (
             <p className="m-0 flex h-[22px] shrink-0 flex-nowrap items-center justify-end gap-1.5 whitespace-nowrap">
               <span className="text-[12px] leading-[1.15] text-[var(--muted)]">
                 {t("rent.chartLast.day")}
@@ -646,8 +661,9 @@ function RentCollectedChart({
           ) : null}
         </div>
         {show ? (
-          <div className="min-h-0 flex-1 max-lg:min-h-[168px]">
+          <div className="min-h-0 flex-1 max-lg:min-h-[168px] max-md:h-[160px] max-md:min-h-0 max-md:flex-none">
             <RentHistoryChart
+              onPick={setPick}
               past={pastPts}
               ahead={NO_CHART_PTS}
               nameBoxes={t("rent.chartBoxes")}

@@ -26,7 +26,8 @@ import { KpiGrid } from "@/components/KpiGrid";
 import { KpiMark } from "@/components/kpi-marks";
 import { RankWindow } from "@/components/RankWindow";
 import { lookupAddress } from "@/lib/address-book";
-import { formatErgPrecise, formatRelAge, formatTs, formatUsd, shortId } from "@/lib/format";
+import { formatErgPrecise, formatRelAge, formatTs, shortId } from "@/lib/format";
+import { formatOracleQuote } from "@/lib/oracle-door";
 import {
   oracleErgLow,
   oracleOperatorMarkSrc,
@@ -66,9 +67,7 @@ function loc(locale: string): string {
 }
 
 function fmtQuote(slug: OracleFeedSlug, n: number | null, locale: string): string {
-  if (n == null || !Number.isFinite(n) || n <= 0) return "—";
-  if (slug === "erg-usd" || slug === "ergusd") return formatUsd(n, 4);
-  return n.toLocaleString(loc(locale), { maximumFractionDigits: 6 });
+  return formatOracleQuote(slug, n, locale);
 }
 
 function fmtHeight(h: number | null, locale: string): string {

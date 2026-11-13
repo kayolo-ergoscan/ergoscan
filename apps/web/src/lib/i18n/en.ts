@@ -178,6 +178,7 @@ export const en: Record<string, string> = {
   "oracles.doorXau": "XAU / ERG",
   "oracles.doorUsdHint": "ERG / USD",
   "oracles.doorXauHint": "Official gold pool",
+  "oracles.doorSpark": "Pool answer over 7 days",
   "oracles.kpiPair": "Pair",
   "oracles.kpiPairSub": "USD v2",
   "oracles.kpiPairSubOfficial": "USD v1",
@@ -1154,6 +1155,8 @@ export const en: Record<string, string> = {
   "fees.economy": "Economy",
   "fees.normal": "Normal",
   "fees.turbo": "Turbo",
+  "fees.pillNext": "next block",
+  "fees.pillBlocks": "~{n} blocks",
   "fees.distribution": "Distribution",
   "metrics.title": "Network metrics",
   "metrics.subtitle":
@@ -1343,6 +1346,11 @@ export const en: Record<string, string> = {
   "status.title": "ErgoScan status",
   "status.lead":
     "Live, publicly inspectable health for the chain index and protocol data — DeFi, Rosen, oracles, and storage rent. Every card links to its source JSON.",
+  "status.banner.ok": "All {n} system operational|All {n} systems operational",
+  "status.banner.some": "{n} of {total} systems needs attention|{n} of {total} systems need attention",
+  "status.row.behind": "{n} behind",
+  "status.row.requests": "{n} req/h",
+  "status.legend": "Where each figure comes from",
   "status.state.operational": "operational",
   "status.state.catching-up": "catching up",
   "status.state.degraded": "degraded",

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import clsx from "clsx";
 import * as echarts from "echarts/core";
 import { EffectScatterChart, LineChart, ScatterChart } from "echarts/charts";
 import { AxisPointerComponent, GridComponent, TooltipComponent } from "echarts/components";
@@ -11,6 +12,19 @@ import { neonLine } from "@/lib/chart-neon";
 import { TipHead, TipRow, TipRows, useFloatTip } from "@/components/Tip";
 import { pointRect } from "@/lib/tip-place";
 import { useInk } from "@/lib/use-ink";
+import { usePhoneChart } from "@/lib/use-phone-chart";
+import {
+  PHONE_CHART_PX,
+  PHONE_READOUT_PX,
+  PHONE_X_LABELS,
+  finiteExtent,
+  insideTicks,
+  labelGutter,
+  readoutWhen,
+  thinTicks,
+  tickStep,
+  tickText,
+} from "@/lib/chart-axis";
 import {
   HOME_TX_CHART_BIN_MS,
   TX_ACTIVITY_TZ,
@@ -186,7 +200,9 @@ export function DualLineChart({
   const hover = useRef(onHover);
   const labels = useRef({ nameTxs, nameFees });
   const loc = useRef(locale);
-  const quietMove = useRef<((ev: PointerEvent) => void) | null>(null);
+  const wrap = useRef<HTMLDivElement>(null);
+  /** Removes the pointer listeners of the last paint. */
+  const unbind = useRef<(() => void) | null>(null);
   /** The shared tip at the hovered day; a tap on a phone shows it too. */
   const lineTip = useFloatTip({ within: () => el.current });
   fmtTxs.current = formatTxs;
@@ -203,6 +219,13 @@ export function DualLineChart({
   const shownKey = useRef(revealKey);
   const snap = useRef(false);
   const frozen = useRef(false);
+  const phone = usePhoneChart();
+  /** Phone: the point under a finger goes into the chart's own header line, not a floating tip. */
+  const readout = phone && showTip;
+  /** Phone, two series: the one whose scale the y labels show. */
+  const [focus, setFocus] = useState<"txs" | "fees">("txs");
+  /** The reading in the header line; null shows the latest point. */
+  const [pick, setPick] = useState<TxActivityPoint | null>(null);
 
   useEffect(() => {
     if (revealKey != null && revealKey !== shownKey.current) return;
@@ -241,6 +264,20 @@ export function DualLineChart({
     };
   }, [revealKey]);
 
+  const view = useMemo(() => {
+    const wall = binMs > 0 ? binMs : HOME_TX_CHART_BIN_MS;
+    const binned = skipBin ? shown : dropOpenActivityBin(binTxActivity(shown, wall), wall);
+    const seriesPts = binned.length >= 2 ? binned : shown;
+    const windowMs = skipBin ? (binMs > 0 ? wall : 0) : binned.length >= 2 ? wall : 0;
+    const showTxs = series !== "fees";
+    const showFees =
+      series !== "txs" && seriesPts.some((p) => p.feesKnown !== false && p.feesErg > 0);
+    return { seriesPts, windowMs, showTxs, showFees };
+  }, [shown, binMs, skipBin, series]);
+  const both = view.showTxs && view.showFees;
+  /** Phone: the series whose scale the y labels show; the other one is drawn faint. */
+  const lead: "txs" | "fees" = !view.showTxs ? "fees" : both ? focus : "txs";
+
   useEffect(() => {
     const node = el.current;
     if (!node) return;
@@ -252,38 +289,49 @@ export function DualLineChart({
       if (ev.pointerType === "touch") return;
       hover.current?.(null);
       lineTip.hide();
+      setPick(null);
+      // A phone-width window drives the hair itself (triggerOn none), so it also takes it away.
+      c.dispatchAction({ type: "hideTip" });
     };
     node.addEventListener("pointerleave", leave);
     return () => {
       node.removeEventListener("pointerleave", leave);
-      if (quietMove.current) {
-        node.removeEventListener("pointermove", quietMove.current);
-        node.removeEventListener("pointerdown", quietMove.current);
-      }
+      unbind.current?.();
+      unbind.current = null;
       ro.disconnect();
       c.dispose();
       chart.current = null;
     };
   }, []);
 
+  // A tapped reading stays in the header until a tap lands outside the chart.
+  useEffect(() => {
+    if (!readout || !pick) return;
+    const away = (ev: PointerEvent) => {
+      const root = wrap.current;
+      if (root && ev.target instanceof Node && root.contains(ev.target)) return;
+      setPick(null);
+      hover.current?.(null);
+      chart.current?.dispatchAction({ type: "hideTip" });
+    };
+    document.addEventListener("pointerdown", away, true);
+    return () => document.removeEventListener("pointerdown", away, true);
+  }, [readout, pick]);
+
+  useEffect(() => {
+    if (!readout) setPick(null);
+  }, [readout]);
+
   useEffect(() => {
     const c = chart.current;
     if (!c) return;
     const chrome = chartChrome();
     const day = ink === "day";
-    const wall = binMs > 0 ? binMs : HOME_TX_CHART_BIN_MS;
-    const binned = skipBin ? shown : dropOpenActivityBin(binTxActivity(shown, wall), wall);
-    const seriesPts = binned.length >= 2 ? binned : shown;
-    const windowMs = skipBin ? (binMs > 0 ? wall : 0) : binned.length >= 2 ? wall : 0;
+    const { seriesPts, windowMs, showTxs, showFees } = view;
     if (seriesPts.length < 2) {
       c.clear();
       return;
     }
-    const wantTxs = series !== "fees";
-    const wantFees = series !== "txs";
-    const showFees =
-      wantFees && seriesPts.some((p) => p.feesKnown !== false && p.feesErg > 0);
-    const showTxs = wantTxs;
     const single = series !== "both";
     const txData = seriesPts.map((p) => [p.t, p.txs] as [number, number]);
     const feeData = seriesPts.map((p) =>
@@ -298,22 +346,76 @@ export function DualLineChart({
       seriesPts[seriesPts.length - 1]!.t,
       tickStepDays(seriesPts[0]!.t, seriesPts[seriesPts.length - 1]!.t)
     );
-    const grid = yRight
-      ? compact
-        ? { top: fillPlot ? 8 : 12, right: 48, bottom: fillPlot ? 22 : 28, left: 8 }
-        : { top: fillPlot ? 8 : 16, right: 56, bottom: fillPlot ? 26 : 36, left: 10 }
-      : compact
-        ? {
-            top: single ? (glow ? 18 : 8) : 12,
-            right: showFees && showTxs ? 44 : 10,
-            bottom: single ? 20 : 28,
-            left: 36,
-          }
-        : { top: 16, right: showFees && showTxs ? 52 : 12, bottom: 36, left: 52 };
+    // Phone: y labels sit inside the plot on the right, so the line keeps the full width.
+    const grid = phone
+      ? { top: readout ? 4 : 8, right: 4, bottom: 18, left: 4 }
+      : yRight
+        ? compact
+          ? { top: fillPlot ? 8 : 12, right: 48, bottom: fillPlot ? 22 : 28, left: 8 }
+          : { top: fillPlot ? 8 : 16, right: 56, bottom: fillPlot ? 26 : 36, left: 10 }
+        : compact
+          ? {
+              top: single ? (glow ? 18 : 8) : 12,
+              right: showFees && showTxs ? 44 : 10,
+              bottom: single ? 20 : 28,
+              left: 36,
+            }
+          : { top: 16, right: showFees && showTxs ? 52 : 12, bottom: 36, left: 52 };
     const txTip = tipPulse && showTxs ? lastPair(txData) : [];
     const feeTip = tipPulse && showFees ? lastPair(feeData) : [];
     const feeAxis = showFees && showTxs && !yRight;
     const yFmt = showTxs ? (v: number) => fmtTxs.current(v) : (v: number) => fmtFees.current(v);
+    // Each axis spans its own series with the same pad the chart has always used.
+    const padOf = (data: [number, number | null][]) => {
+      const ext = finiteExtent(data.map((d) => d[1]));
+      return ext ? padAxis(ext, fillPlot) : null;
+    };
+    const pad0 = padOf(showTxs ? txData : feeData);
+    const pad1 = showTxs && showFees ? padOf(feeData) : null;
+    // A padded floor is not a round tick; its label sat on the next one ($0.1557 under $0.1800).
+    const floorLabel = (pad: { min: number } | null) => (pad && pad.min !== 0 ? { showMinLabel: false } : {});
+    const label0 = !showTxs || lead === "txs";
+    const label1 = showTxs && showFees && lead === "fees";
+    const plotPx = Math.max(60, (el.current?.clientHeight || PHONE_CHART_PX) - grid.top - grid.bottom);
+    // Phone: only the lead series' axis is labelled, with about three round figures.
+    const leadPad = label1 ? pad1 : pad0;
+    const yTicks = phone && leadPad ? insideTicks(leadPad.min, leadPad.max, 3, plotPx) : [];
+    const yStep = tickStep(yTicks);
+    const plotW = Math.max(60, (el.current?.clientWidth || 300) - grid.left - grid.right);
+    // The line ends where the labels start, so the newest point never sits under a figure.
+    const rightGap = phone ? labelGutter(yTicks.map((v) => tickText(v, yStep, locale)), plotW, 0.02, tipPulse ? 22 : 10) : 0.02;
+    const phoneAxis = (pad: { min: number; max: number } | null, labelled: boolean) => {
+      const ticks = labelled ? yTicks : [];
+      const step = yStep;
+      return {
+        type: "value" as const,
+        position: "right" as const,
+        ...(pad ? { min: pad.min, max: pad.max } : {}),
+        axisLine: { show: false },
+        axisTick: { show: false, customValues: ticks },
+        splitLine: labelled
+          ? { show: true, lineStyle: { color: chrome.hair, opacity: day ? 0.16 : 0.2, width: 1 } }
+          : { show: false },
+        axisLabel: labelled
+          ? {
+              show: true,
+              inside: true,
+              align: "right" as const,
+              verticalAlign: "bottom" as const,
+              margin: 0,
+              padding: [0, 0, 2, 0],
+              color: chrome.muted,
+              fontSize: 10,
+              textBorderColor: chrome.module,
+              textBorderWidth: 3,
+              customValues: ticks,
+              formatter: (v: number) => tickText(v, step, locale),
+            }
+          : { show: false },
+      };
+    };
+    const dimTx = phone && showTxs && showFees && lead === "fees";
+    const dimFee = phone && showTxs && showFees && lead === "txs";
     c.setOption(
       {
         ...(chrome.font ? { textStyle: { fontFamily: chrome.font } } : {}),
@@ -324,6 +426,8 @@ export function DualLineChart({
         tooltip: {
           trigger: "axis",
           showContent: false,
+          // The phone header line drives the hair itself, from the finger.
+          triggerOn: readout ? ("none" as const) : ("mousemove|click" as const),
           axisPointer: {
             type: "line",
             lineStyle: {
@@ -336,56 +440,65 @@ export function DualLineChart({
         },
         xAxis: {
           type: "time",
-          boundaryGap: ["2%", "2%"],
+          boundaryGap: ["2%", `${(rightGap * 100).toFixed(2)}%`],
           axisLine: { show: false },
           axisTick: { show: false },
           splitLine: { show: false },
           axisLabel: {
             color: chrome.muted,
-            fontSize: 11,
+            fontSize: phone ? 10 : 11,
             hideOverlap: true,
-            customValues: xTicks,
+            customValues: phone
+              ? thinTicks(
+                  xTicks.filter((t) => t >= seriesPts[0]!.t && t <= seriesPts[seriesPts.length - 1]!.t),
+                  PHONE_X_LABELS
+                )
+              : xTicks,
             formatter: (value: number) => formatActivityTick(value, loc.current),
           },
         },
-        yAxis: [
-          {
-            type: "value",
-            position: yRight ? "right" : "left",
-            min: (ext: { min: number; max: number }) => padAxis(ext, fillPlot).min,
-            max: (ext: { min: number; max: number }) => padAxis(ext, fillPlot).max,
-            splitNumber: single ? 3 : 4,
-            axisLine: { show: false },
-            axisTick: { show: false },
-            splitLine: glow
-              ? { show: true, lineStyle: { color: chrome.hair, opacity: day ? 0.16 : 0.2, width: 1 } }
-              : { show: false },
-            axisLabel: {
-              color: chrome.muted,
-              fontSize: 11,
-              // The padded max is not a round tick; its label sat on top of the next one (97.3 over 90.0).
-              showMaxLabel: false,
-              formatter: (v: number) => yFmt(v),
-            },
-          },
-          {
-            type: "value",
-            position: "right",
-            min: (ext: { min: number; max: number }) => padAxis(ext, fillPlot).min,
-            max: (ext: { min: number; max: number }) => padAxis(ext, fillPlot).max,
-            splitNumber: 4,
-            show: feeAxis,
-            axisLine: { show: false },
-            axisTick: { show: false },
-            splitLine: { show: false },
-            axisLabel: {
-              color: chrome.muted,
-              fontSize: 11,
-              showMaxLabel: false,
-              formatter: (v: number) => fmtFees.current(v),
-            },
-          },
-        ],
+        yAxis: phone
+          ? [phoneAxis(pad0, label0), { ...phoneAxis(pad1, label1), show: showTxs && showFees }]
+          : [
+              {
+                type: "value",
+                position: yRight ? "right" : "left",
+                min: (ext: { min: number; max: number }) => padAxis(ext, fillPlot).min,
+                max: (ext: { min: number; max: number }) => padAxis(ext, fillPlot).max,
+                splitNumber: single ? 3 : 4,
+                axisLine: { show: false },
+                axisTick: { show: false },
+                splitLine: glow
+                  ? { show: true, lineStyle: { color: chrome.hair, opacity: day ? 0.16 : 0.2, width: 1 } }
+                  : { show: false },
+                axisLabel: {
+                  color: chrome.muted,
+                  fontSize: 11,
+                  // The padded max is not a round tick; its label sat on top of the next one (97.3 over 90.0).
+                  showMaxLabel: false,
+                  ...floorLabel(pad0),
+                  formatter: (v: number) => yFmt(v),
+                },
+              },
+              {
+                type: "value",
+                position: "right",
+                min: (ext: { min: number; max: number }) => padAxis(ext, fillPlot).min,
+                max: (ext: { min: number; max: number }) => padAxis(ext, fillPlot).max,
+                splitNumber: 4,
+                show: feeAxis,
+                axisLine: { show: false },
+                axisTick: { show: false },
+                splitLine: { show: false },
+                axisLabel: {
+                  color: chrome.muted,
+                  fontSize: 11,
+                  showMaxLabel: false,
+                  ...floorLabel(pad1),
+                  formatter: (v: number) => fmtFees.current(v),
+                },
+              },
+            ],
         series: [
           ...(showTxs
             ? glow
@@ -409,7 +522,13 @@ export function DualLineChart({
                     symbol: "circle",
                     symbolSize: 8,
                     smooth: 0.65,
-                    lineStyle: { width: 2.5, color: colorTxs, cap: "round" as const, join: "round" as const },
+                    lineStyle: {
+                      width: 2.5,
+                      color: colorTxs,
+                      cap: "round" as const,
+                      join: "round" as const,
+                      opacity: dimTx ? 0.45 : 1,
+                    },
                     itemStyle: { color: colorTxs },
                     emphasis: { scale: true, lineStyle: { width: 2.6 } },
                   },
@@ -445,6 +564,7 @@ export function DualLineChart({
                       cap: "round" as const,
                       join: "round" as const,
                       type: "solid" as const,
+                      opacity: dimFee ? 0.45 : 1,
                     },
                     itemStyle: { color: colorFees },
                     emphasis: { scale: true, lineStyle: { width: 2.6 } },
@@ -458,19 +578,15 @@ export function DualLineChart({
       { notMerge: true }
     );
     const node = el.current;
-    if (node && quietMove.current) {
-      node.removeEventListener("pointermove", quietMove.current);
-      node.removeEventListener("pointerdown", quietMove.current);
-      quietMove.current = null;
-    }
+    unbind.current?.();
+    unbind.current = null;
     if (node) {
-      const onMove = (ev: PointerEvent) => {
-        if (ev.type === "pointermove" && ev.pointerType === "touch") return;
+      const nearest = (clientX: number, clientY: number): TxActivityPoint | null => {
         const rect = node.getBoundingClientRect();
-        const raw = c.convertFromPixel({ gridIndex: 0 }, [ev.clientX - rect.left, ev.clientY - rect.top]);
+        const raw = c.convertFromPixel({ gridIndex: 0 }, [clientX - rect.left, clientY - rect.top]);
         const t = Array.isArray(raw) ? raw[0] : null;
-        if (typeof t !== "number" || !Number.isFinite(t)) return;
-        let best = seriesPts[0];
+        if (typeof t !== "number" || !Number.isFinite(t)) return null;
+        let best: TxActivityPoint | null = null;
         let dist = Infinity;
         for (const p of seriesPts) {
           const d = Math.abs(p.t - t);
@@ -479,9 +595,42 @@ export function DualLineChart({
             best = p;
           }
         }
+        return best;
+      };
+      /** Phone: the reading goes to the header line and the hair stands on the point. */
+      const read = (best: TxActivityPoint) => {
+        setPick(best);
+        const px = c.convertToPixel({ xAxisIndex: 0, yAxisIndex: 0 }, [
+          best.t,
+          showTxs ? best.txs : best.feesErg,
+        ]);
+        if (Array.isArray(px)) c.dispatchAction({ type: "showTip", x: px[0], y: px[1] });
+      };
+      const unread = () => {
+        setPick(null);
+        hover.current?.(null);
+        c.dispatchAction({ type: "hideTip" });
+      };
+      let finger: { id: number; x: number; y: number; slid: boolean } | null = null;
+      const onMove = (ev: PointerEvent) => {
+        const touch = ev.pointerType === "touch";
+        if (ev.type === "pointerdown" && touch && readout) {
+          finger = { id: ev.pointerId, x: ev.clientX, y: ev.clientY, slid: false };
+        }
+        if (ev.type === "pointermove" && touch) {
+          // A finger slides the reading only on a phone chart; elsewhere a tap reads.
+          if (!readout || !finger || finger.id !== ev.pointerId) return;
+          if (Math.hypot(ev.clientX - finger.x, ev.clientY - finger.y) > 6) finger.slid = true;
+        }
+        const best = nearest(ev.clientX, ev.clientY);
         if (!best) return;
         hover.current?.(best);
+        if (readout) {
+          read(best);
+          return;
+        }
         if (!showTip) return;
+        const rect = node.getBoundingClientRect();
         // Anchor on the higher of the two dots, so the tip sits over both lines.
         const feeOk = showFees && best.feesKnown !== false;
         const ys: number[] = [];
@@ -516,30 +665,142 @@ export function DualLineChart({
               ) : null}
             </TipRows>
           </>,
-          { tapped: ev.pointerType === "touch" }
+          { tapped: touch }
         );
       };
-      quietMove.current = onMove;
+      const onEnd = (ev: PointerEvent) => {
+        if (!readout || ev.pointerType !== "touch" || !finger || finger.id !== ev.pointerId) return;
+        const slid = finger.slid || ev.type === "pointercancel";
+        finger = null;
+        // A slide reads while the finger is down; a tap keeps its reading until a tap lands elsewhere.
+        if (slid) unread();
+      };
       node.addEventListener("pointermove", onMove);
       node.addEventListener("pointerdown", onMove);
+      node.addEventListener("pointerup", onEnd);
+      node.addEventListener("pointercancel", onEnd);
+      unbind.current = () => {
+        node.removeEventListener("pointermove", onMove);
+        node.removeEventListener("pointerdown", onMove);
+        node.removeEventListener("pointerup", onEnd);
+        node.removeEventListener("pointercancel", onEnd);
+      };
     }
-  }, [shown, compact, colorTxs, colorFees, locale, binMs, skipBin, yRight, fillPlot, tipPulse, series, glow, showTip, ink]);
+  }, [view, compact, colorTxs, colorFees, locale, yRight, fillPlot, tipPulse, series, glow, showTip, ink, phone, readout, lead]);
+
+  const latest = view.seriesPts.length ? view.seriesPts[view.seriesPts.length - 1]! : null;
+  const reading = pick ?? latest;
+  const feeKnown = reading != null && reading.feesKnown !== false;
 
   return (
     <div
-      ref={el}
-      className={
-        "h-full min-h-0 w-full" +
-        (veil === "out"
-          ? " chart-range-out"
-          : veil === "hold"
-            ? " chart-range-hold"
-            : veil === "in"
-              ? " chart-range-in"
-              : "")
+      ref={wrap}
+      className="flex h-full min-h-0 w-full flex-col"
+      style={
+        readout
+          ? { height: PHONE_CHART_PX + PHONE_READOUT_PX }
+          : height != null
+            ? { height }
+            : series === "both"
+              ? { minHeight: 168 }
+              : undefined
       }
-      style={height != null ? { height } : series === "both" ? { minHeight: 168 } : undefined}
-    />
+    >
+      {readout ? (
+        <div
+          className="flex shrink-0 items-center justify-between gap-2 text-[11px] leading-none"
+          style={{ height: PHONE_READOUT_PX }}
+        >
+          <span className="min-w-0 truncate font-mono tabular-nums text-[var(--muted)]">
+            {reading ? readoutWhen(reading.t, view.windowMs, TX_ACTIVITY_TZ) : ""}
+          </span>
+          <span className="flex shrink-0 items-center gap-1">
+            {view.showTxs ? (
+              <ReadoutValue
+                color={colorTxs}
+                label={nameTxs}
+                on={lead === "txs"}
+                onPick={both ? () => setFocus("txs") : undefined}
+              >
+                {reading ? formatTxs(reading.txs) : "—"}
+              </ReadoutValue>
+            ) : null}
+            {view.showFees ? (
+              <ReadoutValue
+                color={colorFees}
+                label={nameFees}
+                on={lead === "fees"}
+                onPick={both ? () => setFocus("fees") : undefined}
+              >
+                {reading && feeKnown ? formatFees(reading.feesErg) : "—"}
+              </ReadoutValue>
+            ) : null}
+          </span>
+        </div>
+      ) : null}
+      <div
+        ref={el}
+        className={clsx(
+          "min-h-0 w-full flex-1",
+          readout && "touch-pan-y",
+          veil === "out"
+            ? "chart-range-out"
+            : veil === "hold"
+              ? "chart-range-hold"
+              : veil === "in"
+                ? "chart-range-in"
+                : null
+        )}
+      />
+    </div>
+  );
+}
+
+/**
+ * One value in a phone chart header. With two series it is also the legend toggle:
+ * the pressed one owns the y labels.
+ */
+function ReadoutValue({
+  color,
+  label,
+  on,
+  onPick,
+  children,
+}: {
+  color: string;
+  label: string;
+  on: boolean;
+  onPick?: () => void;
+  children: ReactNode;
+}) {
+  const body = (
+    <>
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: color }} aria-hidden />
+      <span className="font-mono tabular-nums">{children}</span>
+    </>
+  );
+  const base = "inline-flex h-6 items-center gap-1.5 whitespace-nowrap rounded-full px-2";
+  if (!onPick) {
+    return (
+      <span className={clsx(base, "text-[var(--text)]")} aria-label={label}>
+        {body}
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      aria-label={label}
+      onClick={onPick}
+      className={clsx(
+        base,
+        "chip-press transition-colors duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
+        on ? "is-pressed bg-[var(--wash-mid)] text-[var(--text)]" : "text-[var(--muted)]"
+      )}
+    >
+      {body}
+    </button>
   );
 }
 
