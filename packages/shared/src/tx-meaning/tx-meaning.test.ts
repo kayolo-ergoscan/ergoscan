@@ -127,16 +127,16 @@ describe("tx meaning: rules", () => {
     assert.equal(m.fee.payer, m.actor);
   });
 
-  it("pools carry only our protocol names: ErgoDex, Crux, LithosDex and the rest of the registry", () => {
+  it("pools carry only our protocol names: ErgoDex, ErgoDex CP, ErgoDex V3, LithosDex and the rest of the registry", () => {
     const names = new Set(Object.values(PROTOCOL_NAMES).map((n) => n.en));
-    const venues = new Set([...names, "ErgoDex V3"]);
+    const venues = new Set([...names, "ErgoDex CP", "ErgoDex V3"]);
     for (const g of GOLDEN) {
       const m = classifyTxMeaning(txOf(g), ctxOf(g));
       assert.ok(m.protocol === null || m.protocol in PROTOCOL_NAMES, g.id);
       for (const v of m.venues) assert.ok(venues.has(v), `${g.id}: ${v}`);
     }
     const routed = classifyTxMeaning(txOf(byId("4f929c15")), ctxOf(byId("4f929c15")));
-    assert.deepEqual(routed.venues, ["Crux", "ErgoDex", "ErgoDex V3"]);
+    assert.deepEqual(routed.venues, ["ErgoDex", "ErgoDex CP", "ErgoDex V3"]);
   });
 
   it("oracle, upkeep and bridge settlement rows fold; user actions do not", () => {
@@ -282,7 +282,7 @@ describe("tx meaning: list row", () => {
     assert.equal(r.phoneSub, "за 4.95 ERG");
     assert.deepEqual(r.notes, ["ещё 1.77 ERG → 9gvv…DDPB"]);
     assert.equal(row("a323e730", "en").phoneSub, "for 4.95 ERG");
-    assert.equal(row("4f929c15").where, "Crux + ErgoDex + ErgoDex V3");
+    assert.equal(row("4f929c15").where, "ErgoDex + ErgoDex CP + ErgoDex V3");
   });
 
   it("a transfer: who → whom, one figure, nothing on the left", () => {
