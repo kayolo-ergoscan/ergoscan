@@ -275,6 +275,8 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
       const name = play.step.act as ActName;
       if (play.wake) {
         wokeAt = now;
+        // Awake now for the scheduler too: the next block reads A0, not A4 (no second "wake").
+        sched.inputAt(now);
         startAct("wake", now, play.key, play.prio);
         after = name;
       } else startAct(name, now, play.key, play.prio);
@@ -703,12 +705,18 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
 
   const inputs = ["pointermove", "pointerdown", "wheel", "keydown", "touchstart", "focusin"] as const;
   for (const n of inputs) window.addEventListener(n, onInput, { passive: true, capture: true });
+  let parkRaf = 0;
   const onScroll = (e: Event) => {
     onInput(e);
-    // The phone park rides the sticky pill: follow it while the page scrolls.
-    if (hold?.where === "park" && !fade && !walk) {
-      const p = parkPoint();
-      if (p) keeper.move({ x: p.x, y: p.y });
+    // The phone park rides the sticky pill: follow it while the page scrolls, once per frame
+    // (capture also sees inner scrollers; parkPoint reads layout).
+    if (hold?.where === "park" && !fade && !walk && !parkRaf) {
+      parkRaf = requestAnimationFrame(() => {
+        parkRaf = 0;
+        if (dead || hold?.where !== "park" || fade || walk) return;
+        const p = parkPoint();
+        if (p) keeper.move({ x: p.x, y: p.y });
+      });
     }
   };
   document.addEventListener("scroll", onScroll, { passive: true, capture: true });
@@ -816,6 +824,7 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
       offSlot();
       for (const n of inputs) window.removeEventListener(n, onInput, { capture: true });
       document.removeEventListener("scroll", onScroll, { capture: true });
+      if (parkRaf) cancelAnimationFrame(parkRaf);
       document.removeEventListener("visibilitychange", onVis);
       window.removeEventListener(INK_EVENT, onInk);
       window.removeEventListener("storage", onStorage);
@@ -849,7 +858,13 @@ export default function KayoloLayer() {
     const body = bodyRef.current;
     const canvas = canvasRef.current;
     if (!host || !body || !canvas || !K.KAYOLO_LAYER) return;
-    const engine = createEngine(body, canvas);
+    let engine: Engine;
+    try {
+      engine = createEngine(body, canvas);
+    } catch (e) {
+      console.warn("[kayolo] engine", e);
+      return;
+    }
     engineRef.current = engine;
     setKeeper(engine.keeper);
     (window as Window & { __kayolo?: () => unknown }).__kayolo = engine.debug;

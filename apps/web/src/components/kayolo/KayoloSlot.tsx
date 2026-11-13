@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Component, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { useTip } from "@/components/Tip";
 import { pixelInkForPath } from "@/components/pixel";
@@ -209,7 +209,25 @@ export function KayoloSlot() {
   );
 }
 
-const KayoloLayer = dynamic(() => import("./KayoloLayer"), { ssr: false });
+/** A chunk that fails to load (bad network, a deploy swapped the build) leaves the page as it is. */
+const KayoloLayer = dynamic(
+  () => import("./KayoloLayer").catch(() => ({ default: () => null })),
+  { ssr: false }
+);
+
+/** He sits in the root layout: any throw of his must not reach global-error and blank the page. */
+class KayoloGuard extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  componentDidCatch(e: unknown) {
+    console.warn("[kayolo] layer", e);
+  }
+  render() {
+    return this.state.failed ? null : this.props.children;
+  }
+}
 
 /** Loads the engine after the page settles (§9.4): idle callback, 2 s at most; Safari waits 1.2 s. */
 export function KayoloBoot() {
@@ -227,5 +245,9 @@ export function KayoloBoot() {
     const id = window.setTimeout(() => setOn(true), 1200);
     return () => window.clearTimeout(id);
   }, []);
-  return on ? <KayoloLayer /> : null;
+  return on ? (
+    <KayoloGuard>
+      <KayoloLayer />
+    </KayoloGuard>
+  ) : null;
 }
