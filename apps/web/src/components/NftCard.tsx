@@ -4,7 +4,8 @@ import Link from "next/link";
 import clsx from "clsx";
 import { useEffect, useRef, useState } from "react";
 import { KpiMark } from "@/components/kpi-marks";
-import { shortId } from "@/lib/format";
+import { formatInt, shortId } from "@/lib/format";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 import { tokenIdenticonSrc } from "@/lib/token-identicon";
 import { useMediaSrc } from "@/lib/use-media-src";
 
@@ -139,6 +140,7 @@ export function NftGroupCard({
   enterClass?: string;
   sheetEnter?: number;
 }) {
+  const { locale } = useI18n();
   return (
     <Link
       prefetch={false}
@@ -152,7 +154,7 @@ export function NftGroupCard({
       <span className="nft-cap" data-k="nft">
         <span className="nft-cap-name">{name}</span>
         <span className="nft-cap-facts">
-          <span className="feed-kind tabular-nums">{count.toLocaleString()}</span>
+          <span className="feed-kind tabular-nums">{formatInt(count, locale)}</span>
           {hint ? <span>{hint}</span> : null}
         </span>
       </span>

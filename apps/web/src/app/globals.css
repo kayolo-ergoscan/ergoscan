@@ -4013,6 +4013,14 @@ html[data-float="ada"] .explorer-dock {
   background: rgba(196, 181, 253, 0.16);
 }
 
+/* A 360 px phone in Russian: "Капитализация" and the rank chip need 152 px of a 134 px tile
+   header, so the chip stuck out of the tile. The label stays; wider screens keep the rank. */
+@media (max-width: 379px) {
+  html[lang="ru"] .mcap-rank {
+    display: none;
+  }
+}
+
 .mcap-vol {
   color: #7eb6ff;
 }
