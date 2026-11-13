@@ -159,6 +159,25 @@ describe("storage rent read off a mempool tx (rentMarkOf)", () => {
   });
 });
 
+describe("ERG dust next to tokens", () => {
+  it("goes behind the token in the phrase, and the row figure is the token", () => {
+    for (const id of ["326af71b", "03b3db46", "0ec5a047"]) {
+      const g = byId(id);
+      const m = classifyTxMeaning(txOf(g), ctxOf(g));
+      const side = m.got.length ? m.got : m.gave;
+      assert.ok(side[0]!.token, id);
+      assert.equal(side[side.length - 1]!.token, null, id);
+      assert.ok(meaningRow(compactMeaning(m), "ru").big?.token, id);
+    }
+  });
+  it("more than 0.0011 ERG a box stays first", () => {
+    // 0.002 ERG into one forward offer box: not dust.
+    const g = byId("a41cdecad6");
+    const m = classifyTxMeaning(txOf(g), ctxOf(g));
+    assert.equal(m.gave[0]!.token, null);
+  });
+});
+
 describe("tx meaning: rules", () => {
   it("box order and token order never change the answer", () => {
     for (const g of GOLDEN) {

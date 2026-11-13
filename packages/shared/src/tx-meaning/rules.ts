@@ -1196,11 +1196,59 @@ export const RULES: ReadonlyArray<[string, Rule]> = [
   ["wallets", ruleWallets],
 ];
 
+/**
+ * ERG a token box carries just to exist: a wallet puts 0.001–0.0011 ERG next to a token. At or
+ * under this per box, the ERG is not what moved; the token is.
+ */
+export const DUST_PER_BOX = 1_100_000n;
+
+/** Boxes that carry any of these tokens, to `owner` (or to anyone but `owner`), at least one. */
+function tokenBoxes(f: Facts, tokens: AssetKey[], owner: string | null, toOwner: boolean): number {
+  const n = f.outs.filter(
+    (b) => !b.fee && (owner == null || (b.address === owner) === toOwner) && tokens.some((t) => b.assets.has(t))
+  ).length;
+  return Math.max(1, n);
+}
+
+/** ERG dust next to tokens goes to the tail: «24.10 rpnADA и 0.0003 ERG», not the other way round. */
+function dustLast(list: Amounts | undefined, boxes: (tokens: AssetKey[]) => number): Amounts | undefined {
+  if (!list || list.length < 2) return list;
+  const erg = list.find(([k]) => k === ERG);
+  const tokens = list.filter(([k]) => k !== ERG).map(([k]) => k);
+  if (!erg || !tokens.length || erg[1] > DUST_PER_BOX * BigInt(boxes(tokens))) return list;
+  return [...list.filter(([k]) => k !== ERG), erg];
+}
+
+function dustOrder(f: Facts, d: Draft): Draft {
+  const out: Draft = { ...d };
+  // Rent is ERG taken from old boxes: the ERG is the point, not dust.
+  if (d.action !== "rent") out.got = dustLast(d.got, (t) => tokenBoxes(f, t, d.actor, true));
+  out.gave = dustLast(d.gave, (t) => tokenBoxes(f, t, d.actor, false));
+  if (d.extra?.length) {
+    // Per receiver, in the receivers' own order: only the ERG entry moves behind its tokens.
+    const by = new Map<string, NonNullable<Draft["extra"]>>();
+    for (const e of d.extra) {
+      const k = `${e.role ?? ""}|${e.to}`;
+      by.set(k, [...(by.get(k) ?? []), e]);
+    }
+    out.extra = [...by.values()].flatMap((rows) => {
+      const to = rows[0]!.to;
+      const order = dustLast(
+        rows.map((e) => [e.key, e.amount] as [AssetKey, bigint]),
+        (t) => tokenBoxes(f, t, to, true)
+      )!;
+      return order.map(([k]) => rows.find((e) => e.key === k)!);
+    });
+  }
+  return out;
+}
+
 /** First rule that answers wins; a mint under another action is added as secondary. */
 export function runRules(f: Facts, ctx: MeaningCtx): Draft & { rule: string } {
   for (const [name, rule] of RULES) {
-    const d = rule(f, ctx);
-    if (!d) continue;
+    const found = rule(f, ctx);
+    if (!found) continue;
+    const d = dustOrder(f, found);
     const secondary = new Set(d.secondary ?? []);
     if (f.minted.size && !["token-issue", "nft-mint", "pool-create", "name-register", "block-reward"].includes(d.action)) {
       const [id, amt] = [...f.minted].sort((a, b) => (a[0] < b[0] ? -1 : 1))[0]!;
