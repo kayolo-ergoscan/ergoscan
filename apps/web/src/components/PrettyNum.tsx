@@ -54,12 +54,14 @@ export function PrettyAmt({
 /** Same tiny-zero mark as USD, without $ — DEX pool mids. */
 export function PrettyPrice({
   n,
+  locale,
   className,
 }: {
   n: number | null | undefined;
+  locale?: string;
   className?: string;
 }) {
-  const d = describePrice(n);
+  const d = describePrice(n, locale);
   if (!d) return <span className={className}>—</span>;
   if (!d.tiny) return <span className={clsx("tabular-nums", className)}>{d.text}</span>;
   return (

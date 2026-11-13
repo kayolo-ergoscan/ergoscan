@@ -35,7 +35,7 @@ function parse(raw: unknown): Versions | null {
 }
 
 export function HomeVersionNodes({ className, style }: { className?: string; style?: CSSProperties }) {
-  const { t, locale } = useI18n();
+  const { t, tn, locale } = useI18n();
   const loc = locale === "ru" ? "ru-RU" : "en-US";
   const [data, setData] = useState<Versions | null>(null);
 
@@ -101,7 +101,7 @@ export function HomeVersionNodes({ className, style }: { className?: string; sty
             >
               <span className="inline-flex shrink-0 items-baseline gap-1 font-semibold">
                 {data.total.toLocaleString(loc)}
-                <span className="font-medium opacity-70">{t("home.versionPeers")}</span>
+                <span className="font-medium opacity-70">{tn("home.versionPeers", data.total)}</span>
               </span>
             </Tip>
             <span className="inline-flex min-w-0 items-center gap-1.5 truncate font-semibold">

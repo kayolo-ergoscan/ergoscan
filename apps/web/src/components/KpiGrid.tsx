@@ -5,6 +5,7 @@ import Link from "next/link";
 import { cloneElement, isValidElement, useEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { KpiMark } from "@/components/kpi-marks";
 import { TokenAvatar } from "@/components/TokenBadge";
+import { formatCompactNumber } from "@/lib/format";
 import { HOME } from "@/lib/palette";
 
 /**
@@ -29,37 +30,17 @@ function splitUnit(children: ReactNode): ReactNode {
   );
 }
 
-const COMPACT_STEPS: readonly [number, string][] = [
-  [1e12, "T"],
-  [1e9, "B"],
-  [1e6, "M"],
-  [1e3, "k"],
-];
-
 /**
  * Phone short form of a figure of 100 000 or more: 141 892 → "141.9k",
- * 1 337 399.26 ERG → "1.34M ERG". Undefined below that, so the tile keeps the
- * exact figure. Block heights and ids are names, not amounts: never pass them.
+ * 1 337 399.26 ERG → "1.34M ERG" (`formatCompactNumber`, the same in both languages).
+ * Undefined below that, so the tile keeps the exact figure. Block heights and ids are
+ * names, not amounts: never pass them.
  */
 export function compactFigure(n: number | bigint | null | undefined, unit?: string): string | undefined {
   if (n == null) return undefined;
   const v = typeof n === "bigint" ? Number(n) : n;
   if (!Number.isFinite(v) || Math.abs(v) < 100_000) return undefined;
-  const abs = Math.abs(v);
-  for (let i = 0; i < COMPACT_STEPS.length; i++) {
-    const [step, suffix] = COMPACT_STEPS[i];
-    if (abs < step) continue;
-    const x = abs / step;
-    const fixed = x.toFixed(x < 10 ? 2 : x < 1000 ? 1 : 0);
-    if (Number(fixed) >= 1000 && i > 0) {
-      const [up, upSuffix] = COMPACT_STEPS[i - 1];
-      const y = (abs / up).toFixed(2).replace(/\.?0+$/, "");
-      return `${v < 0 ? "-" : ""}${y}${upSuffix}${unit ? ` ${unit}` : ""}`;
-    }
-    const body = fixed.includes(".") ? fixed.replace(/\.?0+$/, "") : fixed;
-    return `${v < 0 ? "-" : ""}${body}${suffix}${unit ? ` ${unit}` : ""}`;
-  }
-  return undefined;
+  return `${formatCompactNumber(v)}${unit ? ` ${unit}` : ""}`;
 }
 
 /**

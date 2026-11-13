@@ -23,9 +23,9 @@ function loc(locale: string): string {
   return locale === "ru" ? "ru-RU" : "en-US";
 }
 
-function fmtErgFull(n: number): string {
+function fmtErgFull(n: number, locale?: string): string {
   if (!Number.isFinite(n)) return "—";
-  return `${formatGroupedNumber(n, 2, 2)} ERG`;
+  return `${formatGroupedNumber(n, 2, 2, locale)} ERG`;
 }
 
 const POOL_SORTS: PoolBoardSort[] = ["tvl", "vol", "vol24", "trades", "last", "first"];
@@ -120,7 +120,7 @@ export function PoolView({ initial }: { initial: PoolBoardSnap | null }) {
   const kpis = [
     {
       label: t("spectrum.tvl"),
-      value: tvl != null && tvl > 0 ? fmtErgFull(tvl) : miss,
+      value: tvl != null && tvl > 0 ? fmtErgFull(tvl, locale) : miss,
       compact: compactFigure(tvl, "ERG"),
       unavailable: tvl == null || tvl <= 0,
       sub: t("spectrum.tvlSub"),
@@ -130,7 +130,7 @@ export function PoolView({ initial }: { initial: PoolBoardSnap | null }) {
     },
     {
       label: t("spectrum.volume"),
-      value: vol != null && vol > 0 ? fmtErgFull(vol) : miss,
+      value: vol != null && vol > 0 ? fmtErgFull(vol, locale) : miss,
       compact: compactFigure(vol, "ERG"),
       unavailable: vol == null || vol <= 0,
       sub: t("spectrum.volumeSub"),

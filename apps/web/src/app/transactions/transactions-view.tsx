@@ -12,7 +12,7 @@ import { FeedServiceFold } from "@/components/feed/FeedMeaning";
 import { foldServiceRows, isTxFold, type TxFold } from "@/lib/tx-meaning-row";
 import { getGateway } from "@/lib/config";
 import { fetchChainStats, type ChainStats } from "@/lib/chain-stats";
-import { formatCompact, formatDottedDate, toEpochMs } from "@/lib/format";
+import { formatCompact, formatDottedDate, formatGroupedNumber, toEpochMs } from "@/lib/format";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { useChainTipRefresh, usePageSync } from "@/lib/page-sync";
 import { SNAPSHOT_FETCH, enteringIds, snapshotPath, useEnterIds, ENTER_MS } from "@/lib/keyed-enter";
@@ -256,7 +256,7 @@ export function TransactionsView({
     },
     {
       label: t("txs.kpiPerBlock"),
-      value: perBlock != null ? perBlock.toLocaleString(loc(locale)) : miss,
+      value: perBlock != null ? formatGroupedNumber(perBlock, 0, 1, locale) : miss,
       unavailable: perBlock == null,
       sub: t("txs.kpiPerBlockSub"),
       mark: <KpiMark id="per-block" tone={INK.teal} />,
@@ -265,7 +265,7 @@ export function TransactionsView({
     },
     {
       label: t("txs.kpiFees24h"),
-      value: s24?.feesErg != null ? `${formatCompact(s24.feesErg)} ERG` : miss,
+      value: s24?.feesErg != null ? `${formatCompact(s24.feesErg, 2, locale)} ERG` : miss,
       unavailable: s24?.feesErg == null,
       sub: t("blocks.kpiLast24h"),
       mark: <KpiMark id="fee" tone={INK.gold} />,

@@ -655,7 +655,7 @@ function RentCollectedChart({
                 {t("rent.chartLast.day")}
               </span>
               <KpiNum className="max-w-none shrink-0 tabular-nums text-[22px] font-semibold leading-[1.15] tracking-tight text-[var(--text)]">
-                {`${formatGroupedNumber(lastErg, 2, 2)} ERG`}
+                {`${formatGroupedNumber(lastErg, 2, 2, locale)} ERG`}
               </KpiNum>
             </p>
           ) : null}
