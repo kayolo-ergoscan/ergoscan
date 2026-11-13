@@ -17,17 +17,21 @@ import { INK_EVENT } from "@/lib/skin-ink";
 import { formatInt } from "@/lib/format";
 import { blocksToMs, ergText, formatShare, formatSpan, formatWindowDays, splitHashrate } from "@/lib/lithos-header";
 import {
+  cartLanes,
   cartX,
   coinSpots,
+  FLAG_GAP,
   idleSize,
   idleSpots,
   minerSpots,
+  placeLabels,
   sceneCarts,
   sceneLayout,
   seamX,
-  stackLabels,
+  type Box,
   type CartSpot,
   type SceneLayout,
+  type Seg,
 } from "@/lib/lithos-home-scene";
 
 /**
@@ -118,6 +122,9 @@ type Cart = {
   kind: CartSpot["kind"] | "pay";
   x: number;
   tx: number;
+  /** How high its track runs above the front one, and where it is heading. */
+  lift: number;
+  tl: number;
   bumpAt: number;
   alpha: number;
   leaving: boolean;
@@ -324,6 +331,23 @@ function drawTrack(ctx: CanvasRenderingContext2D, L: SceneLayout, ink: Inks, tex
   }
 }
 
+/** A track behind the front one, over one stretch: the same sleepers and rails, a little dimmer. */
+function drawSiding(ctx: CanvasRenderingContext2D, L: SceneLayout, ink: Inks, s: Seg, color: string, lift: number) {
+  const y = L.ground - lift;
+  const a = s.a + 4;
+  const b = s.b - 4;
+  ctx.save();
+  ctx.globalAlpha = 0.8;
+  ctx.fillStyle = ink.washMid;
+  for (let x = a + 1; x < b - 3; x += L.small ? 7 : 8) ctx.fillRect(x, y - 1, L.small ? 3 : 4, 5);
+  ctx.fillStyle = ink.washStrong;
+  ctx.fillRect(a, y - 1, b - a, 1);
+  ctx.fillStyle = color;
+  ctx.globalAlpha = 0.5;
+  ctx.fillRect(a, y + 3, b - a, 2);
+  ctx.restore();
+}
+
 function drawCart(
   ctx: CanvasRenderingContext2D,
   L: SceneLayout,
@@ -332,17 +356,19 @@ function drawCart(
   color: string,
   chips: number,
   bump: number,
-  alpha: number
+  alpha: number,
+  lift: number
 ) {
   const hw = L.cartHw;
   const body = L.cartBody;
-  const y = L.ground - 4 - bump * 2;
+  const ground = L.ground - lift;
+  const y = ground - 4 - bump * 2;
   const d = L.small ? 4 : Math.round(hw * 0.27);
   ctx.save();
   ctx.globalAlpha = alpha * 0.32;
   ctx.fillStyle = "#000";
   ctx.beginPath();
-  ctx.ellipse(x, L.ground + 1, hw * 0.95, 2.4, 0, 0, Math.PI * 2);
+  ctx.ellipse(x, ground + 1, hw * 0.95, 2.4, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.globalAlpha = alpha;
   // Wheels.
@@ -351,7 +377,7 @@ function drawCart(
   ctx.lineWidth = 1;
   for (const wx of [x - hw * 0.55, x + hw * 0.55]) {
     ctx.beginPath();
-    ctx.arc(wx, L.ground - 2.5, L.small ? 2.6 : hw * 0.16, 0, Math.PI * 2);
+    ctx.arc(wx, ground - 2.5, L.small ? 2.6 : hw * 0.16, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
   }
@@ -414,11 +440,20 @@ function drawCart(
   ctx.restore();
 }
 
-/** Width of a label, measured in the fonts it is drawn with (the first line is bold mono only on the collect cart). */
-function labelWidth(ctx: CanvasRenderingContext2D, L: SceneLayout, ink: Inks, lines: [string, string], strong: boolean): number {
+type LabelStyle = "strong" | "compact" | "plain";
+
+/** The first line's font: a round's height in bold mono (smaller when it stands alone behind the lead), else sans. */
+function labelFont(L: SceneLayout, ink: Inks, style: LabelStyle): string {
+  if (style === "strong") return `600 ${L.font.strong}px ${ink.mono}`;
+  if (style === "compact") return `600 ${L.font.small}px ${ink.mono}`;
+  return `${L.font.small}px ${ink.sans}`;
+}
+
+/** Width of a label, measured in the fonts it is drawn with. */
+function labelWidth(ctx: CanvasRenderingContext2D, L: SceneLayout, ink: Inks, lines: [string, string], style: LabelStyle): number {
   const sans = `${L.font.small}px ${ink.sans}`;
   ctx.save();
-  ctx.font = strong ? `600 ${L.font.strong}px ${ink.mono}` : sans;
+  ctx.font = labelFont(L, ink, style);
   let w = ctx.measureText(lines[0]).width;
   if (lines[1]) {
     ctx.font = sans;
@@ -612,6 +647,7 @@ function LithosScene({ data, tip, text, label, tipFor }: SceneInput & { label: s
       const { data, tip, text } = input.current;
       const tipH = tip ?? data?.tip.height ?? 0;
       const spots = data ? sceneCarts(data.holding, data.evaluation, tipH) : [];
+      const lanes = cartLanes(spots);
       const roundN = Math.min(MAX_MINERS, data?.miners.round ?? data?.holding[0]?.miners ?? 0);
       const registry = data?.miners.registry ?? null;
       const idleN = data ? Math.min(MAX_IDLE, Math.max(0, (registry ?? roundN) - roundN)) : 6;
@@ -657,6 +693,7 @@ function LithosScene({ data, tip, text, label, tipFor }: SceneInput & { label: s
       for (const s of spots) {
         seen.add(s.h);
         const tx = cartX(L, s);
+        const tl = (lanes.get(s.h)?.lane ?? 0) * L.lane;
         const c = carts.get(s.h);
         if (!c) {
           // A round we have not seen: on the first look every cart rolls in; later a new round
@@ -667,6 +704,8 @@ function LithosScene({ data, tip, text, label, tipFor }: SceneInput & { label: s
             kind: s.kind,
             x: reduce ? tx : firstData ? L.collect.a - 24 : isNewRound ? L.collect.a + L.cartHw : tx,
             tx,
+            lift: tl,
+            tl,
             bumpAt: -1e9,
             alpha: 1,
             leaving: false,
@@ -674,6 +713,7 @@ function LithosScene({ data, tip, text, label, tipFor }: SceneInput & { label: s
         } else {
           c.kind = s.kind;
           c.tx = tx;
+          c.tl = tl;
           c.leaving = false;
         }
       }
@@ -683,6 +723,7 @@ function LithosScene({ data, tip, text, label, tipFor }: SceneInput & { label: s
           c.leaving = true;
           c.kind = "pay";
           c.tx = (L.payout.a + L.payout.b) / 2;
+          c.tl = 0;
           if (!reduce) coinPopAt = now + 500;
         }
       }
@@ -690,6 +731,10 @@ function LithosScene({ data, tip, text, label, tipFor }: SceneInput & { label: s
       for (const c of [...carts.values()]) {
         c.x += (c.tx - c.x) * k;
         if (Math.abs(c.tx - c.x) < 0.3) c.x = c.tx;
+        else moving = true;
+        // A cart that becomes the lead of its stretch moves over to the front track.
+        c.lift += (c.tl - c.lift) * k;
+        if (Math.abs(c.tl - c.lift) < 0.3) c.lift = c.tl;
         else moving = true;
         if (c.leaving) {
           c.alpha = reduce ? 0 : Math.max(0, c.alpha - dt * 1.6);
@@ -744,52 +789,95 @@ function LithosScene({ data, tip, text, label, tipFor }: SceneInput & { label: s
       }
       drawRock(ctx, L, ink);
       drawIdle(ctx, L, ink, idleN);
+      for (const [kind, seg, color] of [
+        ["collect", L.collect, ink.gold],
+        ["check", L.check, ink.violet],
+      ] as const) {
+        let top = 0;
+        for (const c of carts.values()) if (c.kind === kind) top = Math.max(top, c.lift);
+        for (let i = 1; i * L.lane <= top + L.lane * 0.5; i++) drawSiding(ctx, L, ink, seg, color, i * L.lane);
+      }
       drawTrack(ctx, L, ink, text);
       if (data) drawCoins(ctx, L, ink, data.payoutN, (now - coinPopAt) / 420);
 
-      // Carts and their labels; each label in its stretch's colour.
+      // Carts, back tracks first, then their labels; each label in its stretch's colour. In a stretch
+      // with one round the label sits over its cart. In a shared one every round carries a flag: a
+      // pole planted in its ore with the text beside it, the lead lowest with its facts, the newer
+      // ones above it with the height alone (the tip has the rest).
       const LINE = L.font.line;
-      type Label = { x: number; w: number; y: number; h: number; lines: [string, string]; strong: boolean; color: string };
-      const labels: Label[] = [];
-      const label = (x: number, base: number, lines: [string, string], strong: boolean, color: string) => {
-        const wTxt = labelWidth(ctx, L, ink, lines, strong);
-        const half = wTxt / 2;
-        const cx = Math.min(w - 2 - half, Math.max(L.quarry + 2 + half, x));
-        labels.push({ x: cx, w: wTxt, y: base + 3, h: (lines[1] ? 2 : 1) * LINE, lines, strong, color });
-      };
-      const order = [...carts.values()].sort((a, b) => a.x - b.x);
-      for (const c of order) {
+      // `round` is the round's height (null for the payout heap); `stretch` colours the pole.
+      type Label = { round: number | null; x: number; w: number; h: number; bottom: number; pole?: number; lines: [string, string]; style: LabelStyle; color: string; stretch: string };
+      const want: Label[] = [];
+      const bodies: Box[] = [];
+      const drawn = [...carts.values()].sort((a, b) => b.lift - a.lift || a.x - b.x);
+      for (const c of drawn) {
         const s = spots.find((x) => x.h === c.h);
         const bump = now - c.bumpAt < 200 ? Math.sin(((now - c.bumpAt) / 200) * Math.PI) : 0;
         const color = c.kind === "collect" ? ink.gold : c.kind === "check" ? ink.violet : ink.green;
-        drawCart(ctx, L, ink, c.x, color, s?.miners ?? 0, bump, c.alpha);
+        drawCart(ctx, L, ink, c.x, color, s?.miners ?? 0, bump, c.alpha, c.lift);
+        const top = L.ground - c.lift - 4 - L.cartBody;
+        bodies.push({ l: c.x - L.cartHw, r: c.x + L.cartHw, top, bottom: L.ground - c.lift });
         if (!s) continue;
+        const lane = lanes.get(s.h);
         const collect = s.kind === "collect";
-        const lines: [string, string] = collect ? text.round(s, L.small) : [text.checkLeft(s), ""];
-        label(c.x, L.ground - 4 - L.cartBody - (L.small ? 10 : 14), lines, collect, collect ? ink.text : ink.violet);
-        hits.push({ kind: "cart", h: s.h, x: c.x - L.cartHw - 4, y: L.ground - L.cartBody - 44, w: 2 * L.cartHw + 8, hh: L.cartBody + 48 });
+        const style: LabelStyle = !collect ? "plain" : lane?.shared && !lane.lead ? "compact" : "strong";
+        const lines: [string, string] = !collect ? [text.checkLeft(s), ""] : style === "compact" ? [text.round(s, L.small)[0], ""] : text.round(s, L.small);
+        want.push({
+          round: s.h,
+          x: c.x,
+          w: labelWidth(ctx, L, ink, lines, style),
+          h: (lines[1] ? 2 : 1) * LINE,
+          bottom: top - (L.small ? 7 : 11),
+          pole: lane?.shared ? top + (L.small ? 2 : Math.round(L.cartHw * 0.14)) : undefined,
+          lines,
+          style,
+          color: collect ? ink.text : ink.violet,
+          stretch: color,
+        });
       }
-      // Payout label joins the same stacking.
+      // Payout label joins the same placement.
       if (data) {
         const px = (L.payout.a + L.payout.b) / 2;
         const rx = L.small ? 4 : 5.4;
-        label(px, L.ground - 8 - Math.ceil(Math.min(21, data.payoutN) / 6) * rx - 8, [text.payout, ""], false, ink.green);
-        hits.push({ kind: "pay", x: L.payout.a, y: L.ground - 56, w: L.payout.b - L.payout.a, hh: 62 });
+        const lines: [string, string] = [text.payout, ""];
+        const bottom = L.ground - 8 - Math.ceil(Math.min(21, data.payoutN) / 6) * rx - 5;
+        want.push({ round: null, x: px, w: labelWidth(ctx, L, ink, lines, "plain"), h: LINE, bottom, lines, style: "plain", color: ink.green, stretch: ink.green });
       }
-      const placed = stackLabels(labels);
+      const placed = placeLabels(want, L.quarry + 2, w - 2, bodies);
       for (const lb of placed) {
-        const baseY = lb.y - 3 - lb.lift - (lb.lines[1] ? LINE : 0);
-        ctx.textAlign = "center";
+        const last = lb.bottom - 3;
+        const first = lb.lines[1] ? last - LINE : last;
+        if (lb.pole != null) {
+          // The pole, from the ore up to the text's first line, with a knob on top.
+          const capTop = first - Math.round((lb.style === "strong" ? L.font.strong : L.font.small) * 0.72);
+          ctx.fillStyle = lb.stretch;
+          ctx.globalAlpha = 0.6;
+          ctx.fillRect(Math.round(lb.x) - 0.5, capTop + 2, 1, lb.pole - capTop - 2);
+          ctx.globalAlpha = 1;
+          ctx.fillRect(Math.round(lb.x) - 1.5, capTop, 3, 3);
+        }
+        ctx.textAlign = lb.side === 1 ? "left" : lb.side === -1 ? "right" : "center";
+        const tx = lb.side === 1 ? lb.x + FLAG_GAP : lb.side === -1 ? lb.x - FLAG_GAP : (lb.l + lb.r) / 2;
         ctx.fillStyle = lb.color;
-        ctx.font = lb.strong ? `600 ${L.font.strong}px ${ink.mono}` : `${L.font.small}px ${ink.sans}`;
-        ctx.fillText(lb.lines[0], lb.x, baseY);
+        ctx.font = labelFont(L, ink, lb.style);
+        if (lb.style === "compact") ctx.globalAlpha = 0.82;
+        ctx.fillText(lb.lines[0], tx, first);
+        ctx.globalAlpha = 1;
         if (lb.lines[1]) {
           ctx.fillStyle = ink.muted;
           ctx.font = `${L.font.small}px ${ink.sans}`;
-          ctx.fillText(lb.lines[1], lb.x, baseY + LINE);
+          ctx.fillText(lb.lines[1], tx, last);
         }
+        if (lb.round != null) hits.push({ kind: "cart", h: lb.round, x: lb.l - 2, y: lb.top - 2, w: lb.r - lb.l + 4, hh: lb.bottom - lb.top + 4 });
       }
       ctx.textAlign = "left";
+      // Carts under the pointer: the front track wins where carts overlap.
+      for (const c of [...drawn].reverse()) {
+        if (c.leaving) continue;
+        const top = L.ground - c.lift - 4 - L.cartBody;
+        hits.push({ kind: "cart", h: c.h, x: c.x - L.cartHw - 3, y: top - 4, w: 2 * L.cartHw + 6, hh: L.cartBody + 9 });
+      }
+      if (data) hits.push({ kind: "pay", x: L.payout.a, y: L.ground - 56, w: L.payout.b - L.payout.a, hh: 62 });
 
       // Miners: back row first. Each knock leans a miner into the rock; a find makes them hop.
       const size = 26 * L.minerScale;
@@ -840,7 +928,7 @@ function LithosScene({ data, tip, text, label, tipFor }: SceneInput & { label: s
         }
         if (u < 0) continue;
         const x1 = cart.x;
-        const y1 = L.ground - 4 - L.cartBody - 2;
+        const y1 = L.ground - cart.lift - 4 - L.cartBody - 2;
         const x = ch.x0 + (x1 - ch.x0) * u;
         const y = ch.y0 + (y1 - ch.y0) * u - 30 * 4 * u * (1 - u);
         ctx.fillStyle = ink.gold;
@@ -857,7 +945,7 @@ function LithosScene({ data, tip, text, label, tipFor }: SceneInput & { label: s
         const sx = g.x;
         const sy = g.y;
         const tx = cart?.x ?? L.collect.a + L.cartHw;
-        const ty = L.ground - 4 - L.cartBody - 4;
+        const ty = L.ground - (cart?.lift ?? 0) - 4 - L.cartBody - 4;
         if (findT < GEM_GLINT) {
           const gl = findT / GEM_GLINT;
           ctx.fillStyle = GOLD_HI;
@@ -914,9 +1002,9 @@ function LithosScene({ data, tip, text, label, tipFor }: SceneInput & { label: s
             const grow = easeOut(t2 / 240);
             const fade = Math.min(1, Math.max(0, (FIND_MS - GEM_LAND - t2) / 420));
             const s = size * grow;
-            let top = L.ground - 4 - L.cartBody - 12;
+            let top = ty - 8;
             for (const lb of placed) {
-              if (Math.abs(lb.x - tx) < lb.w / 2 + size / 2 + 4) top = Math.min(top, lb.y - lb.lift - lb.h - 4);
+              if (lb.l < tx + size / 2 + 4 && lb.r > tx - size / 2 - 4) top = Math.min(top, lb.top - 4);
             }
             const y = Math.max(L.seam.y + L.seam.h + 4, top - 6 - s - 4 * grow);
             ctx.globalAlpha = fade;

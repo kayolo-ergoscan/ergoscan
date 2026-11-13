@@ -4,7 +4,9 @@
  * isometric quarry where the round's miners knock NISP chips loose, with registered miners outside
  * the round on the plateau behind. Right: one track in three stretches — NISP collection (360
  * blocks), the fraud-proof check (360 blocks) and payout. A round is a cart; how far it has rolled
- * is how far its phase has run at the live chain tip. Pure, so it is tested.
+ * is how far its phase has run at the live chain tip. Finds come about every 10 h and a phase lasts
+ * about 12 h, so two rounds often share a stretch: the one furthest along keeps the front track, the
+ * others ride on tracks behind it, each with its label on a flag. Pure, so it is tested.
  */
 import { LITHOS_EVAL_PERIOD, LITHOS_HOLDING_PERIOD, type LithosRound } from "@ergoscan/shared";
 
@@ -35,6 +37,8 @@ export type SceneLayout = {
   payout: Seg;
   cartHw: number;
   cartBody: number;
+  /** How much higher each track behind the front one runs (a stretch shared by several rounds). */
+  lane: number;
   minerScale: number;
   /** Font sizes (CSS px): a round's height, the small lines, the stage names. */
   font: { strong: number; small: number; stage: number; line: number };
@@ -88,6 +92,8 @@ export function sceneLayout(w: number, h: number): SceneLayout {
     // The pipeline is the hero: big carts on a tall desktop scene, compact ones on the phone.
     cartHw: small ? 16 : tall ? 29 : 21,
     cartBody: small ? 15 : tall ? 25 : 18,
+    // Enough that a cart right behind another still shows its rim and ore over it.
+    lane: small ? 10 : tall ? 16 : 12,
     minerScale: small ? 0.46 : tall ? 0.62 : 0.52,
     font: small ? { strong: 11, small: 10.5, stage: 10.5, line: 12.5 } : { strong: 13, small: 11.5, stage: 12, line: 14 },
   };
@@ -171,27 +177,93 @@ export function cartX(L: SceneLayout, c: CartSpot): number {
   return s.a + pad + (s.b - s.a - 2 * pad) * c.u;
 }
 
+/** Tracks in use per stretch, at most this many. */
+export const MAX_LANES = 3;
+
+export type Lane = {
+  /** 0 is the front track; 1, 2 run behind it. */
+  lane: number;
+  /** The stretch holds more than one round. */
+  shared: boolean;
+  /** Furthest along in its stretch (the next to move on). */
+  lead: boolean;
+};
+
 /**
- * Text boxes (centre x, width, bottom y, height), left to right: a box that would overlap one already
- * placed moves up just above it, never further. `lift` is how far it moved.
+ * Which track each cart takes. In a stretch with one round it rides the front track. In a shared
+ * stretch the round furthest along keeps the front track and the newer ones take the tracks behind,
+ * so carts never hide each other while their positions stay the real progress.
  */
-export function stackLabels<T extends { x: number; w: number; y: number; h: number }>(
+export function cartLanes(spots: readonly CartSpot[]): Map<number, Lane> {
+  const out = new Map<number, Lane>();
+  for (const kind of ["collect", "check"] as const) {
+    const here = spots.filter((c) => c.kind === kind).sort((a, b) => b.u - a.u || a.h - b.h);
+    here.forEach((c, i) => out.set(c.h, { lane: Math.min(i, MAX_LANES - 1), shared: here.length > 1, lead: i === 0 }));
+  }
+  return out;
+}
+
+export type Box = { l: number; r: number; top: number; bottom: number };
+
+export type LabelSpec = {
+  /** Centre of what the text names: a cart or the coin heap. */
+  x: number;
+  w: number;
+  h: number;
+  /** Where the text's bottom wants to be. It only ever moves up from here. */
+  bottom: number;
+  /** A flag: the text hangs beside a pole planted in the cart at this y. Without it the text is centred over x. */
+  pole?: number;
+};
+
+export type PlacedLabel<T> = T & Box & { lift: number; side: -1 | 0 | 1 };
+
+/** Space between a flag's pole and its text. */
+export const FLAG_GAP = 5;
+
+/**
+ * Places labels so that none overlaps another, a pole or an obstacle (a cart). Right to left: a
+ * flag further left lifts over the ones already standing, and its pole stays left of their text, so
+ * no pole ever crosses a text. A flag's text goes right of its pole unless it would run past `max`.
+ * A centred text stays within `min…max`. A box that collides moves up just above what it hit.
+ */
+export function placeLabels<T extends LabelSpec>(
   items: readonly T[],
+  min: number,
+  max: number,
+  obstacles: readonly Box[] = [],
   gap = 6
-): (T & { lift: number })[] {
-  const sorted = [...items].sort((a, b) => a.x - b.x);
-  const placed: { l: number; r: number; top: number; bottom: number }[] = [];
-  return sorted.map((it) => {
-    const l = it.x - it.w / 2;
-    const r = it.x + it.w / 2;
-    let bottom = it.y;
+): PlacedLabel<T>[] {
+  const placed: Box[] = [...obstacles];
+  const order = [...items].sort((a, b) => b.x - a.x);
+  return order.map((it) => {
+    let l: number;
+    let r: number;
+    let side: -1 | 0 | 1;
+    if (it.pole == null) {
+      const c = Math.min(max - it.w / 2, Math.max(min + it.w / 2, it.x));
+      l = c - it.w / 2;
+      r = c + it.w / 2;
+      side = 0;
+    } else if (it.x + FLAG_GAP + it.w <= max) {
+      l = it.x - 1;
+      r = it.x + FLAG_GAP + it.w;
+      side = 1;
+    } else {
+      l = it.x - FLAG_GAP - it.w;
+      r = it.x + 1;
+      side = -1;
+    }
+    let bottom = it.bottom;
     for (;;) {
       const hit = placed.find((p) => p.l < r + gap && p.r + gap > l && p.top < bottom && p.bottom > bottom - it.h);
       if (!hit) break;
       bottom = hit.top - 2;
     }
-    placed.push({ l, r, top: bottom - it.h, bottom });
-    return { ...it, lift: it.y - bottom };
+    const box = { l, r, top: bottom - it.h, bottom };
+    placed.push(box);
+    if (it.pole != null) placed.push({ l: it.x - 1, r: it.x + 1, top: bottom, bottom: it.pole });
+    return { ...it, ...box, lift: it.bottom - bottom, side };
   });
 }
 

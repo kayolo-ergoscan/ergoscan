@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cartX, coinSpots, idleSize, idleSpots, minerSpots, sceneCarts, sceneLayout, seamX, stackLabels } from "./lithos-home-scene";
+import { cartLanes, cartX, coinSpots, FLAG_GAP, idleSize, idleSpots, minerSpots, placeLabels, sceneCarts, sceneLayout, seamX, type Box } from "./lithos-home-scene";
 
 test("layout: track to the right of the quarry, three stretches in order, two equal phases", () => {
   for (const [w, h] of [
@@ -71,24 +71,80 @@ test("seam: a moment maps into the band, the window end at the right edge", () =
   assert.ok(seamX(L, 50, 100) > 200 && seamX(L, 50, 100) < 290);
 });
 
-test("labels move up just above the one they would overlap, no further", () => {
-  const out = stackLabels([
-    { x: 100, w: 80, y: 100, h: 12 },
-    { x: 150, w: 60, y: 100, h: 12 },
-    { x: 300, w: 60, y: 100, h: 12 },
-    // Higher already, clear of the first box's band: stays put.
-    { x: 110, w: 40, y: 70, h: 12 },
-  ]);
-  assert.deepEqual(
-    out.map((o) => o.lift),
-    [0, 0, 14, 0]
+test("lanes: a shared stretch keeps the round furthest along in front, the newer ones behind", () => {
+  // The state after a find: the new round at 0 %, the previous one about 78 % through collection.
+  const tip = 1_915_990;
+  const spots = sceneCarts(
+    [
+      { h: 1_915_987, start: 1_915_987, miners: 0, bank: 3e9 },
+      { h: 1_915_708, start: 1_915_708, miners: 8, bank: 5.07e9 },
+    ],
+    [{ h: 1_915_303, start: 1_915_664, miners: 7, bank: 8e9 }],
+    tip
   );
+  const lanes = cartLanes(spots);
+  assert.deepEqual(lanes.get(1_915_708), { lane: 0, shared: true, lead: true });
+  assert.deepEqual(lanes.get(1_915_987), { lane: 1, shared: true, lead: false });
+  assert.deepEqual(lanes.get(1_915_303), { lane: 0, shared: false, lead: true });
+  // Positions stay the real progress: the lead is to the right of the new round.
+  const L = sceneLayout(488, 242);
+  assert.ok(cartX(L, spots[1]!) > cartX(L, spots[0]!));
+  assert.ok(L.lane > 0 && sceneLayout(324, 214).lane > 0);
+  // Four rounds in one stretch: never more than three tracks.
+  const four = cartLanes(sceneCarts([1, 2, 3, 4].map((k) => ({ h: 100 * k, start: 100 * k, miners: 1, bank: 1 })), [], 500));
+  assert.deepEqual(
+    [100, 200, 300, 400].map((h) => four.get(h)!.lane),
+    [0, 1, 2, 2]
+  );
+});
+
+test("labels: none overlaps another, a pole or a cart; flags stair up leftwards", () => {
+  const overlaps = (a: Box, b: Box) => a.l < b.r && b.l < a.r && a.top < b.bottom && b.top < a.bottom;
+  // Two carts sharing a stretch, their flags, a centred label to the right, a cart behind as an obstacle.
+  const cartBehind: Box = { l: 180, r: 238, top: 157, bottom: 186 };
+  const out = placeLabels(
+    [
+      { id: "new", x: 209, w: 70, h: 14, bottom: 146, pole: 161 },
+      { id: "lead", x: 254, w: 105, h: 28, bottom: 162, pole: 177 },
+      { id: "check", x: 420, w: 70, h: 14, bottom: 162 },
+    ],
+    168,
+    486,
+    [cartBehind]
+  );
+  const by = Object.fromEntries(out.map((o) => [o.id, o]));
+  // Placed right to left; the one furthest right stays where it wanted to be.
+  assert.deepEqual(
+    out.map((o) => o.id),
+    ["check", "lead", "new"]
+  );
+  assert.equal(by.check!.lift, 0);
+  assert.equal(by.lead!.lift, 0);
+  assert.equal(by.lead!.side, 1);
+  assert.equal(by.lead!.r, 254 + FLAG_GAP + 105);
+  // The newer flag goes above the lead's text, its pole left of that text.
+  assert.ok(by.new!.bottom <= by.lead!.top - 2);
+  assert.ok(209 < by.lead!.l + 1 && 209 < 254);
+  for (let i = 0; i < out.length; i++) {
+    assert.ok(!overlaps(out[i]!, cartBehind), `${out[i]!.id} vs the cart behind`);
+    for (let j = i + 1; j < out.length; j++) assert.ok(!overlaps(out[i]!, out[j]!), `${out[i]!.id} vs ${out[j]!.id}`);
+  }
+  // A flag that would run past the edge flies left of its pole; a centred text stays inside.
+  const edge = placeLabels([{ x: 470, w: 60, h: 14, bottom: 100, pole: 120 }], 0, 486);
+  assert.equal(edge[0]!.side, -1);
+  assert.ok(edge[0]!.r <= 471 && edge[0]!.l >= 470 - FLAG_GAP - 60);
+  const clamp = placeLabels([{ x: 480, w: 60, h: 14, bottom: 100 }], 0, 486);
+  assert.equal(clamp[0]!.r, 486);
   // A box sitting a little higher than its neighbour only moves the few pixels it needs.
-  const near = stackLabels([
-    { x: 100, w: 60, y: 100, h: 12 },
-    { x: 140, w: 60, y: 95, h: 12 },
-  ]);
-  assert.equal(near[1]!.lift, 95 - 86);
+  const near = placeLabels(
+    [
+      { x: 140, w: 60, h: 12, bottom: 95 },
+      { x: 100, w: 60, h: 12, bottom: 100 },
+    ],
+    0,
+    486
+  );
+  assert.equal(near[1]!.lift, 100 - 81);
 });
 
 test("coin heap: up to 21 in rows of 6…1", () => {
