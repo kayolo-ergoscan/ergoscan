@@ -70,7 +70,7 @@ import {
   type AddrTxActivity,
 } from "../lib/indexDb.js";
 import { rentWriterHealth } from "../lib/rentIndex.js";
-import { addressName } from "../lib/names.js";
+import { addressName, contractNamesOf, partyNames, type AddressName } from "../lib/names.js";
 import type { NodeVersions } from "../lib/node-versions.js";
 import { BLOCK_TX_PACK, getAddressesPage, getBlockCard, getBlockSections, getBlocksList, getHolderBands, getHomePage, getRentPage, getStatusSnapshot, parseBlockHeightCursor, peekChainTip, rentTapeMarks } from "../lib/snapshots.js";
 import { publicIndexerStatus } from "../lib/public-health.js";
@@ -1273,6 +1273,9 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
         }[];
         from: string[];
         to: string[];
+        /** Contract-registry names aligned with from / to; only when one is named. */
+        fromNames?: (string | null)[];
+        toNames?: (string | null)[];
       }
     > = {};
     for (const [tid, flow] of Object.entries({ ...activity, ...mempoolPack.activity })) {
@@ -1309,6 +1312,16 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
           };
         }),
       };
+    }
+
+    // Orders and positions have no book name: the contract registry names them by template.
+    const partyAddrs = new Set<string>();
+    for (const row of Object.values(activityOut)) {
+      for (const a of [...row.from, ...row.to]) if (a !== address) partyAddrs.add(a);
+    }
+    const contracts = await contractNamesOf(partyAddrs).catch(() => new Map<string, AddressName>());
+    if (contracts.size) {
+      for (const row of Object.values(activityOut)) Object.assign(row, partyNames(row, contracts));
     }
 
     const confirmedNanoErg = amountStr(summary?.nanoerg ?? "0");

@@ -32,9 +32,14 @@ type MetaOf = (tid: string) => FeedTokenMeta | undefined;
 
 const neg = (rows: [string, bigint][]): [string, bigint][] => rows.map(([tid, n]) => [tid, -n]);
 
-/** Owner of an address in a few words: a book name, else the type. */
-function ownerType(address: string | null, fee: boolean, t: (k: string) => string): { type: string; name: string | null } {
-  const d = describeParty(address, fee);
+/** Owner of an address in a few words: a book name, else the contract registry's, else the type. */
+function ownerType(
+  address: string | null,
+  fee: boolean,
+  t: (k: string) => string,
+  templateHash?: string | null
+): { type: string; name: string | null } {
+  const d = describeParty(address, fee, { templateHash });
   if (fee) return { type: t("tx.minerFee"), name: d.known };
   const type = d.kind === "wallet" ? t("addresses.pip.holder") : t(`address.type.${d.kind}`);
   return { type: type.startsWith("address.type.") ? t("address.type.unknown") : type, name: d.known };
@@ -52,6 +57,7 @@ export function FeedBoxRow({
   lead,
   side,
   owner,
+  templateHash,
   fee = false,
   txId,
   index,
@@ -66,6 +72,8 @@ export function FeedBoxRow({
   /** In a transaction: spent boxes count down, created boxes up. */
   side?: "in" | "out";
   owner?: string | null;
+  /** The box's ErgoTree template hash: names an order or a position the book does not. */
+  templateHash?: string | null;
   fee?: boolean;
   txId?: string | null;
   index?: number | null;
@@ -78,7 +86,7 @@ export function FeedBoxRow({
   const raw = side === "in" ? -nano : nano;
   const chips = side === "in" ? neg(tokens) : tokens;
   const inTx = owner !== undefined;
-  const who = inTx ? ownerType(owner ?? null, fee, t) : null;
+  const who = inTx ? ownerType(owner ?? null, fee, t, templateHash) : null;
   const boxHref = boxId ? `/box/${boxId}` : null;
   const ownerHref = owner ? `/address/${encodeURIComponent(owner)}` : null;
   const k: FeedKind = fee ? "reward" : "box";
@@ -210,7 +218,7 @@ export function FeedPartyRow({
   const { t, locale } = useI18n();
   const tag = feedLoc(locale);
   const fee = side === "fee" || party.isFee;
-  const who = ownerType(party.address, fee, t);
+  const who = ownerType(party.address, fee, t, party.templateHash);
   const firstBox = party.boxes.find((b) => b.boxId)?.boxId ?? null;
   const href = party.address
     ? `/address/${encodeURIComponent(party.address)}`

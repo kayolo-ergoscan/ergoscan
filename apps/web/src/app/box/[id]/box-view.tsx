@@ -219,7 +219,7 @@ export function BoxView({
       ? Math.max(0, tip - inclusion)
       : null;
   const usd = data ? nanoToUsd(toBigIntAmt(data.value), ergUsd) : null;
-  const party = describeParty(data?.address);
+  const party = describeParty(data?.address, false, { templateHash: data?.ergoTreeTemplateHash });
   const lock = data
     ? classifyBoxLock({
         address: data.address,

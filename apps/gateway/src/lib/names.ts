@@ -1,10 +1,15 @@
 /**
  * Names from the public ergo-names registry, loaded hourly into names_* by the indexer's namesSync.
  * Address → exact or NFT-anchor row; else a P2S address → its ErgoTree template.
+ * Else the contract registry of the tx meaning (@ergoscan/shared roleByTemplate) names the
+ * template: orders and positions get one address each, so no book can list them.
+ * Read time only: nothing is stored, the caches are in memory.
  */
+import { PROTOCOL_NAMES, roleByTemplate, type ProtocolId } from "@ergoscan/shared";
 import { getIndexPool } from "./indexDb.js";
 import { ergoTreeFromAddress } from "./ergoAddress.js";
 import { ergoTreeTemplateHash } from "./ergoTree.js";
+import { stampTemplateHashes } from "./txTemplateHash.js";
 
 export const NAMES_REGISTRY_URL = "https://github.com/kayolo-ergoscan/ergo-names";
 
@@ -16,8 +21,11 @@ export type AddressName = {
   via: "address" | "token" | "template";
   current: boolean;
   until: number | null;
+  /** Project file in ergo-names; "" for a contract-registry name (no file). */
   file: string;
   fileUrl: string;
+  /** "ergo-names": the public book. "contracts": ErgoScan's contract registry, by template hash. */
+  source: "ergo-names" | "contracts";
 };
 
 type NameRow = {
@@ -48,6 +56,29 @@ export function nameFromRow(r: NameRow): AddressName {
     until: r.until_height == null ? null : Number(r.until_height),
     file: r.file,
     fileUrl: registryFileUrl(r.file),
+    source: "ergo-names",
+  };
+}
+
+/**
+ * The contract registry's name for a template (the label the tx meaning shows in «how»).
+ * A guess is not a name. The registry has no catalogue category, so it is "other".
+ */
+export function contractNameByTemplate(hash: string | null | undefined): AddressName | null {
+  const role = roleByTemplate(hash);
+  if (!role || role.src === "guess") return null;
+  const project = PROTOCOL_NAMES[role.p as ProtocolId]?.en ?? role.p;
+  return {
+    name: role.label,
+    kind: "contract",
+    project: { id: role.p, name: project, category: "other" },
+    by: "ergoscan",
+    via: "template",
+    current: true,
+    until: null,
+    file: "",
+    fileUrl: "",
+    source: "contracts",
   };
 }
 
@@ -90,7 +121,46 @@ export async function addressName(address: string): Promise<AddressName | null> 
       WHERE r.match_kind = 'template' AND r.match_value = $1`,
     [hash.toLowerCase()]
   );
-  return tpl[0] ? nameFromRow(tpl[0]) : null;
+  return tpl[0] ? nameFromRow(tpl[0]) : contractNameByTemplate(hash);
+}
+
+/**
+ * Contract-registry names for many addresses at once (list rows, search). Wallets and unknown
+ * templates are left out; the names book is not read here (the site's book wins on its own).
+ * Template hashes: packed.script by tree_md5 (unique index, pool statement_timeout), else
+ * sigma, cached per tree in txTemplateHash.
+ */
+export async function contractNamesOf(addresses: Iterable<string>): Promise<Map<string, AddressName>> {
+  const out = new Map<string, AddressName>();
+  const boxes: Array<{ address: string; ergoTree: string; templateHash?: string | null }> = [];
+  for (const address of new Set(addresses)) {
+    const tree = address ? templateTreeOf(address) : null;
+    if (tree) boxes.push({ address, ergoTree: tree });
+  }
+  if (!boxes.length) return out;
+  await stampTemplateHashes(boxes);
+  for (const b of boxes) {
+    const name = contractNameByTemplate(b.templateHash);
+    if (name) out.set(b.address, name);
+  }
+  return out;
+}
+
+/**
+ * Names for one activity row's parties, in the order of `from` / `to` (null = no registry name).
+ * Arrays instead of an address map: a P2S address runs to kilobytes and the row already has it.
+ */
+export function partyNames(
+  row: { from: readonly string[]; to: readonly string[] },
+  names: ReadonlyMap<string, AddressName>
+): { fromNames?: (string | null)[]; toNames?: (string | null)[] } {
+  const pick = (list: readonly string[]) => {
+    const got = list.map((a) => names.get(a)?.name ?? null);
+    return got.some((n) => n != null) ? got : undefined;
+  };
+  const fromNames = pick(row.from);
+  const toNames = pick(row.to);
+  return { ...(fromNames ? { fromNames } : {}), ...(toNames ? { toNames } : {}) };
 }
 
 export type NameStats = {

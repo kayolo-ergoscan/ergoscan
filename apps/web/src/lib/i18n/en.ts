@@ -1552,6 +1552,7 @@ export const en: Record<string, string> = {
   "address.type.contract": "Contract",
   "address.nameByProject": "Name submitted by the project",
   "address.nameByErgoscan": "Name checked by ErgoScan",
+  "address.nameByContract": "Named by ErgoScan from the contract template",
   "address.suggestName": "Suggest a name",
   "address.type.miner": "Miner",
   "address.type.unknown": "Address",

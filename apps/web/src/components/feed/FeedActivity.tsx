@@ -66,6 +66,8 @@ type Model = {
   fee: bigint | null;
   from: string[];
   to: string[];
+  /** Contract-registry names of parties the book does not name (orders, positions). */
+  names: ReadonlyMap<string, string> | undefined;
   meaning: CompactMeaning | undefined;
 };
 
@@ -93,7 +95,7 @@ function uniqOthers(list: string[], self: string): string[] {
 function modelOf(tx: ActTx, flow: AddrFlow | null | undefined, self: string): Model {
   const id = String(tx.id);
   const fee = tx.fee == null || tx.fee === "" ? null : toBigIntAmt(tx.fee);
-  const base = { tx, id, ms: toEpochMs(tx.timestamp), fee, meaning: parseMeaning(tx.meaning) };
+  const base = { tx, id, ms: toEpochMs(tx.timestamp), fee, meaning: parseMeaning(tx.meaning), names: flow?.names };
   if (!flow) {
     return { ...base, move: "none", erg: null, tokens: [], party: null, others: [], paidFee: false, from: [], to: [] };
   }
@@ -107,7 +109,7 @@ function modelOf(tx: ActTx, flow: AddrFlow | null | undefined, self: string): Mo
   const pool =
     move === "in" ? flow.from : move === "out" ? flow.to : move === "swap" ? [...flow.to, ...flow.from] : [];
   const others = uniqOthers(pool, self);
-  const named = others.find((a) => describeParty(a).known);
+  const named = others.find((a) => describeParty(a, false, { name: flow.names?.get(a) }).known);
   const party = named ?? others[0] ?? null;
   return {
     ...base,
@@ -122,8 +124,8 @@ function modelOf(tx: ActTx, flow: AddrFlow | null | undefined, self: string): Mo
   };
 }
 
-function PartyLink({ address }: { address: string }) {
-  const party = describeParty(address);
+function PartyLink({ address, names }: { address: string; names?: ReadonlyMap<string, string> }) {
+  const party = describeParty(address, false, { name: names?.get(address) });
   const name = party.known;
   return (
     <Link
@@ -147,7 +149,7 @@ function PartyTitle({ m }: { m: Model }) {
   return (
     <>
       <span className="feed-lead-word">{lead}</span>
-      <PartyLink address={m.party} />
+      <PartyLink address={m.party} names={m.names} />
       {m.others.length > 0 ? (
         <Tip content={tn("address.act.moreParties", m.others.length)}>
           <span className="feed-plus tabular-nums">+{m.others.length}</span>
@@ -172,7 +174,7 @@ function kindWord(m: Model, t: (k: string) => string): string {
   }
 }
 
-function PartyList({ list, self }: { list: string[]; self: string }) {
+function PartyList({ list, self, names }: { list: string[]; self: string; names?: ReadonlyMap<string, string> }) {
   const { t } = useI18n();
   if (!list.length) return <span className="text-[var(--muted)]">—</span>;
   return (
@@ -183,7 +185,7 @@ function PartyList({ list, self }: { list: string[]; self: string }) {
             {t("address.thisAddress")}
           </span>
         ) : (
-          <PartyLink key={a} address={a} />
+          <PartyLink key={a} address={a} names={names} />
         )
       )}
     </span>
@@ -302,10 +304,10 @@ function ActivityFields({
         </FeedField>
       ) : null}
       <FeedField label={t("address.colFrom")}>
-        <PartyList list={m.from} self={self} />
+        <PartyList list={m.from} self={self} names={m.names} />
       </FeedField>
       <FeedField label={t("address.colTo")}>
-        <PartyList list={m.to} self={self} />
+        <PartyList list={m.to} self={self} names={m.names} />
       </FeedField>
       {m.tokens.length > 0 ? (
         <FeedField label={t("tx.tab.tokens")} wide>
@@ -392,7 +394,15 @@ function OwnerMeaningRow({
       </Link>
     ) : null;
   const notes = link?.side === "fill" ? r.notes.filter((n) => !BY_ORDER.has(n)) : r.notes;
-  const party = r.to ? <OwnerParty dir="to" p={r.to} /> : r.from ? <OwnerParty dir="from" p={r.from} /> : r.who ? <OwnerParty dir={null} p={r.who} /> : null;
+  // The meaning names wallets it knows; an order or a position gets the contract registry's name.
+  const withName = (p: MeaningParty): MeaningParty => (p.name ? p : { ...p, name: m.names?.get(p.addr) ?? null });
+  const party = r.to ? (
+    <OwnerParty dir="to" p={withName(r.to)} />
+  ) : r.from ? (
+    <OwnerParty dir="from" p={withName(r.from)} />
+  ) : r.who ? (
+    <OwnerParty dir={null} p={withName(r.who)} />
+  ) : null;
   return (
     <FeedRow
       k={k}

@@ -817,6 +817,7 @@ function TxBoxSection({
           lead={{ rank: String(io.index ?? i) }}
           side={side}
           owner={io.address ?? null}
+          templateHash={io.templateHash}
           fee={!!feeIdx?.has(i)}
           height={io.creationHeight}
           enterClass={enterClass(ioKey(io, i, side))}

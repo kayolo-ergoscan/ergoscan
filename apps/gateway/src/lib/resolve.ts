@@ -3,6 +3,7 @@
  */
 import { isErgoAddressChecksumValid } from "./ergoAddress.js";
 import { getIndexPool } from "./indexDb.js";
+import { contractNamesOf } from "./names.js";
 
 export type ResolveHit = {
   type: "block" | "tx" | "box" | "token" | "address";
@@ -57,6 +58,15 @@ function hit(
   label?: string
 ): ResolveHit {
   return label ? { type, id, path, label } : { type, id, path };
+}
+
+/** An order or a position has no book name; the contract registry names it by its template. */
+async function contractLabel(address: string): Promise<string | undefined> {
+  try {
+    return (await contractNamesOf([address])).get(address)?.name;
+  } catch {
+    return undefined;
+  }
 }
 
 function likePattern(q: string): string {
@@ -149,11 +159,11 @@ export async function resolveFromIndex(raw: string): Promise<ResolvePage> {
     q
   );
   if (indexed) {
-    hits.push(hit("address", indexed, `/address/${encodeURIComponent(indexed)}`));
+    hits.push(hit("address", indexed, `/address/${encodeURIComponent(indexed)}`, await contractLabel(indexed)));
     return { q, hits, source: "index" };
   }
   if (isErgoAddressChecksumValid(q)) {
-    hits.push(hit("address", q, `/address/${encodeURIComponent(q)}`));
+    hits.push(hit("address", q, `/address/${encodeURIComponent(q)}`, await contractLabel(q)));
     return { q, hits, source: "index" };
   }
 

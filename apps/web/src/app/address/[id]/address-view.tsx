@@ -51,7 +51,7 @@ import { suggestNameUrl } from "@/lib/address-book";
 import type { AddressRegistryName } from "@/lib/list-snapshots";
 import { useFavorite } from "@/lib/favorites";
 import { NameMarquee } from "@/components/NameMarquee";
-import { type AddrFlow, type AddrFlowKind } from "@/lib/tx-flow";
+import { partyNameMap, type AddrFlow, type AddrFlowKind } from "@/lib/tx-flow";
 import { asAddrFlowKind, rentTapeTone } from "@ergoscan/shared";
 import { INK } from "@/lib/palette";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
@@ -118,6 +118,9 @@ type AddrActivityJson = {
   erg: string;
   from?: string[];
   to?: string[];
+  /** Contract-registry names aligned with from / to (orders, positions). */
+  fromNames?: (string | null)[];
+  toNames?: (string | null)[];
   tokens: {
     tokenId: string;
     amount: string;
@@ -252,12 +255,17 @@ function parseAddrActivity(
       if (!tok.tokenId) continue;
       tokens.set(tok.tokenId.toLowerCase(), toBigIntAmt(tok.amount));
     }
+    const names = partyNameMap([
+      [row.from, row.fromNames],
+      [row.to, row.toNames],
+    ]);
     out[id] = {
       kind,
       erg: toBigIntAmt(row.erg),
       tokens,
       from: (row.from ?? []).filter((a) => typeof a === "string" && a),
       to: (row.to ?? []).filter((a) => typeof a === "string" && a),
+      ...(names ? { names } : {}),
     };
   }
   return out;
@@ -1719,6 +1727,15 @@ function AddressNameSource({
   named: boolean;
   t: (k: string) => string;
 }) {
+  if (name?.source === "contracts") {
+    // The site's book outranks the registry: its name is the title then, and it has no file here.
+    if (named) return null;
+    return (
+      <p className="mt-1 min-w-0 -mr-[calc(2.75rem+0.5rem)] whitespace-nowrap text-[11px] leading-[1.2] text-[var(--muted-2)]">
+        {t("address.nameByContract")}
+      </p>
+    );
+  }
   if (name) {
     return (
       <p className="mt-1 min-w-0 -mr-[calc(2.75rem+0.5rem)] whitespace-nowrap text-[11px] leading-[1.2] text-[var(--muted-2)]">
