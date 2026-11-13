@@ -407,12 +407,12 @@ export function SpectrumView({
                 locale={loc(locale)}
                 formatTxs={(v) => {
                   if (!Number.isFinite(v) || v <= 0) return "0";
-                  if (v >= 1000) return formatCompact(v, 1);
+                  if (v >= 1000) return formatCompact(v, 1, locale);
                   return formatErg(v, 1);
                 }}
                 formatFees={(v) => {
                   if (!Number.isFinite(v) || v <= 0) return "0";
-                  return formatCompact(v, 0);
+                  return formatCompact(v, 0, locale);
                 }}
               />
             ) : (
