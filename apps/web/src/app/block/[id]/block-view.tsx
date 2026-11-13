@@ -9,6 +9,7 @@ import { FavoriteHeart } from "@/components/FavoriteHeart";
 import { AddrFactCard } from "@/components/AddrFactCard";
 import { HopNav } from "@/components/HopNav";
 import { SegBar, segItem } from "@/components/SegBar";
+import { DetailTabs, tabCount, type DetailTabItem } from "@/components/DetailTabs";
 import { BlockHeaderSheet } from "./block-header";
 import { TxBallPit } from "@/components/TxBallPit";
 import { Feed, FeedBoard, FeedCount, FeedEmpty, FeedPlate } from "@/components/feed/Feed";
@@ -435,6 +436,35 @@ export function BlockView({
         ? t("block.cap.feesPaid").replace("{n}", String(head.payingTxCount))
         : dash;
 
+  /** One switch for both bars: the desktop segments and the phone strip. */
+  const pickTab = (next: BlockTab) => {
+    if (next === "txs") {
+      const rows = txsRef.current;
+      if (rows.length) {
+        packEnter.mark(["pack"]);
+        enter.mark(rows.map((row) => row.id));
+      }
+    }
+    setHashTab(next);
+    setTab(next);
+  };
+  const phoneTabs: DetailTabItem<BlockTab>[] = [
+    {
+      id: "txs",
+      label: t("block.tab.txs"),
+      count: tabCount(txTotal || head?.txCount || null, locale),
+    },
+    ...(header ? [{ id: "header" as const, label: t("block.tab.header") }] : []),
+    { id: "extension", label: t("block.tab.extension") },
+    { id: "adproof", label: t("block.tab.adproof") },
+  ];
+  const hopHint = (dir: "back" | "fwd") =>
+    head && (dir === "back" ? prevHref : nextHref)
+      ? (dir === "back" ? t("blocks.parent") : t("blocks.next")) +
+        " · " +
+        (head.height + (dir === "back" ? -1 : 1)).toLocaleString(loc(locale))
+      : undefined;
+
   return (
     <Shell>
       {err && !head && (
@@ -447,7 +477,7 @@ export function BlockView({
         <div className="addr-lane">
           <div className="col-span-2 flex min-h-0 flex-col gap-2 lg:col-span-1 lg:row-span-2">
             <AddrFactCard
-              className="min-h-0 h-auto flex-1"
+              className="detail-sum min-h-0 h-auto flex-1"
               enter={arrive ? 0 : undefined}
               label={t("blocks.height")}
               ink={INK.violet}
@@ -460,21 +490,48 @@ export function BlockView({
                 />
               }
             >
-              <h1 className="mt-2 flex min-w-0 items-center gap-2 text-[17px] font-semibold leading-none tabular-nums tracking-tight">
-                <KpiNum>{head.height.toLocaleString(loc(locale))}</KpiNum>
-                {head.lithos ? (
-                  <Tip content={t("block.chip.lithosHint")} peek>
-                    <Link
-                      prefetch={false}
-                      href="/lithos"
-                      className="chip-press shrink-0 rounded-full bg-[var(--wash-strong)] px-1.5 py-0.5 text-[10px] font-semibold leading-none tracking-tight text-[var(--text)]"
-                    >
-                      {t("block.chip.lithos")}
-                    </Link>
-                  </Tip>
-                ) : null}
-              </h1>
-              <p className="mt-2 flex min-w-0 items-center gap-1">
+              {/* Phone: «‹ 1 915 360 ›». Wider screens keep the hops in the segment bars. */}
+              <div className="detail-sum-title lg:contents">
+                <span className="lg:hidden">
+                  <HopNav
+                    chevron
+                    dir="back"
+                    pageId={head.id}
+                    href={prevHref}
+                    label={t("block.nav.back")}
+                    hint={hopHint("back")}
+                    storageKey={BLOCK_HOP_KEY}
+                    onPrefetch={(href) => prefetchBlockCard(href.replace(/^\/block\//, ""))}
+                  />
+                </span>
+                <h1 className="mt-2 flex min-w-0 items-center gap-2 text-[17px] font-semibold leading-none tabular-nums tracking-tight">
+                  <KpiNum>{head.height.toLocaleString(loc(locale))}</KpiNum>
+                  {head.lithos ? (
+                    <Tip content={t("block.chip.lithosHint")} peek>
+                      <Link
+                        prefetch={false}
+                        href="/lithos"
+                        className="chip-press shrink-0 rounded-full bg-[var(--wash-strong)] px-1.5 py-0.5 text-[10px] font-semibold leading-none tracking-tight text-[var(--text)]"
+                      >
+                        {t("block.chip.lithos")}
+                      </Link>
+                    </Tip>
+                  ) : null}
+                </h1>
+                <span className="lg:hidden">
+                  <HopNav
+                    chevron
+                    dir="fwd"
+                    pageId={head.id}
+                    href={nextHref}
+                    label={t("block.nav.forward")}
+                    hint={hopHint("fwd")}
+                    storageKey={BLOCK_HOP_KEY}
+                    onPrefetch={(href) => prefetchBlockCard(href.replace(/^\/block\//, ""))}
+                  />
+                </span>
+              </div>
+              <p className="detail-sum-id mt-2 flex min-w-0 items-center gap-1">
                 <code className="whitespace-nowrap font-mono text-[12px] leading-none text-accent">
                   {shortId(head.id, 8)}
                 </code>
@@ -486,21 +543,22 @@ export function BlockView({
                   onToggle={blockFav.toggle}
                 />
               </p>
+              {confirmations != null ? (
+                <p className="detail-sum-status is-ok lg:hidden">
+                  {countText(t, locale, "block.cap.time", confirmations, confirmations.toLocaleString(loc(locale)))}
+                  {head.timestamp ? ` · ${formatRelTime(head.timestamp, locale)}` : ""}
+                </p>
+              ) : null}
             </AddrFactCard>
             <SegBar
               cols={header ? 3 : 2}
-              className="block-switch shrink-0"
+              className="block-switch detail-desk-tabs shrink-0"
             >
               <a
                 href="#txs"
                 onClick={(e) => {
-                  const rows = txsRef.current;
-                  if (rows.length) {
-                    packEnter.mark(["pack"]);
-                    enter.mark(rows.map((row) => row.id));
-                  }
-                  setHashTab("txs", e);
-                  setTab("txs");
+                  e.preventDefault();
+                  pickTab("txs");
                 }}
                 className={segItem(tab === "txs")}
               >
@@ -510,8 +568,8 @@ export function BlockView({
                 <a
                   href="#header"
                   onClick={(e) => {
-                    setHashTab("header", e);
-                    setTab("header");
+                    e.preventDefault();
+                    pickTab("header");
                   }}
                   className={segItem(tab === "header")}
                 >
@@ -523,13 +581,7 @@ export function BlockView({
                 pageId={head.id}
                 href={prevHref}
                 label={t("block.nav.back")}
-                hint={
-                  prevHref
-                    ? t("blocks.parent") +
-                      " · " +
-                      (head.height - 1).toLocaleString(loc(locale))
-                    : undefined
-                }
+                hint={hopHint("back")}
                 storageKey={BLOCK_HOP_KEY}
                 onPrefetch={(href) => prefetchBlockCard(href.replace(/^\/block\//, ""))}
               />
@@ -562,27 +614,21 @@ export function BlockView({
               </p>
             ) : null}
           </AddrFactCard>
-            <SegBar cols={3} className="block-switch shrink-0">
+            <SegBar cols={3} className="block-switch detail-desk-tabs shrink-0">
               <HopNav
                 dir="fwd"
                 pageId={head.id}
                 href={nextHref}
                 label={t("block.nav.forward")}
-                hint={
-                  nextHref
-                    ? t("blocks.next") +
-                      " · " +
-                      (head.height + 1).toLocaleString(loc(locale))
-                    : undefined
-                }
+                hint={hopHint("fwd")}
                 storageKey={BLOCK_HOP_KEY}
                 onPrefetch={(href) => prefetchBlockCard(href.replace(/^\/block\//, ""))}
               />
               <a
                 href="#extension"
                 onClick={(e) => {
-                  setHashTab("extension", e);
-                  setTab("extension");
+                  e.preventDefault();
+                  pickTab("extension");
                 }}
                 className={segItem(tab === "extension")}
               >
@@ -591,8 +637,8 @@ export function BlockView({
               <a
                 href="#adproof"
                 onClick={(e) => {
-                  setHashTab("adproof", e);
-                  setTab("adproof");
+                  e.preventDefault();
+                  pickTab("adproof");
                 }}
                 className={segItem(tab === "adproof")}
               >
@@ -672,6 +718,10 @@ export function BlockView({
             </p>
           </AddrFactCard>
         </div>
+      )}
+
+      {head && (
+        <DetailTabs tabs={phoneTabs} active={tab} onPick={pickTab} label={t("detail.tabs")} />
       )}
 
       {tab === "header" && header ? (
