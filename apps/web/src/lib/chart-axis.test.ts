@@ -71,7 +71,9 @@ test("tick text is bare and short", () => {
   assert.equal(tickText(0.25, 0.05), "0.25");
   assert.equal(tickText(0.2, 0.05), "0.20");
   assert.equal(tickText(150, 50), "150");
-  assert.equal(tickText(5_000, 1_000), "5 000");
+  assert.equal(tickText(5_000, 1_000), "5,000");
+  assert.equal(tickText(5_000, 1_000, "ru-RU"), "5\u00a0000");
+  assert.equal(tickText(0.25, 0.05, "ru"), "0.25");
 });
 
 test("thin ticks keeps at most max, evenly, first kept", () => {

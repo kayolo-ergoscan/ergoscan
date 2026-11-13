@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { doorFreshness, sparkPath, sparkQuotes, summarizeOracleFeed } from "./oracle-door";
+import { doorFreshness, formatOracleQuote, sparkPath, sparkQuotes, summarizeOracleFeed } from "./oracle-door";
 import { emptyOracleFeed } from "./oracle-feed";
 
 const NOW = Date.UTC(2026, 10, 12, 23, 0);
@@ -61,4 +61,14 @@ test("spark path spans the box and stays inside the pad", () => {
   assert.equal(d, "M2.0 28.0 L50.0 2.0 L98.0 15.0");
   assert.equal(sparkPath([5], 100, 30), "");
   assert.equal(sparkPath([2, 2], 100, 30, 2), "M2.0 15.0 L98.0 15.0");
+});
+
+test("pool answers: dollars for USD pools, three significant digits for gold, point decimals", () => {
+  assert.equal(formatOracleQuote("ergusd", 0.18224), "$0.1822");
+  assert.equal(formatOracleQuote("erg-usd", 0.1816, "ru"), "$0.1816");
+  assert.equal(formatOracleQuote("xau-erg", 0.0000014612), "0.00000146");
+  assert.equal(formatOracleQuote("xau-erg", 0.0000468, "ru"), "0.0000468");
+  assert.equal(formatOracleQuote("xau-erg", 1234.5, "en"), "1,234.5");
+  assert.equal(formatOracleQuote("xau-erg", 0), "—");
+  assert.equal(formatOracleQuote("xau-erg", null), "—");
 });

@@ -81,17 +81,17 @@ export function tickStep(ticks: number[]): number {
  * Bare axis figure; the unit lives once in the chart header.
  * 30k / 1.5M for big values, otherwise as many digits as the step needs.
  */
-export function tickText(v: number, step: number): string {
+export function tickText(v: number, step: number, locale?: string): string {
   if (!Number.isFinite(v)) return "";
   const a = Math.abs(v);
   if (a >= 1_000_000 && step >= 100_000) {
-    return `${formatGroupedNumber(v / 1_000_000, 0, stepDigits(step / 1_000_000))}M`;
+    return `${formatGroupedNumber(v / 1_000_000, 0, stepDigits(step / 1_000_000), locale)}M`;
   }
   if (a >= 10_000 && step >= 1_000) {
-    return `${formatGroupedNumber(v / 1_000, 0, stepDigits(step / 1_000))}k`;
+    return `${formatGroupedNumber(v / 1_000, 0, stepDigits(step / 1_000), locale)}k`;
   }
   const d = stepDigits(step);
-  return formatGroupedNumber(v, d, d);
+  return formatGroupedNumber(v, d, d, locale);
 }
 
 /** At most `max` of the ticks, spread evenly; the first stays. */

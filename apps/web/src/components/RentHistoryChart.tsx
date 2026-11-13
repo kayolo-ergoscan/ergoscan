@@ -189,7 +189,7 @@ export function RentHistoryChart({
     const step = tickStep(ticks);
     return {
       axisTick: { show: false, customValues: ticks },
-      axisLabel: { customValues: ticks, formatter: (v: number) => tickText(v, step) },
+      axisLabel: { customValues: ticks, formatter: (v: number) => tickText(v, step, loc.current) },
     };
   };
   const yLabelsRef = useRef(yLabels);
@@ -445,7 +445,7 @@ export function RentHistoryChart({
       const ticks = phoneY.axisLabel?.customValues ?? [];
       const step = tickStep(ticks);
       const plotW = Math.max(60, (el.current?.clientWidth || 300) - PHONE_GRID.left - PHONE_GRID.right);
-      viewEnd = end + (end - start) * labelGutter(ticks.map((v) => tickText(v, step)), plotW, 0, 22);
+      viewEnd = end + (end - start) * labelGutter(ticks.map((v) => tickText(v, step, locale)), plotW, 0, 22);
       win.current = { start, end: viewEnd, min: tMin, max: viewEnd };
     }
     const xTicks = phone ? phoneDays(start, viewEnd) : utcTicks(start, end);

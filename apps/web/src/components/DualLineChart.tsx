@@ -383,7 +383,7 @@ export function DualLineChart({
     const yStep = tickStep(yTicks);
     const plotW = Math.max(60, (el.current?.clientWidth || 300) - grid.left - grid.right);
     // The line ends where the labels start, so the newest point never sits under a figure.
-    const rightGap = phone ? labelGutter(yTicks.map((v) => tickText(v, yStep)), plotW, 0.02, tipPulse ? 22 : 10) : 0.02;
+    const rightGap = phone ? labelGutter(yTicks.map((v) => tickText(v, yStep, locale)), plotW, 0.02, tipPulse ? 22 : 10) : 0.02;
     const phoneAxis = (pad: { min: number; max: number } | null, labelled: boolean) => {
       const ticks = labelled ? yTicks : [];
       const step = yStep;
@@ -409,7 +409,7 @@ export function DualLineChart({
               textBorderColor: chrome.module,
               textBorderWidth: 3,
               customValues: ticks,
-              formatter: (v: number) => tickText(v, step),
+              formatter: (v: number) => tickText(v, step, locale),
             }
           : { show: false },
       };

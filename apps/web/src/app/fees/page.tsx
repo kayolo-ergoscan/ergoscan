@@ -10,9 +10,9 @@ import { Tip, TipHead, TipRow, TipRows } from "@/components/Tip";
 import { useMempool } from "@/lib/useMempool";
 import { formatEtaLeft, useNextBlockLeft } from "@/lib/block-eta";
 import { blocksToWait, levelCostNano, medianOf } from "@/lib/fee-levels";
-import { formatFeeRate, formatScaledAmount, formatUsd, nanoToUsd } from "@/lib/format";
+import { formatFeeRate, formatInt, formatPct, formatScaledAmount, formatUsd, nanoToUsd } from "@/lib/format";
 import { INK } from "@/lib/palette";
-import { useI18n, useT } from "@/lib/i18n/I18nProvider";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 import { countText } from "@/lib/i18n/messages";
 import {
   Feed,
@@ -28,7 +28,7 @@ import {
 } from "@/components/feed/Feed";
 
 export default function FeesPage() {
-  const t = useT();
+  const { t, locale } = useI18n();
   const { fees, balls } = useMempool();
   const max = Math.max(1, ...(fees?.buckets.map((b) => b.count) ?? [1]));
   const rates = useMemo(() => balls.map((b) => b.feeRate).filter(Number.isFinite), [balls]);
@@ -43,7 +43,7 @@ export default function FeesPage() {
 
   const txsKpi = {
     label: t("fees.kpiTxs"),
-    value: balls.length.toLocaleString(),
+    value: formatInt(balls.length, locale),
     mark: <KpiMark id="mempool" tone={INK.cyan} />,
     enter: 0,
   };
@@ -170,13 +170,12 @@ function FeeLevelPills({
   className?: string;
 }) {
   const { t, locale } = useI18n();
-  const tag = feedLoc(locale);
   const usd = useErgUsd();
   return (
     <section className={className} aria-label={t("feed.fees.title")}>
       <p className="mb-2 px-1 text-[12px] text-[var(--muted)]">
         {median != null
-          ? t("feed.fees.forTx").replace("{n}", median.toLocaleString(tag))
+          ? t("feed.fees.forTx").replace("{n}", formatInt(median, locale))
           : t("feed.fees.title")}
       </p>
       <div className="grid grid-cols-3 gap-2">
@@ -184,7 +183,7 @@ function FeeLevelPills({
           const rate = rates?.[level];
           const known = rate != null && Number.isFinite(rate);
           const nano = levelCostNano(rate, median);
-          const cost = nano != null ? formatScaledAmount(nano, 9, tag, 4) : null;
+          const cost = nano != null ? formatScaledAmount(nano, 9, locale, 4) : null;
           const usdCost = nano != null ? nanoToUsd(nano, usd) : null;
           const wait = known ? blocksToWait(rate, balls, median ?? 0) : null;
           const ahead = known ? allRates.filter((r) => r > rate).length : 0;
@@ -200,11 +199,11 @@ function FeeLevelPills({
                 <TipRow label={t("feed.fees.rate")}>{formatFeeRate(rate)}</TipRow>
                 {allRates.length ? (
                   <TipRow label={t("fees.kpiTxs")}>
-                    {countText(t, locale, "feed.fees.ahead", ahead, ahead.toLocaleString(tag))}
+                    {countText(t, locale, "feed.fees.ahead", ahead, formatInt(ahead, locale))}
                   </TipRow>
                 ) : null}
                 {below != null ? (
-                  <TipRow label="%">{t("feed.fees.above").replace("{pct}", `${below}%`)}</TipRow>
+                  <TipRow label="%">{t("feed.fees.above").replace("{pct}", formatPct(below, locale, 0, 0))}</TipRow>
                 ) : null}
               </TipRows>
             </>
@@ -233,7 +232,7 @@ function FeeLevelPills({
                     ? "—"
                     : wait <= 1
                       ? t("fees.pillNext")
-                      : t("fees.pillBlocks").replace("{n}", wait.toLocaleString(tag))}
+                      : t("fees.pillBlocks").replace("{n}", formatInt(wait, locale))}
                 </span>
                 <span className="mt-1.5 truncate border-t border-[var(--border-soft)] pt-1.5 font-mono text-[10px] leading-none tabular-nums text-[var(--muted-2)]">
                   {known ? formatFeeRate(rate) : "—"}

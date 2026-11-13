@@ -5,11 +5,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Shell } from "@/components/Shell";
 import { NavIcon } from "@/components/nav-icons";
-import { formatPrice, formatRelAge, formatUsd } from "@/lib/format";
+import { formatRelAge } from "@/lib/format";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { INK } from "@/lib/palette";
 import { useChainTipRefresh, useKeepFresh, usePageSync } from "@/lib/page-sync";
-import { doorFreshness, sparkPath, type DoorFreshness, type OracleDoorSummary } from "@/lib/oracle-door";
+import { doorFreshness, formatOracleQuote, sparkPath, type DoorFreshness, type OracleDoorSummary } from "@/lib/oracle-door";
 import type { OracleFeedSlug } from "@/lib/oracle-feed";
 
 const DOORS = [
@@ -44,12 +44,6 @@ const FRESH_TONE: Record<DoorFreshness, string> = {
 
 const SPARK_W = 120;
 const SPARK_H = 28;
-
-/** The pool answer as the pool pages print it: dollars for the USD pools, the tiny form for gold. */
-function doorValue(slug: OracleFeedSlug, quote: number | null): string {
-  if (quote == null) return "—";
-  return slug === "xau-erg" ? formatPrice(quote) : formatUsd(quote, 4);
-}
 
 export function OraclesDoor({
   summaries = {},
@@ -106,7 +100,7 @@ export function OraclesDoor({
                 {sum ? (
                   <span className="flex shrink-0 flex-col items-end">
                     <span className="font-mono text-[17px] font-semibold tabular-nums text-[var(--text)]">
-                      {doorValue(door.slug, sum.quote)}
+                      {formatOracleQuote(door.slug, sum.quote, locale)}
                     </span>
                     <span className="mt-1 inline-flex items-center gap-1.5 whitespace-nowrap text-[12px] text-[var(--muted)]">
                       {fresh ? (

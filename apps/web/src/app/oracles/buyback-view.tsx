@@ -36,7 +36,7 @@ import {
   type BuybackMoveKind,
   type BuybackPack,
 } from "@/lib/buyback";
-import { formatErg, formatErgFixed, formatErgPrecise, formatTokenAmount, formatTs, shortId, toEpochMs } from "@/lib/format";
+import { formatErg, formatErgFixed, formatErgPrecise, formatPct, formatTokenAmount, formatTs, shortId, toEpochMs } from "@/lib/format";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { useKeepFresh, usePageSync } from "@/lib/page-sync";
 import { INK } from "@/lib/palette";
@@ -178,7 +178,7 @@ export function BuybackView({ kind, initial }: { kind: BuybackKind; initial?: Bu
     notes.push({
       key: "bank",
       label: t("buyback.noteBank"),
-      value: `${(pack.bank.ratioBps / 100).toLocaleString(L, { maximumFractionDigits: 1 })}%`,
+      value: formatPct(pack.bank.ratioBps / 100, locale, 0, 1),
       hint: t("buyback.noteBankHint"),
     });
   }

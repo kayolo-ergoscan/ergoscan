@@ -642,11 +642,11 @@ function RentCollectedChart({
             <p className="m-0 flex h-[22px] shrink-0 flex-nowrap items-center justify-end gap-1.5 whitespace-nowrap" aria-live="polite">
               <span className="font-mono text-[12px] leading-[1.15] text-[var(--muted)] tabular-nums">
                 {formatDottedDate(pick.t, "UTC")}
-                {` · ${t("rent.chartBoxes")} ${formatCompact(pick.boxes, 1)}`}
+                {` · ${t("rent.chartBoxes")} ${formatCompact(pick.boxes, 1, locale)}`}
                 {pick.due ? ` · ${t("rent.chartAhead")}` : ""}
               </span>
               <KpiNum className="max-w-none shrink-0 tabular-nums text-[22px] font-semibold leading-[1.15] tracking-tight text-[var(--text)]">
-                {`${formatGroupedNumber(pick.rentErg, 2, 2)} ERG`}
+                {`${formatGroupedNumber(pick.rentErg, 2, 2, locale)} ERG`}
               </KpiNum>
             </p>
           ) : last ? (

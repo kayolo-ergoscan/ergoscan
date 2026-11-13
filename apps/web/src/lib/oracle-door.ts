@@ -1,4 +1,5 @@
 import { ORACLE_BLOCK_MS, ORACLE_FEEDS, type OracleFeedSlug } from "@ergoscan/shared";
+import { formatGroupedNumber, formatUsdPrice } from "./format";
 import type { OracleFeedPack, OracleTick } from "./oracle-feed";
 
 export const DOOR_SPARK_DAYS = 7;
@@ -64,6 +65,18 @@ export function doorFreshness(slug: OracleFeedSlug, lastMs: number | null, now: 
   if (age <= beat * 2) return "fresh";
   if (age <= beat * 4) return "late";
   return "stale";
+}
+
+/**
+ * A pool answer in text, the same on the /oracles cards and the pool pages: dollars for the
+ * USD pools (`$0.1822`), grouped figures otherwise. Gold answers sit near 1e-6, where six fixed
+ * decimals rounded every one of them to `0.000001`, so small answers keep three significant digits.
+ */
+export function formatOracleQuote(slug: OracleFeedSlug, n: number | null | undefined, locale?: string): string {
+  if (n == null || !Number.isFinite(n) || n <= 0) return "—";
+  if (slug === "erg-usd" || slug === "ergusd") return formatUsdPrice(n, locale);
+  if (n < 0.01) return formatGroupedNumber(n, 0, Math.min(12, 2 - Math.floor(Math.log10(n))), locale);
+  return formatGroupedNumber(n, 0, 6, locale);
 }
 
 /** An SVG polyline through the values, scaled to w×h with a pad so the stroke never clips. */

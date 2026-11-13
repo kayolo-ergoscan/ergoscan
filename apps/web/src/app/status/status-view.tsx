@@ -26,7 +26,7 @@ import {
   FeedSection,
 } from "@/components/feed/Feed";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
-import { formatH24, formatStamp } from "@/lib/format";
+import { formatGroupedNumber, formatH24, formatInt, formatPct, formatStamp } from "@/lib/format";
 import { countText } from "@/lib/i18n/messages";
 import type { EvidenceKind, TrustState } from "@/lib/trust-board";
 import type { ApiUse } from "@/lib/api-use";
@@ -81,7 +81,7 @@ function StatusBanner({ systems, checkedAtMs }: { systems: SystemLine[]; checked
   const tone = stateTone(state);
   const n = systems.length;
   const head = off.length
-    ? countText(t, locale, "status.banner.some", off.length).replace("{total}", String(n))
+    ? countText(t, locale, "status.banner.some", off.length).replace("{total}", formatInt(n, locale))
     : countText(t, locale, "status.banner.ok", n);
   return (
     <div
@@ -160,14 +160,13 @@ function SystemRow({
 
 /** A slice's figure for its phone row: the network height, or how many blocks it is behind. */
 function sliceFigure(slice: TrustSlice, t: (k: string) => string, locale: string): string {
-  const loc = localeId(locale);
   const value = (id: string) => slice.metrics.find((m) => m.id === id)?.value;
   if (slice.id === "gateway") {
     const h = value("height");
-    if (typeof h === "number") return `#${h.toLocaleString(loc)}`;
+    if (typeof h === "number") return `#${formatInt(h, locale)}`;
   }
   const lag = value("lag");
-  if (typeof lag === "number") return t("status.row.behind").replace("{n}", lag.toLocaleString(loc));
+  if (typeof lag === "number") return t("status.row.behind").replace("{n}", formatInt(lag, locale));
   return t(`status.state.${slice.state}`);
 }
 
@@ -393,7 +392,7 @@ function ApiUseCard({
         state={state}
         figure={
           hour?.requests != null
-            ? t("status.row.requests").replace("{n}", hour.requests.toLocaleString(loc))
+            ? t("status.row.requests").replace("{n}", formatInt(hour.requests, locale))
             : t(`status.state.${state}`)
         }
         open={open}
@@ -660,10 +659,8 @@ function Metric({ metric, locale }: { metric: TrustMetric; locale: string }) {
       metric.unit === "ms"
         ? ageText(metric.value, locale)
         : metric.id === "coverage"
-          ? `${metric.value.toLocaleString(localeId(locale), {
-              maximumFractionDigits: 2,
-            })}%`
-          : metric.value.toLocaleString(localeId(locale));
+          ? formatPct(metric.value, locale, 0, 2)
+          : formatGroupedNumber(metric.value, 0, 2, locale);
   } else if (typeof metric.value === "string") {
     value = metric.value;
   }
