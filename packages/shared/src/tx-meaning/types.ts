@@ -106,8 +106,10 @@ export type TxMeaning = {
   label?: string;
   /** Oracle pair, or the pool pair of a new pool. */
   pair?: string;
-  /** Second number for the phrase (boxes out on a consolidation). */
+  /** Second number for the phrase (boxes out on a consolidation, addresses that shared the rent). */
   count2?: number;
+  /** The one amount each receiver got, present only when all got the same («по 1.00»). */
+  each?: MeaningAsset;
   /** Which rule answered (consensus, oracle, pools, wallets…), for «Как определили». */
   rule: string;
   say: { ru: string; en: string };
@@ -142,6 +144,7 @@ export type MeaningPhraseInput = {
   label?: string;
   pair?: string | null;
   sub?: string;
+  each?: MeaningAssetLike;
 };
 
 /**
@@ -176,4 +179,6 @@ export type CompactMeaning = {
   sub?: string;
   label?: string;
   pair?: string;
+  /** The one amount each receiver got, when all got the same. */
+  each?: MeaningAssetLike;
 };

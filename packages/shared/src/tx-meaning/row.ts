@@ -103,9 +103,12 @@ function notesOf(m: MeaningRowInput, lang: Lang): string[] {
     case "miner-payout":
       if (m.sub === "pool" && n) say(ruTo(n, "майнеру", "майнерам"), `to ${enCount(n, "miner", "miners")}`);
       break;
-    case "rent":
+    case "rent": {
       if (n) say(ruCount(n, "старый бокс", "старых бокса", "старых боксов"), enCount(n, "old box", "old boxes"));
+      const k = m.count2 ?? 0;
+      if (k >= 2) say(`забрали ${ruCount(k, "адрес", "адреса", "адресов")}`, `${enCount(k, "address", "addresses")} took it`);
       break;
+    }
     case "name-register":
       if (m.sub === "commit") say("заявка на имя", "name request");
       else if (m.label) out.push(m.label);

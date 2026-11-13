@@ -82,6 +82,22 @@ function who(addr: string | null | undefined, name: string | null | undefined): 
 
 export type Lang = "ru" | "en";
 
+/** Russian noun after a number: 1 адрес, 2 адреса, 5 адресов. */
+function ruCountWord(n: number, one: string, few: string, more: string): string {
+  const a = Math.abs(n) % 100;
+  const b = a % 10;
+  return `${n} ${a > 10 && a < 20 ? more : b === 1 ? one : b >= 2 && b <= 4 ? few : more}`;
+}
+
+/** Russian dative after a number: 1 адресу, 2 адресам, 21 адресу. */
+function ruDat(n: number, one: string, more: string): string {
+  return `${n} ${n % 10 === 1 && n % 100 !== 11 ? one : more}`;
+}
+
+function eachDec(a: MeaningAssetLike): number {
+  return a.token ? (a.decimals ?? 0) : 9;
+}
+
 /** English count with the right noun; Russian lines put the number in brackets instead. */
 function many(n: number, one: string, more: string): string {
   return `${n} ${n === 1 ? one : more}`;
@@ -168,11 +184,27 @@ export function sayLines(m: MeaningPhraseInput): Lines {
         return { ru: `Майнер ${ru} забрал награду${got.ru ? `: ${got.ru}` : ""}${tail.ru}`, en: `Miner ${en} claimed the reward${got.en ? `: ${got.en}` : ""}${tail.en}` };
       }
       return { ru: `${ru} выплатил${gaveS.ru} майнерам (${n})${tail.ru}`, en: `${en} paid${gaveS.en} to ${many(n, "miner", "miners")}${tail.en}` };
-    case "rent":
-      return {
-        ru: `Майнер ${ru} взял плату за хранение со старых боксов (${n})${got.ru ? `: ${got.ru}` : ""}`,
-        en: `Miner ${en} took storage rent from ${many(n, "old box", "old boxes")}${got.en ? `: ${got.en}` : ""}`,
+    case "rent": {
+      // ERG is the rent; tokens swept out of the old boxes are counted, not listed.
+      const erg = (m.got ?? []).filter((a) => !a.token);
+      const toks = (m.got ?? []).length - erg.length;
+      const each = m.each ? { ru: ` (по ${formatAmount(m.each.amount, eachDec(m.each))})`, en: ` (${formatAmount(m.each.amount, eachDec(m.each))} each)` } : { ru: "", en: "" };
+      const amount = {
+        ru: [erg.length ? `${list(erg, "ru")}${each.ru}` : "", toks ? `токены (${toks})` : ""].filter(Boolean).join(" и "),
+        en: [erg.length ? `${list(erg, "en")}${each.en}` : "", toks ? many(toks, "token", "tokens") : ""].filter(Boolean).join(" and "),
       };
+      const k = m.count2 ?? 0;
+      if (k >= 2) {
+        return {
+          ru: `Плату за хранение со старых боксов (${n}) забрали ${ruCountWord(k, "адрес", "адреса", "адресов")}${amount.ru ? `: ${amount.ru}` : ""}`,
+          en: `${many(k, "address", "addresses")} took storage rent from ${many(n, "old box", "old boxes")}${amount.en ? `: ${amount.en}` : ""}`,
+        };
+      }
+      return {
+        ru: `Майнер ${ru} взял плату за хранение со старых боксов (${n})${amount.ru ? `: ${amount.ru}` : ""}`,
+        en: `Miner ${en} took storage rent from ${many(n, "old box", "old boxes")}${amount.en ? `: ${amount.en}` : ""}`,
+      };
+    }
     case "token-issue":
       return { ru: `${ru} выпустил${gotS.ru || " токен"}`, en: `${en} issued${gotS.en || " a token"}` };
     case "nft-mint": {

@@ -143,6 +143,17 @@ describe("storage rent read off a mempool tx (rentMarkOf)", () => {
     assert.equal(rentMarkOf({ inputs: [rentIn("1000000")], outputs: [{ value: "1000000", address: W1 }] }), null);
     assert.equal(rentMarkOf({ inputs: [{ value: "1000000", address: W1 }], outputs: [] }), null);
   });
+  it("mainnet node txs get the mark the rent writer gave their block", () => {
+    const writer: Record<string, string> = { "021d6be7": "rent-renew", "31f1a135": "rent", "02dcce10": "rent" };
+    for (const [id, mark] of Object.entries(writer)) {
+      const g = byId(id);
+      assert.ok(g.mempool, id);
+      assert.equal(rentMarkOf(g as unknown as RentSpendTx), mark, id);
+      // Without the read the same tx is a plain move, as the mempool said before.
+      const plain = classifyTxMeaning({ ...txOf(g), rent: null }, ctxOf(g));
+      assert.notEqual(plain.action, "rent", id);
+    }
+  });
   it("index -1 (zigzag 01): the whole box was taken", () => {
     assert.equal(rentMarkOf({ inputs: [rentIn("1000000", "0301")], outputs: [{ value: "1000000", address: W2 }] }), "rent");
   });

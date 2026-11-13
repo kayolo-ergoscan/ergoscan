@@ -54,6 +54,8 @@ export type Draft = {
   sub?: string;
   /** Second number for the phrase (boxes out on a consolidation, blocks on a payout). */
   count2?: number;
+  /** The one amount every receiver got, when all got the same (a split, a token handout). */
+  each?: [AssetKey, bigint];
   /** The fee was paid by someone the phrase does not name (executor). */
   feeHidden?: boolean;
 };
@@ -168,26 +170,43 @@ const ruleConsensus: Rule = (f, ctx) => {
     };
   }
   if (f.tx.rent) {
-    // Old boxes spent by the miner; the one who ends up with more ERG collected the rent.
+    // Old boxes spent by the miner; whoever ends up with more ERG took the rent. Several takers
+    // (a shared payout group) are said as a group: the sum, and the share when all are equal.
+    const takers = [...f.net]
+      .filter(([, bag]) => (bag.get(ERG) ?? 0n) > 0n)
+      .sort((a, b) => (a[0] < b[0] ? -1 : 1));
     let collector: string | null = null;
     let gain = 0n;
-    for (const [addr, bag] of [...f.net].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
-      const g = bag.get(ERG) ?? 0n;
+    let total = 0n;
+    for (const [addr, bag] of takers) {
+      const g = bag.get(ERG)!;
+      total += g;
       if (g > gain) {
         gain = g;
         collector = addr;
       }
     }
-    return {
+    // Tokens swept out of the old boxes: what any address ended up with more of.
+    const swept: Bag = new Map();
+    for (const [, bag] of f.net) for (const [k, v] of bag) if (k !== ERG && v > 0n) addInto(swept, k, v);
+    const tokens = positive(swept);
+    const split = takers.length >= 2;
+    const shares = new Set(takers.map(([, bag]) => bag.get(ERG)!));
+    const d: Draft = {
       action: "rent",
       protocol: "ergo",
       conf: "exact",
-      actor: collector,
+      actor: split ? null : collector,
       count: f.ins.length,
-      got: gain ? [[ERG, gain]] : [],
+      got: [...((split ? total : gain) ? [[ERG, split ? total : gain] as [AssetKey, bigint]] : []), ...tokens],
       sub: f.tx.rent === "rent-renew" ? "renew" : "collect",
       why: [{ k: "rent", v: f.tx.rent, n: f.ins.length }],
     };
+    if (split) {
+      d.count2 = takers.length;
+      if (shares.size === 1) d.each = [ERG, [...shares][0]!];
+    }
+    return d;
   }
   const locks = f.ins.filter((b) => b.role?.role === "reward-lock");
   if (locks.length && f.ins.every((b) => !b.role || b.role.p === "ergo")) {
