@@ -20,10 +20,7 @@
   touch-action: pan-y;
   outline: none;
 }
-.kayolo-slot:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
+/* Focus: the site's own soft ring (globals.css :focus-visible), not a second style. */
 
 /* The body at home is drawn here: 56×64, ground point at (28, 58), wider than the button. */
 .kayolo-slot .kayolo-canvas {
