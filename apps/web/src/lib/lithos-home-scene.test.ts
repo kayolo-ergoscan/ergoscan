@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cartX, coinSpots, idleSpots, minerSpots, sceneCarts, sceneLayout, stackLabels } from "./lithos-home-scene";
+import { cartX, coinSpots, idleSize, idleSpots, minerSpots, sceneCarts, sceneLayout, seamX, stackLabels } from "./lithos-home-scene";
 
 test("layout: track to the right of the quarry, three stretches in order, two equal phases", () => {
   for (const [w, h] of [
@@ -14,7 +14,12 @@ test("layout: track to the right of the quarry, three stretches in order, two eq
     assert.ok(L.payout.b <= w);
     assert.ok(L.cliffTop > 0);
     assert.equal(L.small, w < 420);
+    // The seam is above the rock, the plateau above the front block, the steps go down to the track.
+    assert.ok(L.seam.y + L.seam.h < L.backTop && L.backTop < L.cliffTop);
+    assert.ok(L.steps.every((st, k) => st.top > L.cliffTop && (k === 0 || st.top > L.steps[k - 1]!.top) && st.top < L.ground));
   }
+  // Desktop carts are the hero; the phone keeps compact ones.
+  assert.ok(sceneLayout(488, 250).cartHw > sceneLayout(324, 206).cartHw);
 });
 
 test("carts: progress from the live tip, a finished phase waits at its end", () => {
@@ -42,9 +47,28 @@ test("miners: steps first, then the rock top; idle ones on the rock", () => {
   assert.ok(m.every((p) => p.x > 0 && p.x < L.quarry));
   assert.ok(m.slice(0, 6).every((p) => !p.back));
   assert.equal(m[0]!.y, L.steps[2]!.top);
+  // Eight miners of a round stand in front rows on both widths.
+  for (const [w, h] of [
+    [488, 250],
+    [324, 206],
+  ] as const) {
+    const LL = sceneLayout(w, h);
+    assert.equal(minerSpots(LL, 8).filter((p) => !p.back).length, 8);
+  }
   const idle = idleSpots(L, 17);
   assert.equal(idle.length, 17);
-  assert.ok(idle.every((p) => p.x >= 0 && p.x <= L.backEnd && p.y <= L.cliffTop));
+  const s = idleSize(L);
+  assert.ok(idle.every((p) => p.x >= 0 && p.x + s <= L.backEnd + L.iso && p.y <= L.backTop && p.y - s > L.seam.y + L.seam.h));
+  // Never more than fit under the seam.
+  assert.ok(idleSpots(L, 500).length < 500);
+});
+
+test("seam: a moment maps into the band, the window end at the right edge", () => {
+  const L = sceneLayout(488, 250);
+  assert.equal(seamX(L, 0, 100), 2);
+  assert.equal(seamX(L, 100, 100), 488 - 4);
+  assert.equal(seamX(L, 250, 100), 488 - 4);
+  assert.ok(seamX(L, 50, 100) > 200 && seamX(L, 50, 100) < 290);
 });
 
 test("labels move up just above the one they would overlap, no further", () => {

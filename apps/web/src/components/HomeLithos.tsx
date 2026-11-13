@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
 import clsx from "clsx";
-import type { LithosHome } from "@ergoscan/shared";
+import { LITHOS_HOLDING_PERIOD, type LithosHome } from "@ergoscan/shared";
 import { EvidenceBadge, EvidenceDot } from "@/components/EvidenceBadge";
 import { ReelText } from "@/components/ReelText";
 import { Tip, TipHead, TipRow, TipRows, useFloatTip } from "@/components/Tip";
@@ -19,33 +19,61 @@ import { blocksToMs, ergText, formatShare, formatSpan, formatWindowDays, splitHa
 import {
   cartX,
   coinSpots,
+  idleSize,
   idleSpots,
   minerSpots,
   sceneCarts,
   sceneLayout,
+  seamX,
   stackLabels,
   type CartSpot,
   type SceneLayout,
 } from "@/lib/lithos-home-scene";
 
 /**
- * Home «Lithos»: how the pool works, drawn with the live numbers. The round's miners (little
- * «Пиксели») knock NISP chips off the quarry into the round's cart; carts roll along NISP
- * collection, the fraud-proof check and payout at the real progress of each round at the chain
- * tip; registered miners outside the round doze on the back ledge. Above it, the network seam:
- * every Ergo block of the hashrate window, the Lithos ones in gold.
+ * Home «Lithos»: how the pool works, drawn with the live numbers. Across the top, the network
+ * seam: one stone per Ergo block of the hashrate window, the Lithos finds in gold. Below it an
+ * isometric quarry: the round's miners (little «Пиксели») knock NISP chips off the rock into the
+ * round's cart, registered miners outside the round doze on the plateau behind; carts roll along
+ * NISP collection, the fraud-proof check and payout at the real progress of each round at the
+ * chain tip, and the payout heap has one coin per waiting payout.
  *
- * Frames only when something happens: the first look, a new block or round, a hover. Off screen
- * and on a hidden tab nothing is drawn; under reduced motion every change is one still frame.
+ * Frames only when something happens: the first look, a new block (a stone drops into the seam,
+ * the miners knock), a new Lithos find (a gem drops from the seam into the new round's cart and the
+ * miners hop), a paid round, a hover. Off screen and on a hidden tab nothing is drawn; under
+ * reduced motion every change is one still frame.
  */
 
 const MAX_MINERS = 16;
-const MAX_IDLE = 28;
+const MAX_IDLE = 40;
 const KNOCK_MS = 260;
 const CHIP_MS = 560;
 const INTRO_MS = 1500;
 const BLOCK_BURST_MS = 1300;
-const ROUND_BURST_MS = 2400;
+/** A new block's stone falling into the seam. */
+const STONE_MS = 460;
+/** The find: the gem glints in the seam, falls into the round's cart, lands; the miners hop. */
+const GEM_GLINT = 280;
+const GEM_FALL = 760;
+const GEM_LAND = GEM_GLINT + GEM_FALL;
+const CHEER_MS = 720;
+const FIND_MS = 3000;
+
+/** Warm stone, light from the upper left: lit tops, the front in half light, the right sides in shade. */
+const STONE = {
+  top: "#a99271",
+  topHi: "#bfa784",
+  face: "#735f48",
+  faceHi: "#816c52",
+  grout: "#5c4b37",
+  side: "#524333",
+  backTop: "#86735a",
+  backFace: "#57493a",
+  backGrout: "#4a3e30",
+  backSide: "#433829",
+};
+const GOLD_HI = "#fff2c4";
+const GOLD_LO = "#b98f3c";
 
 type Inks = {
   gold: string;
@@ -59,6 +87,7 @@ type Inks = {
   washStrong: string;
   module: string;
   edge: string;
+  heur: string;
   sans: string;
   mono: string;
 };
@@ -78,6 +107,7 @@ function readInks(el: Element): Inks {
     washStrong: v("--wash-strong", "rgba(255,255,255,0.16)"),
     module: v("--module", "#1a1a1a"),
     edge: lookEdge() ?? "rgba(255,255,255,0.55)",
+    heur: v("--k-rent", "#d99b2b"),
     sans: `${v("--font-sans", "")}${v("--font-sans", "") ? ", " : ""}ui-sans-serif, system-ui, sans-serif`,
     mono: `${v("--font-mono", "")}${v("--font-mono", "") ? ", " : ""}ui-monospace, monospace`,
   };
@@ -88,8 +118,6 @@ type Cart = {
   kind: CartSpot["kind"] | "pay";
   x: number;
   tx: number;
-  /** Lithos mark falls onto a new round's cart from this time. 0: no mark. */
-  dropAt: number;
   bumpAt: number;
   alpha: number;
   leaving: boolean;
@@ -97,15 +125,17 @@ type Cart = {
 
 type Chip = { x0: number; y0: number; t0: number; to: number };
 
-type Hit = { kind: "cart" | "pay" | "miners"; h?: number; x: number; y: number; w: number; hh: number };
+type Hit = { kind: "cart" | "pay" | "miners" | "seam" | "next"; h?: number; x: number; y: number; w: number; hh: number };
 
 /** Labels that the canvas draws, already in the page language. */
 export type SceneText = {
   collect: string;
-  collectShort: string;
   check: string;
-  checkShort: string;
   pay: string;
+  /** Under the collect and check stage names: how long the phase lasts. */
+  period: string;
+  /** «A Lithos block every ≈ N h on average» from the window, or null when the window is too thin. */
+  next: string | null;
   /** Height, then miners and bank; on the phone's short track only the bank (the facts row has the miners). */
   round: (c: CartSpot, small: boolean) => [string, string];
   checkLeft: (c: CartSpot) => string;
@@ -129,85 +159,168 @@ function fitText(ctx: CanvasRenderingContext2D, s: string, max: number): string 
   return `${out}…`;
 }
 
-function drawRock(ctx: CanvasRenderingContext2D, L: SceneLayout, ink: Inks) {
-  const { steps, cliff, cliffTop, ground, quarry, backEnd } = L;
-  // Back ledge: the dozing miners sit on it.
-  ctx.fillStyle = ink.wash;
-  ctx.fillRect(0, cliffTop, backEnd, ground - cliffTop);
-  ctx.fillStyle = ink.washStrong;
-  ctx.fillRect(0, cliffTop, backEnd, 2);
-  // Front rock with the steps cut into it.
-  const path = new Path2D();
-  path.moveTo(0, cliffTop + 10);
-  path.lineTo(cliff, cliffTop + 10);
-  path.lineTo(cliff, steps[0]!.top);
-  for (let k = 0; k < steps.length; k++) {
-    const s = steps[k]!;
-    path.lineTo(s.x1, s.top);
-    path.lineTo(s.x1, k + 1 < steps.length ? steps[k + 1]!.top : ground);
+/** Deterministic 0…1 noise for the stone textures: the same pixels every frame. */
+function noise(a: number, b: number): number {
+  let x = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263)) | 0;
+  x = Math.imul(x ^ (x >>> 13), 1274126177);
+  return ((x ^ (x >>> 16)) >>> 0) / 4294967295;
+}
+
+type StonePal = { top: string; topHi: string; face: string; faceHi: string; grout: string; side: string };
+
+/**
+ * One block of rock, pixel-isometric: the front face with stone courses, the top face going back
+ * two pixels across for each one up, the right side in shade. Drawn left to right, so the next
+ * (lower) block covers the foot of this one's side.
+ */
+function rockBlock(ctx: CanvasRenderingContext2D, x0: number, x1: number, top: number, bottom: number, iso: number, pal: StonePal, seed: number, course: number) {
+  const dy = Math.round(iso / 2);
+  const w = x1 - x0;
+  // Right side, in shade: one column per pixel, each one higher than the last every second column.
+  ctx.fillStyle = pal.side;
+  for (let c = 0; c < iso; c++) {
+    const lift = Math.floor((c + 1) / 2);
+    ctx.fillRect(x1 + c, top - lift, 1, bottom - top);
   }
-  path.lineTo(quarry, ground);
-  path.lineTo(0, ground);
-  path.closePath();
-  ctx.fillStyle = ink.washMid;
-  ctx.fill(path);
-  // Stone courses: grout lines inside the rock.
-  ctx.save();
-  ctx.clip(path);
-  ctx.strokeStyle = ink.module;
-  ctx.globalAlpha = 0.55;
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  const course = L.small ? 9 : 11;
-  for (let y = ground - course, row = 0; y > cliffTop; y -= course, row++) {
-    ctx.moveTo(0, y + 0.5);
-    ctx.lineTo(quarry, y + 0.5);
-    for (let x = (row % 2) * 9 + 4; x < quarry; x += 18) {
-      ctx.moveTo(x + 0.5, y);
-      ctx.lineTo(x + 0.5, y + course);
+  // Top face: rows going back and right.
+  ctx.fillStyle = pal.top;
+  for (let r = 0; r < dy; r++) ctx.fillRect(x0 + 2 * r + 1, top - 1 - r, w, 1);
+  ctx.fillStyle = pal.topHi;
+  for (let i = 0; i < w; i += 3) {
+    const n = noise(seed + i, 7);
+    if (n > 0.72) ctx.fillRect(x0 + i + 1 + Math.floor(n * 3), top - 1 - Math.floor(n * dy), 1, 1);
+  }
+  // Front face with stone courses: a lit top line on every course, staggered joints.
+  ctx.fillStyle = pal.face;
+  ctx.fillRect(x0, top, w, bottom - top);
+  ctx.fillStyle = pal.topHi;
+  ctx.fillRect(x0, top, w, 1);
+  for (let y = top + 1, row = 0; y < bottom - 1; row++) {
+    const hh = course + Math.floor(noise(seed + 5, row) * 5) - 2;
+    const n = noise(seed + 9, row);
+    if (n > 0.62) {
+      ctx.fillStyle = n > 0.85 ? pal.faceHi : pal.grout;
+      ctx.globalAlpha = n > 0.85 ? 0.7 : 0.45;
+      ctx.fillRect(x0, y, w, Math.min(hh, bottom - y));
+      ctx.globalAlpha = 1;
+    }
+    y += hh;
+    if (y >= bottom - 1) break;
+    ctx.fillStyle = pal.grout;
+    ctx.fillRect(x0, y, w, 1);
+    ctx.fillStyle = pal.faceHi;
+    ctx.fillRect(x0, y + 1, w, 1);
+    // A crack now and then, not a joint in every course.
+    if (noise(seed + row, 3) > 0.55) {
+      const cx = Math.round(x0 + 3 + noise(seed + row, 4) * (w - 6));
+      ctx.fillStyle = pal.grout;
+      ctx.fillRect(cx, y + 2, 1, Math.min(hh - 2, bottom - y - 2));
     }
   }
-  ctx.stroke();
-  ctx.restore();
-  // Lit tops of the steps and the face.
-  ctx.fillStyle = ink.washStrong;
-  ctx.fillRect(0, cliffTop + 10, cliff, 2);
-  for (const s of steps) ctx.fillRect(s.x0, s.top, s.x1 - s.x0, 2);
-  // A few gold stones in the face: Lithos is a stone.
-  ctx.fillStyle = ink.gold;
-  const flecks: [number, number][] = [
-    [0.35, 0.3],
-    [0.6, 0.62],
-    [0.18, 0.78],
-  ];
-  for (const [fx, fy] of flecks) {
-    const x = Math.round(fx * cliff * 1.8);
-    const y = Math.round(cliffTop + 14 + fy * (ground - cliffTop - 18));
-    ctx.globalAlpha = 0.85;
-    ctx.fillRect(x, y, 3, 3);
+}
+
+/** Gold veins in a front face: short diagonal runs with a glint at the head. Lithos is a stone. */
+function veins(ctx: CanvasRenderingContext2D, ink: Inks, x0: number, x1: number, top: number, bottom: number, seed: number, px: number) {
+  const n = Math.max(1, Math.round((x1 - x0) / 36));
+  for (let k = 0; k < n; k++) {
+    const a = noise(seed, k * 3 + 1);
+    const b = noise(seed, k * 3 + 2);
+    const len = 3 + Math.floor(noise(seed, k * 3 + 3) * 4);
+    const dir = b > 0.5 ? 1 : -1;
+    let x = Math.round(x0 + 4 + a * (x1 - x0 - 8 - len * px));
+    let y = Math.round(top + 6 + b * Math.max(1, bottom - top - 12 - len * px));
+    if (dir < 0) x += len * px;
+    for (let i = 0; i < len; i++) {
+      ctx.fillStyle = i === 0 ? GOLD_HI : i === len - 1 ? GOLD_LO : ink.gold;
+      ctx.fillRect(x, y, px, px);
+      x += dir * px;
+      y += i % 2 === 0 ? px : 0;
+    }
   }
-  ctx.globalAlpha = 1;
+}
+
+function drawRock(ctx: CanvasRenderingContext2D, L: SceneLayout, ink: Inks) {
+  const { steps, cliff, cliffTop, ground, quarry, backEnd, backTop, iso } = L;
+  const course = L.small ? 8 : 10;
+  const back: StonePal = { top: STONE.backTop, topHi: STONE.top, face: STONE.backFace, faceHi: STONE.backFace, grout: STONE.backGrout, side: STONE.backSide };
+  // Shadow on the ground under the rock.
+  ctx.fillStyle = "rgba(0,0,0,0.3)";
+  ctx.fillRect(0, ground, quarry + iso, 3);
+  // The plateau behind, in half shade; then the front block and the steps.
+  rockBlock(ctx, 0, backEnd, backTop, ground, iso, back, 11, course);
+  rockBlock(ctx, 0, cliff, cliffTop, ground, iso, STONE, 23, course);
+  steps.forEach((s, k) => rockBlock(ctx, s.x0, s.x1, s.top, ground, iso, STONE, 37 + k * 13, course));
+  const px = L.small ? 1.5 : 2;
+  veins(ctx, ink, 0, cliff, cliffTop, ground, 5, px);
+  steps.forEach((s, k) => veins(ctx, ink, s.x0, s.x1, s.top, ground, 17 + k * 7, px));
+  veins(ctx, ink, cliff + iso, backEnd, backTop, steps[0]!.top - iso, 41, px);
+}
+
+/** The network seam: a bed of small grey stones (every Ergo block), the Lithos finds as gold nuggets. */
+function drawSeam(ctx: CanvasRenderingContext2D, L: SceneLayout, ink: Inks, at: readonly number[], span: number) {
+  const { y, h } = L.seam;
+  const w = L.w;
+  ctx.fillStyle = ink.wash;
+  ctx.fillRect(0, y, w, h);
+  ctx.fillStyle = ink.washStrong;
+  ctx.fillRect(0, y, w, 1);
+  // Pebbles: blocks are about a dozen to a pixel here, so they make a texture, not a count.
+  const rows = Math.floor((h - 2) / 3);
+  for (let x = 1; x < w - 2; x += 3) {
+    for (let r = 0; r < rows; r++) {
+      const n = noise(x, r + 3);
+      if (n < 0.14) continue;
+      ctx.fillStyle = n > 0.86 ? "rgba(255,255,255,0.34)" : n > 0.5 ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.12)";
+      ctx.fillRect(x + (r % 2), y + 2 + r * 3, n > 0.7 ? 3 : 2, 2);
+    }
+  }
+  // Lithos finds: gold nuggets in place of their time, a glint on each.
+  const nh = h - 2;
+  for (const m of at) {
+    const x = seamX(L, m, span);
+    ctx.fillStyle = "rgba(0,0,0,0.45)";
+    ctx.fillRect(x - 3, y + 1, 6, nh);
+    ctx.fillStyle = ink.gold;
+    ctx.fillRect(x - 2, y + 1, 4, nh);
+    ctx.fillStyle = GOLD_HI;
+    ctx.fillRect(x - 2, y + 1, 2, 2);
+    ctx.fillStyle = GOLD_LO;
+    ctx.fillRect(x + 1, y + nh - 1, 1, 2);
+  }
 }
 
 function drawTrack(ctx: CanvasRenderingContext2D, L: SceneLayout, ink: Inks, text: SceneText) {
   const y = L.ground;
+  const a = L.collect.a;
+  const b = L.payout.b;
+  // Sleepers, then the two rails.
   ctx.fillStyle = ink.washMid;
-  for (let x = L.collect.a + 2; x < L.payout.b; x += 9) ctx.fillRect(x, y + 1, 4, 3);
-  const segs: [typeof L.collect, string, string][] = [
-    [L.collect, ink.gold, L.small ? text.collectShort : text.collect],
-    [L.check, ink.violet, L.small ? text.checkShort : text.check],
-    [L.payout, ink.green, text.pay],
+  for (let x = a + 1; x < b - 3; x += L.small ? 7 : 8) ctx.fillRect(x, y - 1, L.small ? 3 : 4, 6);
+  ctx.fillStyle = ink.washStrong;
+  ctx.fillRect(a, y - 1, b - a, 1);
+  ctx.fillRect(a, y + 4, b - a, 1);
+  const segs: [typeof L.collect, string, string, boolean][] = [
+    [L.collect, ink.gold, text.collect, true],
+    [L.check, ink.violet, text.check, true],
+    [L.payout, ink.green, text.pay, false],
   ];
-  ctx.font = `${L.small ? 10 : 10.5}px ${ink.sans}`;
   ctx.textBaseline = "alphabetic";
   ctx.textAlign = "left";
-  for (const [s, c, label] of segs) {
+  for (const [s, c, label, timed] of segs) {
+    // The near rail takes the stretch's colour.
     ctx.fillStyle = c;
-    ctx.globalAlpha = 0.5;
-    ctx.fillRect(s.a + 1.5, y - 1, s.b - s.a - 3, 2.5);
+    ctx.globalAlpha = 0.85;
+    ctx.fillRect(s.a + 2, y + 3, s.b - s.a - 4, 3);
     ctx.globalAlpha = 1;
-    ctx.fillStyle = ink.muted;
-    ctx.fillText(fitText(ctx, label, s.b - s.a - 6), s.a + 3, y + 17);
+    const ty = y + (L.small ? 18 : 21);
+    ctx.font = `600 ${L.font.stage}px ${ink.sans}`;
+    ctx.fillStyle = c;
+    ctx.fillText(fitText(ctx, label, s.b - s.a - 6), s.a + 3, ty);
+    if (timed) {
+      ctx.font = `${L.font.small - 0.5}px ${ink.sans}`;
+      ctx.fillStyle = ink.muted;
+      ctx.fillText(fitText(ctx, text.period, s.b - s.a - 6), s.a + 3, ty + L.font.line - 1);
+    }
   }
 }
 
@@ -226,6 +339,11 @@ function drawCart(
   const y = L.ground - 4 - bump * 2;
   const d = L.small ? 4 : Math.round(hw * 0.27);
   ctx.save();
+  ctx.globalAlpha = alpha * 0.32;
+  ctx.fillStyle = "#000";
+  ctx.beginPath();
+  ctx.ellipse(x, L.ground + 1, hw * 0.95, 2.4, 0, 0, Math.PI * 2);
+  ctx.fill();
   ctx.globalAlpha = alpha;
   // Wheels.
   ctx.fillStyle = "#121116";
@@ -233,7 +351,7 @@ function drawCart(
   ctx.lineWidth = 1;
   for (const wx of [x - hw * 0.55, x + hw * 0.55]) {
     ctx.beginPath();
-    ctx.arc(wx, L.ground - 2.5, L.small ? 2.4 : hw * 0.16, 0, Math.PI * 2);
+    ctx.arc(wx, L.ground - 2.5, L.small ? 2.6 : hw * 0.16, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
   }
@@ -262,6 +380,13 @@ function drawCart(
   ctx.fill();
   ctx.globalAlpha = alpha;
   ctx.stroke();
+  // A slat on the front, like the home's crates.
+  ctx.globalAlpha = alpha * 0.5;
+  ctx.beginPath();
+  ctx.moveTo(x - hw + 2, y - body * 0.45);
+  ctx.lineTo(x - 1, y - body * 0.45 + d * 0.3);
+  ctx.stroke();
+  ctx.globalAlpha = alpha;
   // Open top: the rim, then the ore inside.
   ctx.beginPath();
   ctx.moveTo(x - hw, top + d * 0.35);
@@ -273,7 +398,6 @@ function drawCart(
   ctx.fill();
   ctx.stroke();
   // Ore: one chip per miner who sent a NISP (up to 12), heaped in the middle.
-  ctx.fillStyle = ink.gold;
   const n = Math.min(12, chips);
   const c = L.small ? 3 : hw * 0.19;
   for (let i = 0; i < n; i++) {
@@ -282,16 +406,19 @@ function drawCart(
     const idx = i - (row === 0 ? 0 : row === 1 ? 5 : row === 2 ? 9 : 11);
     const cx = x + (idx - (inRow - 1) / 2) * (c + 1.2);
     const cy = top + d * 0.5 - row * (c - 0.6) - 1;
+    ctx.fillStyle = ink.gold;
     ctx.fillRect(cx - c / 2, cy - c / 2, c, c);
+    ctx.fillStyle = GOLD_HI;
+    ctx.fillRect(cx - c / 2, cy - c / 2, Math.max(1, c * 0.35), Math.max(1, c * 0.35));
   }
   ctx.restore();
 }
 
-/** Width of a cart or payout label, measured in the fonts it is drawn with (the first line is bold mono only on the collect cart). */
+/** Width of a label, measured in the fonts it is drawn with (the first line is bold mono only on the collect cart). */
 function labelWidth(ctx: CanvasRenderingContext2D, L: SceneLayout, ink: Inks, lines: [string, string], strong: boolean): number {
-  const sans = `${L.small ? 10 : 10.5}px ${ink.sans}`;
+  const sans = `${L.font.small}px ${ink.sans}`;
   ctx.save();
-  ctx.font = strong ? `600 ${L.small ? 10.5 : 11}px ${ink.mono}` : sans;
+  ctx.font = strong ? `600 ${L.font.strong}px ${ink.mono}` : sans;
   let w = ctx.measureText(lines[0]).width;
   if (lines[1]) {
     ctx.font = sans;
@@ -304,7 +431,7 @@ function labelWidth(ctx: CanvasRenderingContext2D, L: SceneLayout, ink: Inks, li
 function drawCoins(ctx: CanvasRenderingContext2D, L: SceneLayout, ink: Inks, n: number, pop: number) {
   const cx = (L.payout.a + L.payout.b) / 2;
   const spots = coinSpots(n);
-  const rx = L.small ? 3.6 : 4.4;
+  const rx = L.small ? 4 : 5.4;
   const step = rx * 2 + 0.6;
   spots.forEach((s, i) => {
     const last = i === spots.length - 1;
@@ -322,19 +449,84 @@ function drawCoins(ctx: CanvasRenderingContext2D, L: SceneLayout, ink: Inks, n: 
 }
 
 function drawIdle(ctx: CanvasRenderingContext2D, L: SceneLayout, ink: Inks, n: number) {
-  const s = L.small ? 6 : 7;
+  const s = idleSize(L);
+  const spots = idleSpots(L, n);
   ctx.save();
-  for (const p of idleSpots(L, n)) {
-    ctx.globalAlpha = 0.32;
+  // Back rows first.
+  for (let i = spots.length - 1; i >= 0; i--) {
+    const p = spots[i]!;
+    ctx.globalAlpha = 0.72;
     ctx.fillStyle = ink.miner;
     ctx.fillRect(p.x, p.y - s, s, s);
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = "#000";
+    ctx.fillRect(p.x + s - 1, p.y - s, 1, s);
     // Shut eyes.
-    ctx.globalAlpha = 0.55;
+    ctx.globalAlpha = 0.7;
     ctx.fillStyle = "#121116";
-    ctx.fillRect(p.x + 1, p.y - s * 0.55, s * 0.28, 1);
-    ctx.fillRect(p.x + s * 0.58, p.y - s * 0.55, s * 0.28, 1);
+    ctx.fillRect(p.x + 1, p.y - s * 0.55, Math.max(1, s * 0.28), 1);
+    ctx.fillRect(p.x + s * 0.58, p.y - s * 0.55, Math.max(1, s * 0.28), 1);
   }
   ctx.restore();
+}
+
+/** Where the next find hangs: under the seam's «now» end. */
+function ghostAt(L: SceneLayout): { x: number; y: number } {
+  return { x: L.w - (L.small ? 9 : 11), y: L.seam.y + L.seam.h + (L.small ? 15 : 20) };
+}
+
+/** The next find: a gem outline on a thread from the seam, with the average wait beside it. */
+function drawGhost(ctx: CanvasRenderingContext2D, L: SceneLayout, ink: Inks, label: string, u: number): { x: number; y: number; w: number; hh: number } {
+  const g = ghostAt(L);
+  ctx.save();
+  ctx.fillStyle = ink.gold;
+  ctx.globalAlpha = 0.45;
+  for (let y = L.seam.y + L.seam.h + 2; y < g.y - 3 * u - 2; y += 3) ctx.fillRect(Math.round(g.x - 0.5), y, 1, 1);
+  ctx.globalAlpha = 0.6;
+  gemOutline(ctx, ink.gold, g.x, g.y, u);
+  ctx.globalAlpha = 1;
+  ctx.font = `${L.font.small}px ${ink.sans}`;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  const dot = 3;
+  const right = g.x - 4 * u - 8;
+  ctx.fillStyle = ink.heur;
+  ctx.beginPath();
+  ctx.arc(right - dot, g.y, dot, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = ink.muted;
+  const tw = ctx.measureText(label).width;
+  ctx.fillText(label, right - 2 * dot - 5, g.y + 0.5);
+  ctx.restore();
+  return { x: right - 2 * dot - 5 - tw - 4, y: g.y - 10, w: L.w - (right - 2 * dot - 5 - tw - 4), hh: 20 };
+}
+
+function gemOutline(ctx: CanvasRenderingContext2D, color: string, x: number, y: number, u: number) {
+  const rows = [3, 5, 7, 5, 3, 1];
+  const x0 = Math.round(x);
+  const y0 = Math.round(y - (rows.length * u) / 2);
+  ctx.fillStyle = color;
+  rows.forEach((n, r) => {
+    const edge = r === 0 || r === rows.length - 1;
+    for (let i = 0; i < n; i++) {
+      if (!edge && i !== 0 && i !== n - 1) continue;
+      ctx.fillRect(x0 + (i - (n - 1) / 2) * u - u / 2, y0 + r * u, u, u);
+    }
+  });
+}
+
+/** A cut gem in pixels: crown, girdle, pavilion. `u` is the size of one pixel. */
+function drawGem(ctx: CanvasRenderingContext2D, ink: Inks, x: number, y: number, u: number) {
+  const rows = [3, 5, 7, 5, 3, 1];
+  const x0 = Math.round(x);
+  const y0 = Math.round(y - (rows.length * u) / 2);
+  rows.forEach((n, r) => {
+    for (let i = 0; i < n; i++) {
+      const left = i < n / 2;
+      ctx.fillStyle = r === 0 || (r === 1 && left) ? GOLD_HI : r <= 2 ? ink.gold : left ? ink.gold : GOLD_LO;
+      ctx.fillRect(x0 + (i - (n - 1) / 2) * u - u / 2, y0 + r * u, u, u);
+    }
+  });
 }
 
 function useNow(stepMs: number): number {
@@ -344,6 +536,12 @@ function useNow(stepMs: number): number {
     return () => window.clearInterval(id);
   }, [stepMs]);
   return now;
+}
+
+/** Newest find the cut knows: the latest find height, or the newest round (a find opens a round). */
+function newestFind(data: LithosHome | null): number {
+  if (!data) return 0;
+  return Math.max(data.last?.h ?? 0, data.holding[0]?.h ?? 0);
 }
 
 function LithosScene({ data, tip, text, label, tipFor }: SceneInput & { label: string; tipFor: (hit: Hit) => ReactNode }) {
@@ -372,8 +570,13 @@ function LithosScene({ data, tip, text, label, tipFor }: SceneInput & { label: s
     let busyUntil = 0;
     let settleUntil = 0;
     let coinPopAt = -1e9;
+    let stoneAt = -1e9;
+    let findAt = 0;
+    let findH = 0;
+    let landed = false;
     let prevTip: number | null = null;
     let prevPayout: number | null = null;
+    let prevFind = 0;
     let primed = false;
     let wasBusy = false;
     const carts = new Map<number, Cart>();
@@ -413,20 +616,37 @@ function LithosScene({ data, tip, text, label, tipFor }: SceneInput & { label: s
       const registry = data?.miners.registry ?? null;
       const idleN = data ? Math.min(MAX_IDLE, Math.max(0, (registry ?? roundN) - roundN)) : 6;
       const miners = minerSpots(L, roundN);
+      const hash = data?.hash ?? null;
+      const span = hash ? Math.max(1, (hash.to - hash.from) / 60_000) : 1;
+      const seamAt = data?.seam?.at ?? [];
 
-      // Events: the first look, a new block, a new round, a new payout.
+      // Events: the first look, a new block, a new find, a new payout.
       const firstData = !primed && data != null;
+      const findNow = newestFind(data);
       if (firstData) {
         primed = true;
         prevTip = tipH;
         prevPayout = data.payoutN;
+        prevFind = findNow;
         if (!reduce) {
           introAt = now;
           busyUntil = now + INTRO_MS;
         }
       } else if (data) {
-        if (prevTip != null && tipH > prevTip && !reduce) busyUntil = Math.max(busyUntil, now + BLOCK_BURST_MS);
+        if (prevTip != null && tipH > prevTip && !reduce) {
+          busyUntil = Math.max(busyUntil, now + BLOCK_BURST_MS);
+          stoneAt = now;
+        }
         prevTip = tipH;
+        if (findNow > prevFind) {
+          prevFind = findNow;
+          if (!reduce) {
+            findAt = now;
+            findH = findNow;
+            landed = false;
+            busyUntil = Math.max(busyUntil, now + FIND_MS);
+          }
+        }
         if (prevPayout != null && data.payoutN > prevPayout && !reduce) coinPopAt = now;
         prevPayout = data.payoutN;
       }
@@ -439,19 +659,18 @@ function LithosScene({ data, tip, text, label, tipFor }: SceneInput & { label: s
         const tx = cartX(L, s);
         const c = carts.get(s.h);
         if (!c) {
-          // A round we have not seen: on the first look every cart rolls in; later only a new round does.
+          // A round we have not seen: on the first look every cart rolls in; later a new round
+          // comes in at the start of the collect stretch.
           const isNewRound = !firstData && s.kind === "collect";
           carts.set(s.h, {
             h: s.h,
             kind: s.kind,
             x: reduce ? tx : firstData ? L.collect.a - 24 : isNewRound ? L.collect.a + L.cartHw : tx,
             tx,
-            dropAt: isNewRound && !reduce ? now + 260 : 0,
             bumpAt: -1e9,
             alpha: 1,
             leaving: false,
           });
-          if (isNewRound && !reduce) busyUntil = Math.max(busyUntil, now + ROUND_BURST_MS);
         } else {
           c.kind = s.kind;
           c.tx = tx;
@@ -483,82 +702,96 @@ function LithosScene({ data, tip, text, label, tipFor }: SceneInput & { label: s
       const busy = !reduce && (hoverRef.current || now < busyUntil);
       if (busy && !wasBusy) for (let i = 0; i < MAX_MINERS; i++) nextKnock[i] = now + 60 + i * 110;
       wasBusy = busy;
-      const target = spots.find((s) => s.kind === "collect");
-      const targetCart = target ? carts.get(target.h) : undefined;
+      const newest = spots.filter((s) => s.kind === "collect").sort((a, b) => b.h - a.h)[0];
+      const targetCart = newest ? carts.get(newest.h) : undefined;
+      const findT = findAt ? now - findAt : -1;
+      const finding = findT >= 0 && findT < FIND_MS;
+      if (!finding) findAt = 0;
       for (let i = 0; i < miners.length; i++) {
         nextKnock[i] ??= now + 60 + i * 110;
-        if (busy && targetCart && now >= nextKnock[i]!) {
+        // No knocking while the gem is in the air: everyone watches it.
+        if (busy && targetCart && now >= nextKnock[i]! && !(finding && findT < GEM_LAND + CHEER_MS)) {
           knockAt[i] = now;
           nextKnock[i] = now + 620 + ((i * 397) % 900);
-          chips.push({ x0: miners[i]!.x - 6, y0: miners[i]!.y - 10, t0: now + 120, to: target!.h });
+          chips.push({ x0: miners[i]!.x - 6, y0: miners[i]!.y - 10, t0: now + 120, to: newest!.h });
         }
       }
 
+      const hits: Hit[] = [];
+      if (hash) {
+        drawSeam(ctx, L, ink, seamAt, span);
+        hits.push({ kind: "seam", x: 0, y: L.seam.y - 3, w, hh: L.seam.h + 6 });
+      }
+      // A new block: a stone drops into the right end of the seam.
+      const stoneU = (now - stoneAt) / STONE_MS;
+      if (hash && stoneU >= 0 && stoneU < 1) {
+        const sx = w - 6;
+        const sy = -4 + (L.seam.y + 3 + 4) * Math.min(1, (stoneU / 0.7) ** 2);
+        ctx.fillStyle = "rgba(255,255,255,0.75)";
+        ctx.fillRect(sx, Math.round(sy), 3, 3);
+        if (stoneU > 0.7) {
+          ctx.globalAlpha = 1 - (stoneU - 0.7) / 0.3;
+          ctx.fillStyle = ink.washStrong;
+          ctx.fillRect(sx - 3, L.seam.y - 2, 2, 1);
+          ctx.fillRect(sx + 4, L.seam.y - 2, 2, 1);
+          ctx.globalAlpha = 1;
+        }
+      }
+      // The next find waits under the seam; during a find the gem itself is drawn instead.
+      if (hash && text.next && !finding) {
+        const box = drawGhost(ctx, L, ink, text.next, L.small ? 1.5 : 2);
+        hits.push({ kind: "next", ...box });
+      }
       drawRock(ctx, L, ink);
       drawIdle(ctx, L, ink, idleN);
       drawTrack(ctx, L, ink, text);
       if (data) drawCoins(ctx, L, ink, data.payoutN, (now - coinPopAt) / 420);
 
-      // Carts and their labels.
-      const hits: Hit[] = [];
-      // Label boxes: x is clamped into the track first, y is the bottom of the box (last baseline + descent).
-      const LINE = 12.5;
-      const labels: { x: number; w: number; y: number; h: number; lines: [string, string]; strong: boolean }[] = [];
-      const label = (x: number, base: number, lines: [string, string], strong: boolean) => {
+      // Carts and their labels; each label in its stretch's colour.
+      const LINE = L.font.line;
+      type Label = { x: number; w: number; y: number; h: number; lines: [string, string]; strong: boolean; color: string };
+      const labels: Label[] = [];
+      const label = (x: number, base: number, lines: [string, string], strong: boolean, color: string) => {
         const wTxt = labelWidth(ctx, L, ink, lines, strong);
         const half = wTxt / 2;
         const cx = Math.min(w - 2 - half, Math.max(L.quarry + 2 + half, x));
-        labels.push({ x: cx, w: wTxt, y: base + 3, h: (lines[1] ? 2 : 1) * LINE, lines, strong });
+        labels.push({ x: cx, w: wTxt, y: base + 3, h: (lines[1] ? 2 : 1) * LINE, lines, strong, color });
       };
-      ctx.font = `600 ${L.small ? 10.5 : 11}px ${ink.mono}`;
       const order = [...carts.values()].sort((a, b) => a.x - b.x);
       for (const c of order) {
         const s = spots.find((x) => x.h === c.h);
         const bump = now - c.bumpAt < 200 ? Math.sin(((now - c.bumpAt) / 200) * Math.PI) : 0;
         const color = c.kind === "collect" ? ink.gold : c.kind === "check" ? ink.violet : ink.green;
         drawCart(ctx, L, ink, c.x, color, s?.miners ?? 0, bump, c.alpha);
-        if (c.dropAt > 0 && markOk) {
-          const u = (now - c.dropAt) / 420;
-          if (u >= 0) {
-            const size = L.small ? 13 : 16;
-            const fall = (1 - easeOut(u)) * 46;
-            const topY = L.ground - 4 - L.cartBody - size - 2 - fall;
-            ctx.globalAlpha = u < 2.4 ? 1 : Math.max(0, 1 - (u - 2.4) * 2);
-            ctx.drawImage(mark, c.x - size / 2, topY, size, size);
-            ctx.globalAlpha = 1;
-            if (u > 2.9) c.dropAt = 0;
-            else moving = true;
-          } else moving = true;
-        }
         if (!s) continue;
-        const lines: [string, string] = s.kind === "collect" ? text.round(s, L.small) : [text.checkLeft(s), ""];
-        label(c.x, L.ground - 6 - L.cartBody - 8, lines, s.kind === "collect");
-        hits.push({ kind: "cart", h: s.h, x: c.x - L.cartHw - 4, y: L.ground - L.cartBody - 40, w: 2 * L.cartHw + 8, hh: L.cartBody + 44 });
+        const collect = s.kind === "collect";
+        const lines: [string, string] = collect ? text.round(s, L.small) : [text.checkLeft(s), ""];
+        label(c.x, L.ground - 4 - L.cartBody - (L.small ? 10 : 14), lines, collect, collect ? ink.text : ink.violet);
+        hits.push({ kind: "cart", h: s.h, x: c.x - L.cartHw - 4, y: L.ground - L.cartBody - 44, w: 2 * L.cartHw + 8, hh: L.cartBody + 48 });
       }
       // Payout label joins the same stacking.
       if (data) {
         const px = (L.payout.a + L.payout.b) / 2;
-        label(px, L.ground - 6 - Math.ceil(Math.min(21, data.payoutN) / 6) * 4.5 - 10, [text.payout, ""], false);
-        hits.push({ kind: "pay", x: L.payout.a, y: L.ground - 50, w: L.payout.b - L.payout.a, hh: 56 });
+        const rx = L.small ? 4 : 5.4;
+        label(px, L.ground - 8 - Math.ceil(Math.min(21, data.payoutN) / 6) * rx - 8, [text.payout, ""], false, ink.green);
+        hits.push({ kind: "pay", x: L.payout.a, y: L.ground - 56, w: L.payout.b - L.payout.a, hh: 62 });
       }
-      const stacked = stackLabels(labels);
-      for (const lb of stacked) {
-        const lineH = LINE;
-        const baseY = lb.y - 3 - lb.lift - (lb.lines[1] ? lineH : 0);
-        const x = lb.x;
+      const placed = stackLabels(labels);
+      for (const lb of placed) {
+        const baseY = lb.y - 3 - lb.lift - (lb.lines[1] ? LINE : 0);
         ctx.textAlign = "center";
-        ctx.fillStyle = lb.strong ? ink.text : ink.muted;
-        ctx.font = lb.strong ? `600 ${L.small ? 10.5 : 11}px ${ink.mono}` : `${L.small ? 10 : 10.5}px ${ink.sans}`;
-        ctx.fillText(lb.lines[0], x, baseY);
+        ctx.fillStyle = lb.color;
+        ctx.font = lb.strong ? `600 ${L.font.strong}px ${ink.mono}` : `${L.font.small}px ${ink.sans}`;
+        ctx.fillText(lb.lines[0], lb.x, baseY);
         if (lb.lines[1]) {
           ctx.fillStyle = ink.muted;
-          ctx.font = `${L.small ? 10 : 10.5}px ${ink.sans}`;
-          ctx.fillText(lb.lines[1], x, baseY + lineH);
+          ctx.font = `${L.font.small}px ${ink.sans}`;
+          ctx.fillText(lb.lines[1], lb.x, baseY + LINE);
         }
       }
       ctx.textAlign = "left";
 
-      // Miners: back row first. Each knock leans a miner into the rock.
+      // Miners: back row first. Each knock leans a miner into the rock; a find makes them hop.
       const size = 26 * L.minerScale;
       const order2 = miners.map((m, i) => ({ m, i })).sort((a, b) => Number(b.m.back) - Number(a.m.back));
       for (const { m, i } of order2) {
@@ -566,15 +799,18 @@ function LithosScene({ data, tip, text, label, tipFor }: SceneInput & { label: s
         const pick = since >= 0 && since < KNOCK_MS ? Math.sin((since / KNOCK_MS) * Math.PI) : 0;
         const pop = introAt && !reduce ? easeOut((now - introAt - i * 70) / 300) : 1;
         if (pop <= 0) continue;
+        const cheerT = finding ? findT - GEM_LAND - i * 45 : -1;
+        const cheer = cheerT >= 0 && cheerT < CHEER_MS;
+        const watch = finding && findT < GEM_LAND;
         drawPixel(ctx, {
           x: m.x,
           y: m.y,
           scale: L.minerScale * (0.4 + 0.6 * pop),
           color: ink.miner,
-          mood: pick > 0.02 ? "work" : "idle",
+          mood: cheer ? "happy" : watch ? "look" : pick > 0.02 ? "work" : "idle",
           now,
-          face: -1,
-          pick,
+          face: cheer || watch ? 1 : -1,
+          pick: cheer ? 0 : pick,
           reduce: reduce || !busy,
           id: `lithos-m${i}`,
         });
@@ -592,6 +828,7 @@ function LithosScene({ data, tip, text, label, tipFor }: SceneInput & { label: s
       }
 
       // NISP chips in flight, landing in the round's cart.
+      const chipPx = L.small ? 3 : 4;
       for (let j = chips.length - 1; j >= 0; j--) {
         const ch = chips[j]!;
         const cart = carts.get(ch.to);
@@ -607,12 +844,91 @@ function LithosScene({ data, tip, text, label, tipFor }: SceneInput & { label: s
         const x = ch.x0 + (x1 - ch.x0) * u;
         const y = ch.y0 + (y1 - ch.y0) * u - 30 * 4 * u * (1 - u);
         ctx.fillStyle = ink.gold;
-        ctx.fillRect(x - 1.8, y - 1.8, 3.6, 3.6);
+        ctx.fillRect(x - chipPx / 2, y - chipPx / 2, chipPx, chipPx);
+      }
+
+      // The find: the gem glints in the seam, falls into the new round's cart, the cart takes it,
+      // sparks fly, the Lithos mark rises over the cart and the miners hop.
+      if (finding && hash) {
+        const cart = carts.get(findH) ?? targetCart;
+        const gu = L.small ? 1.5 : 2;
+        // The gem is the one that hung under the seam: it fills with gold and drops.
+        const g = ghostAt(L);
+        const sx = g.x;
+        const sy = g.y;
+        const tx = cart?.x ?? L.collect.a + L.cartHw;
+        const ty = L.ground - 4 - L.cartBody - 4;
+        if (findT < GEM_GLINT) {
+          const gl = findT / GEM_GLINT;
+          ctx.fillStyle = GOLD_HI;
+          const r = 3 + gl * 10;
+          ctx.globalAlpha = 1 - gl * 0.6;
+          ctx.fillRect(sx - r, sy, 2, 1);
+          ctx.fillRect(sx + r - 1, sy, 2, 1);
+          ctx.fillRect(sx, sy - r, 1, 2);
+          ctx.fillRect(sx, sy + r - 1, 1, 2);
+          ctx.globalAlpha = 1;
+          gemOutline(ctx, ink.gold, sx, sy, gu);
+          ctx.globalAlpha = gl;
+          drawGem(ctx, ink, sx, sy, gu);
+          ctx.globalAlpha = 1;
+        } else if (findT < GEM_LAND) {
+          const u = (findT - GEM_GLINT) / GEM_FALL;
+          const ex = 1 - (1 - u) ** 2;
+          const x = sx + (tx - sx) * ex;
+          const y = sy + (ty - sy) * u * u;
+          for (let t = 1; t <= 3; t++) {
+            const v = Math.max(0, u - t * 0.05);
+            ctx.globalAlpha = 0.5 - t * 0.13;
+            ctx.fillStyle = ink.gold;
+            ctx.fillRect(sx + (tx - sx) * (1 - (1 - v) ** 2) - 1, sy + (ty - sy) * v * v - 1, 2, 2);
+          }
+          ctx.globalAlpha = 1;
+          drawGem(ctx, ink, x, y, gu);
+        } else {
+          if (!landed) {
+            landed = true;
+            if (cart) cart.bumpAt = now;
+          }
+          const t2 = findT - GEM_LAND;
+          const su = Math.min(1, t2 / 760);
+          if (su < 1) {
+            // Sparks fly out of the cart.
+            const sp = gu + 2;
+            for (let i = 0; i < 12; i++) {
+              const a = (i / 12) * Math.PI * 2 + 0.26;
+              const d = 6 + easeOut(su) * (L.small ? 24 : 38) * (i % 2 ? 0.75 : 1);
+              ctx.globalAlpha = 1 - su * su;
+              ctx.fillStyle = i % 3 === 0 ? ink.gold : GOLD_HI;
+              ctx.fillRect(Math.round(tx + Math.cos(a) * d), Math.round(ty - 6 + Math.sin(a) * d * 0.7), sp, sp);
+            }
+            ctx.globalAlpha = 1;
+          }
+          // The gem stays on the round's ore, the find it brought.
+          ctx.globalAlpha = Math.min(1, Math.max(0, (FIND_MS - GEM_LAND - t2) / 420));
+          drawGem(ctx, ink, tx, ty - 3 * gu + 2, gu);
+          ctx.globalAlpha = 1;
+          if (markOk) {
+            // The Lithos mark rises over the round, above any label stacked over this cart.
+            const size = L.small ? 20 : 28;
+            const grow = easeOut(t2 / 240);
+            const fade = Math.min(1, Math.max(0, (FIND_MS - GEM_LAND - t2) / 420));
+            const s = size * grow;
+            let top = L.ground - 4 - L.cartBody - 12;
+            for (const lb of placed) {
+              if (Math.abs(lb.x - tx) < lb.w / 2 + size / 2 + 4) top = Math.min(top, lb.y - lb.lift - lb.h - 4);
+            }
+            const y = Math.max(L.seam.y + L.seam.h + 4, top - 6 - s - 4 * grow);
+            ctx.globalAlpha = fade;
+            ctx.drawImage(mark, tx - s / 2, y, s, s);
+            ctx.globalAlpha = 1;
+          }
+        }
       }
       hitsRef.current = hits;
 
       const knocking = miners.some((_, i) => now - (knockAt[i] ?? -1e9) < KNOCK_MS);
-      const active = busy || moving || chips.length > 0 || knocking || now - coinPopAt < 450;
+      const active = busy || moving || chips.length > 0 || knocking || now - coinPopAt < 450 || (stoneU >= 0 && stoneU < 1) || finding;
       if (active) settleUntil = now + 500;
       if (visible && (active || now < settleUntil)) raf = requestAnimationFrame(paint);
     };
@@ -705,6 +1021,9 @@ function Fact({ children, ev, hint, className }: { children: ReactNode; ev: "dec
   );
 }
 
+/** The tile's tag in the Lithos mark's violet, black ink (≈ 8.6 : 1), like the other home tiles. */
+const LITHOS_TAG = { "--tag": "var(--k-nft, #c19fe9)", "--tag-ink": "#0e0e0e", "--mark": "var(--k-nft, #c19fe9)" } as CSSProperties;
+
 export function HomeLithos({ data, tipHeight, enter = 0 }: { data: LithosHome | null; tipHeight: number | null; enter?: number }) {
   const { t, tn, locale } = useI18n();
   const now = useNow(60_000);
@@ -713,14 +1032,16 @@ export function HomeLithos({ data, tipHeight, enter = 0 }: { data: LithosHome | 
   const days = hash ? formatWindowDays(hash.to - hash.from, locale) : "";
   const share = hash && hash.netN > 0 ? formatShare((hash.n / hash.netN) * 100, locale) : null;
   const tip = tipHeight ?? data?.tip.height ?? null;
+  // Mean time between Lithos finds over the window. Finds are random: an average, not a countdown.
+  const meanFind = hash && hash.n >= 2 && hash.to > hash.from ? (hash.to - hash.from) / hash.n : null;
 
   const text = useMemo<SceneText>(
     () => ({
-      collect: t("homeLithos.stageCollect"),
-      collectShort: t("homeLithos.stageCollectShort"),
-      check: t("homeLithos.stageCheck"),
-      checkShort: t("lithosH.stageCheckShort"),
+      collect: t("homeLithos.stageCollectShort"),
+      check: t("lithosH.stageCheckShort"),
       pay: t("lithosH.stagePay"),
+      period: tn("lithosH.hashBlocks", LITHOS_HOLDING_PERIOD, formatInt(LITHOS_HOLDING_PERIOD, locale)),
+      next: meanFind != null ? t("homeLithos.next").replace("{t}", formatSpan(meanFind, locale, true)) : null,
       round: (c, small) => [
         formatInt(c.h, locale),
         small
@@ -730,11 +1051,43 @@ export function HomeLithos({ data, tipHeight, enter = 0 }: { data: LithosHome | 
       checkLeft: (c) => t("lithosH.toPayoutShort").replace("{list}", formatInt(c.left, locale)),
       payout: data ? `${formatInt(data.payoutN, locale)} · ${ergText(data.payoutNano, locale)} ERG` : "",
     }),
-    [t, locale, data]
+    [t, tn, locale, data, meanFind]
   );
+
+  const seamHint =
+    hash && data?.seam
+      ? t(data.seam.approx ? "homeLithos.seamHintApprox" : "homeLithos.seamHint")
+          .replace("{n}", formatInt(hash.n, locale))
+          .replace("{net}", formatInt(hash.netN, locale))
+          .replace("{days}", days)
+      : null;
 
   const tipFor = (hit: Hit): ReactNode => {
     if (!data) return null;
+    if (hit.kind === "next") {
+      if (!hash || meanFind == null) return null;
+      return (
+        <>
+          <TipHead chip={t("trust.evidence.heuristic.short")} ink="var(--k-rent, #d99b2b)">
+            {text.next}
+          </TipHead>
+          <p className="m-0 max-w-[280px] text-[12px] leading-[1.35] text-[var(--muted)]">
+            {t("homeLithos.nextTip").replace("{days}", days).replace("{n}", formatInt(hash.n, locale))}
+          </p>
+        </>
+      );
+    }
+    if (hit.kind === "seam") {
+      if (!hash || !seamHint) return null;
+      return (
+        <>
+          <TipHead chip={t("homeLithos.seamChip")} ink="var(--c-block)">
+            {t("homeLithos.seamLithos").replace("{n}", formatInt(hash.n, locale)).replace("{share}", share ?? "—")}
+          </TipHead>
+          <p className="m-0 max-w-[280px] text-[12px] leading-[1.35] text-[var(--muted)]">{seamHint}</p>
+        </>
+      );
+    }
     if (hit.kind === "pay") {
       return (
         <>
@@ -785,8 +1138,6 @@ export function HomeLithos({ data, tipHeight, enter = 0 }: { data: LithosHome | 
     );
   };
 
-  const seam = data?.seam ?? null;
-  const span = hash ? Math.max(1, (hash.to - hash.from) / 60_000) : 1;
   const lastAgo = data?.last ? formatSpan(Math.max(0, now - data.last.ts), locale) : null;
 
   return (
@@ -799,6 +1150,7 @@ export function HomeLithos({ data, tipHeight, enter = 0 }: { data: LithosHome | 
         href="/lithos"
         aria-label={t("homeLithos.aria")}
         className="mod group flex h-full min-h-0 flex-col rounded-[20px] border border-[var(--border)] bg-[var(--module)] px-4 py-3 text-[var(--text)] no-underline sm:px-5"
+        style={LITHOS_TAG}
       >
         <div className="flex h-[22px] shrink-0 items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
@@ -823,57 +1175,25 @@ export function HomeLithos({ data, tipHeight, enter = 0 }: { data: LithosHome | 
           ) : null}
         </div>
 
-        {hash && seam ? (
-          <Tip
-            content={t(seam.approx ? "homeLithos.seamHintApprox" : "homeLithos.seamHint")
-              .replace("{n}", formatInt(hash.n, locale))
-              .replace("{net}", formatInt(hash.netN, locale))
-              .replace("{days}", days)}
-          >
-            <div className="mt-2.5 shrink-0">
-              <svg
-                className="block h-[10px] w-full overflow-visible"
-                viewBox="0 0 1000 10"
-                preserveAspectRatio="none"
-                aria-hidden
-              >
-                <rect x="0" y="2" width="1000" height="6" rx="3" fill="var(--wash-mid)" />
-                {seam.at.map((m, i) => {
-                  const x = Math.min(999, Math.max(1, (m / span) * 1000));
-                  return (
-                    <line
-                      key={`${m}-${i}`}
-                      x1={x}
-                      x2={x}
-                      y1="0"
-                      y2="10"
-                      stroke="var(--c-block, #ebcb71)"
-                      strokeWidth="2"
-                      vectorEffect="non-scaling-stroke"
-                    />
-                  );
-                })}
-              </svg>
-              <div className="mt-1 flex items-center justify-between gap-2 font-mono text-[10.5px] leading-none text-[var(--muted-2)]">
-                <span className="truncate">
-                  {tn("homeLithos.seamNet", hash.netN, formatInt(hash.netN, locale)).replace("{days}", days)}
-                </span>
-                <span className="inline-flex shrink-0 items-center gap-1.5 text-[var(--c-block,#ebcb71)]">
+        {hash ? (
+          <div className="mt-2.5 flex shrink-0 items-center justify-between gap-2 font-mono text-[10.5px] leading-none text-[var(--muted-2)]">
+            <span className="truncate">
+              {tn("homeLithos.seamNet", hash.netN, formatInt(hash.netN, locale)).replace("{days}", days)}
+            </span>
+            <span className="inline-flex shrink-0 items-center gap-2">
+              <Tip content={seamHint ?? undefined}>
+                <span className="inline-flex items-center gap-1.5 text-[var(--c-block,#ebcb71)]">
                   {t("homeLithos.seamLithos").replace("{n}", formatInt(hash.n, locale)).replace("{share}", share ?? "—")}
                   <EvidenceDot kind="decoded" />
                 </span>
-              </div>
-            </div>
-          </Tip>
+              </Tip>
+              <EvidenceBadge kind="decoded" compact className="max-sm:hidden" />
+            </span>
+          </div>
         ) : null}
 
-        <div className="relative mt-2 h-[192px] min-h-0 shrink-0 lg:h-auto lg:min-h-[180px] lg:flex-1">
+        <div className="relative mt-1 h-[214px] min-h-0 shrink-0 lg:h-auto lg:min-h-[200px] lg:flex-1">
           <LithosScene data={data} tip={tip} text={text} label={t("homeLithos.aria")} tipFor={tipFor} />
-          {data ? (
-            <span className="pointer-events-none absolute right-0 top-0">
-              <EvidenceBadge kind="decoded" compact />
-            </span>
-          ) : null}
         </div>
 
         <div className="mt-2 flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 text-[12px] leading-[1.25] text-[var(--muted)]">
