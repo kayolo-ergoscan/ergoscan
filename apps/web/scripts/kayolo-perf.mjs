@@ -366,15 +366,21 @@ async function bodyPoints(base, path) {
  */
 async function tabOrder(base, path, vpName = "1771x891@1.5") {
   const b = await browser();
+  // A keyDown without text is a raw key down in CDP: a button only activates on Enter with "\r".
   const key = async (k, code, vk, mods = 0) => {
-    await b.send("Input.dispatchKeyEvent", { type: "keyDown", key: k, code, windowsVirtualKeyCode: vk, modifiers: mods });
+    const text = k === "Enter" ? { text: "\r", unmodifiedText: "\r" } : {};
+    await b.send("Input.dispatchKeyEvent", { type: "keyDown", key: k, code, windowsVirtualKeyCode: vk, modifiers: mods, ...text });
     await b.send("Input.dispatchKeyEvent", { type: "keyUp", key: k, code, windowsVirtualKeyCode: vk, modifiers: mods });
     await sleep(250);
   };
   try {
     const vp = parseVp(vpName);
     await openPage(b, base, path, vp, false);
-    await sleep(4000);
+    // A first visit takes the tour; a press while he is away calls him home (§4.4), not the
+    // panel. Wait until he holds his own window again.
+    const homeBy = Date.now() + 45000;
+    await sleep(2000);
+    while (Date.now() < homeBy && !(await b.evaluate(`!!window.__kayolo?.()?.hold`))) await sleep(500);
     const name = `(() => { const el = document.activeElement; if (!el) return "-"; if (el.closest(".kayolo-panel")) return "panel"; if (el.closest(".kayolo-slot")) return "kayolo"; if (el.closest('[data-scout="search"]')) return "search"; if (el.querySelector && el.querySelector('[data-scout="price"]')) return "price"; return (el.tagName + " " + (el.getAttribute("aria-label") || el.textContent || "").trim().slice(0, 30)); })()`;
     await b.evaluate(`(() => { const s = [...document.querySelectorAll('[data-scout="search"]')].find((el) => el.getBoundingClientRect().width > 2); s?.focus(); return !!s; })()`);
     const seen = [await b.evaluate(name)];
