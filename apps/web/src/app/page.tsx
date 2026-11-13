@@ -11,7 +11,8 @@ import type { RentTapeRow } from "@ergoscan/shared";
 
 export const dynamic = "force-dynamic";
 
-const CADENCE = 8;
+/** The home street keeps 10 blocks (HomeExplorer CADENCE); the snapshot has them all, so none pops in after mount. */
+const CADENCE = 10;
 
 /** Local `/?preview=share` only — stage has no miner snapshot yet. */
 const SHARE_PREVIEW: PoolShare[] = [

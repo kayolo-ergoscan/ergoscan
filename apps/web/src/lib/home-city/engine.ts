@@ -10,7 +10,7 @@ import { readInks, sealPlan, type CityBlock, type Fees, type Frame, type Inks, t
 import { cityGeo, cityTarget, citySiteRest, drawCity, type CityHit, type KayoloCue } from "./city";
 import { KAYOLO_ID, drawKayolo, kayoloScale } from "./kayolo";
 import { momentPlays, sealMatch, sealStoreys, sealTargets, sealYard, waitingShown } from "./moment";
-import { cableAt, drawCrateFlight, drawYard, drawYardCable, yardCable, yardRest, type YardHit, type YardText } from "./yard";
+import { cableAt, drawCrateFlight, drawYard, drawYardCable, flightSize, yardCable, yardRest, type YardHit, type YardText } from "./yard";
 
 /** No new block for this long: the chain or the node is behind, he dozes. Ergo aims at 2 min. */
 export const STALE_MS = 8 * 60_000;
@@ -60,6 +60,8 @@ export type EngineCallbacks = {
   onWaiting: (n: number | null) => void;
   /** The newest height the street shows. */
   onCommit: (height: number | null) => void;
+  /** The count on the wrapped pallet as drawn at rest (0 when there is none). */
+  onWrap?: (n: number) => void;
 };
 
 type Moment = {
@@ -72,6 +74,16 @@ type Moment = {
   /** The street before the new block. */
   street: CityBlock[];
   end: number;
+  /** Built once per data change, not per frame: the scene the yard and the street stand in, the
+   * new tower with its storeys, the crates by id and the ids still in the stream. */
+  memFor?: Scene;
+  memScene?: Scene;
+  blockFor?: CityBlock | null;
+  block?: CityBlock;
+  kinds?: string[];
+  byId: Map<string, YardTx>;
+  streamFor?: readonly YardTx[];
+  inStream?: Set<string>;
 };
 
 type Canvas = { el: HTMLCanvasElement; ctx: CanvasRenderingContext2D; w: number; h: number };
@@ -104,6 +116,7 @@ export class CityEngine {
   private rare: { height: number; at: number; start: number | null } | null = null;
   private timers: number[] = [];
   private holdTimer = 0;
+  private rareTimer = 0;
   private staleTimer = 0;
   private blinkTail = 0;
   private gone = new Map<string, { tx: YardTx; at: number }>();
@@ -112,6 +125,10 @@ export class CityEngine {
   private stops: (() => void)[] = [];
   private lastBuilt = -2;
   private lastWaiting: number | null = -1;
+  private lastWrap = -1;
+  private fed = false;
+  private dead = false;
+  private warned = false;
 
   constructor(o: { city: HTMLCanvasElement; yard: HTMLCanvasElement; fly: HTMLCanvasElement; host: HTMLElement; reduce: boolean; text: YardText & { tag: (n: number) => string }; cb: EngineCallbacks }) {
     const c2 = (el: HTMLCanvasElement): Canvas => ({ el, ctx: el.getContext("2d")!, w: 0, h: 0 });
@@ -126,6 +143,7 @@ export class CityEngine {
     if (typeof Image !== "undefined") {
       const img = new Image();
       img.onload = () => {
+        if (this.dead) return;
         this.markOk = true;
         this.kick();
       };
@@ -169,13 +187,20 @@ export class CityEngine {
   }
 
   destroy() {
+    this.dead = true;
+    this.on = false;
     if (this.raf) cancelAnimationFrame(this.raf);
     this.raf = 0;
     for (const s of this.stops) s();
+    this.stops = [];
     for (const t of this.timers) window.clearTimeout(t);
+    this.timers = [];
     window.clearTimeout(this.holdTimer);
+    window.clearTimeout(this.rareTimer);
     window.clearTimeout(this.staleTimer);
     window.clearTimeout(this.blinkTail);
+    if (this.mark) this.mark.onload = null;
+    this.moment = null;
   }
 
   setReduce(reduce: boolean) {
@@ -197,7 +222,32 @@ export class CityEngine {
     this.kick(true);
   }
 
+  /** The same street, yard and levels as now (a parent re-render, a chart scrub): nothing to draw. */
+  private same(d: EngineData): boolean {
+    const a = this.data;
+    if (a.streamLive !== d.streamLive || a.avgBlockMs !== d.avgBlockMs || a.mem.count !== d.mem.count) return false;
+    if ((a.fees?.normal ?? null) !== (d.fees?.normal ?? null) || (a.fees?.turbo ?? null) !== (d.fees?.turbo ?? null)) return false;
+    if (a.blocks.length !== d.blocks.length || a.mem.txs.length !== d.mem.txs.length) return false;
+    for (let i = 0; i < d.blocks.length; i++) {
+      const x = a.blocks[i]!;
+      const y = d.blocks[i]!;
+      if (x === y) continue;
+      if (x.id !== y.id || x.height !== y.height || x.ts !== y.ts || x.txCount !== y.txCount || x.size !== y.size) return false;
+      if (x.flag !== y.flag || x.lithos !== y.lithos || x.txs !== y.txs) return false;
+    }
+    for (let i = 0; i < d.mem.txs.length; i++) {
+      const x = a.mem.txs[i]!;
+      const y = d.mem.txs[i]!;
+      if (x === y) continue;
+      if (x.id !== y.id || x.size !== y.size || x.fee !== y.fee || x.feeRate !== y.feeRate || x.color !== y.color || x.category !== y.category || x.firstSeen !== y.firstSeen) return false;
+    }
+    return true;
+  }
+
   setData(d: EngineData) {
+    if (this.dead) return;
+    if (this.fed && this.same(d)) return;
+    this.fed = true;
     const prevTop = this.data.blocks[0]?.height ?? null;
     // Txs that just left the yard, kept a while: a seal in the same update takes them from here.
     const at = performance.now();
@@ -210,19 +260,7 @@ export class CityEngine {
     if (this.committed == null && top != null) {
       this.committed = top;
       this.cb.onCommit(top);
-    } else if (top != null && this.committed != null && top > this.committed && top !== prevTop) {
-      // A new block without its seal so far: wait for the seal's list, but never longer than 8 s. An old
-      // block (the tab was away, the stream missed its seal) has no seal coming: it just stands.
-      const recent = Date.now() - (d.blocks[0]?.ts ?? 0) < SEAL_LIST_WAIT_MS * 4;
-      if (!d.streamLive || this.reduce || !this.on || !recent) this.commit(top);
-      else if (!this.moment) {
-        window.clearTimeout(this.holdTimer);
-        this.holdTimer = window.setTimeout(() => {
-          const t = this.data.blocks[0]?.height ?? null;
-          if (t != null && !this.moment && (this.committed == null || t > this.committed)) this.commit(t);
-        }, SEAL_LIST_WAIT_MS);
-      }
-    }
+    } else if (top != null && this.committed != null && top > this.committed && top !== prevTop) this.holdNewer();
     // New crates are lowered in (only real arrivals: not the first load, not a burst).
     const now = performance.now();
     const fresh: string[] = [];
@@ -234,8 +272,29 @@ export class CityEngine {
     this.kick(true);
   }
 
+  /**
+   * A block above the street that came without its seal so far: it waits for the seal's list, but
+   * never longer than 8 s. An old block (the tab was away, the stream missed its seal) has no seal
+   * coming: it just stands. During a moment it waits for the moment's end (finishMoment asks again).
+   */
+  private holdNewer() {
+    const top = this.data.blocks[0]?.height ?? null;
+    if (top == null || this.committed == null || top <= this.committed || this.moment) return;
+    const recent = Date.now() - (this.data.blocks[0]?.ts ?? 0) < SEAL_LIST_WAIT_MS * 4;
+    if (!this.data.streamLive || this.reduce || !this.on || !recent) {
+      this.commit(top);
+      return;
+    }
+    window.clearTimeout(this.holdTimer);
+    this.holdTimer = window.setTimeout(() => {
+      const t = this.data.blocks[0]?.height ?? null;
+      if (t != null && !this.moment && (this.committed == null || t > this.committed)) this.commit(t);
+    }, SEAL_LIST_WAIT_MS);
+  }
+
   /** `block.sealed`: play the moment if it can be seen, else just show the new street. */
   seal(s: SealIn) {
+    if (this.dead) return;
     const key = `${s.height}:${s.blockId}`;
     if (this.sealKeys.has(key)) return;
     this.sealKeys.add(key);
@@ -263,6 +322,7 @@ export class CityEngine {
       memBefore,
       street,
       end: sealPlan(ids.length).end,
+      byId: new Map(memBefore.txs.map((t) => [t.id, t])),
     };
     this.adds.clear();
     this.lastBuilt = -2;
@@ -272,15 +332,20 @@ export class CityEngine {
 
   /** Kayolo E20: a rare height was announced. */
   rareHeight(height: number) {
-    if (this.reduce || !this.on) return;
+    if (this.dead || this.reduce || !this.on) return;
     this.rare = { height, at: performance.now(), start: null };
     // The rare tower may not stand yet: the beat starts when it does (a data change), or after 4 s.
-    this.later(RARE_WAIT_MS + 20, () => this.kick());
+    window.clearTimeout(this.rareTimer);
+    this.rareTimer = window.setTimeout(() => this.kick(), RARE_WAIT_MS + 20);
     this.kick(true);
   }
 
   private later(ms: number, fn: () => void) {
-    this.timers.push(window.setTimeout(fn, ms));
+    const id = window.setTimeout(() => {
+      this.timers = this.timers.filter((t) => t !== id);
+      if (!this.dead) fn();
+    }, ms);
+    this.timers.push(id);
   }
 
   private commit(height: number) {
@@ -309,6 +374,8 @@ export class CityEngine {
       this.rects = null;
       this.fly.h = 0;
     }
+    // A newer block that came during the moment without its own seal: its hold starts now.
+    this.holdNewer();
   }
 
   /** Sleepy once the newest block is 8 min old: one frame then, no clock running. */
@@ -322,6 +389,7 @@ export class CityEngine {
 
   /** Ask for one frame (and its face settling after a change). */
   kick(settle = false) {
+    if (this.dead) return;
     if (settle) this.settleUntil = Math.max(this.settleUntil, performance.now() + SETTLE_MS);
     if (!this.on || this.raf) return;
     this.raf = requestAnimationFrame((t) => this.paint(t));
@@ -355,35 +423,87 @@ export class CityEngine {
   }
 
   private paint(now: number): void {
+    // One chain only: a kick made while this frame runs (a commit at a moment's end) is folded in.
+    if (this.raf) cancelAnimationFrame(this.raf);
     this.raf = 0;
-    if (!this.on) return;
+    if (this.dead || !this.on) return;
+    try {
+      this.frameAt(now);
+    } catch (e) {
+      // One bad frame must not take the home page with it: drop what moves, keep the last picture.
+      if (!this.warned) {
+        this.warned = true;
+        console.warn("[home-city] frame", e);
+      }
+      if (this.raf) cancelAnimationFrame(this.raf);
+      this.raf = 0;
+      this.abandon();
+    }
+  }
+
+  /** After a failed frame: no moment, no crates in the air, the street as the data has it. */
+  private abandon() {
+    const m = this.moment;
+    this.moment = null;
+    this.adds.clear();
+    this.rare = null;
+    this.settleUntil = 0;
+    try {
+      if (m) {
+        const h = Math.max(m.seal.height, this.committed ?? m.seal.height);
+        if (this.committed == null || h > this.committed) {
+          this.committed = h;
+          this.scene = null;
+          this.cb.onCommit(h);
+        }
+        this.cb.onBuilt(null);
+        this.cb.onWaiting(null);
+      }
+      this.fly.el.width = 0;
+      this.fly.el.height = 0;
+      this.fly.w = 0;
+      this.fly.h = 0;
+    } catch {
+      /* nothing more to drop */
+    }
+  }
+
+  private frameAt(now: number): void {
+    const m0 = this.moment;
+    if (m0 && now - m0.t0 >= m0.end) this.finishMoment();
     const m = this.moment;
     const ms = m ? now - m.t0 : 0;
-    if (m && ms >= m.end) {
-      this.finishMoment();
-      return this.paint(now);
-    }
     const base = this.sceneNow();
     // During a seal the yard holds what waited when the block came, the street what stood before it.
-    const memScene: Scene = m ? { ...base, mem: m.memBefore, blocks: m.street } : base;
-    const cityScene: Scene = m ? memScene : base;
+    let memScene: Scene = base;
     let sealBlock: CityBlock | null = null;
     let kinds: string[] = [];
     if (m) {
+      if (m.memFor !== base || !m.memScene) {
+        m.memFor = base;
+        m.memScene = { ...base, mem: m.memBefore, blocks: m.street };
+      }
+      memScene = m.memScene;
       const read = this.data.blocks.find((b) => b.id === m.seal.blockId) ?? null;
-      const st = sealStoreys(m.seal.txIds, m.memBefore.txs, read?.txs ?? null);
-      kinds = st.kinds;
-      sealBlock = {
-        id: m.seal.blockId,
-        height: m.seal.height,
-        ts: m.seal.timestamp > 1e12 ? m.seal.timestamp : m.seal.timestamp * 1000,
-        txCount: m.seal.txCount || m.seal.txIds.length,
-        size: m.seal.size || read?.size || 0,
-        flag: read?.flag ?? null,
-        lithos: read?.lithos === true,
-        txs: st.txs,
-      };
+      if (!m.block || m.blockFor !== read) {
+        m.blockFor = read;
+        const st = sealStoreys(m.seal.txIds, m.memBefore.txs, read?.txs ?? null);
+        m.kinds = st.kinds;
+        m.block = {
+          id: m.seal.blockId,
+          height: m.seal.height,
+          ts: m.seal.timestamp > 1e12 ? m.seal.timestamp : m.seal.timestamp * 1000,
+          txCount: m.seal.txCount || m.seal.txIds.length,
+          size: m.seal.size || read?.size || 0,
+          flag: read?.flag ?? null,
+          lithos: read?.lithos === true,
+          txs: st.txs,
+        };
+      }
+      sealBlock = m.block;
+      kinds = m.kinds ?? [];
     }
+    const cityScene: Scene = memScene;
     for (const [id, at] of this.adds) if (now - at > ADD_MS) this.adds.delete(id);
     const frame: Frame = {
       seal: m && sealBlock ? { ms, block: sealBlock, ids: m.ids } : null,
@@ -419,14 +539,26 @@ export class CityEngine {
     // Yard.
     if (this.size(this.yard)) {
       this.hits.yard = drawYard(this.yard.ctx, this.yard.w, this.yard.h, memScene, { ...frame, hover: this.hover.yard }, inks, this.text);
+      if (!m) {
+        let wrap = 0;
+        for (const h of this.hits.yard) if (h.id == null) wrap = h.n ?? 0;
+        if (wrap !== this.lastWrap) {
+          this.lastWrap = wrap;
+          this.cb.onWrap?.(wrap);
+        }
+      }
     }
-    if (m) {
-      const waiting = waitingShown({ streamCount: this.data.mem.count, ids: m.ids, ms, inStream: new Set(this.data.mem.txs.map((t) => t.id)) });
+    if (m && sealBlock) {
+      if (m.streamFor !== this.data.mem.txs || !m.inStream) {
+        m.streamFor = this.data.mem.txs;
+        m.inStream = new Set(this.data.mem.txs.map((t) => t.id));
+      }
+      const waiting = waitingShown({ streamCount: this.data.mem.count, ids: m.ids, ms, inStream: m.inStream });
       if (waiting !== this.lastWaiting) {
         this.lastWaiting = waiting;
         this.cb.onWaiting(waiting);
       }
-      this.paintFlights(m, ms, memScene, sealBlock!);
+      this.paintFlights(m, ms, memScene, sealBlock);
     }
     const easing = now < this.settleUntil && pixelSettling(this.city.ctx, KAYOLO_ID);
     // Under reduced motion a change gets its final frame only; if that frame caught a blink, one more
@@ -444,6 +576,8 @@ export class CityEngine {
 
   /** The cable and the crates on it, on the overlay that lives only for the seal. */
   private paintFlights(m: Moment, ms: number, memScene: Scene, block: CityBlock) {
+    // An empty block lifts nothing: no overlay at all.
+    if (!m.ids.length) return;
     if (!this.rects) this.rects = { host: this.host.getBoundingClientRect(), city: this.city.el.getBoundingClientRect(), yard: this.yard.el.getBoundingClientRect() };
     const { host: hr, city: cr, yard: yr } = this.rects;
     const fly = this.fly;
@@ -460,7 +594,6 @@ export class CityEngine {
     fly.h = h;
     fly.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     fly.ctx.clearRect(0, 0, w, h);
-    if (!m.ids.length) return;
     const box = (r: DOMRect) => ({ left: r.left - hr.left, top: r.top - hr.top, bottom: r.bottom - hr.top });
     const small = this.city.w < 420;
     const cable = yardCable(box(cr), this.city.w, box(yr), this.yard.w, small);
@@ -469,18 +602,16 @@ export class CityEngine {
     const t1 = plan.depart(m.ids.length - 1) + plan.fly;
     const a = Math.min(Math.max(0, Math.min(1, (ms - t0 + 120) / 160)), Math.max(0, Math.min(1, (t1 + 160 - ms) / 160)));
     drawYardCable(fly.ctx, cable, a, this.inks.day);
-    const byId = new Map(m.memBefore.txs.map((t) => [t.id, t]));
-    const cityScene: Scene = { ...memScene, blocks: m.street };
     m.ids.forEach((id, k) => {
       const u = (ms - plan.depart(k)) / plan.fly;
       if (u <= 0 || u >= 1) return;
-      const tx = byId.get(id);
+      const tx = m.byId.get(id);
       const from = yardRest(this.yard.w, this.yard.h, memScene, id);
       if (!tx || !from) return;
-      const to = cityTarget(this.city.w, this.city.h, cityScene, block, m.targets[k] ?? 0);
+      const to = cityTarget(this.city.w, this.city.h, memScene, block, m.targets[k] ?? 0);
       const route = cable.route({ x: yr.left - hr.left + from.x, y: yr.top - hr.top + from.y }, { x: cr.left - hr.left + to.x, y: cr.top - hr.top + to.y });
       const p = cableAt(route, u);
-      drawCrateFlight(fly.ctx, p.x, p.y, tx.color, p.rope, small, this.inks.day);
+      drawCrateFlight(fly.ctx, p.x, p.y, tx.color, p.rope, small, this.inks.day, flightSize(from.w, small, u));
     });
   }
 

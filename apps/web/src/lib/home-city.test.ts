@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { builtAt, sealPlan, storeyTimes, type CityBlock, type Fees, type Scene, type YardTx } from "./home-city/common";
 import { bodyHeight, cityGeo, drawCity, floorH, frontW, gapPx, storeysUp } from "./home-city/city";
 import { feeLevels, feeZone } from "./home-city/load";
-import { H_MAX, crateH, feeOrder, sizeIdx, yardLayout } from "./home-city/yard";
+import { H_MAX, W_MAX, crateH, feeOrder, sizeIdx, sizesFor, yardLayout, yardStack } from "./home-city/yard";
 import { momentLength, momentPlays, sealMatch, sealStoreys, sealTargets, sealYard, waitingShown } from "./home-city/moment";
 
 /* ---------- fixtures ---------- */
@@ -61,7 +61,7 @@ test("yard: nothing leaves the lot, stacks stay under the floodlight", () => {
       const { txs, count } = poolOf(n);
       const lay = yardLayout(vp.w, vp.h, scene(txs, count, txs.length ? gatewayLevels(txs.map((t) => t.feeRate)) : null));
       const left = vp.w < 420 ? 4 : 6;
-      const stack = vp.w < 420 ? 56 : 64;
+      const stack = yardStack(vp.w < 420);
       for (const c of lay.crates) {
         assert.ok(c.x >= left && c.x + c.w <= lay.right, `crate inside x (${vp.w}, ${n})`);
         assert.ok(c.y >= lay.ground - 2 - stack && c.y + c.h <= lay.ground - 2, `crate inside y (${vp.w}, ${n})`);
@@ -118,6 +118,28 @@ test("yard: the quiet chain gets big crates in low stacks, a surge smaller and h
   assert.ok(l1.level < l2.level, "a bigger pool takes a smaller level");
   assert.equal(l1.plus, null);
   assert.equal(l2.plus?.n, 400 - l2.crates.length);
+});
+
+test("yard: a quiet pool fills the lot in big crates; they shrink a pixel at a time as it grows", () => {
+  for (const vp of [DESK, PHONE]) {
+    const small = vp.w < 420;
+    let prevW = Infinity;
+    let prevLevel = -1;
+    const widths: number[] = [];
+    for (let n = 1; n <= 80; n++) {
+      const { txs } = poolOf(n);
+      const lay = yardLayout(vp.w, vp.h, scene(txs, n, gatewayLevels(txs.map((t) => t.feeRate))));
+      const W = Math.max(...lay.crates.map((c) => c.w));
+      widths.push(W);
+      assert.ok(lay.level >= prevLevel, `level never goes back as the pool grows (${vp.w}, ${n})`);
+      prevLevel = lay.level;
+      prevW = Math.min(prevW, W);
+    }
+    // Five to twenty waiting txs stand in crates at least three fifths of the biggest.
+    for (const n of [5, 12, 20]) assert.ok(widths[n - 1]! >= Math.round((small ? W_MAX.phone : W_MAX.desk) * 0.6), `big crates at ${n} (${vp.w}): ${widths[n - 1]}`);
+  }
+  assert.deepEqual(sizesFor(24), [14, 17, 20, 24]);
+  assert.deepEqual(sizesFor(7), [4, 5, 6, 7]);
 });
 
 test("yard: crate size classes and heights", () => {

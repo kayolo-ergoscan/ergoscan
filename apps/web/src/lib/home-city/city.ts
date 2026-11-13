@@ -54,7 +54,7 @@ export type CityGeo = {
 };
 
 export function frontW(size: number, small: boolean): number {
-  const lg = clamp(Math.log2(Math.max(300, size) / 300), 0, 6);
+  const lg = clamp(Math.log2(Math.max(300, Number.isFinite(size) ? size : 0) / 300), 0, 6);
   return small ? 12 + 3 * Math.round(lg) : 18 + 5 * Math.round(lg);
 }
 
@@ -102,7 +102,7 @@ export function cityGeo(w: number, h: number, blocks: readonly CityBlock[], extr
     const prev = blocks[i + 1];
     const fw = frontW(b.size, small);
     const floors = floorsOf(b);
-    const gapMs = prev ? Math.max(0, b.ts - prev.ts) : 0;
+    const gapMs = prev && Number.isFinite(b.ts - prev.ts) ? Math.max(0, b.ts - prev.ts) : 0;
     const gp = gapPx(gapMs, small);
     const x = right - d - fw;
     towers.push({ b, x, fw, d, floors, fh, gapMs, gapPx: gp });
@@ -131,7 +131,7 @@ export function cityFloorAt(g: CityGeo, b: CityBlock, k: number): { x: number; y
 function siteTower(g: CityGeo, b: CityBlock, prev: CityBlock | undefined): Tower {
   const fw = frontW(b.size, g.small);
   const d = g.small ? 5 : 8;
-  const gapMs = prev ? Math.max(0, b.ts - prev.ts) : 0;
+  const gapMs = prev && Number.isFinite(b.ts - prev.ts) ? Math.max(0, b.ts - prev.ts) : 0;
   return { b, x: Math.round(g.siteX + (g.siteW - fw - d) / 2), fw, d, floors: floorsOf(b), fh: g.fh, gapMs, gapPx: gapPx(gapMs, g.small) };
 }
 

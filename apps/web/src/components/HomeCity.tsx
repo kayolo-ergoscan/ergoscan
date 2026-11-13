@@ -7,7 +7,7 @@
  * headers, «All» links, footers, tips and links: a tower opens its block, a crate its tx, the wrap
  * and the empty lot the mempool.
  */
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { Component, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
@@ -55,16 +55,33 @@ export type CityBall = {
   value: number;
 };
 
-/** Per-block tx kinds, in block order: the `/v1/blocks/:id?limit=80` read the home made for its crate ink. */
-const READ_LIMIT = 80;
 /**
- * The seal comes from the node, the block read from the database a moment later (0.3 s seen): a
- * read made at the seal answers 404 (or no txs). The same read is asked again after these, then
- * only when the tape next changes. The first lands while the moment still plays.
+ * Per-block tx kinds, in block order: the `/v1/blocks/:id?limit=80&offset=0` read the home made for
+ * its crate ink. The gateway gives at most 50 txs (getBlockCard), so storeys past the 50th stay grey.
  */
-const READ_RETRY_MS = [1_500, 5_000, 15_000];
+const READ_LIMIT = 80;
+/** The seal comes from the node, the block read from the database 0.3–1.5 s later: the new block's
+ * first read waits this long (± half a second, so viewers do not ask in lockstep). */
+const SEAL_READ_MS = 1_500;
+/** A fresh block's read that answered 404/503 or no txs is asked again after these (± 0.5 s), then
+ * only when the tape next changes. Blocks older than READ_FRESH_MS are never retried: a database
+ * stall must not multiply the load from every open home. */
+const READ_RETRY_MS = [3_500, 10_000];
+const READ_FRESH_MS = 60_000;
 
-export function useBlockReads(blocks: readonly CityRow[]): Record<string, CityTx[]> {
+function jitter(ms: number): number {
+  return Math.max(0, Math.round(ms + (Math.random() - 0.5) * 1000));
+}
+
+function tsMs(ts: number): number {
+  return Number.isFinite(ts) && ts > 0 ? (ts > 1e12 ? ts : ts * 1000) : 0;
+}
+
+function finite(v: unknown): number {
+  return typeof v === "number" && Number.isFinite(v) ? v : 0;
+}
+
+export function useBlockReads(blocks: readonly CityRow[], sealId: string | null): Record<string, CityTx[]> {
   const [reads, setReads] = useState<Record<string, CityTx[]>>({});
   const cache = useRef<Record<string, CityTx[]>>({});
   const asked = useRef(new Set<string>());
@@ -73,15 +90,23 @@ export function useBlockReads(blocks: readonly CityRow[]): Record<string, CityTx
   const want = useRef<string[]>([]);
   const rows = useRef(blocks);
   rows.current = blocks;
+  const sealRef = useRef(sealId);
+  sealRef.current = sealId;
   const alive = useRef(true);
+  const abort = useRef<AbortController | null>(null);
   const key = blocks.map((b) => b.id).join(",");
   useEffect(() => {
     alive.current = true;
+    const ac = new AbortController();
+    abort.current = ac;
     const pending = timers.current;
+    const inFlight = asked.current;
     return () => {
       alive.current = false;
+      ac.abort();
       for (const h of pending.values()) window.clearTimeout(h);
       pending.clear();
+      inFlight.clear();
     };
   }, []);
   useEffect(() => {
@@ -101,22 +126,19 @@ export function useBlockReads(blocks: readonly CityRow[]): Record<string, CityTx
         return a.length === b.length && b.every((k) => prev[k] === next[k]) ? prev : next;
       });
     };
+    const fresh = (id: string) => id === sealRef.current || Date.now() - tsMs(rows.current.find((b) => b.id === id)?.timestamp ?? 0) < READ_FRESH_MS;
+    const wait = (id: string, ms: number) => {
+      timers.current.set(
+        id,
+        window.setTimeout(() => {
+          timers.current.delete(id);
+          if (alive.current && want.current.includes(id) && !cache.current[id] && !asked.current.has(id)) ask(id);
+        }, ms)
+      );
+    };
     const ask = (id: string) => {
       asked.current.add(id);
-      const later = () => {
-        asked.current.delete(id);
-        const n = tries.current.get(id) ?? 0;
-        if (!alive.current || n >= READ_RETRY_MS.length) return;
-        tries.current.set(id, n + 1);
-        timers.current.set(
-          id,
-          window.setTimeout(() => {
-            timers.current.delete(id);
-            if (alive.current && want.current.includes(id) && !cache.current[id] && !asked.current.has(id)) ask(id);
-          }, READ_RETRY_MS[n])
-        );
-      };
-      void fetch(`${getGateway()}/v1/blocks/${encodeURIComponent(id)}?limit=${READ_LIMIT}&offset=0`, SNAPSHOT_FETCH)
+      void fetch(`${getGateway()}/v1/blocks/${encodeURIComponent(id)}?limit=${READ_LIMIT}&offset=0`, { ...SNAPSHOT_FETCH, signal: abort.current?.signal })
         .then(async (r) => {
           if (!r.ok) throw new Error(String(r.status));
           const j = (await r.json()) as { txs?: Array<{ category?: string; color?: string }> };
@@ -131,7 +153,14 @@ export function useBlockReads(blocks: readonly CityRow[]): Record<string, CityTx
           tries.current.delete(id);
           paint();
         })
-        .catch(later);
+        .catch(() => {
+          asked.current.delete(id);
+          if (!alive.current) return;
+          const n = tries.current.get(id) ?? 0;
+          if (n >= READ_RETRY_MS.length || !fresh(id)) return;
+          tries.current.set(id, n + 1);
+          wait(id, jitter(READ_RETRY_MS[n]!));
+        });
     };
     const keep = new Set(ids);
     for (const id of Object.keys(cache.current)) if (!keep.has(id)) delete cache.current[id];
@@ -142,7 +171,14 @@ export function useBlockReads(blocks: readonly CityRow[]): Record<string, CityTx
       timers.current.delete(id);
     }
     paint();
-    for (const id of ids) if (!cache.current[id] && !asked.current.has(id) && !timers.current.has(id)) ask(id);
+    for (const id of ids) {
+      if (cache.current[id] || asked.current.has(id) || timers.current.has(id)) continue;
+      // The block just sealed is not in the database yet: its first read waits a moment.
+      if (id === sealRef.current && !tries.current.has(id)) {
+        tries.current.set(id, 0);
+        wait(id, jitter(SEAL_READ_MS));
+      } else ask(id);
+    }
   }, [key]);
   return reads;
 }
@@ -198,7 +234,7 @@ function local(el: HTMLElement, ev: { clientX: number; clientY: number }) {
   return { x: ev.clientX - r.left, y: ev.clientY - r.top, r };
 }
 
-export function HomeCityPair({
+function HomeCityPairLive({
   blocks,
   balls,
   pool,
@@ -249,7 +285,8 @@ export function HomeCityPair({
   const [waiting, setWaiting] = useState<number | null>(null);
   const [committed, setCommitted] = useState<number | null>(null);
   const [hoverBlock, setHoverBlock] = useState<string | null>(null);
-  const reads = useBlockReads(blocks);
+  const [wrapN, setWrapN] = useState(0);
+  const reads = useBlockReads(blocks, seal && typeof seal.blockId === "string" && seal.blockId.length >= 16 ? seal.blockId : null);
 
   const fees: Fees | null = useMemo(() => {
     if (streamLive && streamFees) return { normal: streamFees.normal, turbo: streamFees.turbo };
@@ -259,20 +296,32 @@ export function HomeCityPair({
 
   const cityBlocks: CityBlock[] = useMemo(
     () =>
-      blocks.map((b) => ({
-        id: b.id,
-        height: b.height,
-        ts: b.timestamp > 1e12 ? b.timestamp : b.timestamp * 1000,
-        txCount: b.txCount ?? reads[b.id]?.length ?? 0,
-        size: b.size,
-        flag: b.minerAddress ? (poolInk[b.minerAddress] ?? null) : null,
-        lithos: b.lithos === true,
-        txs: reads[b.id] ?? null,
-      })),
+      // A missing number from the tape must not turn a tower (and every one left of it) into NaN.
+      blocks
+        .filter((b) => Number.isFinite(b.height))
+        .map((b) => ({
+          id: b.id,
+          height: b.height,
+          ts: tsMs(b.timestamp),
+          txCount: Number.isFinite(b.txCount) ? Math.max(0, b.txCount!) : (reads[b.id]?.length ?? 0),
+          size: Math.max(0, finite(b.size)),
+          flag: b.minerAddress ? (poolInk[b.minerAddress] ?? null) : null,
+          lithos: b.lithos === true,
+          txs: reads[b.id] ?? null,
+        })),
     [blocks, poolInk, reads]
   );
   const yardTxs: YardTx[] = useMemo(
-    () => balls.map((b) => ({ id: b.id, size: b.size, fee: b.fee, feeRate: b.feeRate, color: b.color, category: b.category, firstSeen: b.firstSeen })),
+    () =>
+      balls.map((b) => ({
+        id: b.id,
+        size: Math.max(0, finite(b.size)),
+        fee: Math.max(0, finite(b.fee)),
+        feeRate: Math.max(0, finite(b.feeRate)),
+        color: b.color,
+        category: b.category,
+        firstSeen: finite(b.firstSeen),
+      })),
     [balls]
   );
   const text = useMemo(
@@ -300,7 +349,7 @@ export function HomeCityPair({
       host,
       reduce,
       text: textRef.current,
-      cb: { onBuilt: setBuilt, onWaiting: setWaiting, onCommit: setCommitted },
+      cb: { onBuilt: setBuilt, onWaiting: setWaiting, onCommit: setCommitted, onWrap: setWrapN },
     });
     engineRef.current = e;
     const offRare = onKayolo((ev) => {
@@ -427,7 +476,6 @@ export function HomeCityPair({
           .filter(Boolean)
           .join(" · ") || t("mempool.kpiWaitSub");
   const ballById = useMemo(() => new Map(balls.map((b) => [b.id, b])), [balls]);
-  const moreN = Math.max(0, pool - balls.length);
 
   const crateTip = (id: string | null, n = 0): ReactNode => {
     if (id == null) return t("home.yardMore").replace("{n}", n.toLocaleString(loc));
@@ -506,8 +554,9 @@ export function HomeCityPair({
       .replace("{t}", turbo.toLocaleString(loc))
       .replace("{m}", normal.toLocaleString(loc))
       .replace("{b}", below.toLocaleString(loc));
-    return moreN > 0 ? `${base}; ${levels}; ${t("home.yardMore").replace("{n}", moreN.toLocaleString(loc))}` : `${base}; ${levels}`;
-  }, [balls, fees, loc, moreN, pool, t]);
+    // The wrap's count as drawn on it.
+    return wrapN > 0 ? `${base}; ${levels}; ${t("home.yardMore").replace("{n}", wrapN.toLocaleString(loc))}` : `${base}; ${levels}`;
+  }, [balls, fees, loc, pool, t, wrapN]);
 
   return (
     <div ref={hostRef} className="relative">
@@ -672,3 +721,52 @@ export function HomeCityPair({
 
 /** Both canvases: the old track (52) and its head room (64). */
 const CITY_H = 116;
+
+type PairProps = Parameters<typeof HomeCityPairLive>[0];
+
+/** One throw in the scene must never take the home page with it: the cards stay, without their pictures. */
+class CityGuard extends Component<{ children: ReactNode; fallback: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  componentDidCatch(e: unknown) {
+    console.warn("[home-city]", e);
+  }
+  render() {
+    return this.state.failed ? this.props.fallback : this.props.children;
+  }
+}
+
+/** The two cards as plain frames: titles, «All» links, the same height. */
+function StaticPair({ title, mempoolTitle, all }: { title: string; mempoolTitle: string; all: string }) {
+  const cards: [string, string][] = [
+    [title, "/blocks"],
+    [mempoolTitle, "/mempool"],
+  ];
+  return (
+    <div className="grid grid-cols-1 items-stretch gap-2 lg:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]">
+      {cards.map(([name, href]) => (
+        <section key={href} className="mod h-full min-w-0 rounded-[20px] border border-[var(--border)] bg-[var(--module)] px-4 py-3 sm:px-5">
+          <div className="mb-2 flex h-[22px] items-center justify-between gap-3">
+            <h2 className="m-0 shrink-0 text-[13px] leading-none" style={{ color: HOME.forming }}>
+              {name}
+            </h2>
+            <Link prefetch={false} href={href} className="tap-44 shrink-0 text-[13px] leading-none text-[var(--muted)] hover:text-[var(--text)]">
+              {all}
+            </Link>
+          </div>
+          <div style={{ height: CITY_H }} />
+        </section>
+      ))}
+    </div>
+  );
+}
+
+export function HomeCityPair(props: PairProps) {
+  return (
+    <CityGuard fallback={<StaticPair title={props.title} mempoolTitle={props.mempoolTitle} all={props.all} />}>
+      <HomeCityPairLive {...props} />
+    </CityGuard>
+  );
+}

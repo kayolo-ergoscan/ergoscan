@@ -470,7 +470,7 @@ export const en: Record<string, string> = {
   "home.cityLabel": "Live blocks as a night street: newest block {h}, {tx} tx. A tower is a block, a storey a transaction; older blocks stand to the left.",
   "home.yardLabel": "Mempool as a yard: {n} tx waiting, highest fee on the left",
   "home.yardLevels": "Turbo {t}, Normal {m}, below Normal {b}",
-  "home.yardMore": "Waiting, not drawn one by one: {n} tx. The full list is under View all.",
+  "home.yardMore": "{n} more tx in the mempool, not drawn one by one. The full list is under View all.",
   "footer.explorer": "Ergo explorer",
   "ux.breadcrumb": "Breadcrumb",
   "ux.scope.window": "Indexed",

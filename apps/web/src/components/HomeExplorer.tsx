@@ -132,6 +132,8 @@ function formatFeeAxis(v: number): string {
 }
 /** Blocks on the street: all the home snapshot gives (10); the tape keeps one more from a seal. */
 const CADENCE = 10;
+/** No pools yet: one array, so the city's roof-flag memo does not change on every render. */
+const NO_POOLS: PoolShare[] = [];
 const PRICE_UP = "#3dd68c";
 const PRICE_DOWN = "#ff5a6a";
 
@@ -522,7 +524,7 @@ export function HomeExplorer({
         : t("home.mcapNeedCirc");
   const vol24 = market?.volume24h ?? chartVol;
 
-  const pools = stats?.pools ?? [];
+  const pools = stats?.pools ?? NO_POOLS;
   const lead = pools[0] ?? null;
   const shareSlices = pools.map((p) => ({
     label: !p.address && p.name === "other" ? t("home.shareOther") : p.name,
@@ -1348,20 +1350,25 @@ function useHomeMempool(initialCount: number) {
   }, [stream.streamLive]);
 
   const live = stream.streamLive && stream.mempoolCount != null;
-  const balls = live
-    ? stream.balls.map((b) => ({
-        id: b.id,
-        size: b.size,
-        fee: b.fee,
-        feeRate: b.feeRate > 0 ? b.feeRate : b.size > 0 ? b.fee / b.size : 0,
-        color: b.color || HOME.txs,
-        firstSeen: b.firstSeen,
-        category: b.category,
-        platform: b.platform,
-        action: b.action ?? null,
-        value: b.value,
-      }))
-    : httpBalls;
+  // One array per stream update, not per render: the yard's memos (and its frames) hang on it.
+  const balls = useMemo(
+    () =>
+      live
+        ? stream.balls.map((b) => ({
+            id: b.id,
+            size: b.size,
+            fee: b.fee,
+            feeRate: b.feeRate > 0 ? b.feeRate : b.size > 0 ? b.fee / b.size : 0,
+            color: b.color || HOME.txs,
+            firstSeen: b.firstSeen,
+            category: b.category,
+            platform: b.platform,
+            action: b.action ?? null,
+            value: b.value,
+          }))
+        : httpBalls,
+    [live, stream.balls, httpBalls]
+  );
   const pool = (live ? stream.mempoolCount : null) ?? httpPool ?? initialCount;
   const totalSize = (live ? stream.totalSize : null) ?? httpSize;
   const totalFees = (live ? stream.totalFees : null) ?? httpFees;

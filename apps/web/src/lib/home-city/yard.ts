@@ -7,9 +7,10 @@
  * the cheapest at the far end — and a pallet never mixes fee zones, so the ground marks «Турбо» and
  * «Норма» stay true at any load. A crate that has waited more than two average blocks is dusty.
  *
- * Load: with more txs the stacks grow (2 to 8 high) and the crates get smaller; when even the
- * tallest stacks of the smallest crates cannot hold the pool, the rest goes onto one wrapped pallet
- * with its exact count (it also holds the txs the page does not keep one by one). On a seal the crane
+ * Load: a quiet pool stands in big crates that fill the lot's height; with more txs the crates
+ * shrink a pixel at a time and the stacks grow (2 to 8 high); when even the tallest stacks of the
+ * smallest crates cannot hold the pool, the rest goes onto one wrapped pallet with its exact count
+ * (it also holds the txs the page does not keep one by one). On a seal the crane
  * lifts exactly the block's crates, in block order, along its cable into the new tower; the rest
  * close up. A new tx is lowered onto its place.
  */
@@ -18,27 +19,25 @@ import { R, clamp, easeIn, easeOut, hash01, sealPlan, shade, type Frame, type In
 import { drawPlusPallet, drawZoneMarks, feeZone, zoneSpans, type FeeZone, type ZoneSpan, type ZoneWords } from "./load";
 
 type Sizes = readonly [number, number, number, number];
-type Level = { sizes: Sizes; H: number };
+type Level = { sizes: Sizes; H: number; W: number };
 
-// Crate widths by bytes, biggest first. The yard takes the biggest crates and the lowest stacks that
-// still hold the whole pool inside the lot.
-const DESK: readonly Sizes[] = [
-  [14, 17, 20, 24],
-  [11, 13, 16, 19],
-  [9, 11, 13, 15],
-  [7, 8, 10, 12],
-  [6, 7, 8, 10],
-  [5, 6, 7, 8],
-];
-const PHONE: readonly Sizes[] = [
-  [10, 12, 14, 17],
-  [8, 10, 12, 14],
-  [7, 8, 10, 12],
-  [6, 7, 8, 10],
-  [5, 6, 7, 8],
-  [4, 5, 6, 7],
-];
+/**
+ * Crate widths by bytes for the yard's biggest crate W; the four classes keep their ratios. The yard
+ * takes the biggest W and the lowest stacks that still hold the whole pool inside the lot, stepping
+ * W down one pixel at a time, so the crates grow and shrink with the pool without jumps.
+ */
+export function sizesFor(W: number): Sizes {
+  return [Math.max(4, Math.round(W * 0.58)), Math.max(5, Math.round(W * 0.71)), Math.max(6, Math.round(W * 0.83)), W];
+}
+/** Biggest crate width: a quiet pool fills the lot's height (desktop, phone). */
+export const W_MAX = { desk: 44, phone: 38 } as const;
+/** Smallest: a surge still reads as crates. */
+export const W_MIN = { desk: 8, phone: 7 } as const;
 export const H_MAX = 8;
+/** Tallest stack, px: under the cable the crates ride on and the room a new crate drops in from. */
+export function yardStack(small: boolean): number {
+  return small ? 72 : 76;
+}
 
 export function sizeIdx(bytes: number): 0 | 1 | 2 | 3 {
   if (bytes < 300) return 0;
@@ -65,7 +64,7 @@ export type YardLayout = {
   pallets: Pallet[];
   plus: { x: number; w: number; h: number; n: number } | null;
   spans: ZoneSpan[];
-  /** Index of the crate sizes × 16 + stack height. */
+  /** How far the crates shrank from the biggest (px) × 16 + stack height: grows with the pool. */
   level: number;
   ground: number;
   /** Rightmost pixel anything may use (the floodlight mast stands beyond it). */
@@ -79,7 +78,7 @@ function ygeo(w: number, h: number): YGeo {
   const small = w < 420;
   // The ground sits on the city's street line, so the yard reads as the next lot along the street;
   // a stack stays well under the floodlight's head.
-  return { small, ground: h - 12, left: small ? 4 : 6, right: w - (small ? 12 : 16), stack: small ? 56 : 64 };
+  return { small, ground: h - 12, left: small ? 4 : 6, right: w - (small ? 12 : 16), stack: Math.min(yardStack(small), h - 40) };
 }
 
 /** Fee order: the best payers first; equal rates by arrival, then id, so the order never flickers. */
@@ -125,27 +124,27 @@ function layoutYard(w: number, h: number, scene: Scene, without?: ReadonlySet<st
   // Tallest stack a level could build: its H biggest crates on one pallet.
   const heights = (sizes: Sizes) => txs.map((t) => crateH(sizes[sizeIdx(t.size)])).sort((a, b) => b - a);
   const tallest = (hs: number[], H: number) => hs.slice(0, H).reduce((a, b) => a + b, 0) + 2;
-  const sets = g.small ? PHONE : DESK;
+  const wMax = g.small ? W_MAX.phone : W_MAX.desk;
+  const wMin = g.small ? W_MIN.phone : W_MIN.desk;
   let L: Level | null = null;
-  let li = sets.length - 1;
-  for (let i = 0; L == null && i < sets.length; i++) {
-    const hs = heights(sets[i]!);
+  for (let W = wMax; L == null && W >= wMin; W--) {
+    const sizes = sizesFor(W);
+    const hs = heights(sizes);
     for (let H = 2; H <= H_MAX; H++) {
       if (tallest(hs, H) > g.stack) break;
-      if (palletsAt(H) * pitchOf(sets[i]!) <= avail) {
-        L = { sizes: sets[i]!, H };
-        li = i;
+      if (palletsAt(H) * pitchOf(sizes) <= avail) {
+        L = { sizes, H, W };
         break;
       }
     }
   }
   if (L == null) {
     // Even the smallest crates in the tallest stacks cannot hold the pool: the rest goes on the wrap.
-    const sizes = sets[sets.length - 1]!;
+    const sizes = sizesFor(wMin);
     const hs = heights(sizes);
     let H = 2;
     while (H < H_MAX && tallest(hs, H + 1) <= g.stack) H++;
-    L = { sizes, H };
+    L = { sizes, H, W: wMin };
   }
   const pitch = pitchOf(L.sizes);
   const pw = L.sizes[3] + depthOf(L.sizes[3]) + 2;
@@ -155,7 +154,9 @@ function layoutYard(w: number, h: number, scene: Scene, without?: ReadonlySet<st
   let fit = Math.floor(avail / pitch);
   let plusW = 0;
   if (need > fit || extra > 0) {
-    const chars = String(txs.length + extra).length + 1;
+    // «+N» as drawn: a group separator every three digits (ru «1 234», en «1,234»).
+    const digits = String(txs.length + extra).length;
+    const chars = 1 + digits + Math.floor((digits - 1) / 3);
     plusW = Math.max(g.small ? 24 : 30, chars * (g.small ? 6 : 7) + 8);
     fit = Math.max(0, Math.floor((avail - plusW - 2) / pitch));
   }
@@ -189,15 +190,15 @@ function layoutYard(w: number, h: number, scene: Scene, without?: ReadonlySet<st
   const n = txs.length - shown + extra;
   const plus = n > 0 ? { x: g.left + groups.length * pitch + 2, w: plusW || (g.small ? 24 : 30), h: Math.min(L.H, 6) * crateH(L.sizes[2]), n } : null;
   const spans = fees ? zoneSpans(pallets, (p) => p.zone, (p) => p.x, (p) => p.x + p.w) : [];
-  return { crates, pallets, plus, spans, level: li * 16 + L.H, ground: g.ground, right: g.right, small: g.small };
+  return { crates, pallets, plus, spans, level: (wMax - L.W) * 16 + L.H, ground: g.ground, right: g.right, small: g.small };
 }
 
-/** Where a tx rests in the yard (a crate's centre, or the wrapped pallet if it is not drawn alone). */
-export function yardRest(w: number, h: number, scene: Scene, id: string): { x: number; y: number } | null {
+/** Where a tx rests in the yard (a crate's centre, or the wrapped pallet if it is not drawn alone) and its crate's width. */
+export function yardRest(w: number, h: number, scene: Scene, id: string): { x: number; y: number; w: number } | null {
   const lay = yardLayout(w, h, scene);
   const c = lay.crates.find((x) => x.tx.id === id);
-  if (c) return { x: c.x + c.w / 2, y: c.y + c.h / 2 };
-  if (lay.plus && scene.mem.txs.some((t) => t.id === id)) return { x: lay.plus.x + lay.plus.w / 2, y: lay.ground - 2 - lay.plus.h / 2 };
+  if (c) return { x: c.x + c.w / 2, y: c.y + c.h / 2, w: c.w };
+  if (lay.plus && scene.mem.txs.some((t) => t.id === id)) return { x: lay.plus.x + lay.plus.w / 2, y: lay.ground - 2 - lay.plus.h / 2, w: lay.small ? 6 : 8 };
   return null;
 }
 
@@ -215,10 +216,9 @@ function drawCrate(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   R(ctx, x0, y0, w, 1, shade(c, 1.32));
   R(ctx, x0 + w - 1, y0 + 1, 1, h - 1, shade(c, 0.6));
   R(ctx, x0, y0 + h - 1, w - 1, 1, shade(c, 0.7));
-  if (w >= 9) {
-    R(ctx, x0 + Math.floor(w / 3), y0 + 1, 1, h - 2, shade(c, 0.84));
-    R(ctx, x0 + Math.floor((2 * w) / 3), y0 + 1, 1, h - 2, shade(c, 0.84));
-  } else if (w >= 6) R(ctx, x0 + Math.floor(w / 2), y0 + 1, 1, h - 2, shade(c, 0.84));
+  // Planks: more of them on a big crate, so it still reads as a crate and not a block.
+  const planks = w >= 24 ? 4 : w >= 9 ? 3 : w >= 6 ? 2 : 1;
+  for (let i = 1; i < planks; i++) R(ctx, x0 + Math.floor((i * w) / planks), y0 + 1, 1, h - 2, shade(c, 0.84));
   // Gold strap: at or above «Turbo».
   if (scene.fees && tx.feeRate >= scene.fees.turbo) {
     const sy = y0 + Math.floor(h / 2);
@@ -340,9 +340,16 @@ export function drawYard(ctx: CanvasRenderingContext2D, w: number, h: number, sc
   return hits;
 }
 
+/** The crate on the hook leaves at its yard size and shrinks to a storey's on the way. */
+export function flightSize(fromW: number, small: boolean, u: number): number {
+  const end = small ? 6 : 8;
+  const from = Math.max(end, Math.min(fromW, small ? 16 : 20));
+  return Math.round(from + (end - from) * clamp(u * 1.6, 0, 1));
+}
+
 /** A crate on the crane's hook, on its way to its storey. */
-export function drawCrateFlight(ctx: CanvasRenderingContext2D, x: number, y: number, color: string, ropeTop: number, small: boolean, day: boolean) {
-  const s = small ? 6 : 8;
+export function drawCrateFlight(ctx: CanvasRenderingContext2D, x: number, y: number, color: string, ropeTop: number, small: boolean, day: boolean, size?: number) {
+  const s = size ?? (small ? 6 : 8);
   const ink = lookInk(color);
   const x0 = Math.round(x - s / 2);
   const y0 = Math.round(y - s / 2);
