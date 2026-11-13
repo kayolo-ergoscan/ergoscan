@@ -1,8 +1,12 @@
 /**
  * Lithos protocol page. First pack is snapshot_kv.lithos_protocol.
  * Older pages are a height keyset on packed.lithos_find. No chain COUNT.
+ * `stats` (header figures) come from the same snapshot row; `client` is the GitHub release
+ * held in RAM (lithosClient.ts). Both are additive: older clients ignore them.
  */
+import { parseLithosStats, type LithosProtocolStats } from "@ergoscan/shared";
 import { getIndexPool } from "./indexDb.js";
+import { lithosClientRelease, type LithosClientRelease } from "./lithosClient.js";
 import { readSnapshot } from "./snapshots.js";
 
 const PAGE = 25;
@@ -37,9 +41,13 @@ export type LithosProtocolPage = {
   nextCursor: string | null;
   updatedAt: string | null;
   source: "snapshot" | "tables";
+  /** Header figures; null on older pages and before the indexer writes them. */
+  stats: LithosProtocolStats | null;
+  /** Lithos client release (external: GitHub), null when unknown. */
+  client: LithosClientRelease | null;
 };
 
-type Snap = Omit<LithosProtocolPage, "updatedAt" | "source">;
+type Snap = Omit<LithosProtocolPage, "updatedAt" | "source" | "stats" | "client"> & { stats?: unknown };
 
 function n(v: unknown): number {
   const x = typeof v === "number" ? v : Number(v);
@@ -154,12 +162,20 @@ export async function getLithosProtocolPage(cursor: number | null): Promise<Lith
       nextCursor: hasMore && last ? String(last.height) : null,
       updatedAt: null,
       source: "tables",
+      stats: null,
+      client: null,
     };
   }
   const snap = await readSnapshot<Snap>("lithos_protocol");
   const parsed = parseSnap(snap?.payload);
   if (parsed) {
-    return { ...parsed, updatedAt: snap?.updatedAt ?? null, source: "snapshot" };
+    return {
+      ...parsed,
+      updatedAt: snap?.updatedAt ?? null,
+      source: "snapshot",
+      stats: parseLithosStats(snap?.payload?.stats),
+      client: lithosClientRelease(),
+    };
   }
   const rows = await pageFromTable(null);
   if (!rows) return null;
@@ -179,5 +195,7 @@ export async function getLithosProtocolPage(cursor: number | null): Promise<Lith
     nextCursor: hasMore && last ? String(last.height) : null,
     updatedAt: null,
     source: "tables",
+    stats: null,
+    client: lithosClientRelease(),
   };
 }
