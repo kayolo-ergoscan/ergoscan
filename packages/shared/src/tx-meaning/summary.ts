@@ -168,8 +168,35 @@ export function sayLines(m: MeaningPhraseInput): Lines {
         return { ru: `${ru} перевёл${gaveS.ru} между своими адресами${tail.ru}`, en: `${en} moved${gaveS.en} between its own addresses${tail.en}` };
       }
       return { ru: `${ru} отправил${gaveS.ru} → ${to}${tail.ru}`, en: `${en} sent${gaveS.en} to ${to}${tail.en}` };
-    case "multisend":
-      return { ru: `${ru} отправил${gaveS.ru} адресам (${n})`, en: `${en} sent${gaveS.en} to ${many(n, "address", "addresses")}` };
+    case "multisend": {
+      const toN = { ru: ruDat(n, "адресу", "адресам"), en: many(n, "address", "addresses") };
+      const each = m.each ? formatAmount(m.each.amount, eachDec(m.each)) : null;
+      switch (m.sub) {
+        case "exchange":
+          return { ru: `${ru}: выводы ${toN.ru}${gave.ru ? ` — ${gave.ru}` : ""}`, en: `${en}: withdrawals to ${toN.en}${gave.en ? ` — ${gave.en}` : ""}` };
+        case "pool":
+          return { ru: `${ru} выплатил${gaveS.ru} майнерам (${n})`, en: `${en} paid${gaveS.en} to ${many(n, "miner", "miners")}` };
+        case "batch":
+          return { ru: `${ru} выплатил${gaveS.ru} ${toN.ru}`, en: `${en} paid${gaveS.en} to ${toN.en}` };
+        case "split":
+          return {
+            ru: `${ru} разделил${gaveS.ru} поровну между ${n} ${n % 10 === 1 && n % 100 !== 11 ? "адресом" : "адресами"}${each ? ` (по ${each})` : ""}`,
+            en: `${en} split${gaveS.en} equally between ${n} addresses${each ? ` (${each} each)` : ""}`,
+          };
+        case "airdrop": {
+          // The token handed out; the ERG its boxes carry is in the cards, not in the sentence.
+          const tok = (m.gave ?? []).filter((a) => a.token).slice(0, 1);
+          const how = each ? { ru: ` (по ${each})`, en: ` (${each} each)` } : { ru: " разными суммами", en: " in different amounts" };
+          return { ru: `${ru} раздал ${list(tok, "ru")} ${toN.ru}${how.ru}`, en: `${en} distributed ${list(tok, "en")} to ${toN.en}${how.en}` };
+        }
+        case "nft": {
+          const k = m.count2 ?? 0;
+          return { ru: `${ru} разослал ${k} NFT ${toN.ru}`, en: `${en} sent ${many(k, "NFT", "NFTs")} to ${toN.en}` };
+        }
+        default:
+          return { ru: `${ru} отправил${gaveS.ru} адресам (${n})`, en: `${en} sent${gaveS.en} to ${toN.en}` };
+      }
+    }
     case "self":
       return { ru: `${ru} перевёл средства себе`, en: `${en} moved funds to itself` };
     case "consolidate":

@@ -1111,6 +1111,60 @@ const ruleUnknownContract: Rule = (f) => {
   };
 };
 
+/**
+ * What kind of multi-send, from facts only: the payer's names-book entry (an exchange, a pool's
+ * payout wallet), else what the receivers got: NFTs one each, one token with ERG dust, the same
+ * ERG to all, different ERG amounts. Anything mixed keeps the plain words. Never a purpose.
+ */
+function multisendKind(
+  f: Facts,
+  ctx: MeaningCtx,
+  payer: string,
+  receivers: string[]
+): Partial<Draft> {
+  const category = ctx.nameOf?.(payer)?.category;
+  if (category === "exchange") return { sub: "exchange" };
+  if (category === "mining-pool") return { sub: "pool" };
+  // Cut short, or something also went into a contract: the receivers' amounts are not the whole story.
+  const scriptGained = f.outs.some(
+    (b) => !b.wallet && !b.fee && [...(f.net.get(b.address) ?? new Map<AssetKey, bigint>()).values()].some((v) => v > 0n)
+  );
+  // Another address paid in as well: the payout is not the payer's alone.
+  const coFunded = [...f.net].some(([a, bag]) => a !== payer && [...bag.values()].some((v) => v < 0n));
+  if (f.truncated || scriptGained || coFunded) return {};
+  const bags = receivers.map((a) => f.net.get(a) ?? new Map<AssetKey, bigint>());
+  const ergOf = (bag: Bag) => {
+    const v = bag.get(ERG) ?? 0n;
+    return v > 0n ? v : 0n;
+  };
+  const tokenSet = new Set<AssetKey>();
+  for (const bag of bags) for (const [k, v] of bag) if (k !== ERG && v > 0n) tokenSet.add(k);
+  const tokens = [...tokenSet].sort();
+  let ergTotal = 0n;
+  for (const bag of bags) ergTotal += ergOf(bag);
+  if (tokens.length) {
+    // Tokens to every receiver and only the ERG their boxes need: a token handout.
+    const dust = receivers.every((a, i) => {
+      const boxes = Math.max(1, f.outs.filter((b) => b.address === a && b.tokenIds.length).length);
+      return ergOf(bags[i]!) <= DUST_PER_BOX * BigInt(boxes);
+    });
+    const each = (k: AssetKey) => bags.map((bag) => bag.get(k) ?? 0n);
+    if (!dust || !bags.every((bag) => tokens.some((k) => (bag.get(k) ?? 0n) > 0n))) return {};
+    const totals: Amounts = tokens.map((k) => [k, each(k).reduce((s, v) => s + (v > 0n ? v : 0n), 0n)]);
+    const tail: Amounts = ergTotal ? [[ERG, ergTotal]] : [];
+    const nft = totals.every(([k, v]) => v === 1n && !(ctx.token?.(k)?.decimals ?? 0));
+    if (nft && tokens.length >= 2) return { sub: "nft", count2: tokens.length, gave: [...totals, ...tail] };
+    if (tokens.length !== 1) return {};
+    const [k] = tokens as [AssetKey];
+    const shares = new Set(each(k));
+    return { sub: "airdrop", gave: [...totals, ...tail], ...(shares.size === 1 ? { each: [k, [...shares][0]!] as [AssetKey, bigint] } : {}) };
+  }
+  const shares = new Set(bags.map(ergOf));
+  if (!ergTotal || shares.has(0n)) return {};
+  if (shares.size === 1) return { sub: "split", gave: [[ERG, ergTotal]], each: [ERG, [...shares][0]!] };
+  return { sub: "batch", gave: [[ERG, ergTotal]] };
+}
+
 const ruleWallets: Rule = (f, ctx) => {
   const payer = f.payer;
   if (!payer) {
@@ -1148,7 +1202,8 @@ const ruleWallets: Rule = (f, ctx) => {
   const { gave } = sides(net);
   if (receivers.length >= 3 || (f.truncated && (f.tx.outputCount ?? 0) > 4)) {
     const count = f.truncated ? Math.max(receivers.length, (f.tx.outputCount ?? 0) - 2) : receivers.length;
-    return { action: "multisend", protocol: null, conf: "flow", actor: payer, count, gave, secondary: burnt, why };
+    const base: Draft = { action: "multisend", protocol: null, conf: "flow", actor: payer, count, gave, secondary: burnt, why };
+    return { ...base, ...multisendKind(f, ctx, payer, receivers) };
   }
   // The receiver with the most ERG is the counterparty; a second one is listed apart.
   const sorted = [...receivers].sort((a, b) => {

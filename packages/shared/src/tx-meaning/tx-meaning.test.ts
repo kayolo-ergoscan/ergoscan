@@ -178,6 +178,48 @@ describe("ERG dust next to tokens", () => {
   });
 });
 
+describe("multi-send kinds", () => {
+  const sub = (id: string) => {
+    const g = byId(id);
+    const m = classifyTxMeaning(txOf(g), ctxOf(g));
+    return { m, row: meaningRow(compactMeaning(m), "ru") };
+  };
+  it("names the kind from the names book or from what the receivers got", () => {
+    const cases: [string, string, string][] = [
+      ["cf1b8c98", "exchange", "Выводы с биржи"],
+      ["a3db25cb", "batch", "Пакетная выплата"],
+      ["5747e52d", "split", "Выплата поровну"],
+      ["1a61da96", "airdrop", "Раздача токена"],
+      ["bb45dda5", "airdrop", "Раздача токена"],
+    ];
+    for (const [id, want, word] of cases) {
+      const { m, row } = sub(id);
+      assert.equal(m.action, "multisend", id);
+      assert.equal(m.sub, want, id);
+      assert.equal(m.conf, "flow", id);
+      assert.equal(row.word, word, id);
+    }
+  });
+  it("«по …» only when every share is the same", () => {
+    assert.ok(sub("5747e52d").m.each);
+    assert.ok(sub("bb45dda5").m.each);
+    assert.equal(sub("1a61da96").m.each, undefined);
+    assert.equal(sub("a3db25cb").m.each, undefined);
+  });
+  it("a payout another wallet paid into keeps the plain words", () => {
+    // 9gsb… and 9hys… both funded it: «выплатил» would credit one of them with all of it.
+    const { m } = sub("df4cf912");
+    assert.equal(m.action, "multisend");
+    assert.equal(m.sub, undefined);
+  });
+  it("the token handout leads with the token, ERG dust goes last", () => {
+    const { m, row } = sub("1a61da96");
+    assert.ok(m.gave[0]!.token);
+    assert.equal(m.gave[m.gave.length - 1]!.token, null);
+    assert.ok(row.big?.token);
+  });
+});
+
 describe("tx meaning: rules", () => {
   it("box order and token order never change the answer", () => {
     for (const g of GOLDEN) {
