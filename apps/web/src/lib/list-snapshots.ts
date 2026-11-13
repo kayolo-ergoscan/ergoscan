@@ -3,10 +3,12 @@
  * Browser islands still use getGateway() after paint.
  */
 import {
+  parseLithosHome,
   parseRentTape,
   parseRentEpochBoxes,
   parseRentEpochNano,
   type AddrFlowKind,
+  type LithosHome,
   type CompactMeaning,
   type RentTapeRow,
 } from "@ergoscan/shared";
@@ -204,6 +206,8 @@ export type HomePageSnapshot = {
   rentEpochNano?: string | null;
   /** Additive: tokens short on ERG in the next 7 days, from snapshot_kv.rent. */
   rentDanger?: RentDangerRow[] | null;
+  /** Additive: home «Lithos» card, a cut of snapshot_kv.lithos_protocol. Null before it has stats. */
+  lithos?: LithosHome | null;
 };
 
 export type TokenHeat = {
@@ -788,6 +792,7 @@ export async function fetchHomeSnapshot(): Promise<HomePageSnapshot> {
     rentEpochBoxes?: unknown;
     rentEpochNano?: unknown;
     rentDanger?: unknown;
+    lithos?: unknown;
   }>("/v1/page/home");
   if (!j || j.stale) {
     return { height: null, blocks: [], txs: [], mempoolCount: null, updatedAt: null };
@@ -834,6 +839,7 @@ export async function fetchHomeSnapshot(): Promise<HomePageSnapshot> {
     rentEpochBoxes: parseRentEpochBoxes(j.rentEpochBoxes),
     rentEpochNano: parseRentEpochNano(j.rentEpochNano),
     rentDanger: parseRentDanger(j.rentDanger),
+    lithos: parseLithosHome(j.lithos),
   };
 }
 

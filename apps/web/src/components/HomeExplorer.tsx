@@ -37,11 +37,14 @@ import { useChainTipRefresh, usePageSync, useStreamMempool } from "@/lib/page-sy
 import { SNAPSHOT_FETCH, snapshotPath } from "@/lib/keyed-enter";
 import { majorityColorInk, majorityTxInk } from "@/lib/block-ink";
 import {
+  parseLithosHome,
   parseRentTape,
   parseRentEpochBoxes,
   parseRentEpochNano,
+  type LithosHome,
   type RentTapeRow,
 } from "@ergoscan/shared";
+import { HomeLithos } from "@/components/HomeLithos";
 import { HomeRentTape } from "@/components/HomeRentTape";
 import { parseRentDanger, type RentDangerRow } from "@/lib/rent-danger";
 import { HomeMempoolStage } from "@/components/HomeMempoolStage";
@@ -55,23 +58,6 @@ function ChartSparkSlot() {
   return <div className="h-9 w-full" />;
 }
 
-function OrbitSlot() {
-  return (
-    <section className="min-w-0 max-lg:order-5 lg:h-full">
-      <div className="mod grid h-full min-h-0 grid-cols-1 grid-rows-[auto_minmax(0,1fr)_auto] gap-x-4 gap-y-3 overflow-hidden rounded-[20px] border border-[var(--border)] bg-[var(--module)] px-4 py-3 sm:grid-cols-[minmax(0,1fr)_11rem] sm:grid-rows-[auto_minmax(0,1fr)] sm:px-5">
-        <div className="flex h-[22px] shrink-0 items-center justify-between gap-3 sm:col-span-2 sm:row-start-1">
-          <div className="h-4 w-24 rounded-[6px] bg-[var(--wash-faint)]" />
-          <div className="h-5 w-10 rounded-[6px] bg-[var(--wash-faint)]" />
-        </div>
-        <div className="flex min-h-0 min-w-0 items-center justify-center sm:col-start-1 sm:row-start-2">
-          <div className="relative aspect-square w-full max-w-[15rem]" />
-        </div>
-        <div className="h-[8.5rem] w-full sm:col-start-2 sm:row-start-2 sm:w-[11rem] sm:self-center" />
-      </div>
-    </section>
-  );
-}
-
 const AreaChart = dynamic(() => import("@/components/AreaChart"), {
   ssr: false,
   loading: ChartSparkSlot,
@@ -83,10 +69,6 @@ const DualLineChart = dynamic(() => import("@/components/DualLineChart"), {
 const DonutChart = dynamic(() => import("@/components/DonutChart"), {
   ssr: false,
   loading: () => <div className="h-full w-full" />,
-});
-const NetworkOrbit = dynamic(() => import("@/components/NetworkOrbit"), {
-  ssr: false,
-  loading: OrbitSlot,
 });
 
 type BlockRow = {
@@ -176,6 +158,7 @@ export function HomeExplorer({
   initialRentEpochNano = null,
   initialRentEpochBoxes = null,
   initialRentDanger = null,
+  initialLithos = null,
   previewShare = false,
 }: {
   initialMempool?: number | null;
@@ -195,6 +178,8 @@ export function HomeExplorer({
   initialRentEpochBoxes?: number | null;
   /** Tokens short on ERG, from the rent snapshot. Null until that field arrives. */
   initialRentDanger?: RentDangerRow[] | null;
+  /** Home «Lithos» card from the Lithos snapshot. Null until the indexer writes its stats. */
+  initialLithos?: LithosHome | null;
   /** Local `/?preview=share` — keep fixture rows, don't overwrite from stage. */
   previewShare?: boolean;
 }) {
@@ -231,6 +216,7 @@ export function HomeExplorer({
   const [rentEpochBoxes, setRentEpochBoxes] = useState<number | null>(initialRentEpochBoxes);
   const [rentDanger, setRentDanger] = useState<RentDangerRow[]>(initialRentDanger ?? []);
   const [rentDangerReady, setRentDangerReady] = useState(initialRentDanger != null);
+  const [lithos, setLithos] = useState<LithosHome | null>(initialLithos);
   const snapRetry = useRef(0);
   const snapTries = useRef(0);
   const loadSnapRef = useRef<() => void>(() => {});
@@ -296,6 +282,7 @@ export function HomeExplorer({
           rentEpochNano?: unknown;
           rentEpochBoxes?: unknown;
           rentDanger?: unknown;
+          lithos?: unknown;
         }>;
       })
       .then((j) => {
@@ -450,6 +437,8 @@ export function HomeExplorer({
           setRentDanger(danger ?? []);
           setRentDangerReady(true);
         }
+        // A home without the field (older gateway) keeps what the card already shows.
+        if (j.lithos !== undefined) setLithos(parseLithosHome(j.lithos));
         markSynced(j.updatedAt);
         const gotH =
           height ??
@@ -872,7 +861,7 @@ export function HomeExplorer({
           enter={12}
         />
 
-        <NetworkOrbit enter={13} />
+        <HomeLithos data={lithos} tipHeight={blocks[0]?.height ?? lithos?.tip.height ?? null} enter={13} />
       </div>
     </Shell>
   );
