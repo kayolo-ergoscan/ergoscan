@@ -291,6 +291,52 @@ describe("burns of many tokens", () => {
   });
 });
 
+describe("a contract nobody knows paid wallets that did not sign", () => {
+  const run = (id: string) => {
+    const g = byId(id);
+    return classifyTxMeaning(txOf(g), ctxOf(g));
+  };
+  it("the contract is the subject, the signer only set it off", () => {
+    const m = run("fff50ff7ab");
+    assert.equal(m.action, "contract-call");
+    assert.equal(m.sub, "payout");
+    assert.equal(m.conf, "unknown");
+    assert.ok(m.say.ru.startsWith("Контракт 2x45…VsAy выплатил 167.60 NETA"), m.say.ru);
+    assert.ok(m.say.ru.endsWith("→ 9h6Q…P79T; запустил 9gUi…cGoU"), m.say.ru);
+    assert.equal(sayMeaning(compactMeaning(m), "ru"), m.say.ru);
+    assert.equal(sayMeaning(compactMeaning(m), "en"), m.say.en);
+  });
+  it("what the signer funded is not the contract's payout", () => {
+    // 9hod… put the receivers' box ERG in: only the SPF is the contract's.
+    const m = run("0152716536");
+    assert.equal(m.gave.length, 1);
+    assert.ok(m.gave[0]!.token);
+    assert.equal(m.count, 10);
+  });
+  it("only what the paying contract itself lost; no signer = an ERG-only taker is left out", () => {
+    // The ERG came from another script, and 9gqr… took only ERG: the NETA withdrawal alone.
+    const m = run("9aa4cd69ba");
+    assert.equal(m.gave.length, 1);
+    assert.equal(m.count, 1);
+    assert.ok(m.say.ru.endsWith("выплатил 20 634.62 NETA → 9htS…nyeT"), m.say.ru);
+    // A bare tip to whoever built a contract-only tx stays a plain contract call.
+    assert.equal(run("3f8a9d6918").sub, undefined);
+  });
+  it("the receiver's own page says «Получено» from the contract; the trigger's does not", () => {
+    const m = compactMeaning(run("fff50ff7ab"));
+    const to = m.counterparty!;
+    const own = meaningOwnerRow(m, to, "ru");
+    assert.equal(own.word, "Получено");
+    assert.equal(own.from?.addr, m.actor);
+    const trig = meaningOwnerRow(m, m.feePayer!, "ru", "5000000");
+    assert.notEqual(trig.word, "Получено");
+    // Three receivers: no counterparty, a gain on the address page is enough.
+    const many = compactMeaning(run("03084dd1ba"));
+    const rcv = byId("03084dd1ba").outputs.find((b) => b.address?.startsWith("9fFnJT"))!.address!;
+    assert.equal(meaningOwnerRow(many, rcv, "ru", "1000000").word, "Получено");
+  });
+});
+
 describe("tx meaning: rules", () => {
   it("box order and token order never change the answer", () => {
     for (const g of GOLDEN) {

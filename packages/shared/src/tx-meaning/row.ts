@@ -167,6 +167,8 @@ function notesOf(m: MeaningRowInput, lang: Lang): string[] {
     case "contract-call":
     case "to-contract":
       if (m.protocol && m.label) out.push(`«${m.label}»`);
+      // A contract's payout to several wallets: how many (one receiver is the row's «→»).
+      if (m.sub === "payout" && n >= 2) say(ruTo(n, "адресу", "адресам"), `to ${enCount(n, "address", "addresses")}`);
       break;
     default:
       break;

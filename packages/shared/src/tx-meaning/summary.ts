@@ -448,6 +448,13 @@ export function sayLines(m: MeaningPhraseInput): Lines {
             : { ru: `Служебная операция · ${P.ru}`, en: `${P.en} upkeep` };
       }
     case "contract-call":
+      if (m.sub === "payout") {
+        // A contract paid wallets that did not sign; whoever paid the fee set it off.
+        const by = m.feePayer !== undefined ? m.feePayer : (m.fee?.payer ?? null);
+        const trig = by && by !== m.actor ? { ru: `; запустил ${shortAddr(by)}`, en: `; triggered by ${shortAddr(by)}` } : { ru: "", en: "" };
+        const dest = m.counterparty ? { ru: ` → ${to}`, en: ` to ${to}` } : { ru: ` ${ruDat(n, "адресу", "адресам")}`, en: ` to ${many(n, "address", "addresses")}` };
+        return { ru: `${ru} выплатил${gaveS.ru}${dest.ru}${trig.ru}`, en: `${en} paid${gaveS.en}${dest.en}${trig.en}` };
+      }
       if (m.protocol && m.label) {
         const g = m.got?.length ? { ru: `, получил ${got.ru}`, en: ` and got ${got.en}` } : { ru: "", en: "" };
         return { ru: `${ru} вызвал «${m.label}»${g.ru} · ${P.ru}`, en: `${en} called “${m.label}”${g.en} · ${P.en}` };

@@ -1139,9 +1139,71 @@ const ruleBurn: Rule = (f) => {
 
 // ── 5–6. contracts nobody knows, wallet moves ───────────────────────────────
 
+/**
+ * A contract nobody knows paid wallets that did not sign: «Контракт 2x45… выплатил … → 9hPC…».
+ * An asset counts only when the signer put none of it in (ERG: beyond the fee) and the paying
+ * contract itself lost at least what the receivers got; no receiver may have given anything.
+ * A wallet that got a token the signer paid in, or more than box ERG the signer paid in, is the
+ * signer's receiver (a contract only covered the fee). With no signer at all, a wallet that took
+ * only ERG is likely whoever built the tx: not a payout.
+ */
+function contractPayout(f: Facts, payer: string | null): Draft | null {
+  if (f.truncated) return null;
+  const gainers = walletGainers(f, new Set(payer ? [payer] : []));
+  const bagOfAddr = (a: string) => f.net.get(a) ?? new Map<AssetKey, bigint>();
+  if (gainers.some((a) => [...bagOfAddr(a).values()].some((v) => v < 0n))) return null;
+  const tokenTaker = (a: string) => [...bagOfAddr(a)].some(([k, v]) => k !== ERG && v > 0n);
+  const payerNet = payer ? netOf(f, payer) : new Map<AssetKey, bigint>();
+  const funded = (k: AssetKey) => -(payerNet.get(k) ?? 0n) - (k === ERG ? f.feeNano : 0n) > 0n;
+  const signersOwn = (a: string) =>
+    [...bagOfAddr(a)].some(([k, v]) => {
+      if (v <= 0n || !funded(k)) return false;
+      if (k !== ERG) return true;
+      const boxes = BigInt(Math.max(1, f.outs.filter((b) => b.address === a).length));
+      return v > DUST_PER_BOX * boxes;
+    });
+  const receivers = (payer ? gainers : gainers.filter(tokenTaker)).filter((a) => !signersOwn(a));
+  if (!receivers.length) return null;
+  const total: Bag = new Map();
+  for (const a of receivers) for (const [k, v] of bagOfAddr(a)) if (v > 0n) total.set(k, (total.get(k) ?? 0n) + v);
+  const scripts = [...new Set(f.ins.filter((b) => !b.wallet && !b.fee && !b.role).map((b) => b.address))].sort();
+  const lossOf = (addr: string, k: AssetKey) => {
+    const v = f.net.get(addr)?.get(k) ?? 0n;
+    return v < 0n ? -v : 0n;
+  };
+  // Assets the signer did not fund, by id (tokens first is the dust order's job).
+  const open = [...total].filter(([k]) => !funded(k)).sort((a, b) => (a[0] < b[0] ? -1 : 1));
+  if (!open.length) return null;
+  // The payer: the contract that lost the most of the first token paid (else of ERG).
+  const lead = (open.find(([k]) => k !== ERG) ?? open[0]!)[0];
+  const actor = [...scripts].sort((a, b) => {
+    const d = lossOf(b, lead) - lossOf(a, lead);
+    return d > 0n ? 1 : d < 0n ? -1 : a < b ? -1 : 1;
+  })[0];
+  if (!actor) return null;
+  const paid: Amounts = open.filter(([k, v]) => lossOf(actor, k) >= v);
+  if (!paid.length) return null;
+  const keys = new Set(paid.map(([k]) => k));
+  const to = receivers.filter((a) => [...bagOfAddr(a)].some(([k, v]) => keys.has(k) && v > 0n));
+  return {
+    action: "contract-call",
+    protocol: null,
+    conf: "unknown",
+    actor,
+    byContract: true,
+    sub: "payout",
+    count: to.length,
+    counterparty: to.length === 1 ? to[0]! : null,
+    gave: paid,
+    why: [{ k: "spent-unknown", v: f.ins.find((b) => b.address === actor)?.raw.templateHash ?? actor }],
+  };
+}
+
 const ruleUnknownContract: Rule = (f) => {
   const script = stable(f.ins.filter((b) => !b.wallet && !b.fee && !b.role))[0];
   if (!script) return null;
+  const payout = contractPayout(f, f.payer);
+  if (payout) return payout;
   const actor = f.payer;
   const { gave, got } = actorSides(f, actor);
   return {
