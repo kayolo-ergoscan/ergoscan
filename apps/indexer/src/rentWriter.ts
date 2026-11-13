@@ -8,6 +8,7 @@
 import http from "node:http";
 import pg from "pg";
 import { maybeFollowRentTip, maybeScanRentFull, maybeVerifyRentClaims } from "./rentClaim.js";
+import { maybeRefreshRentHistory } from "./rentCollected.js";
 
 const port = Number(process.env.HEALTH_PORT || 8798);
 const pollMs = Number(process.env.POLL_MS || 2000);
@@ -64,6 +65,7 @@ async function tick(): Promise<void> {
   await maybeVerifyRentClaims(pool);
   await maybeFollowRentTip(pool);
   await maybeScanRentFull(pool);
+  await maybeRefreshRentHistory(pool);
   await refresh();
   health.ok = true;
   health.lastError = null;
