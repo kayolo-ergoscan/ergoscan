@@ -7,7 +7,34 @@ import { useI18n } from "@/lib/i18n/I18nProvider";
 import { lookupScoutRent } from "@/lib/scout-rent";
 import { INK_EVENT } from "@/lib/skin-ink";
 import { REDUCE_QUERY, useMediaTick, WIDE_QUERY } from "@/lib/kayolo/motion";
-import { drawPixel, pixelColor, pixelInkForPath, pixelWake, type PixelMood, type PixelPose } from "./pixel";
+import { onKayolo, type BodyWhere } from "@/lib/kayolo/events";
+import {
+  arrive,
+  bodyOwner,
+  currentMode,
+  handoff,
+  hasKeeper,
+  kayoloHolds,
+  moveBody,
+  onKeeper,
+  reclaim,
+  sendHome,
+  setOwner,
+  type BodyPose,
+} from "@/lib/kayolo/body";
+import { nookPoint } from "@/lib/kayolo/anchors";
+import { readHome } from "@/lib/kayolo/memory";
+import { KAYOLO_LAYER } from "@/lib/kayolo/thresholds";
+import {
+  adoptPixelState,
+  drawPixel,
+  pixelColor,
+  pixelInkForPath,
+  pixelState,
+  pixelWake,
+  type PixelMood,
+  type PixelPose,
+} from "./pixel";
 
 /**
  * «Пиксель» (components/pixel.ts), in the page's entity colour.
@@ -24,6 +51,11 @@ import { drawPixel, pixelColor, pixelInkForPath, pixelWake, type PixelMood, type
  *
  * On an address card that is already on the home rent tape, he rises onto the
  * column header, rolls to the balance tile, and scratches the clock with the pick.
+ *
+ * Kayolo Э1b (design/brand/kayolo-life.md §7.1, §9.8 M1): the pass runs only when a tour is due
+ * (first show in a session, or the first entry to a section today, at most once per 10 min). On the
+ * desktop it ends in Kayolo's niche right of the title. Parked (the niche, the phone park, the door,
+ * a note), the scout hands the body to Kayolo and draws nothing; it takes the body back only to move.
  */
 
 const SPEED = 140;
@@ -163,7 +195,9 @@ function scoutMood(beat: string | undefined): PixelMood {
   if (!beat) return "idle";
   if (beat === "ask" || beat === "fall" || beat === "drop" || beat === "note-drop") return "surprised";
   if (beat === "read" || beat === "carve" || beat === "note-write" || beat === "write") return "work";
-  if (beat === "price" || beat === "mcap" || beat === "bye" || beat === "retreat") return "happy";
+  // §12.6: the price and the market cap are looked at with interest, never with joy.
+  if (beat === "price" || beat === "mcap") return "curious";
+  if (beat === "bye" || beat === "retreat") return "happy";
   // An empty list on the address page: he goes over and peeks at it.
   if (beat === "peek" || beat === "nest" || beat === "watch" || beat === "note-live") return "curious";
   if (beat === "note-drive") return "look";
@@ -171,12 +205,29 @@ function scoutMood(beat: string | undefined): PixelMood {
   return "idle";
 }
 
+/**
+ * Kayolo E20 (a rare height, Э0): on pages other than home he hops once, happy, where he is parked.
+ * Mid-pass the call waits for the park, at most a minute (design/brand/kayolo-life.md §8.3).
+ */
+const CHEER_MS = 1300;
+const RARE_TTL_MS = 60_000;
+let rareCalledAt = -1e9;
+let cheerUntil = 0;
+
+/** Parked: play a waiting rare-height cheer. The hop itself comes with the switch to happy. */
+function cheerAtRest() {
+  const t = performance.now();
+  if (t - rareCalledAt > RARE_TTL_MS) return;
+  rareCalledAt = -1e9;
+  cheerUntil = t + CHEER_MS;
+}
+
 /** «Пиксель» in the header. The mood follows the beat unless the caller names one; he blinks on his own. */
 function drawScout(ctx: CanvasRenderingContext2D, pose: Omit<PixelPose, "color" | "now">) {
   const now = performance.now();
   drawPixel(ctx, {
     ...pose,
-    mood: pose.mood ?? scoutMood(ctx.canvas.dataset.scoutBeat),
+    mood: now < cheerUntil ? "happy" : (pose.mood ?? scoutMood(ctx.canvas.dataset.scoutBeat)),
     color: scoutColor(now),
     now,
   });
@@ -185,6 +236,46 @@ function drawScout(ctx: CanvasRenderingContext2D, pose: Omit<PixelPose, "color" 
 function setBeat(canvas: HTMLCanvasElement, beat: string) {
   if (canvas.dataset.scoutBeat !== beat) canvas.dataset.scoutBeat = beat;
 }
+
+/* ---------------- M1 (§9.8): one body, handed over at rest ---------------- */
+
+/** Parked: Kayolo takes the body at this point, with this face. True: draw nothing from now on. */
+function giveBody(
+  ctx: CanvasRenderingContext2D,
+  where: BodyWhere,
+  x: number,
+  y: number,
+  face: number,
+  pose: Partial<PixelPose>
+): boolean {
+  if (!KAYOLO_LAYER) return false;
+  return handoff({ x, y, face: face < 0 ? -1 : 1, where, pose, state: pixelState(ctx, "main"), color: scoutColor(performance.now()) });
+}
+
+/** About to draw: take the body back if Kayolo has it (his face comes along) and own it. */
+function takeBody(ctx: CanvasRenderingContext2D | null): BodyPose | null {
+  if (!KAYOLO_LAYER) return null;
+  const p = reclaim();
+  if (p?.state && ctx) adoptPixelState(ctx, "main", p.state);
+  setOwner("scout");
+  return p;
+}
+
+function local() {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+/** Kayolo's niche in viewport px (desktop), or null. */
+function nookNow() {
+  return nookPoint(readHome(local) ?? "r");
+}
+
+/** The tour already ran for this arrival: a locale change does not replay it. */
+let tourRanFor = "";
 
 /** A parked pose keeps drawing this long (the face eases, a glance lands), then the loop sleeps. */
 const SETTLE_MS = 900;
@@ -215,7 +306,8 @@ function frameLoop(paint: (now: number) => void): Loop {
 
 /** Parked long enough and his face is still: the frame just drawn can stay on the canvas. */
 function settled(ctx: CanvasRenderingContext2D, now: number, since: number) {
-  return now - since >= SETTLE_MS && pixelWake(ctx) > performance.now();
+  cheerAtRest();
+  return now - Math.max(since, cheerUntil) >= SETTLE_MS && pixelWake(ctx) > performance.now();
 }
 
 /**
@@ -496,8 +588,13 @@ function runAddressPerch(
   let noteA = 0;
   let writtenEmpty = "";
   let near = false;
+  /** Kayolo holds the body at the door or by a note: the scout draws only the pebble and the note. */
+  let held = false;
+  let owned = false;
+  const offKeeper = onKeeper(() => wake());
   const onMove = (e: PointerEvent) => {
     aim = { x: e.clientX, y: e.clientY };
+    if (held) return;
     // Parked, his eyes follow a pointer within 160 px: wake for it, and once more as it leaves.
     const close = Math.hypot(e.clientX - x, e.clientY - y) < 220;
     if (close || near) wake();
@@ -553,6 +650,15 @@ function runAddressPerch(
         pick = 0.16;
         pebble = 1;
       }
+      // Another address page: Kayolo is already at the door, he stays there.
+      if (KAYOLO_LAYER && phase === "home" && kayoloHolds() === "door") {
+        held = true;
+        owned = true;
+      }
+    }
+    if (!owned) {
+      owned = true;
+      takeBody(ctx);
     }
     const dt = Math.min(34, now - last);
     last = now;
@@ -1075,6 +1181,7 @@ function runAddressPerch(
         dead = true;
         loop.stop();
         unwake();
+        offKeeper();
         window.removeEventListener("pointermove", onMove);
         restorePerchCanvas();
         onArrived(x);
@@ -1099,15 +1206,38 @@ function runAddressPerch(
     }
 
     setBeat(canvas, phase);
+    const restingHere = phase === "home" || phase === "watch" || phase === "note-live";
+    if (held && !restingHere) {
+      // He has to move (a click at the door, a note to write): the body comes back in this frame.
+      held = false;
+      takeBody(ctx);
+    }
+    if (held) {
+      // Kayolo has him: the resting point may have moved (a resize, a scroll by the note).
+      if (phase === "note-live") {
+        const n = emptyNote();
+        if (n) {
+          const st = emptyStand(n);
+          x = st.x;
+          y = st.y;
+        }
+      } else if (phase === "home") {
+        x = door.x;
+        y = door.y;
+      }
+      moveBody({ x, y });
+    }
     const floor = y - lift + crouch;
     const air = Math.min(1, lift / 4);
     const landed = phase === "fall" ? clamp(1 - (door.y - y) / Math.max(door.y, 1), 0.15, 1) : 1;
-    ctx.save();
-    ctx.fillStyle = `rgba(0,0,0,${0.16 * landed * (1 - air * 0.5)})`;
-    ctx.beginPath();
-    ctx.ellipse(x, floor + 1, 11, 2, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
+    if (!held) {
+      ctx.save();
+      ctx.fillStyle = `rgba(0,0,0,${0.16 * landed * (1 - air * 0.5)})`;
+      ctx.beginPath();
+      ctx.ellipse(x, floor + 1, 11, 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
 
     if (note && noteA > 0.02) {
       const lane = measureRentLane();
@@ -1131,15 +1261,10 @@ function runAddressPerch(
 
     const seek = phase === "nest";
     scoutPose = { x, y: floor, face: faceN > 0 ? 1 : -1, roll };
-    drawScout(ctx, {
-      x: clamp(x, 12, w - 12),
-      y: floor,
+    const bodyPose = {
       head,
       look: clamp(look, -2.1, 2.1),
       pick,
-      roll,
-      face: faceN,
-      scale: SCALE,
       eyesApart: apart,
       eyeLift: seek ? eye * 2.2 : eye * 1.4,
       eyeScale:
@@ -1148,7 +1273,17 @@ function runAddressPerch(
           : 1 + eye * 0.2,
       pupil,
       pupilOrbit: orbit,
-    });
+    };
+    if (!held) {
+      drawScout(ctx, {
+        ...bodyPose,
+        x: clamp(x, 12, w - 12),
+        y: floor,
+        roll,
+        face: faceN,
+        scale: SCALE,
+      });
+    }
     const rentLabel = note ? note.lines.join(", ") : homeLabel;
     const rentHit =
       phase === "home" ||
@@ -1180,8 +1315,16 @@ function runAddressPerch(
 
     // At the door, watching, or by a written note: once still, no more frames until an event.
     const resting = phase === "home" || phase === "watch" || phase === "note-live" || phase === "nest";
+    if (held) return;
     const blinking = phase === "note-live" && (now - beatAt) % 2600 < 90;
-    if (resting && !blinking && settled(ctx, now, Math.max(beatAt, wokeAt))) return;
+    if (resting && !blinking && settled(ctx, now, Math.max(beatAt, wokeAt))) {
+      // Still: Kayolo lives in him from here (M1). This frame is drawn again without the body.
+      if (restingHere && giveBody(ctx, phase === "note-live" ? "note" : "door", x, floor, faceN, bodyPose)) {
+        held = true;
+        paint(now);
+      }
+      return;
+    }
     loop.again();
   };
 
@@ -1204,6 +1347,7 @@ function runAddressPerch(
     dead = true;
     loop.stop();
     unwake();
+    offKeeper();
     window.removeEventListener("pointermove", onMove);
     if (handed) return;
     releaseNotes();
@@ -1320,7 +1464,13 @@ function beatMs(beat: ScoutBeat) {
   return 0;
 }
 
-type PassFrom = "start" | "after-fall" | "seek";
+/**
+ * start: the first show in a session, with the fall. after-fall: on the floor at x (the address
+ * return). seek: parked by the search (Э1a). nook: a later tour from where he is (x), first walking
+ * to the title. walk-home: no tour, but he was mid-pass: he walks home from x. rest: no tour, he is
+ * at home already (Kayolo draws him; the phone keeps the scout's button at the park).
+ */
+type PassFrom = "start" | "after-fall" | "seek" | "nook" | "walk-home" | "rest";
 
 /** The toolbar pass. A click stops him into a question, unless he is still under a word. */
 function runHeaderPass(
@@ -1332,8 +1482,20 @@ function runHeaderPass(
   start: { from: PassFrom; x?: number; markDone?: boolean },
   wakeRef: { current: () => void },
   /** Address pages: an empty tokens, NFTs or boxes line can appear and wake him. */
-  watchNotes = false
+  watchNotes = false,
+  /** Kayolo's window is on (desktop): the tour ends in his niche. homeRef: «call him home». */
+  kayolo: { nook: boolean; homeRef: { current: boolean } } = { nook: false, homeRef: { current: false } }
 ) {
+  const nook = kayolo.nook;
+  const lastBeat: ScoutBeat = nook ? "home" : "seek";
+  const wide = window.matchMedia(WIDE_QUERY).matches;
+  /** Phone hops: ×0.8, never above 6 px (§2.7). */
+  const hopPx = wide ? HOP : Math.min(HOP * 0.8, 6);
+  /** Kayolo holds the body (or will, at rest): nothing is drawn. */
+  let held = false;
+  let owned = false;
+  let restAt = -1;
+  let approachTo: number | null = null;
   let dead = false;
   let wokeAt = 0;
   let last = 0;
@@ -1370,9 +1532,44 @@ function runHeaderPass(
     aim = { x: e.clientX, y: e.clientY };
   };
   window.addEventListener("pointermove", onMove, { passive: true });
+  const offKeeper = onKeeper(() => wake());
+
+  /** Home in header coordinates: the niche (desktop) or the park past the search word (phone). */
+  const homeX = (g: World) => {
+    if (nook) {
+      const n = nookNow();
+      if (n) return n.x - root.getBoundingClientRect().left;
+      return g.title ? g.title.right + 25 : g.w * 0.5;
+    }
+    return travelTo("to-search", g) ?? g.searchEnd ?? 80;
+  };
 
   const paint = (now: number) => {
     if (dead) return;
+    if (held) {
+      // At rest Kayolo has him. A click on the phone park, or a note to write, needs the body back.
+      const takeBack = pokeRef.current || (watchNotes && emptyNote() != null);
+      if (!takeBack) {
+        if (!nook) {
+          const g = world(root);
+          x = homeX(g);
+          const box = root.getBoundingClientRect();
+          const floorY = box.top + root.clientHeight - 6;
+          if (kayoloHolds() === "park") moveBody({ x: box.left + x, y: floorY });
+          placeHit(hit, true, box.left + x, floorY, askLabel);
+        }
+        return;
+      }
+      held = false;
+      const p = takeBody(canvas.getContext("2d"));
+      if (p) {
+        x = p.x - root.getBoundingClientRect().left;
+        face = p.face;
+      }
+      wokeAt = now;
+      beatAt = now - SEEK_LOOK_MS;
+      restAt = -1;
+    }
     const lineElNow = emptyNote();
     if (lineElNow || emptyDrive) {
       const vw = window.innerWidth;
@@ -1398,6 +1595,10 @@ function runHeaderPass(
       }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, vw, vh);
+      if (!owned) {
+        owned = true;
+        takeBody(ctx);
+      }
       if (!ready) {
         const g0 = world(root);
         beats.push(...scoutBeats(!!g0.title, !!g0.mcap));
@@ -1647,30 +1848,75 @@ function runHeaderPass(
     g.w = w;
     const floor = h - 6;
     if (!ready) {
-      beats.push(...scoutBeats(!!g.title, !!g.mcap));
-      if (start.from === "seek") {
-        beatI = beats.length;
-        x = travelTo("to-search", g) ?? g.searchEnd ?? 80;
-      } else       if (start.from === "after-fall") {
+      beats.push(...scoutBeats(!!g.title, !!g.mcap, nook));
+      const from = start.from;
+      if (from === "seek" || from === "rest") {
+        beatI = beats.length - 1;
+        x = homeX(g);
+        // At rest Kayolo draws him; until the layer has loaded the phone scout keeps drawing him.
+        if (from === "rest" && (nook || hasKeeper())) {
+          held = true;
+          owned = true;
+        }
+      } else if (from === "after-fall") {
         beatI = 1;
         const land = start.x ?? (g.title ? leftOf(g.title) : g.searchEnd ?? 56);
         x = clamp(land, 20, w - 20);
         const titleIn = g.title ? leftOf(g.title) : x;
         approaching = !!g.title && x < titleIn - 8;
+        if (approaching) approachTo = titleIn;
+      } else if (from === "nook" || from === "walk-home") {
+        x = clamp(start.x ?? homeX(g), 20, w - 20);
+        if (from === "walk-home") beatI = beats.indexOf(nook ? "to-home" : "to-search");
+        else if (nook && g.title) {
+          // A later tour: from where he is to the title's edge, then the read and on to the price.
+          beatI = beats.indexOf("read");
+          approachTo = rightOf(g.title, w);
+          approaching = Math.abs(approachTo - x) > 1.5;
+        } else beatI = 1;
       } else {
         const land = g.title ? leftOf(g.title) : g.searchEnd ?? 56;
         x = clamp(land, 20, w - 20);
       }
+      beatI = Math.max(0, beatI);
       beatAt = now;
       last = now;
       ready = true;
+      if (held) {
+        if (!nook) {
+          const box = root.getBoundingClientRect();
+          placeHit(hit, true, box.left + x, box.top + floor, askLabel);
+        } else placeHit(hit, false, 0, 0);
+        return;
+      }
+    }
+    if (!owned) {
+      owned = true;
+      const p = takeBody(ctx);
+      // From Kayolo's place, not from the old one.
+      if (p && (p.where === "nook" || p.where === "park") && (start.from === "nook" || start.from === "walk-home")) {
+        x = clamp(p.x - root.getBoundingClientRect().left, 20, w - 20);
+        if (approachTo != null) approaching = Math.abs(approachTo - x) > 1.5;
+      }
     }
 
     const dt = Math.min(34, now - last);
     last = now;
-    const beat = beats[beatI] ?? "seek";
+    // «Call him home» from his window during the tour: he finishes a slip, then walks home.
+    if (kayolo.homeRef.current && nook) {
+      const cur = beats[beatI] ?? lastBeat;
+      if (cur === "to-home" || cur === "home") kayolo.homeRef.current = false;
+      else if (!cur.startsWith("under") && !cur.startsWith("squat") && cur !== "fall" && !asking) {
+        kayolo.homeRef.current = false;
+        beatI = beats.indexOf("to-home");
+        beatAt = now;
+        lineA = 0;
+        approaching = false;
+      }
+    }
+    const beat = beats[beatI] ?? lastBeat;
     const u = beatMs(beat) > 0 ? (now - beatAt) / beatMs(beat) : 1;
-    if (start.markDone && beat === "seek") addressPassed = true;
+    if (start.markDone && beat === lastBeat) addressPassed = true;
 
     const beginAsk = () => {
       asking = true;
@@ -1708,7 +1954,7 @@ function runHeaderPass(
     };
 
     if (approaching && !asking) {
-      const dest = g.title ? leftOf(g.title) : x;
+      const dest = approachTo ?? (g.title ? leftOf(g.title) : x);
       const d = dest - x;
       face = d >= 0 ? 1 : -1;
       const step = Math.sign(d) * Math.min(Math.abs(d), (SPEED * dt) / 1000);
@@ -1811,7 +2057,7 @@ function runHeaderPass(
     } else if (beat.startsWith("under") || beat.startsWith("to-")) {
       const moving = beat.startsWith("under");
       apart = moving ? 1 : 0;
-      const target = travelTo(beat, g);
+      const target = beat === "to-home" ? homeX(g) : travelTo(beat, g);
       if (target == null) {
         beatI += 1;
         beatAt = now;
@@ -1838,7 +2084,7 @@ function runHeaderPass(
       apart = 0;
       face = -1;
       const hopU = Math.min(1, u / 0.62);
-      lift = hopU < 1 ? Math.sin(hopU * Math.PI) * HOP : 0;
+      lift = hopU < 1 ? Math.sin(hopU * Math.PI) * hopPx : 0;
       if (u > 0.12 && u < 0.5) pick = Math.sin(((u - 0.12) / 0.38) * Math.PI);
       if (u > 0.42 && u < 0.92) head = Math.sin(((u - 0.42) / 0.5) * Math.PI * 5) * 0.4;
       if (!g.mcap && u > 0.55) {
@@ -1854,7 +2100,7 @@ function runHeaderPass(
       apart = 0;
       face = -1;
       const hopU = Math.min(1, u / 0.4);
-      lift = hopU < 1 ? Math.sin(hopU * Math.PI) * HOP : 0;
+      lift = hopU < 1 ? Math.sin(hopU * Math.PI) * hopPx : 0;
       eye = Math.sin(Math.min(1, u) * Math.PI);
       orbit = eye * 1.5;
       pupil = now * 0.01;
@@ -1882,6 +2128,12 @@ function runHeaderPass(
         beatI += 1;
         beatAt = now;
       }
+    } else if (beat === "home") {
+      // In the niche: face the page, eyes down on it, and settle. Kayolo takes him from here.
+      apart = 0;
+      face = -1;
+      x += (homeX(g) - x) * 0.3;
+      if (restAt < 0) restAt = now;
     } else {
       // Parked past the search word: one look around, then he settles and the loop sleeps.
       const s = now - beatAt;
@@ -1904,8 +2156,28 @@ function runHeaderPass(
     const box = root.getBoundingClientRect();
     scoutPose = { x: box.left + x, y: box.top + spriteY, face, roll };
     draw(ctx, root, g, x, spriteY, floor, lift, face, roll, apart, head, look, pick, eye, pupil, orbit, lineA, lineTo);
-    follow(spriteY);
-    if (beat === "seek" && !askQueued && settled(ctx, now, Math.max(beatAt + SEEK_LOOK_MS, wokeAt))) return;
+    // In the niche the slot is his button; the moving one goes (M1).
+    if (beat === "home") placeHit(hit, false, 0, 0);
+    else follow(spriteY);
+    const parked = (beat === "seek" || beat === "home") && !askQueued;
+    const since = beat === "home" ? Math.max(restAt, wokeAt) : Math.max(beatAt + SEEK_LOOK_MS, wokeAt);
+    if (parked && settled(ctx, now, since)) {
+      if (beat === "seek") {
+        // The phone park: he looks around, then Kayolo takes him 1.6 s later (§9.8).
+        if (restAt < 0) restAt = now;
+        if (now - restAt < 1600) {
+          // One timer, not frames, for the wait.
+          window.setTimeout(() => loop.again(), 1600 - (now - restAt) + 8);
+          return;
+        }
+      }
+      const pose = { look: clamp(look, -2.1, 2.1), head, pick, eyeLift: eye * 2.2, eyeScale: 1 + eye * 0.34, pupil, pupilOrbit: orbit };
+      if (giveBody(ctx, beat === "home" ? "nook" : "park", box.left + x, box.top + floor, face, pose)) {
+        held = true;
+        ctx.clearRect(0, 0, w, h);
+      }
+      return;
+    }
     loop.again();
   };
 
@@ -1921,6 +2193,7 @@ function runHeaderPass(
     dead = true;
     loop.stop();
     unwake();
+    offKeeper();
     window.removeEventListener("pointermove", onMove);
     if (watchNotes) releaseNotes();
     placeHit(hit, false, 0, 0);
@@ -1956,10 +2229,17 @@ function runFavoritesErrand(canvas: HTMLCanvasElement, header: HTMLElement, wake
   let aim: { x: number; y: number } | null = null;
   type Phase = "home" | "rail" | "drop" | "rollin" | "write" | "live" | "retreat" | "rise";
   let phase: Phase = "home";
+  const wide = window.matchMedia(WIDE_QUERY).matches;
+  const homeWhere: BodyWhere = wide ? "nook" : "park";
+  /** Kayolo holds the body at home or by the note (M1): the scout draws nothing. */
+  let held = false;
+  let owned = false;
+  const offKeeper = onKeeper(() => wake());
 
   let near = false;
   const onMove = (e: PointerEvent) => {
     aim = { x: e.clientX, y: e.clientY };
+    if (held) return;
     // At rest his eyes follow a pointer within 140–160 px: wake for it, and once more as it leaves.
     const close = Math.hypot(e.clientX - x, e.clientY - y) < 220;
     if (close || near) wake();
@@ -1971,10 +2251,15 @@ function runFavoritesErrand(canvas: HTMLCanvasElement, header: HTMLElement, wake
 
   const headerHome = () => {
     const slip = searchSlip(header);
+    const y0 = slip?.floorY ?? header.getBoundingClientRect().bottom - 6;
+    if (KAYOLO_LAYER && wide) {
+      // Home is Kayolo's niche (Э1b).
+      const n = nookNow();
+      if (n) return { x: n.x, y: n.y };
+    }
     const title = header.querySelector<HTMLElement>('[data-scout="title"]');
     const titleBox = title?.getBoundingClientRect();
-    const x0 = titleBox ? titleBox.left - 40 : slip?.parkX ?? x;
-    const y0 = slip?.floorY ?? header.getBoundingClientRect().bottom - 6;
+    const x0 = titleBox && titleBox.width > 2 ? titleBox.left - 40 : slip?.parkX ?? x;
     return { x: x0, y: y0 };
   };
 
@@ -2029,7 +2314,23 @@ function runFavoritesErrand(canvas: HTMLCanvasElement, header: HTMLElement, wake
       last = now;
       ready = true;
       const waiting = noteEl();
+      if (KAYOLO_LAYER && !waiting && kayoloHolds() === homeWhere) {
+        // Already at home with Kayolo: nothing to do until a note appears.
+        held = true;
+        owned = true;
+        x = home.x;
+        y = home.y;
+      }
       if (waiting) beginTrip(now);
+    }
+    if (!owned) {
+      owned = true;
+      const p = takeBody(ctx);
+      if (p) {
+        x = p.x;
+        y = p.y;
+        face = p.face;
+      }
     }
     const dt = Math.min(34, now - last);
     last = now;
@@ -2205,6 +2506,25 @@ function runFavoritesErrand(canvas: HTMLCanvasElement, header: HTMLElement, wake
       beatAt = now;
     }
 
+    const restingHere = phase === "home" || phase === "live";
+    if (held && !restingHere) {
+      // Off to the note (or back): the body comes back in this frame.
+      held = false;
+      takeBody(ctx);
+    }
+    if (held) {
+      if (phase === "live" && note) {
+        const stand = standAt(note);
+        x = stand.x;
+        y = stand.y;
+      } else if (phase === "home") {
+        const home = headerHome();
+        x = home.x;
+        y = home.y;
+      }
+      if (kayoloHolds() !== "nook") moveBody({ x, y });
+      return;
+    }
     const floor = y;
     const air = phase === "drop" || phase === "rise" ? 0.45 : 0;
     ctx.save();
@@ -2214,25 +2534,26 @@ function runFavoritesErrand(canvas: HTMLCanvasElement, header: HTMLElement, wake
     ctx.fill();
     ctx.restore();
     scoutPose = { x, y: floor, face, roll };
+    const bodyPose = { head, look: clamp(look, -2.1, 2.1), pick, eyesApart: apart, eyeLift: eye * 2.2, eyeScale, pupil, pupilOrbit: orbit };
     drawScout(ctx, {
+      ...bodyPose,
       x: clamp(x, 16, w - 16),
       y: floor,
-      head,
-      look: clamp(look, -2.1, 2.1),
-      pick,
       roll,
       face,
       scale: SCALE,
-      eyesApart: apart,
-      eyeLift: eye * 2.2,
-      eyeScale,
-      pupil,
-      pupilOrbit: orbit,
       mood: phase === "write" ? "work" : phase === "drop" ? "surprised" : phase === "retreat" ? "happy" : phase === "live" ? "curious" : "idle",
     });
     // By the title or by the written line: once still, no frames until an event.
     const blinking = phase === "home" ? now % 2700 < 80 : phase === "live" ? (now - beatAt) % 2600 < 90 : false;
-    if ((phase === "home" || phase === "live") && !blinking && settled(ctx, now, Math.max(beatAt, wokeAt))) return;
+    if (restingHere && !blinking && settled(ctx, now, Math.max(beatAt, wokeAt))) {
+      // Still: Kayolo lives in him from here (M1); the canvas is cleared in this frame.
+      if (giveBody(ctx, phase === "live" ? "note" : homeWhere, x, floor, face, bodyPose)) {
+        held = true;
+        ctx.clearRect(0, 0, w, h);
+      }
+      return;
+    }
     loop.again();
   };
 
@@ -2248,6 +2569,7 @@ function runFavoritesErrand(canvas: HTMLCanvasElement, header: HTMLElement, wake
     dead = true;
     loop.stop();
     unwake();
+    offKeeper();
     window.removeEventListener("pointermove", onMove);
     releaseNotes();
     if (prev == null) canvas.removeAttribute("style");
@@ -2261,6 +2583,9 @@ export function HeaderScout() {
   const ref = useRef<HTMLCanvasElement>(null);
   const hitRef = useRef<HTMLButtonElement>(null);
   const leaveRef = useRef(false);
+  /** «Call him home» from Kayolo's window during the tour (the door uses leaveRef). */
+  const homeRef = useRef(false);
+  const machineRef = useRef<"perch" | "pass" | "errand" | null>(null);
   /** The running pass sleeps when parked; a click on him or a rent answer wakes it. */
   const wakeRef = useRef<() => void>(() => {});
   // Live media: a changed motion setting restarts him; on address pages so does crossing 1024 px.
@@ -2268,28 +2593,63 @@ export function HeaderScout() {
   const wideTick = useMediaTick(WIDE_QUERY);
   const perchTick = isAddressHome(path) ? wideTick : 0;
 
+  useEffect(
+    () =>
+      onKayolo((ev) => {
+        if (ev.k === "kayolo:call-home") {
+          if (machineRef.current === "perch") leaveRef.current = true;
+          else homeRef.current = true;
+          wakeRef.current();
+          return;
+        }
+        // Home celebrates in the live-blocks yard; he is not in the bar there. Kayolo answers it
+        // himself when he holds the body.
+        if (ev.k !== "chain:rare" || window.location.pathname === "/" || kayoloHolds()) return;
+        rareCalledAt = performance.now();
+        wakeRef.current();
+      }),
+    []
+  );
+
   useEffect(() => {
     leaveRef.current = false;
+    homeRef.current = false;
+    machineRef.current = null;
     wakeRef.current = () => {};
     if (path === "/") {
       perchedOnAddresses = false;
       returnedToHeader = false;
       addressPassed = false;
       rentTold = "";
+      if (bodyOwner() === "scout") setOwner("none");
       return;
     }
     const canvas = ref.current;
     const root = canvas?.parentElement;
     if (!canvas || !root) return;
-    if (window.matchMedia(REDUCE_QUERY).matches) {
-      // No scout under reduced motion. Switched on live, the last frame must not stay behind.
+    if (window.matchMedia(REDUCE_QUERY).matches || (KAYOLO_LAYER && currentMode() !== "live")) {
+      // No scout under reduced motion (or in «Тихий» and the quieter modes): Kayolo keeps him at
+      // home, still. Switched on live, the last frame must not stay behind.
       canvas.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
       placeHit(hitRef.current, false, 0, 0);
+      if (bodyOwner() === "scout") setOwner("none");
       return;
     }
     const wide = window.matchMedia(WIDE_QUERY).matches;
-    const homeLabel = t("scout.home");
-    const askLabel = t("scout.ask");
+    const layer = KAYOLO_LAYER;
+    // The gate (§7.1, §9.8 M1): a tour only when one is due, once per arrival.
+    const arrival = layer ? arrive(path) : null;
+    const tour = !!arrival && arrival.tour && tourRanFor !== path;
+    if (tour) tourRanFor = path;
+    const midPass = layer && bodyOwner() === "scout" && scoutPose != null;
+    const kayolo = { nook: layer && wide, homeRef };
+    /** A machine that will draw says so now, in this effect: his window drops its still frame
+     *  in the same task, so no frame shows the still and the scout together. */
+    const claim = () => {
+      if (layer && !kayoloHolds()) setOwner("scout");
+    };
+    const homeLabel = t("kayolo.home");
+    const askLabel = t("kayolo.ask");
     const addressId = addressIdOf(path);
     if (!addressId) rentTold = "";
     else if (rentTold && rentTold !== addressId) rentTold = "";
@@ -2315,13 +2675,16 @@ export function HeaderScout() {
     let stopPerch = () => {};
     let stopPass = () => {};
     if (isAddressHome(path) && wide && !returnedToHeader) {
+      machineRef.current = "perch";
+      claim();
       stopPerch = runAddressPerch(canvas, hitRef.current, leaveRef, homeLabel, (vx) => {
         const local = vx - root.getBoundingClientRect().left;
+        machineRef.current = "pass";
         stopPass = runHeaderPass(canvas, root, hitRef.current, leaveRef, askLabel, {
           from: "after-fall",
           x: local,
           markDone: true,
-        }, wakeRef, true);
+        }, wakeRef, true, kayolo);
       }, { addressId, blocks, scratch }, wakeRef);
       return () => {
         cancelRent = true;
@@ -2336,11 +2699,40 @@ export function HeaderScout() {
       rentTold = "";
     }
     placeHit(hitRef.current, false, 0, 0);
-    if (path === "/favorites") return runFavoritesErrand(canvas, root, wakeRef);
+    if (path === "/favorites") {
+      machineRef.current = "errand";
+      claim();
+      return runFavoritesErrand(canvas, root, wakeRef);
+    }
+    // Kayolo is held where this page does not keep him (the door after leaving Addresses): home.
+    const holds = kayoloHolds();
+    if (layer && holds && holds !== (wide ? "nook" : "park") && !tour) sendHome();
+    machineRef.current = "pass";
+    const local = (vx: number) => vx - root.getBoundingClientRect().left;
+    let from: PassFrom;
+    let x: number | undefined;
+    if (isAddressHome(path) && wide) from = addressPassed ? (layer ? "rest" : "seek") : "after-fall";
+    else if (!layer) from = "start";
+    else if (tour) {
+      // The first show in a session falls in; later tours start where he is.
+      from = arrival?.first && !midPass && !holds ? "start" : "nook";
+      if (midPass && scoutPose) x = local(scoutPose.x);
+    } else if (midPass && scoutPose) {
+      from = "walk-home";
+      x = local(scoutPose.x);
+    } else from = "rest";
+    if (from === "rest") {
+      // Nothing to draw: Kayolo has him at home (or takes him there). The last frame must go.
+      canvas.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
+      if (bodyOwner() === "scout") setOwner("none");
+      // The phone keeps drawing him at the park until the layer has loaded.
+      if (!wide && !hasKeeper()) claim();
+    } else claim();
     return runHeaderPass(canvas, root, hitRef.current, leaveRef, askLabel, {
-      from: isAddressHome(path) && wide && addressPassed ? "seek" : isAddressHome(path) && wide ? "after-fall" : "start",
+      from,
+      x,
       markDone: isAddressHome(path) && wide,
-    }, wakeRef, isAddressHome(path));
+    }, wakeRef, isAddressHome(path), kayolo);
   }, [path, locale, t, reduceTick, perchTick]);
 
   if (path === "/") return null;
@@ -2355,7 +2747,7 @@ export function HeaderScout() {
         ref={hitRef}
         type="button"
         tabIndex={-1}
-        aria-label={t("scout.home")}
+        aria-label={t("kayolo.home")}
         className="header-scout pointer-events-none fixed z-20 h-14 w-[52px] cursor-pointer rounded-full border-0 bg-transparent p-0 opacity-0 outline-none focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
         onPointerDown={(e) => {
           e.preventDefault();

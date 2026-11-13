@@ -81,7 +81,10 @@ export type ScoutBeat =
   | "under-title-back"
   | "rise-title-back"
   | "to-search"
-  | "seek";
+  | "seek"
+  /** Kayolo's niche (Э1b, §7.1): the desktop tour starts and ends at home, right of the title. */
+  | "to-home"
+  | "home";
 
 /**
  * Out: slip under the title and draw the line, slip under the price and
@@ -99,7 +102,11 @@ export function askWaitsForSlip(beat: string): boolean {
   return beat.startsWith("under");
 }
 
-export function scoutBeats(hasTitle: boolean, hasMcap: boolean): ScoutBeat[] {
+/**
+ * `nook`: the desktop tour with Kayolo's window (design/brand/kayolo-life.md §7.1). After the price
+ * he walks to his niche right of the title instead of going back under the title to the search.
+ */
+export function scoutBeats(hasTitle: boolean, hasMcap: boolean, nook = false): ScoutBeat[] {
   const beats: ScoutBeat[] = ["fall"];
   if (hasTitle) beats.push("squat-title", "under-title", "rise-title", "read");
   beats.push("to-price", "squat-price", "under-price", "rise-gap", "price");
@@ -116,6 +123,10 @@ export function scoutBeats(hasTitle: boolean, hasMcap: boolean): ScoutBeat[] {
     );
   }
   beats.push("squat-price-back", "under-price-back", "rise-price-back");
+  if (nook) {
+    beats.push("to-home", "home");
+    return beats;
+  }
   if (hasTitle) {
     beats.push("to-title-back", "squat-title-back", "under-title-back", "rise-title-back");
   }

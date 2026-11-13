@@ -20,6 +20,7 @@ import { IndexerStatus } from "./IndexerStatus";
 import { INK } from "@/lib/palette";
 import { BrandMark, BrandWord } from "./BrandMark";
 import { HeaderScout } from "./HeaderScout";
+import { KayoloBoot, KayoloSlot } from "./kayolo/KayoloSlot";
 import { ErgUsdContext, PriceTape, useSiteMarket } from "./PriceTape";
 import type { SiteMarket } from "@/lib/site-market";
 import { SCOUT_CUES_EN, SCOUT_CUES_RU } from "@/lib/header-scout";
@@ -188,13 +189,18 @@ export function Shell({
                 <SearchField />
               </div>
 
-              <ChromeHeading />
+              {/* Kayolo's window is ChromeHeading's sibling, between search and price in Tab order (§3.1). */}
+              <div className="relative h-full">
+                <ChromeHeading />
+                <KayoloSlot />
+              </div>
 
               <div className="flex h-full min-w-0 items-center justify-end gap-3">
                 <ErgPrice />
               </div>
             </div>
             <HeaderScout />
+            <KayoloBoot />
 
             <div className="phone-toolbar flex h-14 items-center gap-2 px-2.5 lg:hidden">
               <NavBrand compact />

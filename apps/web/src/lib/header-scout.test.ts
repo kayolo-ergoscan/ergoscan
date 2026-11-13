@@ -117,3 +117,12 @@ test("phone pass only slips under the price", () => {
     "seek",
   ]);
 });
+
+test("with Kayolo's window the desktop tour ends at home in the niche, not by the search", () => {
+  const beats = scoutBeats(true, true, true);
+  assert.deepEqual(beats.slice(0, 5), ["fall", "squat-title", "under-title", "rise-title", "read"]);
+  assert.deepEqual(beats.slice(-5), ["squat-price-back", "under-price-back", "rise-price-back", "to-home", "home"]);
+  assert.equal(beats.includes("to-search"), false);
+  assert.equal(beats.includes("under-title-back"), false, "the niche is right of the title: no slip back under it");
+  assert.deepEqual(scoutBeats(true, true, false), scoutBeats(true, true), "without the window the old pass stands");
+});

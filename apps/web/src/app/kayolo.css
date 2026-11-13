@@ -1,0 +1,119 @@
+/* Kayolo's window and layer (design/brand/kayolo-life.md §3.1, §9.4, §10). */
+
+/* His window: a 40×48 button in the header's middle cell, ground 6 px above its bottom. */
+.kayolo-slot {
+  position: absolute;
+  bottom: 0;
+  left: calc(50% - 20px);
+  z-index: 1;
+  width: 40px;
+  height: 48px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: pan-y;
+  outline: none;
+}
+/* Focus: the site's own soft ring (globals.css :focus-visible), not a second style. */
+
+/* The body at home is drawn here: 56×64, ground point at (28, 58), wider than the button. */
+.kayolo-slot .kayolo-canvas {
+  position: absolute;
+  left: -8px;
+  top: -16px;
+  width: 56px;
+  height: 64px;
+  pointer-events: none;
+}
+
+/* The still frame (nobody draws him yet, reduced motion before the layer): the idle face, the same pixels. */
+.kayolo-still {
+  display: none;
+  position: absolute;
+  left: 8.82px;
+  bottom: 6px;
+  width: 22.36px;
+  height: 22.36px;
+  background: var(--still-ink, var(--brand-new));
+  pointer-events: none;
+}
+.kayolo-still::before,
+.kayolo-still::after {
+  content: "";
+  position: absolute;
+  top: 5.21px;
+  width: 3.91px;
+  height: 7.83px;
+  background: #121116;
+}
+.kayolo-still::before {
+  left: 3.92px;
+}
+.kayolo-still::after {
+  left: 13.24px;
+}
+.kayolo-slot[data-still] .kayolo-still {
+  display: block;
+}
+
+/* The layer: the body on a path or away from home. Above the header and the dock, below sheets. */
+.kayolo-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+  contain: strict;
+}
+.kayolo-body {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 56px;
+  height: 64px;
+}
+.kayolo-body .kayolo-canvas {
+  display: block;
+  width: 56px;
+  height: 64px;
+}
+
+.kayolo-tip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.kayolo-tip-name {
+  font-weight: 600;
+}
+.kayolo-tip-line {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (forced-colors: active) {
+  .kayolo-canvas {
+    display: none;
+  }
+  .kayolo-slot .kayolo-still {
+    display: block;
+    background: ButtonText;
+    forced-color-adjust: none;
+  }
+  .kayolo-still::before,
+  .kayolo-still::after {
+    display: none;
+  }
+}
+
+@media print {
+  .kayolo-slot,
+  .kayolo-layer {
+    display: none !important;
+  }
+}

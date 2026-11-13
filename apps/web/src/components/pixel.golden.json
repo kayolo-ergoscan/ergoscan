@@ -1,0 +1,112 @@
+{
+ "idle": [
+  "d35a96754c550b63",
+  "72d1d446f87c051b",
+  "2919e8023d4c3447"
+ ],
+ "idle:reduce": [
+  "463ef89bd678e363",
+  "463ef89bd678e363",
+  "463ef89bd678e363"
+ ],
+ "look": [
+  "a4f405b2578685d3",
+  "a94d2a4b9bb21f18",
+  "4c14252ba998e5b3"
+ ],
+ "look:reduce": [
+  "a5cff6b3b2284fa5",
+  "a5cff6b3b2284fa5",
+  "a5cff6b3b2284fa5"
+ ],
+ "happy": [
+  "b0d4dc590c8a244e",
+  "5f7ad71b6f6c951c",
+  "c6ecdec3780d16e9"
+ ],
+ "happy:reduce": [
+  "b897f0b2eb13acc9",
+  "b897f0b2eb13acc9",
+  "b897f0b2eb13acc9"
+ ],
+ "think": [
+  "0bc7219c74d13d6b",
+  "0ec3fcc6c490c390",
+  "8f1993ca59bdfbbd"
+ ],
+ "think:reduce": [
+  "47239a07d3eab613",
+  "47239a07d3eab613",
+  "47239a07d3eab613"
+ ],
+ "surprised": [
+  "009147301f4501fb",
+  "e3a27f2f6659ef84",
+  "6de1777787f09210"
+ ],
+ "surprised:reduce": [
+  "c9188cda8e24a777",
+  "c9188cda8e24a777",
+  "c9188cda8e24a777"
+ ],
+ "sleepy": [
+  "290339fd8170129e",
+  "bc1779e59bff2dc6",
+  "e4e72779b16f098e"
+ ],
+ "sleepy:reduce": [
+  "2c1f095d3bcaee70",
+  "2c1f095d3bcaee70",
+  "2c1f095d3bcaee70"
+ ],
+ "sad": [
+  "be1e90dc2d39cecc",
+  "712611b622d14428",
+  "de246a5d1c6a1dda"
+ ],
+ "sad:reduce": [
+  "f966c840e7d194dc",
+  "f966c840e7d194dc",
+  "f966c840e7d194dc"
+ ],
+ "curious": [
+  "f1e1ac6c6f06ab39",
+  "e714afd1e8902ec0",
+  "bbb6ed6b511acc66"
+ ],
+ "curious:reduce": [
+  "99b9976187200138",
+  "99b9976187200138",
+  "99b9976187200138"
+ ],
+ "work": [
+  "3df3ad8aa6ccd682",
+  "356c7c3811d8d2e8",
+  "b9e290cfd3867830"
+ ],
+ "work:reduce": [
+  "9fdb6bb9ee589f77",
+  "9fdb6bb9ee589f77",
+  "9fdb6bb9ee589f77"
+ ],
+ "idle>happy": [
+  "213b174c76546e7b",
+  "623729923ea5180e",
+  "2cef241e516c98fd"
+ ],
+ "idle>surprised": [
+  "213b174c76546e7b",
+  "d56eaefe52d6c434",
+  "e66c0fcefbb6eec8"
+ ],
+ "happy>sleepy": [
+  "39a3a41a3f1a1288",
+  "7d3ac369a1214888",
+  "5afe23345acb15ab"
+ ],
+ "walk+pick+apart+gaze": [
+  "0e58578537a3565d",
+  "8f8fe1ff7b3ba495",
+  "ba22742a09188432"
+ ]
+}

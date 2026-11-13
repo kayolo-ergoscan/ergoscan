@@ -8,6 +8,7 @@ import { useSiteHost } from "@/lib/site-host";
 
 const EASE: [number, number, number, number] = [0.4, 0, 0.2, 1];
 
+/** The title leaves 48 px on each side for Kayolo's niche (design/brand/kayolo-life.md §3.1). */
 export function ChromeHeading() {
   const path = usePathname();
   const t = useT();
@@ -32,7 +33,7 @@ export function ChromeHeading() {
         >
           <Tag
             data-scout="title"
-            className="m-0 max-w-full truncate text-[17px] font-semibold leading-none tracking-[-0.02em] text-[var(--text)]"
+            className="m-0 max-w-[calc(100%-96px)] truncate text-[17px] font-semibold leading-none tracking-[-0.02em] text-[var(--text)]"
           >
             {title}
           </Tag>
