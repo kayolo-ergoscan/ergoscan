@@ -18,6 +18,8 @@
  *     [--gateway http://127.0.0.1:4400] [--pages /,/block/H,/address/A,/favorites] \
  *     [--vp 1771x891@1.5,390x844@3] [--warm 30] [--idle 60] [--clicks] [--out result.json] \
  *     [--shots DIR]   (one PNG per viewport and page after --warm s, at --idle 0 nothing is measured)
+ *     [--tab]         (Э1b: Tab from the search goes to Kayolo's window, then to the price)
+ *     [--bodies N]    (Э1b: N client-side transitions; every frame counts the bodies drawn: never 2)
  * Start the preview on a free port (not 4400/4401/4410) and stop it by its port PID only.
  */
 import { createRequire } from "node:module";
@@ -41,6 +43,8 @@ const IDLE = Number(opt("idle", "60")) * 1000;
 const OUT = opt("out", "");
 const CHROME = opt("chrome", "/usr/bin/chromium-browser");
 const CLICKS = args.includes("--clicks");
+const TAB = args.includes("--tab");
+const BODIES = Number(opt("bodies", "0"));
 const SHOTS = opt("shots", "");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -186,7 +190,7 @@ const COUNTERS = (hidden) => `(() => {
     hidden
       ? `const pe = Object.getOwnPropertyDescriptor(Node.prototype, "parentElement");
   Object.defineProperty(HTMLCanvasElement.prototype, "parentElement", { configurable: true,
-    get() { return this.classList && this.classList.contains("header-scout") ? null : pe.get.call(this); } });`
+    get() { return this.classList && (this.classList.contains("header-scout") || this.classList.contains("kayolo-canvas")) ? null : pe.get.call(this); } });`
       : ""
   }
 })();`;
@@ -245,7 +249,8 @@ const CLICK_PLAN = (pages) => {
   const desk = parseVp("1771x891@1.5");
   const phone = parseVp("390x844@3");
   return [
-    { vp: desk, path: block, name: "search, parked", target: '[data-scout="search"]', beat: "seek" },
+    // Э1b: the desktop tour ends in the niche, nowhere near the search; the click must still reach it.
+    { vp: desk, path: block, name: "search", target: '[data-scout="search"]', any: true },
     { vp: desk, path: block, name: "price", target: 'a:has([data-scout="price"])', near: '[data-scout="price"]' },
     { vp: desk, path: block, name: "market cap", target: 'a:has([data-scout="mcap"])', near: '[data-scout="mcap"]' },
     { vp: desk, path: address, name: "«Адреса» by the door", target: '.nav-rail a:has([data-scout="addresses"]), .nav-rail [data-scout="addresses"]', beat: "home", any: true },
@@ -326,16 +331,128 @@ async function bodyPoints(base, path) {
     await openPage(b, base, path, vp, false);
     await sleep(WARM);
     return await b.evaluate(`(() => {
+      // Э1b: at rest he is in his window (a control of his own); the moving button is off. The 9
+      // points must hit his window or the bare header, never the search, the price or a link.
+      const slot = document.querySelector(".kayolo-slot");
       const hit = document.querySelector("button.header-scout");
-      if (!hit || hit.getAttribute("aria-hidden") !== "false") return { parked: false };
-      const r = hit.getBoundingClientRect();
+      const on = hit && hit.getAttribute("aria-hidden") === "false";
+      const box = slot ?? (on ? hit : null);
+      if (!box) return { parked: false };
+      const r = box.getBoundingClientRect();
       const names = [];
       for (const fy of [0.45, 0.65, 0.85]) for (const fx of [0.3, 0.5, 0.7]) {
         const el = document.elementFromPoint(r.left + r.width * fx, r.top + r.height * fy);
-        names.push(!el ? "-" : el.closest(".header-scout") ? "scout" : el.closest("[data-scout=search]") ? "search" : el.closest("header") ? "header" : el.tagName.toLowerCase());
+        names.push(!el ? "-" : el.closest(".kayolo-slot") ? "slot" : el.closest(".header-scout") ? "scout" : el.closest("[data-scout=search]") ? "search" : el.closest("a,button") ? "control" : el.closest("header") ? "header" : el.tagName.toLowerCase());
       }
-      return { parked: true, beat: document.querySelector("canvas.header-scout")?.dataset.scoutBeat, points: names };
+      return { parked: true, moving: !!on, beat: document.querySelector("canvas.header-scout")?.dataset.scoutBeat, holds: window.__kayolo?.()?.hold?.where ?? null, points: names };
     })()`);
+  } finally {
+    b.close();
+  }
+}
+
+/* ---------- Э1b: Tab order and one body ---------- */
+
+/** Desktop: focus the search, Tab twice. Kayolo's window must come between the search and the price. */
+async function tabOrder(base, path) {
+  const b = await browser();
+  try {
+    const vp = parseVp("1771x891@1.5");
+    await openPage(b, base, path, vp, false);
+    await sleep(4000);
+    const name = `(() => { const el = document.activeElement; if (!el) return "-"; if (el.closest(".kayolo-slot")) return "kayolo"; if (el.closest('[data-scout="search"]')) return "search"; if (el.querySelector && el.querySelector('[data-scout="price"]')) return "price"; return (el.tagName + " " + (el.getAttribute("aria-label") || el.textContent || "").trim().slice(0, 30)); })()`;
+    await b.evaluate(`(() => { const s = [...document.querySelectorAll('[data-scout="search"]')].find((el) => el.getBoundingClientRect().width > 2); s?.focus(); return !!s; })()`);
+    const seen = [await b.evaluate(name)];
+    for (let i = 0; i < 2; i++) {
+      await b.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+      await b.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+      await sleep(250);
+      seen.push(await b.evaluate(name));
+    }
+    return { path, seen, ok: seen.join(" → ") === "search → kayolo → price" };
+  } finally {
+    b.close();
+  }
+}
+
+/**
+ * Counts bodies in every frame: a canvas of the scout or of Kayolo counts once it has a body-sized
+ * fillRect since its last clear; his still frame counts while shown. Sampled at the start of each
+ * frame, i.e. what the frame before put on screen.
+ */
+const BODY_PROBE = `(() => {
+  const has = new WeakMap();
+  const ours = (cv) => cv && cv.classList && (cv.classList.contains("header-scout") || cv.classList.contains("kayolo-canvas"));
+  const P = CanvasRenderingContext2D.prototype;
+  const fill = P.fillRect, clear = P.clearRect;
+  P.fillRect = function (x, y, w, h) {
+    if (ours(this.canvas) && Math.abs(w) >= 14 && Math.abs(h) >= 10) has.set(this.canvas, true);
+    return fill.call(this, x, y, w, h);
+  };
+  P.clearRect = function (x, y, w, h) {
+    if (ours(this.canvas)) has.set(this.canvas, false);
+    return clear.call(this, x, y, w, h);
+  };
+  for (const k of ["width", "height"]) {
+    const d = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, k);
+    Object.defineProperty(HTMLCanvasElement.prototype, k, { configurable: true, get() { return d.get.call(this); },
+      set(v) { if (ours(this)) has.set(this, false); d.set.call(this, v); } });
+  }
+  const seen = (el) => el.isConnected && (el.checkVisibility ? el.checkVisibility({ opacityProperty: true, visibilityProperty: true }) : el.getClientRects().length > 0);
+  const out = { frames: 0, two: 0, zero: 0, max: 0, worst: [] };
+  Object.defineProperty(window, "__bodies", { value: out });
+  const tick = () => {
+    let n = 0;
+    const who = [];
+    for (const cv of document.querySelectorAll("canvas.header-scout, canvas.kayolo-canvas")) {
+      if (has.get(cv) && cv.width > 0 && seen(cv)) { n++; who.push(cv.classList.contains("header-scout") ? "scout" : cv.closest(".kayolo-slot") ? "slot" : "layer"); }
+    }
+    for (const st of document.querySelectorAll(".kayolo-slot[data-still] .kayolo-still")) if (seen(st)) { n++; who.push("still"); }
+    if (location.pathname !== "/") {
+      out.frames++;
+      if (n === 0) out.zero++;
+    }
+    if (n >= 2) { out.two++; if (out.worst.length < 12) out.worst.push(location.pathname + " " + who.join("+")); }
+    out.max = Math.max(out.max, n);
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+})();`;
+
+async function oneBody(base, vp, n, pages) {
+  const b = await browser();
+  try {
+    await b.send("Page.enable");
+    await b.send("Runtime.enable");
+    await b.send("Page.addScriptToEvaluateOnNewDocument", { source: BODY_PROBE });
+    await openPage(b, base, "/blocks", vp, false);
+    await sleep(6000);
+    const trail = [];
+    for (let i = 0; i < n; i++) {
+      const to = pages[i % pages.length];
+      // A client-side transition through the site's own links (the rail, the tab bar, a row).
+      const how = await b.evaluate(`(() => {
+        const want = ${JSON.stringify(to)};
+        const links = [...document.querySelectorAll('a[href]')].filter((a) => {
+          const r = a.getBoundingClientRect();
+          return a.getAttribute("href") === want && r.width > 2 && r.height > 2 && r.bottom > 0 && r.top < innerHeight;
+        });
+        if (links.length) { links[0].click(); return "link"; }
+        const a = document.createElement("a");
+        a.href = want;
+        a.style.position = "fixed"; a.style.left = "0"; a.style.top = "0"; a.style.width = "1px"; a.style.height = "1px";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        return "anchor";
+      })()`);
+      trail.push(`${to}(${how})`);
+      // Short and long stays: mid-tour arrivals and arrivals at rest.
+      await sleep(i % 3 === 0 ? 900 : i % 3 === 1 ? 2500 : 6000);
+    }
+    await sleep(3000);
+    const r = await b.evaluate("({ ...window.__bodies, at: location.pathname })");
+    return { vp: vp.name, transitions: n, trail, ...r };
   } finally {
     b.close();
   }
@@ -391,6 +508,20 @@ try {
     result.body = await bodyPoints(base, block);
     console.log(`body points at rest on ${block}: ${JSON.stringify(result.body)}`);
     console.log(`clicks through: ${result.clicks.filter((c) => c.ok).length} of ${result.clicks.length}`);
+  }
+  if (TAB) {
+    const block = pages.find((p) => p.startsWith("/block/")) ?? "/blocks";
+    result.tab = await tabOrder(base, block);
+    console.log(`tab on ${block}: ${result.tab.seen.join(" → ")} ${result.tab.ok ? "OK" : "WRONG"}`);
+  }
+  if (BODIES > 0) {
+    const route = opt("route", "/transactions,/addresses,/tokens,/blocks,/favorites,/mempool,/,/blocks,/tokens,/addresses").split(",").map((s) => s.trim());
+    result.bodies = [];
+    for (const vp of vps) {
+      const r = await oneBody(base, vp, BODIES, route);
+      result.bodies.push(r);
+      console.log(`bodies ${vp.name}: ${r.transitions} transitions, ${r.frames} frames, two-body frames ${r.two}, max ${r.max}, zero-body frames ${r.zero}${r.worst.length ? " " + JSON.stringify(r.worst) : ""}`);
+    }
   }
 } finally {
   proxy.close();

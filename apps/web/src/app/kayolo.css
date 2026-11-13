@@ -35,7 +35,7 @@
   pointer-events: none;
 }
 
-/* The still frame (SSR, reduced motion before the layer): the idle face, the same pixels. */
+/* The still frame (nobody draws him yet, reduced motion before the layer): the idle face, the same pixels. */
 .kayolo-still {
   display: none;
   position: absolute;

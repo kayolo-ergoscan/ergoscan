@@ -2643,6 +2643,11 @@ export function HeaderScout() {
     if (tour) tourRanFor = path;
     const midPass = layer && bodyOwner() === "scout" && scoutPose != null;
     const kayolo = { nook: layer && wide, homeRef };
+    /** A machine that will draw says so now, in this effect: his window drops its still frame
+     *  in the same task, so no frame shows the still and the scout together. */
+    const claim = () => {
+      if (layer && !kayoloHolds()) setOwner("scout");
+    };
     const homeLabel = t("kayolo.home");
     const askLabel = t("kayolo.ask");
     const addressId = addressIdOf(path);
@@ -2671,6 +2676,7 @@ export function HeaderScout() {
     let stopPass = () => {};
     if (isAddressHome(path) && wide && !returnedToHeader) {
       machineRef.current = "perch";
+      claim();
       stopPerch = runAddressPerch(canvas, hitRef.current, leaveRef, homeLabel, (vx) => {
         const local = vx - root.getBoundingClientRect().left;
         machineRef.current = "pass";
@@ -2695,6 +2701,7 @@ export function HeaderScout() {
     placeHit(hitRef.current, false, 0, 0);
     if (path === "/favorites") {
       machineRef.current = "errand";
+      claim();
       return runFavoritesErrand(canvas, root, wakeRef);
     }
     // Kayolo is held where this page does not keep him (the door after leaving Addresses): home.
@@ -2718,7 +2725,9 @@ export function HeaderScout() {
       // Nothing to draw: Kayolo has him at home (or takes him there). The last frame must go.
       canvas.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
       if (bodyOwner() === "scout") setOwner("none");
-    }
+      // The phone keeps drawing him at the park until the layer has loaded.
+      if (!wide && !hasKeeper()) claim();
+    } else claim();
     return runHeaderPass(canvas, root, hitRef.current, leaveRef, askLabel, {
       from,
       x,

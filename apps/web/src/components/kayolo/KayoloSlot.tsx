@@ -20,9 +20,11 @@ import { KAYOLO_LAYER, NOTICE_MS, OFFLINE_MS, TIP_MS } from "@/lib/kayolo/thresh
  * Kayolo's window (design/brand/kayolo-life.md §3.1, §4.1, §10): a 40×48 button in the middle cell of
  * the desktop header, a sibling of ChromeHeading, so Tab goes search → Kayolo → price. Home is the
  * niche right of the title. The body at rest is drawn on the small canvas inside (by the lazy layer);
- * until the layer has it, a CSS still frame with the same pixels stands in (and under reduced motion
- * before the layer loads). While he is away (the tour, the Addresses door) the window is a handle that
- * calls him home; the niche is empty.
+ * while nobody draws him (no tour due and the layer not loaded yet, reduced motion before the layer
+ * loads) a CSS still frame with the same pixels stands in. It is not in the server HTML: on a first
+ * visit he falls in with the tour, and a still frame in the niche first would be a second body.
+ * While he is away (the tour, the Addresses door) the window is a handle that calls him home; the
+ * niche is empty.
  */
 
 function local() {
@@ -172,7 +174,6 @@ export function KayoloSlot() {
       ref={ref}
       type="button"
       className="kayolo-slot"
-      data-still=""
       data-away={away ?? undefined}
       aria-label={label}
       style={{ ["--still-ink" as string]: ink }}
