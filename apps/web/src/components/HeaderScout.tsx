@@ -2753,13 +2753,19 @@ export function HeaderScout() {
       const go = (from: PassFrom) => {
         if (done) return;
         done = true;
-        machineRef.current = "pass";
         claim();
+        if (path === "/favorites") {
+          // Favorites keeps its own show after the introduction, not the header tour.
+          machineRef.current = "errand";
+          stop = runFavoritesErrand(canvas, root, wakeRef);
+          return;
+        }
+        machineRef.current = "pass";
         stop = runHeaderPass(canvas, root, hitRef.current, leaveRef, askLabel, { from }, wakeRef, isAddressHome(path), kayolo);
       };
       const off = onKayolo((ev) => {
         if (ev.k !== "kayolo:intro-done") return;
-        if (ev.tour && tour) go("nook");
+        if ((ev.tour && tour) || path === "/favorites") go("nook");
         else done = true;
       });
       const fallback = window.setTimeout(() => {
