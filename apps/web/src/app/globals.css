@@ -4053,6 +4053,13 @@ html[data-look="c"] .holders-mark {
   background: color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
+/* Narrow phones: the caption chip («Держатели Ergo ⓘ») needs the mark's corner; the mark is decoration. */
+@media (max-width: 379px) {
+  .holders-mark {
+    display: none;
+  }
+}
+
 .holders-month {
   display: inline-flex;
   align-items: center;
