@@ -6,7 +6,23 @@
 /** E20 kinds (§8.2). Э0 celebrates only "10k". */
 export type RareKind = "10k" | "100k" | "emission-step" | "emission-end";
 
-export type KayoloEvent = { k: "chain:rare"; height: number; what: RareKind };
+/** Where the body is when Kayolo holds it: his niche, the phone park, the address door, a note. */
+export type BodyWhere = "nook" | "park" | "door" | "note";
+
+export type KayoloEvent =
+  | { k: "chain:rare"; height: number; what: RareKind }
+  /** E1–E3: one per height (seal and tip merged). txCount is null when only the tip came. */
+  | { k: "chain:block"; height: number; txCount: number | null; size: number | null; kind: "empty" | "normal" | "big" }
+  /** The header scout gave him the body (M1, §9.8). */
+  | { k: "kayolo:took"; where: BodyWhere }
+  /** He gave the body back to the header scout, from this point. */
+  | { k: "kayolo:release"; x: number; y: number; face: 1 | -1; where: BodyWhere }
+  /** His window while he is away: call him home. */
+  | { k: "kayolo:call-home" }
+  /** A click, a tap or Enter on his window. */
+  | { k: "ui:poke" }
+  /** The pointer rests on his window (250 ms), or it has focus. */
+  | { k: "ui:notice"; on: boolean };
 
 export const KAYOLO_EVENT = "kayolo";
 
