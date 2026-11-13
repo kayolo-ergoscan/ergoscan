@@ -106,7 +106,8 @@ export type SceneText = {
   check: string;
   checkShort: string;
   pay: string;
-  round: (c: CartSpot) => [string, string];
+  /** Height, then miners and bank; on the phone's short track only the bank (the facts row has the miners). */
+  round: (c: CartSpot, small: boolean) => [string, string];
   checkLeft: (c: CartSpot) => string;
   payout: string;
 };
@@ -223,7 +224,7 @@ function drawCart(
   const hw = L.cartHw;
   const body = L.cartBody;
   const y = L.ground - 4 - bump * 2;
-  const d = L.small ? 4 : 5;
+  const d = L.small ? 4 : Math.round(hw * 0.27);
   ctx.save();
   ctx.globalAlpha = alpha;
   // Wheels.
@@ -232,7 +233,7 @@ function drawCart(
   ctx.lineWidth = 1;
   for (const wx of [x - hw * 0.55, x + hw * 0.55]) {
     ctx.beginPath();
-    ctx.arc(wx, L.ground - 2.5, L.small ? 2.4 : 3, 0, Math.PI * 2);
+    ctx.arc(wx, L.ground - 2.5, L.small ? 2.4 : hw * 0.16, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
   }
@@ -274,7 +275,7 @@ function drawCart(
   // Ore: one chip per miner who sent a NISP (up to 12), heaped in the middle.
   ctx.fillStyle = ink.gold;
   const n = Math.min(12, chips);
-  const c = L.small ? 3 : 3.6;
+  const c = L.small ? 3 : hw * 0.19;
   for (let i = 0; i < n; i++) {
     const row = i < 5 ? 0 : i < 9 ? 1 : i < 11 ? 2 : 3;
     const inRow = row === 0 ? 5 : row === 1 ? 4 : row === 2 ? 2 : 1;
@@ -284,6 +285,20 @@ function drawCart(
     ctx.fillRect(cx - c / 2, cy - c / 2, c, c);
   }
   ctx.restore();
+}
+
+/** Width of a cart or payout label, measured in the fonts it is drawn with (the first line is bold mono only on the collect cart). */
+function labelWidth(ctx: CanvasRenderingContext2D, L: SceneLayout, ink: Inks, lines: [string, string], strong: boolean): number {
+  const sans = `${L.small ? 10 : 10.5}px ${ink.sans}`;
+  ctx.save();
+  ctx.font = strong ? `600 ${L.small ? 10.5 : 11}px ${ink.mono}` : sans;
+  let w = ctx.measureText(lines[0]).width;
+  if (lines[1]) {
+    ctx.font = sans;
+    w = Math.max(w, ctx.measureText(lines[1]).width);
+  }
+  ctx.restore();
+  return w;
 }
 
 function drawCoins(ctx: CanvasRenderingContext2D, L: SceneLayout, ink: Inks, n: number, pop: number) {
@@ -486,7 +501,15 @@ function LithosScene({ data, tip, text, label, tipFor }: SceneInput & { label: s
 
       // Carts and their labels.
       const hits: Hit[] = [];
-      const labels: { x: number; w: number; top: number; lines: [string, string]; strong: boolean }[] = [];
+      // Label boxes: x is clamped into the track first, y is the bottom of the box (last baseline + descent).
+      const LINE = 12.5;
+      const labels: { x: number; w: number; y: number; h: number; lines: [string, string]; strong: boolean }[] = [];
+      const label = (x: number, base: number, lines: [string, string], strong: boolean) => {
+        const wTxt = labelWidth(ctx, L, ink, lines, strong);
+        const half = wTxt / 2;
+        const cx = Math.min(w - 2 - half, Math.max(L.quarry + 2 + half, x));
+        labels.push({ x: cx, w: wTxt, y: base + 3, h: (lines[1] ? 2 : 1) * LINE, lines, strong });
+      };
       ctx.font = `600 ${L.small ? 10.5 : 11}px ${ink.mono}`;
       const order = [...carts.values()].sort((a, b) => a.x - b.x);
       for (const c of order) {
@@ -508,25 +531,21 @@ function LithosScene({ data, tip, text, label, tipFor }: SceneInput & { label: s
           } else moving = true;
         }
         if (!s) continue;
-        const lines: [string, string] = s.kind === "collect" ? text.round(s) : [text.checkLeft(s), ""];
-        const wTxt = Math.max(ctx.measureText(lines[0]).width, lines[1] ? ctx.measureText(lines[1]).width * 0.95 : 0);
-        labels.push({ x: c.x, w: wTxt, top: L.ground - 6 - L.cartBody - 8, lines, strong: s.kind === "collect" });
+        const lines: [string, string] = s.kind === "collect" ? text.round(s, L.small) : [text.checkLeft(s), ""];
+        label(c.x, L.ground - 6 - L.cartBody - 8, lines, s.kind === "collect");
         hits.push({ kind: "cart", h: s.h, x: c.x - L.cartHw - 4, y: L.ground - L.cartBody - 40, w: 2 * L.cartHw + 8, hh: L.cartBody + 44 });
       }
       // Payout label joins the same stacking.
       if (data) {
         const px = (L.payout.a + L.payout.b) / 2;
-        const pw = ctx.measureText(text.payout).width;
-        labels.push({ x: px, w: pw, top: L.ground - 6 - Math.ceil(Math.min(21, data.payoutN) / 6) * 4.5 - 10, lines: [text.payout, ""], strong: false });
+        label(px, L.ground - 6 - Math.ceil(Math.min(21, data.payoutN) / 6) * 4.5 - 10, [text.payout, ""], false);
         hits.push({ kind: "pay", x: L.payout.a, y: L.ground - 50, w: L.payout.b - L.payout.a, hh: 56 });
       }
       const stacked = stackLabels(labels);
       for (const lb of stacked) {
-        const lineH = 12.5;
-        const baseY = lb.top - lb.row * 26 - (lb.lines[1] ? lineH : 0);
-        let x = lb.x;
-        const half = lb.w / 2;
-        x = Math.min(w - 2 - half, Math.max(L.quarry + 2 + half, x));
+        const lineH = LINE;
+        const baseY = lb.y - 3 - lb.lift - (lb.lines[1] ? lineH : 0);
+        const x = lb.x;
         ctx.textAlign = "center";
         ctx.fillStyle = lb.strong ? ink.text : ink.muted;
         ctx.font = lb.strong ? `600 ${L.small ? 10.5 : 11}px ${ink.mono}` : `${L.small ? 10 : 10.5}px ${ink.sans}`;
@@ -702,9 +721,11 @@ export function HomeLithos({ data, tipHeight, enter = 0 }: { data: LithosHome | 
       check: t("homeLithos.stageCheck"),
       checkShort: t("lithosH.stageCheckShort"),
       pay: t("lithosH.stagePay"),
-      round: (c) => [
+      round: (c, small) => [
         formatInt(c.h, locale),
-        `${t("lithosH.roundMiners").replace("{n}", formatInt(c.miners, locale))} · ${ergText(c.bank, locale)} ERG`,
+        small
+          ? `${ergText(c.bank, locale)} ERG`
+          : `${t("lithosH.roundMiners").replace("{n}", formatInt(c.miners, locale))} · ${ergText(c.bank, locale)} ERG`,
       ],
       checkLeft: (c) => t("lithosH.toPayoutShort").replace("{list}", formatInt(c.left, locale)),
       payout: data ? `${formatInt(data.payoutN, locale)} · ${ergText(data.payoutNano, locale)} ERG` : "",
@@ -846,7 +867,7 @@ export function HomeLithos({ data, tipHeight, enter = 0 }: { data: LithosHome | 
           </Tip>
         ) : null}
 
-        <div className="relative mt-2 h-[208px] min-h-0 shrink-0 lg:h-auto lg:min-h-[180px] lg:flex-1">
+        <div className="relative mt-2 h-[192px] min-h-0 shrink-0 lg:h-auto lg:min-h-[180px] lg:flex-1">
           <LithosScene data={data} tip={tip} text={text} label={t("homeLithos.aria")} tipFor={tipFor} />
           {data ? (
             <span className="pointer-events-none absolute right-0 top-0">

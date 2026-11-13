@@ -36,7 +36,8 @@ export function sceneLayout(w: number, h: number): SceneLayout {
   const small = w < 420;
   const ground = Math.round(h - (small ? 26 : 28));
   const quarry = Math.round(Math.min(180, Math.max(110, w * 0.36)));
-  const cliff = Math.round(quarry * 0.2);
+  // A wider rock top on the phone so two miners fit up there too.
+  const cliff = Math.round(quarry * (small ? 0.24 : 0.2));
   const stepH = Math.round(Math.min(34, Math.max(22, (ground - 40) / (STEPS + 1.6))));
   const stepW = (quarry - cliff) / STEPS;
   const steps = Array.from({ length: STEPS }, (_, k) => ({
@@ -61,9 +62,10 @@ export function sceneLayout(w: number, h: number): SceneLayout {
     collect: { a: railA, b: railA + run },
     check: { a: railA + run, b: railA + 2 * run },
     payout: { a: railA + 2 * run, b: railB },
-    cartHw: small ? 13 : 19,
-    cartBody: small ? 12 : 16,
-    minerScale: small ? 0.42 : 0.52,
+    // A tall desktop scene gets bigger carts and miners; the phone keeps the compact ones.
+    cartHw: small ? 13 : h >= 180 ? 23 : 19,
+    cartBody: small ? 12 : h >= 180 ? 19 : 16,
+    minerScale: small ? 0.42 : h >= 180 ? 0.55 : 0.52,
   };
 }
 
@@ -128,16 +130,27 @@ export function cartX(L: SceneLayout, c: CartSpot): number {
   return s.a + pad + (s.b - s.a - 2 * pad) * c.u;
 }
 
-/** Text boxes, left to right: a box that would overlap the one before it moves up a row. */
-export function stackLabels<T extends { x: number; w: number }>(items: readonly T[], gap = 6): (T & { row: number })[] {
+/**
+ * Text boxes (centre x, width, bottom y, height), left to right: a box that would overlap one already
+ * placed moves up just above it, never further. `lift` is how far it moved.
+ */
+export function stackLabels<T extends { x: number; w: number; y: number; h: number }>(
+  items: readonly T[],
+  gap = 6
+): (T & { lift: number })[] {
   const sorted = [...items].sort((a, b) => a.x - b.x);
-  const rows: number[] = [];
+  const placed: { l: number; r: number; top: number; bottom: number }[] = [];
   return sorted.map((it) => {
-    const left = it.x - it.w / 2;
-    let row = 0;
-    while (rows[row] != null && rows[row]! + gap > left) row++;
-    rows[row] = it.x + it.w / 2;
-    return { ...it, row };
+    const l = it.x - it.w / 2;
+    const r = it.x + it.w / 2;
+    let bottom = it.y;
+    for (;;) {
+      const hit = placed.find((p) => p.l < r + gap && p.r + gap > l && p.top < bottom && p.bottom > bottom - it.h);
+      if (!hit) break;
+      bottom = hit.top - 2;
+    }
+    placed.push({ l, r, top: bottom - it.h, bottom });
+    return { ...it, lift: it.y - bottom };
   });
 }
 

@@ -47,16 +47,24 @@ test("miners: steps first, then the rock top; idle ones on the rock", () => {
   assert.ok(idle.every((p) => p.x >= 0 && p.x <= L.backEnd && p.y <= L.cliffTop));
 });
 
-test("labels move up a row instead of overlapping", () => {
+test("labels move up just above the one they would overlap, no further", () => {
   const out = stackLabels([
-    { x: 100, w: 80 },
-    { x: 150, w: 60 },
-    { x: 300, w: 60 },
+    { x: 100, w: 80, y: 100, h: 12 },
+    { x: 150, w: 60, y: 100, h: 12 },
+    { x: 300, w: 60, y: 100, h: 12 },
+    // Higher already, clear of the first box's band: stays put.
+    { x: 110, w: 40, y: 70, h: 12 },
   ]);
   assert.deepEqual(
-    out.map((o) => o.row),
-    [0, 1, 0]
+    out.map((o) => o.lift),
+    [0, 0, 14, 0]
   );
+  // A box sitting a little higher than its neighbour only moves the few pixels it needs.
+  const near = stackLabels([
+    { x: 100, w: 60, y: 100, h: 12 },
+    { x: 140, w: 60, y: 95, h: 12 },
+  ]);
+  assert.equal(near[1]!.lift, 95 - 86);
 });
 
 test("coin heap: up to 21 in rows of 6…1", () => {
