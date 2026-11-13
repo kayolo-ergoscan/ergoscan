@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { rentToneInk } from "@/lib/rent-miner-patrol";
 import { drawPixel, pixelColor, type PixelMood } from "./pixel";
 import { lookEdge, lookInk } from "@/lib/look";
+import { watchOnScreen } from "@/lib/canvas-run";
+import { INK_EVENT } from "@/lib/skin-ink";
 import type { RentTapeRow } from "@ergoscan/shared";
 
 /**
@@ -113,6 +115,8 @@ export function RentBelt({
   formatRef.current = formatAmount;
   const router = useRouter();
   const hits = useRef<Hit[]>([]);
+  /** Asks for one frame. Under reduced motion the belt stands still and repaints only on change. */
+  const kick = useRef<() => void>(() => {});
   // A finger has no hover: the first tap pins a crate's caption, the second opens it.
   const finger = useRef(false);
   const pinned = useRef<string | null>(null);
@@ -135,6 +139,8 @@ export function RentBelt({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     let raf = 0;
+    /** At least 10 % on screen and the tab visible. Off screen or hidden: no frames. */
+    let on = true;
     let last = performance.now();
     let rx = 40;
     let ry = 80;
@@ -278,12 +284,44 @@ export function RentBelt({
         const label = open ? (formatRef.current?.(open.rentNano) ?? "") : "";
         if (open && at && label) drawPurse(ctx, at.x, at.y, rentToneInk(open.rentNano, nanos), hopT, label);
       }
-      raf = requestAnimationFrame(paint);
+      raf = on && !reduce ? requestAnimationFrame(paint) : 0;
     };
 
-    raf = requestAnimationFrame(paint);
-    return () => cancelAnimationFrame(raf);
+    const frame = () => {
+      if (!raf && on) raf = requestAnimationFrame(paint);
+    };
+    kick.current = frame;
+    const onInk = () => {
+      inkAt = -1e9;
+      frame();
+    };
+    const parent = canvas.parentElement;
+    const ro = reduce && parent && typeof ResizeObserver !== "undefined" ? new ResizeObserver(frame) : null;
+    if (ro && parent) ro.observe(parent);
+    window.addEventListener(INK_EVENT, onInk);
+    const stop = watchOnScreen(canvas, (visible) => {
+      on = visible;
+      if (!on) {
+        if (raf) cancelAnimationFrame(raf);
+        raf = 0;
+      } else {
+        last = performance.now();
+        frame();
+      }
+    });
+    return () => {
+      stop();
+      ro?.disconnect();
+      window.removeEventListener(INK_EVENT, onInk);
+      kick.current = () => {};
+      cancelAnimationFrame(raf);
+    };
   }, [reduce]);
+
+  // Standing still (reduced motion): new rows or a hovered crate still need their one frame.
+  useEffect(() => {
+    if (reduce) kick.current();
+  }, [reduce, rows, hover]);
 
   const pick = (ev: { clientX: number; clientY: number }) => {
     const canvas = host.current;
