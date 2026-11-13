@@ -1,6 +1,6 @@
 "use client";
 
-/** The empty favorites line. The header scout finds it and scratches it out. */
+/** The empty favorites line. It reads on its own; when the header scout runs, he comes and writes it out. */
 export function FavKayolo({ line }: { line: string }) {
   return (
     <div className="fav-kayolo">

@@ -1,0 +1,1042 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<title>Кайоло — раскадровка</title>
+<!--
+  Storyboard for design/brand/kayolo-life.md. Kayolo is drawn by the real engine:
+  pixel.js is apps/web/src/components/pixel.ts bundled as PixelKit (same as pixel.html).
+  Page layouts are simplified from live shots of the site (13.11, 1771×891 and 390×844).
+  Each <section class="board"> is one PNG; ?b=3 shows only board 3.
+-->
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=block" rel="stylesheet" />
+<style>
+  :root { --page:#0e0e0e; --tile:#1a1a1a; --tile2:#232323; --t2:#c6c6c6; --t3:#8f8f8f; --line:rgba(255,255,255,.08); --ring:#3ca2ff; --no:#ff5468; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #050505; color: #fff; font-family: "IBM Plex Sans", system-ui, sans-serif; }
+  .board { width: 1600px; padding: 34px 40px 38px; background: var(--page); margin: 0 0 40px; position: relative; }
+  .board h1 { font: 600 34px/1.15 "IBM Plex Sans"; margin: 0 0 8px; letter-spacing: -.01em; }
+  .board h1 .tag { font: 600 17px "IBM Plex Mono"; color: #0e0e0e; background: #fff; border-radius: 6px; padding: 2px 9px; margin-right: 12px; vertical-align: 6px; }
+  .sub { font: 400 17px/1.5 "IBM Plex Sans"; color: var(--t2); max-width: 1500px; margin: 0 0 22px; }
+  .sub b, .note b, .cap2 b { color: #fff; font-weight: 600; }
+  .row { display: flex; gap: 20px; align-items: flex-start; }
+  .col { display: flex; flex-direction: column; gap: 14px; }
+  .card { background: var(--tile); border-radius: 16px; padding: 14px 16px 16px; position: relative; }
+  .cap { font: 500 12px "IBM Plex Mono"; letter-spacing: .12em; text-transform: uppercase; color: var(--t3); margin-bottom: 8px; }
+  .cap2 { font: 400 15px/1.42 "IBM Plex Sans"; color: var(--t2); margin-top: 8px; }
+  .ttl { font: 600 19px/1.25 "IBM Plex Sans"; margin-bottom: 4px; }
+  .note { font: 400 15px/1.45 "IBM Plex Sans"; color: var(--t2); }
+  .mono { font-family: "IBM Plex Mono"; }
+  .stage { position: relative; overflow: hidden; border-radius: 12px; background: var(--page); }
+  .pin { position: absolute; width: 30px; height: 30px; border-radius: 15px; background: #fff; color: #0e0e0e; font: 700 16px/30px "IBM Plex Mono"; text-align: center; transform: translate(-50%, -50%); box-shadow: 0 0 0 4px rgba(14,14,14,.85); }
+  .legend { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px 22px; margin-top: 16px; }
+  .lg { display: flex; gap: 12px; align-items: flex-start; font: 400 15px/1.42 "IBM Plex Sans"; color: var(--t2); }
+  .lg .n { flex: none; width: 28px; height: 28px; border-radius: 14px; background: #fff; color: #0e0e0e; font: 700 15px/28px "IBM Plex Mono"; text-align: center; }
+  .lg b { color: #fff; font-weight: 600; }
+  .tip { position: absolute; background: #2c2b33; color: #fff; border-radius: 10px; padding: 7px 11px; font: 500 13px/1.35 "IBM Plex Sans"; white-space: nowrap; box-shadow: 0 6px 18px rgba(0,0,0,.45); }
+  .tip .m { color: #a3a3a3; }
+  .k { display: inline-block; font: 600 13px "IBM Plex Mono"; background: #2c2b33; border-radius: 5px; padding: 1px 7px; color: #fff; }
+  .yes { color: #2fd27f; font-weight: 600; }
+  .no { color: var(--no); font-weight: 600; }
+  .bar { height: 10px; border-radius: 5px; background: #2a2a2a; position: relative; overflow: hidden; }
+  .bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 5px; }
+  .vs { font: 600 13px "IBM Plex Mono"; letter-spacing: .1em; text-transform: uppercase; padding: 2px 8px; border-radius: 5px; display: inline-block; margin-bottom: 8px; }
+  .vs.before { background: #3a2226; color: #ff9aa6; }
+  .vs.after { background: #173528; color: #6ee7a8; }
+  body.one .board { display: none; }
+  body.one .board.on { display: block; margin: 0; }
+</style>
+</head>
+<body>
+<script src="common.js"></script>
+<script src="pixel.js"></script>
+<div id="root"></div>
+<script>
+"use strict";
+const { drawPixel } = PixelKit;
+const el = H.el;
+const INK = { block: "#ffd23c", tx: "#ff6a2b", addr: "#ff7ab8", token: "#5b8dff", box: "#2fd27f", brand: "#ff6a2b", down: "#ff5468" };
+const later = [];
+const root = document.getElementById("root");
+
+/* ---------- small DOM helpers ---------- */
+function abs(p, x, y, w, h, css = "", html = "") {
+  const d = document.createElement("div");
+  d.style.cssText = `position:absolute;left:${x}px;top:${y}px;${w != null ? `width:${w}px;` : ""}${h != null ? `height:${h}px;` : ""}${css}`;
+  if (html) d.innerHTML = html;
+  p.append(d);
+  return d;
+}
+const txt = (p, x, y, s, css = "") => abs(p, x, y, null, null, `white-space:nowrap;${css}`, s);
+const mix = (hex, pct, base = "#1a1a1a") => `color-mix(in srgb, ${hex} ${pct}%, ${base})`;
+const chip = (p, x, y, label, ink, size = 12) => txt(p, x, y, label, `padding:2px 7px;border-radius:5px;background:${mix(ink, 22)};color:${ink};font:600 ${size}px 'IBM Plex Sans'`);
+const rtxt = (p, xr, y, s, css = "") => abs(p, xr, y, null, null, `white-space:nowrap;transform:translateX(-100%);${css}`, s);
+const ctxt = (p, xc, y, s, css = "") => abs(p, xc, y, null, null, `white-space:nowrap;transform:translateX(-50%);${css}`, s);
+function pinEl(p, x, y, n) { const d = document.createElement("div"); d.className = "pin"; d.style.left = x + "px"; d.style.top = y + "px"; d.textContent = n; p.append(d); return d; }
+function ring(p, x, y, w, h, color = "var(--ring)", r = 8, dash = false) {
+  return abs(p, x, y, w, h, `border:${dash ? "2px dashed" : "2.5px solid"} ${color};border-radius:${r}px`);
+}
+function shade(p, x, y, w, h, color, label, lx = 0, ly = -22) {
+  abs(p, x, y, w, h, `background:${color};border-radius:6px`);
+  if (label) txt(p, x + lx, y + ly, label, "font:600 13px 'IBM Plex Sans';color:#fff;background:rgba(14,14,14,.82);padding:2px 7px;border-radius:5px");
+}
+function arrow(p, x1, y1, x2, y2, color = "#fff", w = 2.5, dashed = false, head = true) {
+  const s = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  const minx = Math.min(x1, x2) - 12, miny = Math.min(y1, y2) - 12;
+  const W = Math.abs(x2 - x1) + 24, Hh = Math.abs(y2 - y1) + 24;
+  s.setAttribute("width", W); s.setAttribute("height", Hh);
+  s.style.cssText = `position:absolute;left:${minx}px;top:${miny}px;overflow:visible;pointer-events:none`;
+  const a = x1 - minx, b = y1 - miny, c = x2 - minx, d = y2 - miny;
+  const ang = Math.atan2(d - b, c - a), hl = 10;
+  s.innerHTML = `<path d="M${a} ${b}L${c} ${d}" stroke="${color}" stroke-width="${w}" fill="none" ${dashed ? 'stroke-dasharray="6 6"' : ""} stroke-linecap="round"/>` +
+    (head ? `<path d="M${c} ${d}L${c - hl * Math.cos(ang - 0.45)} ${d - hl * Math.sin(ang - 0.45)}M${c} ${d}L${c - hl * Math.cos(ang + 0.45)} ${d - hl * Math.sin(ang + 0.45)}" stroke="${color}" stroke-width="${w}" stroke-linecap="round" fill="none"/>` : "");
+  p.append(s);
+  return s;
+}
+function curve(p, pts, color = "#fff", w = 2.5, dashed = true) {
+  const s = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  s.setAttribute("width", 10); s.setAttribute("height", 10);
+  s.style.cssText = "position:absolute;left:0;top:0;overflow:visible;pointer-events:none";
+  let d = `M${pts[0][0]} ${pts[0][1]}`;
+  for (let i = 1; i < pts.length; i++) d += ` L${pts[i][0]} ${pts[i][1]}`;
+  s.innerHTML = `<path d="${d}" stroke="${color}" stroke-width="${w}" fill="none" ${dashed ? 'stroke-dasharray="7 7"' : ""} stroke-linecap="round" stroke-linejoin="round"/>`;
+  p.append(s);
+}
+function cursor(p, x, y, sc = 1) {
+  return abs(p, x, y, 18 * sc, 26 * sc, "", `<svg width="${18 * sc}" height="${26 * sc}" viewBox="0 0 18 26"><path d="M1 1 L1 21 L6 16 L9.5 24 L13 22.5 L9.6 15 L16 15 Z" fill="#fff" stroke="#0e0e0e" stroke-width="1.6" stroke-linejoin="round"/></svg>`);
+}
+function tipBox(p, x, y, html) { const d = abs(p, x, y, null, null, ""); d.className = "tip"; d.innerHTML = html; return d; }
+
+/* ---------- Kayolo by the real engine ---------- */
+// o: x,y ground point in host px; s scale (1 = 26 px body); ink|color; mood; before; face; pose; hopAt; at; walk (px/s); ghost (opacity); from
+function K(host, o) {
+  const s = o.s ?? 1;
+  const W = Math.ceil(70 * s) + 8, Hh = Math.ceil(92 * s) + 8, gy = Hh - Math.ceil(6 * s) - 2;
+  const dpr = o.dpr ?? 3;
+  const mood = o.mood ?? "idle";
+  const before = o.before ?? mood;
+  const at = o.at ?? (o.hopAt != null ? 1200 + o.hopAt : 2600);
+  const base = o.from ?? 10000;
+  // Each (canvas, id) has its own seeded blinks; try a few seeds and keep the frame
+  // with the most eye ink, so a still never catches him mid-blink by accident.
+  const run = (from) => {
+    const c = document.createElement("canvas");
+    c.width = W * dpr; c.height = Hh * dpr;
+    const ctx = c.getContext("2d");
+    ctx.scale(dpr, dpr);
+    for (let t = 0; t <= at; t += 16) {
+      ctx.clearRect(0, 0, W, Hh);
+      const pose = { ...(o.pose || {}) };
+      if (o.walk) pose.roll = (t / 1000) * o.walk;
+      drawPixel(ctx, { x: W / 2, y: gy, scale: s, color: o.color ?? INK[o.ink ?? "tx"], mood: t < 1200 ? before : mood, now: from + t, face: o.face ?? -1, id: o.id ?? "kayolo", ...pose });
+    }
+    const d = ctx.getImageData(0, 0, c.width, c.height).data;
+    let ink = 0;
+    for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 200 && d[i] < 40 && d[i + 1] < 40 && d[i + 2] < 40) ink++;
+    return { c, ink };
+  };
+  let best = null;
+  for (const k of [0, 3100, 7300, 12700, 19900]) {
+    const r = run(base + k);
+    if (!best || r.ink > best.ink * 1.04) best = r;
+  }
+  const c = best.c;
+  c.style.cssText = `position:absolute;left:${o.x - W / 2}px;top:${o.y - gy}px;width:${W}px;height:${Hh}px;pointer-events:none;${o.ghost ? `opacity:${o.ghost};` : ""}`;
+  host.append(c);
+  return c;
+}
+const grain = (p, x, y, s, ink) => abs(p, x - 4 * s, y - 8 * s, 8 * s, 8 * s, `background:${INK[ink] ?? ink}`);
+
+/* ---------- framing ---------- */
+function scaled(node, W, Hh, sc, extra = "") {
+  const o = el("div", { style: { width: W * sc + "px", height: Hh * sc + "px", position: "relative", overflow: "hidden", borderRadius: "12px" } });
+  node.style.position = "absolute"; node.style.left = "0"; node.style.top = "0";
+  node.style.transform = `scale(${sc})`; node.style.transformOrigin = "0 0";
+  o.append(node);
+  if (extra) o.style.cssText += extra;
+  return o;
+}
+function crop(node, x0, y0, w, h, sc) {
+  const o = el("div", { style: { width: w * sc + "px", height: h * sc + "px", position: "relative", overflow: "hidden", borderRadius: "12px" } });
+  node.style.position = "absolute"; node.style.left = "0"; node.style.top = "0";
+  node.style.transform = `scale(${sc}) translate(${-x0}px, ${-y0}px)`; node.style.transformOrigin = "0 0";
+  o.append(node);
+  return o;
+}
+
+/* ---------- desktop page, simplified from the live site (1771×891) ---------- */
+const RAIL = [["Главная", "brand"], ["Блоки", "block"], ["Мемпул", "tx"], ["Транзакции", "tx"], ["Адреса", "addr"], ["Имена", "addr"], ["Избранное", "addr"], ["Токены", "token"], ["NFT", "token"], ["Рента ›", "box"], ["DeFi ›", "token"], ["Оракулы ›", "brand"], ["Мост Rosen", "brand"], ["Протокол Lithos", "brand"]];
+const RAIL2 = ["Справка ›", "Настройки", "О нас", "API", "Статус"];
+function logo(p, x, y, s = 1) {
+  abs(p, x, y, 14 * s, 14 * s, `border:${3 * s}px solid #fff`);
+  abs(p, x + 8 * s, y + 8 * s, 12 * s, 12 * s, "background:#ff6a2b");
+}
+function desk(o) {
+  const r = el("div", { style: { width: "1771px", height: "891px", background: "#0e0e0e", position: "relative", overflow: "hidden" } });
+  const ink = INK[o.ink ?? "block"];
+  abs(r, 94, 10, 248, 871, "background:#1a1a1a;border-radius:16px");
+  logo(r, 152, 32);
+  txt(r, 184, 29, "ergoscan.me", "font:600 18px 'IBM Plex Sans'");
+  RAIL.forEach(([n, k], i) => {
+    const y = 113 + i * 40.5, on = i === o.active;
+    if (on) abs(r, 102, y - 19, 231, 39, "background:#fff;border-radius:8px");
+    abs(r, 121, y - 7, 15, 15, `border:2px solid ${on ? "#0e0e0e" : INK[k]};border-radius:3px`);
+    txt(r, 151, y - 11, n, `font:500 16px 'IBM Plex Sans';color:${on ? "#0e0e0e" : "#fff"}`);
+  });
+  abs(r, 110, 672, 215, 1, "background:rgba(255,255,255,.08)");
+  RAIL2.forEach((n, i) => {
+    const y = 704 + i * 40.5;
+    abs(r, 121, y - 7, 15, 15, "border:2px solid #c6c6c6;border-radius:3px");
+    txt(r, 151, y - 11, n, "font:500 16px 'IBM Plex Sans'");
+  });
+  // header
+  abs(r, 352, 10, 1320, 65, "background:#1a1a1a;border-radius:14px");
+  abs(r, 386, 35, 14, 14, `border:2px solid ${o.searchInk ?? "#c6c6c6"};border-radius:8px`);
+  abs(r, 398, 47, 6, 2, `background:${o.searchInk ?? "#c6c6c6"};transform:rotate(45deg)`);
+  const cue = txt(r, 410, 31, (o.cue ?? "транзак") + "<span style='color:#3ca2ff'>_</span>", "font:500 15px 'IBM Plex Sans'");
+  const title = ctxt(r, 1011, 31, o.title ?? "Блоки", "font:600 17px 'IBM Plex Sans'");
+  const priceL = txt(r, 1315, 33, "Цена ERG", "font:400 13px 'IBM Plex Sans';color:#c6c6c6");
+  txt(r, 1380, 31, "$0.1786", "font:600 14px 'IBM Plex Mono'");
+  txt(r, 1478, 33, "Капитализация", "font:400 12px 'IBM Plex Sans';color:#c6c6c6");
+  txt(r, 1571, 31, "$14.92M", "font:600 13px 'IBM Plex Mono'");
+  // tail + dock
+  logo(r, 386, 843, 0.6);
+  txt(r, 404, 841, "ergoscan.me · Обновлено 2м назад", "font:500 12px 'IBM Plex Sans';color:#c6c6c6");
+  rtxt(r, 1640, 841, "индекс: tip · отставание 0", "font:400 11px 'IBM Plex Mono';color:#2fd27f");
+  abs(r, 352, 857, 1320, 24, "background:#121212;border-radius:6px");
+  txt(r, 372, 861, "RSN $0.0067 +0.21% · rsETH $1.59k +0.02% · GORT $0.0077 +0.01% · SigUSD $1.04 +0.01% · rsFIRO $0.7191 −3.98% · rsADA $0.1680 −3.18% · rsBTC $96.2k", "font:500 12px 'IBM Plex Mono';color:#c6c6c6");
+  r._title = title; r._cue = cue; r._priceL = priceL; r._ink = ink;
+  if (o.body) o.body(r, ink);
+  return r;
+}
+function kpi(r, x, y, w, h, label, value, sub, ink, big = 20) {
+  abs(r, x, y, w, h, "background:#1a1a1a;border-radius:12px");
+  chip(r, x + 12, y + 10, label, ink);
+  txt(r, x + 12, y + 34, value, `font:600 ${big}px 'IBM Plex Mono';letter-spacing:-.02em`);
+  if (sub) txt(r, x + 12, y + h - 26, sub, "font:400 12px 'IBM Plex Sans';color:#a3a3a3");
+}
+function listRows(r, x, y, w, items, rowH = 56) {
+  items.forEach((it, i) => {
+    const yy = y + i * rowH;
+    if (i) abs(r, x + 14, yy, w - 28, 1, "background:rgba(255,255,255,.06)");
+    if (it.i != null) txt(r, x + 50, yy + 19, String(it.i), "font:400 13px 'IBM Plex Mono';color:#a3a3a3");
+    abs(r, x + 74, yy + 14, 28, 28, `background:${mix(it.ink, 30)};border-radius:6px`);
+    txt(r, x + 114, yy + 9, it.t, "font:500 14px 'IBM Plex Sans'");
+    txt(r, x + 114, yy + 31, it.s, `font:400 12px 'IBM Plex Sans';color:${it.sc ?? "#ff8a65"}`);
+    if (it.v) rtxt(r, x + w - 50, yy + 18, it.v, "font:500 14px 'IBM Plex Mono'");
+  });
+}
+function blockBody(r, ink) {
+  kpi(r, 384, 83, 308, 121, "Высота", "1 915 825", "402da201…ae6d7c82", ink);
+  kpi(r, 700, 83, 308, 121, "Выходы", "54.3255 ERG", "4 транзакции", ink, 24);
+  kpi(r, 1016, 83, 308, 80, "Майнер", "2miners", "", ink, 16);
+  kpi(r, 1332, 83, 308, 80, "Комиссии", "0.002 ERG", "", ink, 16);
+  kpi(r, 1016, 171, 308, 80, "Размер", "2.2KB", "", ink, 16);
+  kpi(r, 1332, 171, 308, 80, "Время", "2 мин назад", "", ink, 16);
+  abs(r, 384, 212, 308, 40, "background:#1a1a1a;border-radius:10px");
+  abs(r, 388, 216, 132, 32, "background:#fff;border-radius:8px");
+  ctxt(r, 454, 223, "Транзакции", "font:600 13px 'IBM Plex Sans';color:#0e0e0e");
+  ctxt(r, 586, 223, "Заголовок", "font:500 13px 'IBM Plex Sans'");
+  abs(r, 700, 212, 308, 40, "background:#1a1a1a;border-radius:10px");
+  ctxt(r, 804, 223, "Расширение", "font:500 13px 'IBM Plex Sans'");
+  ctxt(r, 936, 223, "AD-пруф", "font:500 13px 'IBM Plex Sans'");
+  abs(r, 384, 260, 1256, 268, "background:#1a1a1a;border-radius:12px");
+  chip(r, 398, 272, "Транзакции", "#ffffff");
+  txt(r, 493, 274, "4 транзакции", "font:400 13px 'IBM Plex Sans';color:#a3a3a3");
+  listRows(r, 384, 304, 1256, [
+    { i: 0, t: "Награда за блок", s: "2miners", ink, v: "9 ERG" },
+    { i: 1, t: "Перевод себе", s: "9g9X…KovA", ink: "#8f8f8f", v: "—" },
+    { i: 2, t: "Выплата майнерам", s: "Kryptex · 5 майнерам", ink, v: "10.1423 ERG" },
+    { i: 3, t: "Комиссии блока", s: "2miners", ink, v: "0.002 ERG" },
+  ]);
+}
+function homeBody(r) {
+  const Y = INK.block;
+  abs(r, 384, 83, 718, 192, "background:#1a1a1a;border-radius:12px");
+  chip(r, 404, 97, "Живые блоки", Y);
+  txt(r, 508, 97, "1 915 826 <span style='color:#a3a3a3;font-weight:400'>4 tx · 13.11.2026, 11:18</span>", "font:600 13px 'IBM Plex Mono'");
+  const cols = ["#56c08f", "#d98bb0", "#56c08f", "#d98bb0", "#56c08f", "#d98bb0", "#58c4d6", "#d98bb0"];
+  const hs = [14, 34, 12, 46, 14, 56, 26, 24];
+  hs.forEach((h, i) => { const x = 426 + i * 76; abs(r, x, 228 - h, 64, h, `background:${cols[i]};border-radius:2px`); abs(r, x + 6, 222 - h, 64, 6, `background:${mix(cols[i], 70, "#ffffff")};transform:skewX(-40deg);border-radius:1px`); });
+  abs(r, 1109, 83, 530, 192, "background:#1a1a1a;border-radius:12px");
+  chip(r, 1130, 97, "Мемпул", INK.tx);
+  txt(r, 1212, 97, "1 915 827 <span style='color:#a3a3a3;font-weight:400'>5 tx · 1:39</span>", "font:600 13px 'IBM Plex Mono'");
+  [[1435, 170, "#58c4d6"], [1471, 157, "#e391b5"], [1501, 149, "#e391b5"], [1537, 147, "#7f9cf5"], [1536, 203, "#7f9cf5"]].forEach(([x, y, c]) => abs(r, x - 14, y - 14, 28, 28, `background:${c};border-radius:14px`));
+  const k = [["Цена", "$0.1786"], ["Капитализация", "$14 917 976"], ["Держатели Ergo", "145 477"], ["В обороте", "83 546 013 ERG"], ["Майнинг-пулы", "15"], ["Хешрейт", "551 GH/s"]];
+  k.forEach(([l, v], i) => kpi(r, 384 + (i % 3) * 241, 283 + Math.floor(i / 3) * 149, 234, 141, l, v, "", "#c6c6c6", 22));
+  kpi(r, 1109, 283, 530, 141, "Транзакции", "в сутки 4 699", "", INK.tx, 18);
+  kpi(r, 1109, 432, 530, 141, "Комиссии", "7.3 ERG за 24ч", "", INK.tx, 18);
+  abs(r, 384, 582, 718, 61, "background:#1a1a1a;border-radius:12px");
+  chip(r, 398, 596, "Эпоха 1 870", "#ffffff");
+  abs(r, 399, 622, 687, 8, "background:#2a2a2a;border-radius:4px");
+  abs(r, 399, 622, 635, 8, `background:${Y};border-radius:4px`);
+  abs(r, 1109, 582, 530, 61, "background:#1a1a1a;border-radius:12px");
+  chip(r, 1124, 596, "Версии нод", "#ffffff");
+  abs(r, 384, 651, 345, 200, "background:#1a1a1a;border-radius:12px");
+  chip(r, 402, 666, "Рента этой эпохи", INK.box);
+  txt(r, 400, 694, "до <b style='font-size:26px;color:#f6b38d'>27.12 ERG</b>", "font:500 14px 'IBM Plex Mono';color:#c6c6c6");
+  [440, 506, 572, 638].forEach((x) => abs(r, x, 815, 24, 18, "background:#c9a75b;border-radius:2px"));
+  abs(r, 737, 651, 365, 200, "background:#1a1a1a;border-radius:12px");
+  chip(r, 762, 666, "Токены под угрозой", INK.token);
+  abs(r, 1109, 651, 530, 200, "background:#1a1a1a;border-radius:12px");
+  chip(r, 1130, 666, "Живые ноды", "#ffffff");
+}
+function addrBody(r) {
+  const P = INK.addr;
+  abs(r, 384, 83, 268, 128, "background:#1a1a1a;border-radius:12px");
+  chip(r, 396, 91, "P2PK", P);
+  txt(r, 396, 113, "9g9XpgahDd35GJLkdxL5m<br>b9hqZZVFvRQJS1TmUw2aT<br>aRmSvKovA", "font:600 14px/1.35 'IBM Plex Mono'");
+  abs(r, 660, 83, 268, 176, "background:#1a1a1a;border-radius:12px");
+  chip(r, 672, 91, "Баланс", P);
+  txt(r, 672, 113, "26.0653 <span style='font-size:12px'>ERG</span>", "font:600 28px 'IBM Plex Mono'");
+  txt(r, 672, 156, "$4.65", "font:500 13px 'IBM Plex Mono';color:#c6c6c6");
+  txt(r, 672, 186, "Неподтверждённый −0.0008 ERG", "font:400 12px 'IBM Plex Sans';color:#a3a3a3");
+  r._beacon = abs(r, 872, 211, 42, 40, `background:${mix(P, 26)};border-radius:10px`);
+  kpi(r, 936, 83, 268, 84, "Боксы", "2", "", P);
+  kpi(r, 1212, 83, 268, 84, "Токены", "4", "", P);
+  kpi(r, 936, 175, 268, 84, "Транзакции", "231 166", "", P);
+  kpi(r, 1212, 175, 268, 84, "Активность", "2 с назад", "", P);
+  abs(r, 1488, 83, 152, 176, "background:#1a1a1a;border-radius:12px");
+  abs(r, 1503, 108, 120, 120, "background:repeating-conic-gradient(#fff 0 25%, #1a1a1a 0 50%) 0 0/12px 12px;border-radius:4px");
+  abs(r, 384, 219, 268, 40, "background:#1a1a1a;border-radius:10px");
+  abs(r, 388, 223, 90, 32, "background:#fff;border-radius:8px");
+  ctxt(r, 433, 230, "Активность", "font:600 12px 'IBM Plex Sans';color:#0e0e0e");
+  txt(r, 489, 231, "Токены &nbsp; NFT &nbsp; Боксы", "font:500 12px 'IBM Plex Sans'");
+  abs(r, 384, 268, 1256, 156, "background:#1a1a1a;border-radius:12px");
+  chip(r, 398, 280, "В мемпуле", "#ffffff");
+  listRows(r, 384, 312, 1256, [
+    { t: "Объединение боксов", s: "3 бокса → 2 · a760…4360", ink: P, v: "—" },
+    { t: "Обновление курса · Оракул ERG/USD", s: "9g4K…KoxW", ink: P, v: "+0.0003 ERG" },
+  ]);
+  abs(r, 384, 434, 1256, 400, "background:#1a1a1a;border-radius:12px");
+  chip(r, 398, 446, "Сегодня", P);
+  listRows(r, 384, 478, 1256, [
+    { t: "Перевод себе", s: "ccc7…f6c2", ink: P, v: "—" },
+    { t: "Перевод себе", s: "ed1f…526a", ink: P, v: "—" },
+    { t: "Цена отправлена · Оракул ERG/USD", s: "9066…36b4", ink: P, v: "—" },
+    { t: "Объединение боксов", s: "3 бокса → 2", ink: P, v: "—" },
+    { t: "Обновление курса", s: "9g4K…KoxW", ink: P, v: "+0.0003 ERG" },
+    { t: "Цена отправлена", s: "1955…b598", ink: P, v: "—" },
+  ]);
+}
+// Nook: right edge of title text + 25; floor y 68.
+const nookX = (r) => r._title.offsetLeft + r._title.offsetWidth / 2 + 25;
+
+/* ---------- phone page, simplified (390×844) ---------- */
+function phone(o) {
+  const r = el("div", { style: { width: "390px", height: "844px", background: "#0e0e0e", position: "relative", overflow: "hidden" } });
+  const slot = o.slot !== false;
+  abs(r, 12, 7, 366, 56, "background:#1a1a1a;border-radius:28px");
+  logo(r, 33, 24, 1.05);
+  abs(r, 76, 26, 15, 15, `border:2px solid ${o.searchInk ?? "#f0c14a"};border-radius:8px`);
+  txt(r, 101, 22, o.cue ?? "транзакции", `font:500 17px 'IBM Plex Sans';${slot ? "max-width:165px;overflow:hidden;text-overflow:ellipsis" : ""}`);
+  rtxt(r, 365, 24, "$0.1786", "font:600 13px 'IBM Plex Mono';letter-spacing:-.03em");
+  // tab bar
+  if (o.tabs !== false) {
+    abs(r, 12, 779, 366, 58, "background:#1a1a1a;border-radius:29px;border:1px solid rgba(255,255,255,.12)");
+    ["Главная", "Блоки", "Мемпул", "Транзакции", "Ещё"].forEach((n, i) => {
+      const cx = 49 + i * 73, on = i === (o.tab ?? 0);
+      if (on) abs(r, cx - 32, 784, 64, 48, "background:#fff;border-radius:16px");
+      abs(r, cx - 8, 791, 16, 14, `border:2px solid ${on ? "#0e0e0e" : [INK.brand, INK.block, INK.tx, INK.tx, "#fff"][i]};border-radius:3px`);
+      ctxt(r, cx, 811, n, `font:500 10.5px 'IBM Plex Sans';color:${on ? "#0e0e0e" : "#fff"}`);
+    });
+  }
+  if (o.body) o.body(r);
+  return r;
+}
+function phoneHome(r) {
+  abs(r, 16, 79, 358, 171, "background:#1a1a1a;border-radius:16px");
+  chip(r, 33, 92, "Живые блоки", INK.block, 11);
+  txt(r, 136, 92, "1 915 826", "font:600 13px 'IBM Plex Mono'");
+  [16, 30, 40, 52, 26, 30].forEach((h, i) => abs(r, 34 + i * 54, 226 - h, 50, h, `background:${["#56c08f", "#d98bb0", "#d98bb0", "#d98bb0", "#58c4d6", "#d98bb0"][i]};border-radius:2px`));
+  abs(r, 16, 259, 358, 190, "background:#1a1a1a;border-radius:16px");
+  chip(r, 33, 274, "Мемпул", INK.tx, 11);
+  txt(r, 113, 274, "1 915 827 · 8 tx", "font:600 13px 'IBM Plex Mono'");
+  [[181, 323], [224, 349], [253, 330], [283, 323], [200, 360], [248, 359], [233, 386], [274, 377]].forEach(([x, y], i) => abs(r, x - 15, y - 15, 30, 30, `background:${["#e391b5", "#e391b5", "#e391b5", "#7f9cf5", "#58c4d6", "#e391b5", "#e391b5", "#7f9cf5"][i]};border-radius:15px`));
+  kpi(r, 16, 458, 175, 113, "Цена", "$0.1786", "", "#c6c6c6", 20);
+  kpi(r, 199, 458, 175, 113, "Капитализация", "$14.9M", "", "#c6c6c6", 20);
+  kpi(r, 16, 580, 175, 121, "Держатели", "145 477", "", "#c6c6c6", 20);
+  kpi(r, 199, 580, 175, 121, "Хешрейт", "551 GH/s", "", "#c6c6c6", 20);
+  abs(r, 0, 750, 390, 22, "background:#121212");
+  txt(r, 8, 753, "$0.07273 +0.29% · RSN $0.0067 +0.21% · rsETH $1.59k", "font:500 11px 'IBM Plex Mono';color:#c6c6c6");
+}
+function phoneBlocks(r, docked) {
+  const y0 = docked ? 63 : 79;
+  abs(r, 12, y0, 366, 44, `background:#1a1a1a;border-radius:${docked ? "0 0 14px 14px" : "14px"};${docked ? "box-shadow:0 8px 16px rgba(0,0,0,.5)" : ""}`);
+  chip(r, 26, y0 + 12, "Блоки", INK.block, 12);
+  txt(r, 90, y0 + 13, "1 915 826 · вершина", "font:500 13px 'IBM Plex Mono';color:#c6c6c6");
+  for (let i = 0; i < 9; i++) {
+    const y = y0 + 54 + i * 72;
+    abs(r, 16, y, 358, 64, "background:#1a1a1a;border-radius:12px");
+    txt(r, 30, y + 11, (1915826 - i).toLocaleString("ru-RU"), "font:600 15px 'IBM Plex Mono'");
+    txt(r, 30, y + 36, `${[4, 6, 1, 9, 3, 2, 7, 5, 1][i]} tx · ${[40, 158, 64, 211, 30, 77, 92, 140, 25][i]} с`, "font:400 12px 'IBM Plex Sans';color:#a3a3a3");
+    abs(r, 300, y + 18, 56, 28, `background:${mix(INK.block, 24)};border-radius:6px`);
+  }
+}
+
+/* ---------- boards ---------- */
+const params = new URLSearchParams(location.search);
+const only = params.get("b");
+if (only) document.body.classList.add("one");
+function board(n, tag, title, sub) {
+  const b = el("section", { class: "board", id: "b" + n });
+  if (only === String(n)) b.classList.add("on");
+  b.append(el("h1", { html: `<span class="tag">${tag}</span>${title}` }));
+  if (sub) b.append(el("div", { class: "sub", html: sub }));
+  root.append(b);
+  return b;
+}
+const card = (cls = "card", style = {}) => el("div", { class: cls, style });
+const stage = (w, h, bg = "var(--page)") => el("div", { class: "stage", style: { width: w + "px", height: h + "px", background: bg } });
+
+/* ===== 01: home and perches, desktop ===== */
+{
+  const b = board(1, "01", "Где живёт Кайоло · десктоп 1771×891",
+    "Экран оператора, страница /block (раскладка снята с живого сайта 13.11). Тело 22 px (scale 0.86) в цвете страницы. <b>1 — дом.</b> Полупрозрачные — запасные дома и места, куда он ходит на других страницах. Красным — где он не стоит никогда.");
+  const page = desk({ title: "Блоки", active: 1, ink: "block", searchInk: INK.block, body: blockBody });
+  const sc = 0.855;
+  const wrap = scaled(page, 1771, 891, sc);
+  b.append(wrap);
+  later.push(() => {
+    const nx = nookX(page);
+    // keep-outs
+    shade(page, 384, 26, 456, 32, "rgba(255,84,104,.20)", "не стоит: кнопка поиска", 0, 36);
+    shade(page, 1308, 26, 316, 30, "rgba(255,84,104,.20)", "не стоит: цена и капитализация", 0, 36);
+    shade(page, 384, 304, 1256, 224, "rgba(255,84,104,.10)", "не стоит: строки, ссылки, цифры", 980, -26);
+    ring(page, nx - 20, 22, 40, 48, "var(--ring)", 9);
+    K(page, { x: nx, y: 68, s: 0.86, ink: "block", mood: "look", pose: { gaze: { x: 0, y: 0.5 } } });
+    K(page, { x: page._title.offsetLeft - page._title.offsetWidth / 2 - 25, y: 68, s: 0.86, ink: "block", face: 1, ghost: 0.42 });
+    K(page, { x: 1288, y: 68, s: 0.86, ink: "block", face: 1, ghost: 0.42 });
+    K(page, { x: 366, y: 287, s: 0.86, color: INK.addr, face: 1, mood: "curious", ghost: 0.5 });
+    abs(page, 352, 284, 30, 5, "background:#5a5a5a;border-radius:3px");
+    K(page, { x: 575, y: 118, s: 0.86, ink: "block", face: 1, ghost: 0.42, pose: { gaze: { x: 1, y: 0.2 } } });
+    pinEl(page, nx + 36, 44, 1);
+    pinEl(page, page._title.offsetLeft - page._title.offsetWidth / 2 - 61, 44, 2);
+    pinEl(page, 1252, 44, 3);
+    pinEl(page, 366, 330, 4);
+    pinEl(page, 612, 120, 5);
+  });
+  const lg = el("div", { class: "legend" });
+  const L = (n, html) => lg.append(el("div", { class: "lg" }, el("span", { class: "n" }, String(n)), el("div", { html })));
+  L(1, "<b>Ниша — дом.</b> Справа от текста заголовка +25 px, пол y 68. Синее кольцо — окошко 40×48, единственный контрол: соседка ChromeHeading, Tab идёт поиск → Кайоло → цена.");
+  L(2, "<b>Слева от заголовка</b> — запасной дом (выбор на /settings или броском).");
+  L(3, "<b>У цены</b> — дом до «да» по нише. Сегодняшней парковки за словом поиска больше нет.");
+  L(4, "<b>Дверь «Адреса»</b> — шов рельса на /addresses и /address/*, камешек под ногами, не на тексте.");
+  L(5, "<b>Край палитры</b> — когда открыт поиск: слева от поля, вне панели, z 75. При ширине 1024–1279 остаётся дома.");
+  L("П", "<b>Записки и полы контента</b> — у строки на /favorites (лист 05). Там тело — ребёнок пола: скролл и вставка строк двигают его бесплатно.");
+  L("Д", "<b>Двор и Лента</b> — станции главной (лист 06). Там рисует сама станция, второго тела нет.");
+  L("!", "<b>Никогда</b> не стоит над поиском, ценой, строками и цифрами и не ест клики. Нет места — двигаются только глаза.");
+  b.append(lg);
+  // zooms
+  const zr = el("div", { class: "row", style: { marginTop: "22px", gap: "20px" } });
+  const zoom = (title, x0, fn, capHtml) => {
+    const p = desk({ title: "Блоки", active: 1, ink: "block", searchInk: INK.block, body: blockBody });
+    const c = card("card", { width: "493px" });
+    c.append(el("div", { class: "ttl", html: title }));
+    const cr = crop(p, x0, 10, 228, 68, 2.0);
+    c.append(cr);
+    c.append(el("div", { class: "cap2", html: capHtml }));
+    zr.append(c);
+    later.push(() => fn(p));
+  };
+  zoom("<span class='yes'>Да</span> · ниша у заголовка", 896, (p) => {
+    const nx = nookX(p);
+    ring(p, nx - 20, 22, 40, 48, "var(--ring)", 9);
+    K(p, { x: nx, y: 68, s: 0.86, ink: "block", mood: "look", pose: { gaze: { x: 0, y: 0.5 } } });
+  }, "Под нишей нет кнопок, его можно ткнуть. Кольцо фокуса — как везде на сайте.");
+  zoom("<span class='yes'>Пока нет «да»</span> · дом у цены", 1160, (p) => {
+    ring(p, 1268, 22, 40, 48, "var(--ring)", 9);
+    K(p, { x: 1288, y: 68, s: 0.86, ink: "block", face: 1, mood: "look", pose: { gaze: { x: -0.2, y: 0.5 } } });
+  }, "Левый край «Цена ERG» − 27 px. Клик по цене идёт цене, по нему — ему.");
+  zoom("<span class='no'>Больше нет</span> · парковка в кнопке поиска", 372, (p) => {
+    shade(p, 384, 26, 456, 32, "rgba(255,84,104,.28)");
+    K(p, { x: 478, y: 68, s: 0.86, ink: "block", mood: "idle" });
+  }, "Тело лежит на нижних 12 px кнопки поиска: ткнуть нельзя, клик открывает палитру.");
+  b.append(zr);
+}
+
+/* ===== 02: phone ===== */
+{
+  const b = board(2, "02", "Где живёт Кайоло · телефон 390×844",
+    "Своё окошко 32 px в пилюле между поиском и ценой. Тело 18 px рисуется внутри окошка и из пилюли не выходит: прыжок ≤ 6 px, Zzz ≤ 14 px. Все y — от rect пилюли, поэтому safe-area в standalone-PWA не ломает ничего.");
+  const r = el("div", { class: "row", style: { gap: "22px" } });
+  const sc = 0.85;
+  const frame = (title, o, fn, capHtml) => {
+    const p = phone(o);
+    const c = card("card", { width: "364px", padding: "14px 16px 16px" });
+    c.append(el("div", { class: "ttl", html: title }));
+    c.append(scaled(p, 390, 844, sc, "background:#0e0e0e"));
+    c.append(el("div", { class: "cap2", html: capHtml }));
+    r.append(c);
+    later.push(() => fn(p));
+  };
+  frame("Главная · дом в окошке", { body: phoneHome, searchInk: "#c6c6c6" }, (p) => {
+    K(p, { x: 290, y: 54, s: 0.7, ink: "brand", mood: "look", pose: { gaze: { x: -0.3, y: 0.5 } } });
+  }, "Порядок: бренд · поиск · <b>Кайоло</b> · цена. Поиску остаётся ~190 px — «транзакции» влезает.");
+  frame("/blocks · плашка прижата", { tab: 1, searchInk: INK.block, body: (p) => phoneBlocks(p, true) }, (p) => {
+    K(p, { x: 290, y: 54, s: 0.7, ink: "block", mood: "look", pose: { eyesApart: 0.18, gaze: { x: 0, y: 0.6 } } });
+  }, "Плашка докуется — он <b>садится</b> (squash −0.06, прыжки 0), а не прячется под ней. По «да», §12.3.");
+  frame("Поиск открыт · Край в шите", { tabs: false, body: (p) => {
+    abs(p, 0, 0, 390, 844, "background:#0e0e0e");
+    abs(p, 12, 10, 256, 48, "background:#232323;border-radius:24px");
+    txt(p, 32, 23, "9g9X<span style='color:#3ca2ff'>_</span>", "font:500 17px 'IBM Plex Mono'");
+    txt(p, 312, 23, "Отмена", "font:500 16px 'IBM Plex Sans';color:#3ca2ff");
+    ["Адрес 9g9XpgahDd35…KovA", "Адрес 9g9Xe4…f61b", "Токен 9GX", "Недавние: 1 915 825"].forEach((s, i) => {
+      abs(p, 12, 78 + i * 60, 366, 52, "background:#1a1a1a;border-radius:12px");
+      txt(p, 28, 93 + i * 60, s, "font:500 15px 'IBM Plex Sans'");
+    });
+  } }, (p) => {
+    K(p, { x: 287, y: 46, s: 0.7, ink: "brand", face: -1, mood: "look", pose: { gaze: { x: -1, y: 0.1 } } });
+  }, "Слева от «Отмена» (34 px). Нет места — полоса над списком; нет и её — ждёт закрытия.");
+  // zoom
+  const z = card("card", { width: "362px" });
+  z.append(el("div", { class: "ttl", html: "Пилюля крупно · 2.2×" }));
+  const p = phone({ body: phoneHome, searchInk: "#c6c6c6" });
+  z.append(crop(p, 220, 0, 160, 72, 2.06));
+  later.push(() => {
+    abs(p, 268, 13, 44, 44, "border:1.5px dashed rgba(60,162,255,.9);border-radius:10px");
+    abs(p, 274, 15, 32, 40, "background:rgba(60,162,255,.10);border-radius:8px");
+    K(p, { x: 290, y: 54, s: 0.7, ink: "brand", mood: "look", pose: { gaze: { x: -0.3, y: 0.5 } } });
+  });
+  z.append(el("div", { class: "note", style: { marginTop: "12px" }, html:
+    "<b>Окошко</b> x 274–306, хит 44×44 (пунктир) не задевает поиск (до 266) и цену (от 314).<br><br>" +
+    "<b>touch-action: pan-y</b> — гладить пальцем вбок, прокрутка с края пилюли работает.<br><br>" +
+    "<b>Тап</b> — тык и Tip 2.4 с. <b>Долгое нажатие</b> — панель под пилюлей. <b>Двойной тап</b> не выделяет текст.<br><br>" +
+    "&lt; 360 px: окошко 28, scale 0.62. 768–1023: 32×44, scale 0.78. 200 % на десктопе — тоже телефон." }));
+  r.append(z);
+  b.append(r);
+}
+
+/* ===== 03: states ===== */
+{
+  const b = board(3, "03", "Состояния: режимы, бодрость, фоны, бюджет",
+    "Нижний слой не отменяет верхний: <b>режим → место → фон → бодрость → акт → взгляд</b>. Фон — это лицо, а не движение: качание думающего лица идёт только первые 2 с. Через 210 с без ввода — 0 кадров.");
+  // modes
+  b.append(el("div", { class: "cap" }, "Режимы — выбирает только человек, сам ни один не выключается"));
+  const mr = el("div", { class: "row", style: { gap: "16px", marginBottom: "22px" } });
+  const mode = (name, fn, lines) => {
+    const c = card("card", { width: "292px" });
+    const s = stage(260, 128);
+    c.append(el("div", { class: "ttl" }, name), s, el("div", { class: "note", style: { marginTop: "10px" }, html: lines }));
+    mr.append(c);
+    later.push(() => fn(s));
+  };
+  mode("Живой", (s) => K(s, { x: 130, y: 112, s: 2.3, ink: "block", mood: "look", pose: { gaze: { x: 0.5, y: 0.2 } } }), "По умолчанию. Всё описанное: глаза, жесты, прыжки, обход, станции.");
+  mode("Тихий", (s) => K(s, { x: 130, y: 112, s: 2.3, ink: "block", mood: "idle", pose: { reduce: true } }), "Умолчание при системном RM. Глаза, моргания, лица, кивки; без прыжков и ходьбы. «Живой» можно выбрать осознанно.");
+  mode("Спит", (s) => K(s, { x: 118, y: 112, s: 2.3, ink: "block", mood: "sleepy", pose: { reduce: true } }), "Стоп-кадр, 0 кадров, глух даже к блокам. Будит только действие на нём: 900 мс.");
+  mode("Спрятан", (s) => { grain(s, 130, 108, 2.3, "block"); txt(s, 70, 20, "зерно 8×8, полный цвет", "font:500 12px 'IBM Plex Mono';color:#8f8f8f"); }, "Без глаз, 0 кадров, контраст ≥ 3:1. Окошко остаётся в Tab. Клик — вырастает за 420 мс.");
+  mode("Выключен", (s) => { abs(s, 106, 52, 48, 56, "border:2px dashed #3a3a3a;border-radius:10px"); txt(s, 72, 20, "только /settings", "font:500 12px 'IBM Plex Mono';color:#8f8f8f"); }, "Новый. Ни зерна, ни окошка, ни шага Tab. Вернуть — только на /settings.");
+  b.append(mr);
+  // energy
+  b.append(el("div", { class: "cap" }, "Бодрость — от времени без ввода (мышь ≥ 4 px, клавиши, скролл, тап, фокус)"));
+  const ec = card("card", { marginBottom: "22px", padding: "18px 22px" });
+  const es = stage(1476, 330, "#1a1a1a");
+  ec.append(es);
+  b.append(ec);
+  later.push(() => {
+    abs(es, 20, 236, 1436, 6, "background:#2a2a2a;border-radius:3px");
+    const lv = [
+      ["A0 бодр", "0–8 с", "глаза за курсором ≤ 240 px скачком, ≤ 20 к/с", "#2fd27f"],
+      ["A1 спокоен", "8–30 с", "за курсором не следит; одно тихое занятие на страницу", "#9be26b"],
+      ["A2 читает", "30–90 с", "глаза бегут по главному на странице, 4 прохода и покой", "#ffd23c"],
+      ["A3 дремлет", "90–180 с", "веки 0.55, один кивок, дальше неподвижен", "#f0a24b"],
+      ["A4 спит", "> 180 с", "Zzz 30 с, затем стоп-кадр: 0 кадров с 210 с", "#8f8f8f"],
+    ];
+    lv.forEach(([n, t, d, c], i) => {
+      const x = 30 + i * 290;
+      abs(es, x, 232, 270, 14, `background:${c};border-radius:7px;opacity:.85`);
+      txt(es, x, 252, `<b style="color:#fff">${n}</b> · ${t}`, "font:500 15px 'IBM Plex Sans';color:#c6c6c6");
+      abs(es, x, 274, 270, null, "font:400 13px/1.35 'IBM Plex Sans';color:#a3a3a3;white-space:normal", d);
+    });
+    cursor(es, 214, 64, 1.1);
+    K(es, { x: 130, y: 196, s: 2.6, ink: "block", mood: "look", pose: { gaze: { x: 0.9, y: -0.5 } } });
+    K(es, { x: 420, y: 196, s: 2.6, ink: "block", mood: "idle", from: 21000 });
+    K(es, { x: 710, y: 196, s: 2.6, ink: "block", mood: "work", pose: { look: 1.2 } });
+    abs(es, 765, 150, 120, 6, "background:#3a3a3a;border-radius:3px");
+    abs(es, 765, 166, 90, 6, "background:#3a3a3a;border-radius:3px");
+    K(es, { x: 1000, y: 196, s: 2.6, ink: "block", mood: "idle", pose: { eyeScale: 0.42, gaze: { x: 0, y: 0.6 } } });
+    K(es, { x: 1260, y: 196, s: 2.6, ink: "block", mood: "sleepy", from: 33000 });
+    txt(es, 1150, 22, "ввод → A0: 420 / 600 / 900 мс", "font:500 13px 'IBM Plex Mono';color:#c6c6c6");
+    txt(es, 20, 22, "кадры: вспышки — только когда что-то меняется", "font:500 13px 'IBM Plex Mono';color:#c6c6c6");
+  });
+  // backgrounds + budget
+  const br = el("div", { class: "row", style: { gap: "20px" } });
+  const bg = card("card", { width: "880px" });
+  bg.append(el("div", { class: "cap" }, "Фоны — лицо по состоянию сайта и цепи"));
+  const bs = stage(848, 196, "#1a1a1a");
+  bg.append(bs);
+  br.append(bg);
+  later.push(() => {
+    const items = [
+      ["offline", "присел, взгляд вниз", { mood: "idle", pose: { eyesApart: 0.18, gaze: { x: 0, y: 0.7 } } }],
+      ["связь пропала", "через 2 мин — спокоен", { mood: "idle", pose: { eyesApart: 0.18, gaze: { x: -0.4, y: -0.4 } } }],
+      ["сайт отстаёт", "статичное think, никогда sad", { mood: "think", pose: { reduce: true } }],
+      ["цепь ждёт", "≥ 3× среднего: «где же он»", { mood: "curious", pose: {} }],
+      ["цепь стоит", "≥ 8 мин: дремлет до блока", { mood: "idle", pose: { eyeScale: 0.42, gaze: { x: 0, y: 0.6 } } }],
+    ];
+    items.forEach(([n, d, o], i) => {
+      const x = 85 + i * 170;
+      K(bs, { x, y: 120, s: 2.1, ink: "box", ...o });
+      ctxt(bs, x, 140, `<b style="color:#fff">${n}</b>`, "font:600 14px 'IBM Plex Sans'");
+      ctxt(bs, x, 162, d, "font:400 12.5px 'IBM Plex Sans';color:#a3a3a3");
+    });
+  });
+  const bu = card("card", { width: "596px" });
+  bu.append(el("div", { class: "cap" }, "Ярусы и бюджет спонтанного"));
+  const tiers = [
+    ["T0 глаза", "взгляд, моргание, лицо", "новая цель ≥ 250 мс", 100, "#2fd27f"],
+    ["T1 жест", "кивок, стук, вздрог", "3 жетона, +1 за 15 с", 55, "#9be26b"],
+    ["T2 прыжок", "прыжок, путь ≤ 300 px", "≥ 20 с между, ≤ 3 за 2 мин", 25, "#ffd23c"],
+    ["T3 событие", "большой акт, станция, обход", "≥ 120 с между, ≤ 8 в час", 10, "#ff6a2b"],
+  ];
+  tiers.forEach(([n, w, l, pct, c]) => {
+    bu.append(el("div", { style: { display: "flex", alignItems: "center", gap: "12px", margin: "9px 0" } },
+      el("div", { style: { width: "110px", font: "600 15px 'IBM Plex Sans'" } }, n),
+      el("div", { class: "bar", style: { width: "120px" } }, el("i", { style: { width: pct + "%", background: c } })),
+      el("div", { class: "note", style: { fontSize: "13.5px" }, html: `${w} · <span class="mono" style="color:#fff">${l}</span>` })));
+  });
+  bu.append(el("div", { class: "note", style: { marginTop: "10px" }, html: "<b>Внимание:</b> всё не-глазное ≤ 18 с за 5 мин (6 %). <b>Занят</b> (скролл, набор, выделение, график под курсором, переход) — двигаются только глаза. Ответ на действие человека бюджетом не режется." }));
+  br.append(bu);
+  b.append(br);
+}
+
+/* ===== 04: interaction grammar ===== */
+{
+  const b = board(4, "04", "Как с ним общаться",
+    "Сначала глаза, потом тело. Текст — только по просьбе и только в Tip сайта. Он <b>никогда не ест клики</b>: тык засчитывается только по фону шапки, пустой ячейке сетки или окошку.");
+  // header strip with Tab order and panel
+  const hc = card("card", { padding: "16px 18px 18px", marginBottom: "20px" });
+  hc.append(el("div", { class: "cap" }, "Клавиатура · Tab, Enter, Shift+K · панель-раскрывашка"));
+  const hp = desk({ title: "Блоки", active: 1, ink: "block", searchInk: INK.block, body: blockBody });
+  const hwrap = el("div", { style: { position: "relative", width: "1452px", height: "296px" } });
+  hwrap.append(crop(hp, 352, 4, 1320, 76, 1.1));
+  const below = el("div", { style: { position: "absolute", left: "0", top: "100px", width: "1452px", height: "196px" } });
+  hwrap.append(below);
+  hc.append(hwrap);
+  later.push(() => {
+    const nx = nookX(hp);
+    const X = (x) => (x - 352) * 1.1;
+    ring(hp, nx - 20, 22, 40, 48, "var(--ring)", 9);
+    K(hp, { x: nx, y: 68, s: 0.86, ink: "block", mood: "look", pose: { gaze: { x: 0.2, y: 0.7 } } });
+    const step = (x, y, n) => { const d = pinEl(hp, x, y, n); d.style.background = "var(--ring)"; d.style.color = "#fff"; };
+    step(372, 22, 1); step(nx + 40, 22, 2); step(1300, 22, 3); step(1462, 22, 4);
+    arrow(hp, 392, 22, nx - 26, 22, "rgba(60,162,255,.9)", 2, true);
+    arrow(hp, nx + 60, 22, 1280, 22, "rgba(60,162,255,.9)", 2, true);
+    arrow(below, X(nx), -16, X(nx), -4, "#c6c6c6", 2);
+    const pn = abs(below, X(nx) - 125, 0, 250, null, "background:#2c2b33;border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.6);padding:10px 12px");
+    pn.innerHTML = "<div style=\"font:500 12px 'IBM Plex Mono';color:#a3a3a3;margin-bottom:6px\">Блок 1 915 825 · 40 с назад<br>в мемпуле 8</div>" +
+      ["Погладить", "Тише", "Уснуть", "Спрятать"].map((t, i) => `<div style="font:500 14px 'IBM Plex Sans';padding:6px 10px;border-radius:8px;margin-top:4px;background:${i === 0 ? "rgba(60,162,255,.22)" : "rgba(255,255,255,.05)"}">${t}${i === 1 ? " <span style='color:#a3a3a3;font-size:12px'>aria-pressed</span>" : ""}</div>`).join("");
+    abs(below, X(nx) + 150, 4, 470, null, "font:400 15px/1.5 'IBM Plex Sans';color:#c6c6c6;white-space:normal",
+      "<b style='color:#fff'>Enter, Space или держать 500 мс</b> — панель-раскрывашка: обычные кнопки и обычный Tab, режимы с aria-pressed. Esc или клик снаружи — фокус обратно на окошко.<br><br><b style='color:#fff'>Shift+K</b> — по <span class='k'>e.code KeyK</span>: работает и в русской раскладке, не срабатывает в полях ввода, выключается на /settings.");
+    abs(below, 0, 4, X(nx) - 170, null, "font:400 15px/1.5 'IBM Plex Sans';color:#c6c6c6;white-space:normal",
+      "<b style='color:#fff'>Tab:</b> поиск → <b style='color:#fff'>Кайоло</b> → цена → капитализация. Окошко стоит в DOM между ними — соседка заголовка, а не его часть: заголовок пересоздаётся на каждой странице, и фокус бы терялся.<br><br>Фокус на окошке — «заметил» и сразу Tip со статусом.");
+  });
+  b.append(hc);
+  // poke ladder
+  b.append(el("div", { class: "cap" }, "Тыки подряд (клик, тап, Enter по окошку) — лестница; серия гаснет через 2.5 с тишины"));
+  const lr = el("div", { class: "row", style: { gap: "10px", marginBottom: "20px" } });
+  const steps = [
+    ["1", "рад ^ ^, взгляд на главную цифру", { mood: "happy", before: "happy" }],
+    ["2", "прыжок", { mood: "happy", before: "idle", hopAt: 300 }],
+    ["3", "прыжок с разворотом", { mood: "happy", before: "idle", hopAt: 260, face: 1 }],
+    ["4", "прыжок ниже, 6 px", { mood: "happy", before: "idle", hopAt: 120 }],
+    ["5", "закружилась голова", { mood: "idle", pose: { pupilOrbit: 1.6, pupil: 2.2, head: 0.3 } }],
+    ["6", "двойное моргание", { mood: "idle", pose: { eyeScale: 0.12 } }],
+    ["7", "«ну хватит» — без злости", { mood: "work", pose: { head: -0.4 } }],
+    ["8–9", "просто моргает", { mood: "idle", pose: { eyeScale: 0.5 } }],
+    ["10", "секрет: кирпичик, игра 20 с", { mood: "surprised", before: "surprised", pose: { eyeLift: 1.5 } }],
+  ];
+  steps.forEach(([n, d, o]) => {
+    const c = card("card", { width: "160px", padding: "10px 10px 12px" });
+    const s = stage(140, 112, "#0e0e0e");
+    abs(s, 16, 100, 108, 2, "background:#2e2e2e");
+    c.append(el("div", { style: { font: "700 15px 'IBM Plex Mono'" } }, n), s, el("div", { class: "note", style: { fontSize: "13px", marginTop: "6px", lineHeight: "1.35" } }, d));
+    lr.append(c);
+    later.push(() => {
+      K(s, { x: 70, y: 100, s: 1.9, ink: "tx", ...o });
+      if (n === "10") abs(s, 96, 22, 10, 10, `background:${INK.tx}`);
+    });
+  });
+  b.append(lr);
+  // hover, petting, phone, never
+  const gr = el("div", { class: "row", style: { gap: "20px" } });
+  const g1 = card("card", { width: "560px" });
+  g1.append(el("div", { class: "cap" }, "Наведение мыши"));
+  const s1 = stage(528, 170, "#0e0e0e");
+  g1.append(s1);
+  later.push(() => {
+    K(s1, { x: 70, y: 140, s: 1.8, ink: "tx", mood: "look", pose: { gaze: { x: 0.8, y: -0.6 } } });
+    cursor(s1, 104, 70, 0.9);
+    ctxt(s1, 70, 150, "250 мс · заметил", "font:500 12.5px 'IBM Plex Mono';color:#c6c6c6");
+    K(s1, { x: 250, y: 140, s: 1.8, ink: "tx", mood: "look", pose: { eyeScale: 1.12, head: 0.2, gaze: { x: 0.2, y: -0.8 } } });
+    cursor(s1, 258, 96, 0.9);
+    tipBox(s1, 196, 18, "Кайоло<br><span class='m'>Блок 1 915 825 · 40 с назад</span>");
+    ctxt(s1, 250, 150, "600 мс · Tip со статусом", "font:500 12.5px 'IBM Plex Mono';color:#c6c6c6");
+    K(s1, { x: 440, y: 140, s: 1.8, ink: "tx", mood: "idle", pose: { gaze: { x: -0.9, y: 0.7 }, eyeScale: 0.8 } });
+    cursor(s1, 446, 92, 0.9);
+    ctxt(s1, 440, 150, "2 с неподвижно · смущён", "font:500 12.5px 'IBM Plex Mono';color:#c6c6c6");
+  });
+  g1.append(el("div", { class: "note", style: { marginTop: "8px" }, html: "Курсор ближе 48 px — откидывается, под курсор не уходит. Держать 500 мс — панель. Двойной клик — 2 тыка, текст рядом не выделяется." }));
+  gr.append(g1);
+  const g2 = card("card", { width: "440px" });
+  g2.append(el("div", { class: "cap" }, "Погладить"));
+  const s2 = stage(408, 170, "#0e0e0e");
+  g2.append(s2);
+  later.push(() => {
+    K(s2, { x: 204, y: 140, s: 2.4, ink: "addr", mood: "happy", before: "happy", pose: { head: 0.25 } });
+    arrow(s2, 140, 62, 268, 62, "#fff", 2.5, false, true);
+    arrow(s2, 268, 76, 140, 76, "#fff", 2.5, false, true);
+    ctxt(s2, 204, 150, "≥ 3 разворота за 1.5 с · через 2 с «мурчит»", "font:500 12.5px 'IBM Plex Mono';color:#c6c6c6");
+  });
+  g2.append(el("div", { class: "note", style: { marginTop: "8px" }, html: "Десктоп — курсором над телом без кнопки. Телефон — пальцем вбок в окошке (<b>pan-y</b>: вертикальный скролл не ломается)." }));
+  gr.append(g2);
+  const g3 = card("card", { width: "480px" });
+  g3.append(el("div", { class: "cap" }, "Чего не бывает"));
+  g3.append(el("div", { class: "note", style: { lineHeight: "1.6" }, html:
+    "<span class='no'>✕</span> не ест клики: над поиском, ценой, ссылками, строками клик уходит им<br>" +
+    "<span class='no'>✕</span> не гонится за курсором (кроме игры, в которую вошёл сам человек)<br>" +
+    "<span class='no'>✕</span> не советует и ничего не предлагает — даже «в избранное»<br>" +
+    "<span class='no'>✕</span> не прокручивает страницу и не двигает фокус<br>" +
+    "<span class='no'>✕</span> ни звука, ни вибрации, никакой вины и голода<br>" +
+    "<span class='no'>✕</span> ни одной функции только через него: «Следить» — обычная кнопка<br>" +
+    "<span class='yes'>✓</span> всё управление — в окошке, в панели и на /settings" }));
+  gr.append(g3);
+  b.append(gr);
+}
+
+/* ===== 05: per-page moments ===== */
+{
+  const b = board(5, "05", "Восемь моментов на страницах",
+    "Каждая страница даёт ему одну-две своих реакции. Цифры не закрывает: стоит рядом с якорем, а не на нём. Цифры <b>1 → 2 → 3</b> — кадры одного акта слева направо.");
+  const grid = el("div", { style: { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "18px" } });
+  const vig = (route, title, fn, capHtml) => {
+    const c = card("card", { padding: "12px 14px 14px" });
+    c.append(el("div", { style: { display: "flex", gap: "10px", alignItems: "baseline", marginBottom: "8px" } },
+      el("span", { class: "k" }, route), el("span", { class: "ttl", style: { margin: "0" } }, title)));
+    const s = stage(335, 230, "#0e0e0e");
+    c.append(s);
+    c.append(el("div", { class: "cap2", html: capHtml }));
+    grid.append(c);
+    later.push(() => fn(s));
+  };
+  const lab = (s, x, y, n) => { const d = pinEl(s, x, y, n); d.style.width = "22px"; d.style.height = "22px"; d.style.lineHeight = "22px"; d.style.fontSize = "13px"; };
+  vig("/blocks", "Новый блок пришёл", (s) => {
+    for (let i = 0; i < 4; i++) {
+      const y = 60 + i * 42;
+      abs(s, 12, y, 311, 36, `background:${i === 0 ? mix(INK.block, 16) : "#1a1a1a"};border-radius:8px`);
+      txt(s, 24, y + 9, (1915826 - i).toLocaleString("ru-RU"), "font:600 14px 'IBM Plex Mono'");
+      txt(s, 140, y + 10, `${[4, 6, 1, 9][i]} tx · ${[2, 158, 64, 211][i]} с назад`, "font:400 12px 'IBM Plex Sans';color:#a3a3a3");
+    }
+    abs(s, 12, 8, 311, 34, "background:#1a1a1a;border-radius:8px");
+    txt(s, 22, 16, "Блоки", "font:600 14px 'IBM Plex Sans'");
+    K(s, { x: 250, y: 42, s: 1.15, ink: "block", mood: "happy", before: "idle", hopAt: 290, pose: { gaze: { x: 0.3, y: 1 } } });
+  }, "Страница блоков: <b>прыжок</b> и взгляд на новую строку. На нейтральных страницах — только кивок.");
+  vig("/tx/…", "Транзакция подтверждена", (s) => {
+    abs(s, 12, 8, 311, 56, "background:#1a1a1a;border-radius:10px");
+    txt(s, 24, 16, "Отправил 12.5 ERG", "font:600 15px 'IBM Plex Sans'");
+    txt(s, 24, 38, "9fAb…k2 → 9hQ1…77", "font:400 12.5px 'IBM Plex Mono';color:#a3a3a3");
+    abs(s, 12, 120, 311, 2, "background:#2e2e2e");
+    K(s, { x: 46, y: 120, s: 1.1, ink: "tx", mood: "look", pose: { eyeScale: 1.2, eyeLift: 1 } }); lab(s, 82, 98, 1);
+    K(s, { x: 146, y: 120, s: 1.1, ink: "tx", mood: "happy", before: "idle", hopAt: 300 }); lab(s, 182, 98, 2);
+    K(s, { x: 246, y: 120, s: 1.1, ink: "tx", mood: "work", face: 1, pose: { pick: 1, gaze: { x: 0.4, y: 1 } } }); lab(s, 282, 98, 3);
+    abs(s, 12, 132, 311, 86, "background:#1a1a1a;border-radius:10px");
+    chip(s, 24, 144, "Подтверждения", INK.tx);
+    txt(s, 24, 174, "1 · в блоке 1 915 826", "font:600 18px 'IBM Plex Mono'");
+  }, "Акт — <b>по данным</b>: после блока страница перечитывается до «в блоке» (≤ 15 с), иначе индекс ещё не знает. Вздрог → прыжок → стук по подтверждениям.");
+  vig("/address/…", "Дверь и рента", (s) => {
+    abs(s, 0, 0, 26, 230, "background:#1a1a1a;border-radius:0 12px 12px 0");
+    abs(s, 60, 26, 260, 150, "background:#1a1a1a;border-radius:12px");
+    chip(s, 72, 36, "Баланс", INK.addr);
+    txt(s, 72, 60, "26.0653 ERG", "font:600 22px 'IBM Plex Mono'");
+    abs(s, 266, 124, 42, 40, `background:${mix(INK.addr, 26)};border-radius:10px`);
+    txt(s, 72, 140, "рента · 23 д", "font:500 13px 'IBM Plex Mono';color:#ff9ccb");
+    K(s, { x: 40, y: 206, s: 1.1, color: INK.addr, face: 1, mood: "look", pose: { gaze: { x: 1, y: -0.6 } } }); lab(s, 40, 222 - 70, 1);
+    K(s, { x: 238, y: 200, s: 1.1, color: INK.addr, face: 1, mood: "work", pose: { pick: 1 } }); lab(s, 238, 222 - 76, 2);
+    abs(s, 26, 206, 310, 3, "background:#2a2a2a");
+  }, "Стоит в Двери у шва рельса. Рента близко — взгляд на маяк и <b>стук рядом</b> с ним, не на цифрах. Страницу не крутит.");
+  vig("/mempool", "Редкая категория tx", (s) => {
+    [[60, 120, "#e391b5"], [100, 95, "#e391b5"], [140, 130, "#7f9cf5"], [180, 100, "#58c4d6"], [220, 135, "#e391b5"], [262, 108, "#f0c14a"]].forEach(([x, y, c]) => abs(s, x - 15, y - 15, 30, 30, `background:${c};border-radius:15px`));
+    abs(s, 248, 72, 30, 30, "border:2.5px solid #fff;border-radius:18px;transform:translate(-1px,22px)");
+    txt(s, 208, 146, "мост Rosen", "font:500 12px 'IBM Plex Mono';color:#f0c14a");
+    K(s, { x: 60, y: 210, s: 1.2, ink: "tx", mood: "curious", face: 1, pose: { gaze: { x: 1.2, y: -0.8 } } });
+    abs(s, 12, 214, 311, 2, "background:#2a2a2a");
+  }, "Категория, которой в сессии меньше 2 % — <b>взгляд и наклон</b>. Крупные суммы не отмечаем: в сумме есть сдача.");
+  vig("/fees", "Три уровня комиссии", (s) => {
+    ["economy", "normal", "turbo"].forEach((n, i) => {
+      abs(s, 12 + i * 106, 18, 98, 70, "background:#1a1a1a;border-radius:10px");
+      txt(s, 22 + i * 106, 28, n, "font:500 12px 'IBM Plex Mono';color:#a3a3a3");
+      txt(s, 22 + i * 106, 50, ["0.001", "0.0022", "1.05"][i], "font:600 16px 'IBM Plex Mono'");
+    });
+    K(s, { x: 70, y: 200, s: 1.1, ink: "brand", mood: "look", face: 1, pose: { gaze: { x: -0.6, y: -1 } } }); lab(s, 70, 130, 1);
+    K(s, { x: 167, y: 200, s: 1.1, ink: "brand", mood: "look", face: 1, pose: { gaze: { x: 0, y: -1 } } }); lab(s, 167, 130, 2);
+    K(s, { x: 264, y: 200, s: 1.1, ink: "brand", mood: "look", face: 1, pose: { gaze: { x: 0.7, y: -1 } } }); lab(s, 264, 130, 3);
+  }, "При входе — три саккады economy → normal → turbo за 900 мс. На телефоне тап по уровню: моргание / кивок / двойной кивок.");
+  vig("/status", "Что-то сломалось", (s) => {
+    [["Индексатор", "норма", "#2fd27f"], ["Нода", "отстаёт 6", "#ff5468"], ["Шлюз", "норма", "#2fd27f"]].forEach(([n, st, c], i) => {
+      abs(s, 12, 14 + i * 56, 230, 48, `background:${i === 1 ? mix("#ff5468", 14) : "#1a1a1a"};border-radius:10px`);
+      txt(s, 24, 22 + i * 56, n, "font:600 14px 'IBM Plex Sans'");
+      txt(s, 24, 41 + i * 56, st, `font:500 12px 'IBM Plex Mono';color:${c}`);
+    });
+    K(s, { x: 266, y: 110, s: 1.1, ink: "brand", mood: "work", face: -1, pose: { pick: 1 } }); lab(s, 266, 54, 1);
+    K(s, { x: 290, y: 214, s: 1.1, ink: "brand", mood: "think", pose: { reduce: true } }); lab(s, 290, 160, 2);
+  }, "Поворот к первой плохой карточке, <b>стук ×2</b>, потом думающее лицо. Никогда не грустит из-за сайта — он на стороне человека.");
+  vig("404", "Такой страницы нет", (s) => {
+    txt(s, 18, 18, "Такой страницы нет", "font:600 17px 'IBM Plex Sans'");
+    txt(s, 18, 44, "/blokcs/1915826", "font:500 13px 'IBM Plex Mono';color:#a3a3a3");
+    ["Главная", "Блоки", "Транзакции"].forEach((n, i) => { abs(s, 18 + i * 102, 182, 94, 34, "background:#1a1a1a;border-radius:9px"); ctxt(s, 65 + i * 102, 190, n, "font:500 13px 'IBM Plex Sans'"); });
+    K(s, { x: 90, y: 160, s: 1.25, ink: "brand", mood: "sad", before: "idle" }); lab(s, 90, 96, 1);
+    K(s, { x: 240, y: 160, s: 1.25, ink: "brand", mood: "curious", face: 1, pose: { gaze: { x: 0.6, y: 1 } } }); lab(s, 240, 96, 2);
+  }, "Слот маскота на странице. <b>Одна слеза</b> на 2 с, потом любопытство к выходам. Наведение — взгляд, клик — ^ ^ и переход.");
+  vig("/favorites", "Пишет записку", (s) => {
+    abs(s, 12, 18, 311, 44, "background:#1a1a1a;border-radius:10px");
+    txt(s, 24, 30, "Адреса · 0", "font:600 14px 'IBM Plex Sans'");
+    abs(s, 12, 74, 311, 74, "background:#1a1a1a;border-radius:10px");
+    txt(s, 26, 90, "Нажмите ♡ на странице адреса,", "font:400 14px 'IBM Plex Sans';color:#fff");
+    txt(s, 26, 112, "и он появится здесь.", "font:400 14px 'IBM Plex Sans';color:#fff");
+    abs(s, 196, 112, 120, 18, "background:linear-gradient(90deg, rgba(14,14,14,0), #1a1a1a 55%);");
+    K(s, { x: 210, y: 210, s: 1.2, color: INK.addr, mood: "work", face: -1, pose: { pick: 0.6, gaze: { x: -0.4, y: -0.9 } } });
+    abs(s, 12, 214, 311, 2, "background:#2a2a2a");
+  }, "Текст записки <b>виден всегда</b>; если он рядом, строка проявляется слева направо ≤ 1.2 с, пока он «пишет». Без JS и при RM — просто текст.");
+  b.append(grid);
+}
+
+/* ===== 06: transitions ===== */
+{
+  const b = board(6, "06", "Переходы между страницами",
+    "Шапка живёт между переходами: он не падает заново и не телепортируется. Цвет меняется <b>морганием 240 мс</b>, пока глаза закрыты, и только если цвет правда другой. Нырка под новый заголовок нет — человек его как раз читает.");
+  // arrival act
+  const ac = card("card", { padding: "16px 20px 18px", marginBottom: "20px" });
+  ac.append(el("div", { class: "cap" }, "Акт прибытия: клик по ссылке → новая страница (без затемнения экрана)"));
+  const as = stage(1460, 210, "#1a1a1a");
+  ac.append(as);
+  b.append(ac);
+  later.push(() => {
+    abs(as, 20, 168, 1420, 4, "background:#2a2a2a;border-radius:2px");
+    const fr = [
+      [80, "0 мс", "наклон к ссылке", { mood: "look", face: 1, pose: { head: 0.3, gaze: { x: 1, y: 0.6 } }, ink: "block" }],
+      [270, "0–500 мс", "думает на месте", { mood: "think", ink: "block", pose: { reduce: true } }],
+      [460, "> 500 мс", "«толкает дверь»: стук по рамке заголовка раз в 700 мс", { mood: "work", face: 1, pose: { pick: 1 }, ink: "block" }],
+      [650, "> 4 с", "смотрит на человека, пожимает плечами", { mood: "look", pose: { eyeLift: 1.5, gaze: { x: 0, y: -0.2 } }, ink: "block" }],
+      [840, "> 8 с", "садится ждать", { mood: "idle", pose: { eyesApart: 0.18, eyeScale: 0.6 }, ink: "block" }],
+      [1030, "прибытие", "глаза провожают старый заголовок вверх", { mood: "look", pose: { gaze: { x: 0, y: -1.2 } }, ink: "block" }],
+      [1190, "+ моргание", "цвет сменился, пока глаза закрыты", { mood: "idle", pose: { eyeScale: 0.1 }, ink: "addr" }],
+      [1350, "+ кивок", "новый заголовок, шаг в новую нишу ≤ 60 px", { mood: "look", pose: { pick: 0.6 }, ink: "addr" }],
+    ];
+    fr.forEach(([x, t, d, o]) => {
+      K(as, { x, y: 120, s: 1.9, ...o, color: INK[o.ink] });
+      abs(as, x - 4, 164, 8, 12, "background:#c6c6c6;border-radius:2px");
+      ctxt(as, x, 178, `<b style="color:#fff">${t}</b>`, "font:600 13px 'IBM Plex Mono'");
+      abs(as, x - 84, 14, 168, null, "font:400 13px/1.35 'IBM Plex Sans';color:#c6c6c6;text-align:center;white-space:normal", d);
+    });
+    txt(as, 1220, 196, "15 с без ответа — слеза, остаётся на старой странице", "font:400 12px 'IBM Plex Sans';color:#8f8f8f;transform:translateX(-40%)");
+  });
+  // path to the yard + table
+  const rr = el("div", { class: "row", style: { gap: "20px" } });
+  const pc = card("card", { width: "900px" });
+  pc.append(el("div", { class: "ttl" }, "Главная: ниша → шов → Двор"));
+  const hp = desk({ title: "Главная", active: 0, ink: "brand", cue: "транзак", body: homeBody });
+  pc.append(crop(hp, 330, 0, 880, 300, 0.985));
+  later.push(() => {
+    const nx = nookX(hp);
+    K(hp, { x: nx, y: 68, s: 0.86, ink: "brand", ghost: 0.5, mood: "look", pose: { gaze: { x: -0.6, y: 0.9 } } });
+    curve(hp, [[nx, 60], [nx, 69]], "#fff", 2.2, false);
+    curve(hp, [[nx, 69], [366, 69]], "rgba(255,255,255,.38)", 2.2, true);
+    curve(hp, [[366, 69], [366, 232], [1040, 232]], "#fff", 2.2, true);
+    K(hp, { x: 366, y: 176, s: 0.86, ink: "block", ghost: 0.55, mood: "look", pose: { gaze: { x: 0.2, y: 1 } } });
+    K(hp, { x: 1050, y: 230, s: 0.86, ink: "block", face: -1, mood: "look", pose: { gaze: { x: -0.8, y: 0.3 } } });
+    const tag = (x, y, n) => { const d = pinEl(hp, x, y, n); d.style.width = d.style.height = "22px"; d.style.lineHeight = "22px"; d.style.fontSize = "13px"; };
+    tag(nx - 18, 70, 1); tag(720, 69, 2); tag(366, 130, 3); tag(720, 232, 4);
+  });
+  pc.append(el("div", { class: "note", style: { marginTop: "10px", lineHeight: "1.6" }, html:
+    "<b>1</b> нырок под кромку шапки, 360 мс · <b>2</b> под шапкой его не видно, цвет перетекает brand → block · <b>3</b> выходит у шва рельса, 120 px/s · <b>4</b> существующим въездом Двора к w−34. Всего ≈ 1.2 с. Двор рисует станция — второго тела нет." }));
+  pc.append(el("div", { class: "cap2", html: "Путь идёт, пока грузится главная. Двор вне окна (восстановленный скролл) — остаётся в нише. Уходя с главной — тем же путём обратно, пока грузится следующая." }));
+  rr.append(pc);
+  const tc = card("card", { width: "600px" });
+  tc.append(el("div", { class: "ttl" }, "Что он делает на каждом виде перехода"));
+  const rowsT = [
+    ["тот же раздел", "только бит прибытия"],
+    ["Назад / Вперёд", "оглядывается влево/вправо 300 мс; уже был тут — «я тут был» и моргание"],
+    ["клик по текущему URL", "«уже здесь»: взгляд на заголовок, моргание"],
+    ["средний клик, Ctrl/Cmd", "взгляд на ссылку и вверх на вкладки; в новой вкладке — вход с левого края"],
+    ["/address/A → B", "остаётся в Двери, кивок"],
+    ["hash-вкладка, ?q=, фильтр", "реакция вкладки или фильтра, не прибытие"],
+    ["F5 ≤ 30 с", "тот же кадр на том же месте и моргание"],
+    ["сбой RSC, перезагрузка", "как F5"],
+    ["два окна на двух мониторах", "каждое живёт само, замирают только скрытые"],
+    ["ширина через 1024, поворот", "затухание 150 + 150 мс — единственный «телепорт»"],
+  ];
+  const tbl = el("div", { style: { marginTop: "8px" } });
+  rowsT.forEach(([a, c]) => tbl.append(el("div", { style: { display: "flex", gap: "14px", padding: "7px 0", borderTop: "1px solid rgba(255,255,255,.06)" } },
+    el("div", { style: { width: "205px", flex: "none", font: "600 14px 'IBM Plex Sans'" } }, a),
+    el("div", { class: "note", style: { fontSize: "14px" } }, c))));
+  tc.append(tbl);
+  tc.append(el("div", { class: "note", style: { marginTop: "10px", fontSize: "13.5px" }, html: "Источник — смена адреса страницы плюс свои слушатели <span class='mono'>popstate</span>, <span class='mono'>auxclick</span> и клика по тому же URL: сегодняшний индикатор перехода видит только левый клик." }));
+  rr.append(tc);
+  b.append(rr);
+}
+
+/* ===== 07: chain ===== */
+{
+  const b = board(7, "07", "Жизнь цепочки",
+    "Блок приходит ~раз в 2 мин (31 в час, медиана 66 с) — это его пульс. Сила реакции зависит от страницы: <b>Б</b> — блоки, <b>Н</b> — нейтральная, <b>П</b> — плотная (tx, адрес, бокс). Новых запросов нет: всё из живого потока сайта.");
+  const top = el("div", { class: "row", style: { gap: "20px", marginBottom: "20px" } });
+  const mc = card("card", { width: "760px" });
+  mc.append(el("div", { class: "cap" }, "Матрица: событие × тип страницы"));
+  const ms = stage(728, 330, "#1a1a1a");
+  mc.append(ms);
+  top.append(mc);
+  later.push(() => {
+    const cols = ["Б", "Н", "П"], rows = [
+      ["обычный блок", "2–38 tx", [{ mood: "happy", before: "idle", hopAt: 300 }, { mood: "look", pose: { pick: 0.6 } }, { mood: "look", pose: { gaze: { x: -1, y: -0.6 } } }], ["прыжок", "кивок", "взгляд"]],
+      ["пустой блок", "≤ 1 tx", [{ mood: "idle", pose: { eyeScale: 0.35, gaze: { x: -0.5, y: 0 } } }, { mood: "idle", pose: { eyeScale: 0.35, gaze: { x: -0.5, y: 0 } } }, { mood: "idle", pose: { eyeScale: 0.35, gaze: { x: -0.5, y: 0 } } }], ["«хм»", "«хм»", "«хм»"]],
+      ["большой блок", "≥ 39 tx", [{ mood: "surprised", before: "idle", hopAt: 330 }, { mood: "surprised", before: "idle", hopAt: 330 }, { mood: "surprised", before: "idle", hopAt: 330 }], ["большой акт", "большой акт", "прыжок-удивление"]],
+    ];
+    cols.forEach((c, i) => ctxt(ms, 300 + i * 160, 12, `<b>${c}</b>`, "font:700 18px 'IBM Plex Mono'"));
+    rows.forEach(([n, d, poses, labels], j) => {
+      const y = 50 + j * 94;
+      txt(ms, 18, y + 24, `<b style="color:#fff">${n}</b><br><span class="mono">${d}</span>`, "font:500 15px/1.4 'IBM Plex Sans';color:#a3a3a3");
+      poses.forEach((o, i) => {
+        abs(ms, 300 + i * 160 - 46, y + 70, 92, 2, "background:#3a3a3a");
+        K(ms, { x: 300 + i * 160, y: y + 70, s: 1.4, ink: "block", ...o });
+        ctxt(ms, 300 + i * 160, y + 74, labels[i], "font:500 12px 'IBM Plex Mono';color:#c6c6c6");
+      });
+    });
+  });
+  const wc = card("card", { width: "720px" });
+  wc.append(el("div", { class: "cap" }, "Ожидание блока · отсчёт от момента, когда блок получил браузер"));
+  const ws = stage(688, 330, "#1a1a1a");
+  wc.append(ws);
+  top.append(wc);
+  later.push(() => {
+    abs(ws, 20, 210, 648, 6, "background:#2a2a2a;border-radius:3px");
+    const pts = [[40, "0", "блок"], [190, "3:50", "2× среднего"], [330, "5:45", "3×"], [490, "8:00", "стоит"], [630, "блок!", ""]];
+    pts.forEach(([x, t, d]) => { abs(ws, x - 3, 204, 6, 18, "background:#c6c6c6;border-radius:2px"); ctxt(ws, x, 228, `<b style="color:#fff">${t}</b>`, "font:600 14px 'IBM Plex Mono'"); ctxt(ws, x, 250, d, "font:400 12.5px 'IBM Plex Sans';color:#a3a3a3"); });
+    K(ws, { x: 40, y: 190, s: 1.5, ink: "block", mood: "look", pose: { pick: 0.5 } });
+    K(ws, { x: 190, y: 190, s: 1.5, ink: "block", mood: "look", pose: { gaze: { x: -1.1, y: 0.2 } } });
+    K(ws, { x: 330, y: 190, s: 1.5, ink: "block", mood: "curious" });
+    K(ws, { x: 490, y: 190, s: 1.5, ink: "block", mood: "idle", pose: { eyeScale: 0.42, gaze: { x: 0, y: 0.6 } } });
+    K(ws, { x: 630, y: 190, s: 1.5, ink: "block", mood: "happy", before: "idle", hopAt: 300 });
+    abs(ws, 20, 18, 648, null, "font:400 14px/1.45 'IBM Plex Sans';color:#c6c6c6;white-space:normal",
+      "Взгляд на край → «где же он» (одно думающее лицо) → дремлет без слёз → <b style='color:#fff'>облегчение и прыжок</b>. Метку времени майнера не используем: часы майнера и браузера расходятся и давали бы ложное «ждём». Блоки идут по Пуассону — «скоро будет» не бывает.");
+    abs(ws, 20, 280, 648, null, "font:400 13px/1.4 'IBM Plex Sans';color:#8f8f8f;white-space:normal",
+      "Связь пропала ≥ 6 с — «ждёт»; 60 с — дремлет; 2 мин — спокоен (WS могут резать прокси, сайт по HTTP работает). Вернулась — кивок или «с возвращением».");
+  });
+  b.append(top);
+  const bot = el("div", { class: "row", style: { gap: "20px" } });
+  const jc = card("card", { width: "760px" });
+  jc.append(el("div", { class: "cap" }, "Первый праздник · блок 1 920 000"));
+  const js = stage(728, 250, "#1a1a1a");
+  jc.append(js);
+  bot.append(jc);
+  later.push(() => {
+    abs(js, 20, 150, 688, 6, "background:#2a2a2a;border-radius:3px");
+    abs(js, 380, 150, 150, 6, `background:${INK.block};border-radius:3px;opacity:.85`);
+    ctxt(js, 60, 166, "13.11 · 1 915 825", "font:500 12px 'IBM Plex Mono';color:#a3a3a3");
+    ctxt(js, 380, 166, "<b style='color:#fff'>19.11 ≈ 00:45 UTC ± 2 ч</b>", "font:600 13px 'IBM Plex Mono'");
+    ctxt(js, 530, 166, "+30 мин окно", "font:500 12px 'IBM Plex Mono';color:#a3a3a3");
+    ctxt(js, 660, 166, "02.12 · 1 930 000", "font:500 12px 'IBM Plex Mono';color:#a3a3a3");
+    K(js, { x: 380, y: 140, s: 1.7, ink: "block", mood: "happy", before: "idle", hopAt: 300 });
+    txt(js, 400, 40, "1 920 000", `font:700 26px 'IBM Plex Mono';color:${INK.block}`);
+    abs(js, 20, 192, 688, null, "font:400 14px/1.45 'IBM Plex Sans';color:#c6c6c6;white-space:normal",
+      "Ловим <b style='color:#fff'>пересечение</b> prev &lt; H ≤ cur — догон и переподключение не промахнутся. Кто войдёт в течение 30 мин после блока — тоже увидит, один раз. На главной празднует Двор, на прочих — герой шапки. Отдельный маленький мерж до 17.11 — по «да».");
+    abs(js, 20, 18, 300, null, "font:400 13px/1.4 'IBM Plex Sans';color:#8f8f8f;white-space:normal",
+      "Дальше: 1 951 200 (≈ 30.12) — плановая эмиссия 9 → 6 ERG; майнеру и до, и после 3 ERG. Подписи смену награды не обещают.");
+  });
+  const fc = card("card", { width: "720px" });
+  fc.append(el("div", { class: "cap" }, "Сколько он двигается ради цепи (сегодняшний трафик)"));
+  const fl = [["кивок на нейтральной странице", "~25 в час", "≈ 9 с в час", 0.3], ["«хм» на пустой блок", "~5.6 в час", "только глаза", 0.05], ["взгляд на долгое ожидание", "~4 в час", "только глаза", 0.05], ["думает / дремлет", "~1.5 / 0.5 в час", "лицо", 0.03], ["цена", "0–3 в день", "нейтральный взгляд", 0.01]];
+  fl.forEach(([a, n, m, p]) => fc.append(el("div", { style: { display: "flex", gap: "12px", padding: "8px 0", borderTop: "1px solid rgba(255,255,255,.06)", alignItems: "baseline" } },
+    el("div", { style: { width: "270px", font: "600 14.5px 'IBM Plex Sans'" } }, a), el("div", { class: "mono", style: { width: "150px", fontSize: "14px" } }, n), el("div", { class: "note", style: { fontSize: "14px" } }, m))));
+  fc.append(el("div", { class: "note", style: { marginTop: "10px" }, html: "Итого не-глазного движения ради цепи <b>≈ 0.3 %</b> времени на нейтральных страницах и <b>≈ 1.5 %</b> на страницах блоков при бюджете 6 %. Убрано: «крупные tx» (в сумме сдача) и радость от цены." }));
+  bot.append(fc);
+  b.append(bot);
+}
+
+/* ===== 08: before / after ===== */
+{
+  const b = board(8, "08", "Что меняется в одобренном · до / после",
+    "Эти пункты трогают то, что оператор уже принимал. Каждый — отдельный вопрос (§12 спецификации); рекомендация — «после».");
+  const grid = el("div", { style: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "18px" } });
+  const pair = (q, title, fnB, fnA, capB, capA) => {
+    const c = card("card", { padding: "12px 14px 14px" });
+    c.append(el("div", { style: { display: "flex", gap: "10px", alignItems: "baseline", marginBottom: "8px" } }, el("span", { class: "k" }, q), el("span", { class: "ttl", style: { margin: "0" } }, title)));
+    const r = el("div", { class: "row", style: { gap: "10px" } });
+    const mk = (cls, fn, cap) => { const col = el("div", { class: "col", style: { gap: "4px", width: "220px" } }); const s = stage(220, 150, "#0e0e0e"); col.append(el("span", { class: "vs " + cls }, cls === "before" ? "до" : "после"), s, el("div", { class: "note", style: { fontSize: "13px", lineHeight: "1.35" }, html: cap })); r.append(col); later.push(() => fn(s)); };
+    mk("before", fnB, capB); mk("after", fnA, capA);
+    c.append(r);
+    grid.append(c);
+  };
+  const hdr = (s, title = "Блоки") => { abs(s, 0, 10, 220, 52, "background:#1a1a1a;border-radius:12px"); ctxt(s, 110, 26, title, "font:600 15px 'IBM Plex Sans'"); };
+  pair("§12.2", "Обход шапки", (s) => {
+    ["Блоки", "Блок", "Tx", "Адрес"].forEach((n, i) => { abs(s, 8 + i * 52, 30, 46, 30, "background:#1a1a1a;border-radius:8px"); ctxt(s, 31 + i * 52, 37, n, "font:500 11px 'IBM Plex Sans'"); K(s, { x: 31 + i * 52, y: 26, s: 0.7, ink: "block", mood: "surprised", before: "surprised", ghost: 0.9 }); arrow(s, 31 + i * 52, 0, 31 + i * 52, 6, "#ff9aa6", 2); });
+    txt(s, 8, 76, "падает и обходит<br>на каждой странице", "font:400 13px/1.35 'IBM Plex Sans';color:#c6c6c6");
+  }, (s) => {
+    ["Блоки", "Блок", "Tx", "Адрес"].forEach((n, i) => { abs(s, 8 + i * 52, 30, 46, 30, "background:#1a1a1a;border-radius:8px"); ctxt(s, 31 + i * 52, 37, n, "font:500 11px 'IBM Plex Sans'"); K(s, { x: 31 + i * 52, y: 26, s: 0.7, ink: "block", mood: i ? "look" : "surprised", before: i ? "look" : "surprised", pose: i ? { pick: 0.6 } : {} }); });
+    arrow(s, 31, 0, 31, 6, "#6ee7a8", 2);
+    txt(s, 8, 76, "обход — первый показ в сессии<br>или раздел за день; дальше кивок", "font:400 13px/1.35 'IBM Plex Sans';color:#c6c6c6");
+  }, "lib/header-scout.ts:1 «один проход на каждой странице»", "≥ 10 мин между обходами; шапка живёт между переходами");
+  pair("§12.3", "Телефон и прижатая плашка", (s) => {
+    abs(s, 6, 8, 208, 40, "background:#1a1a1a;border-radius:20px"); abs(s, 6, 46, 208, 30, "background:#232323;border-radius:0 0 10px 10px");
+    ctxt(s, 110, 52, "плашка «Блоки»", "font:500 12px 'IBM Plex Sans';color:#c6c6c6");
+    K(s, { x: 168, y: 40, s: 0.6, ink: "block", ghost: 0.15 });
+  }, (s) => {
+    abs(s, 6, 8, 208, 40, "background:#1a1a1a;border-radius:20px"); abs(s, 6, 46, 208, 30, "background:#232323;border-radius:0 0 10px 10px");
+    ctxt(s, 110, 52, "плашка «Блоки»", "font:500 12px 'IBM Plex Sans';color:#c6c6c6");
+    K(s, { x: 168, y: 40, s: 0.6, ink: "block", mood: "look", pose: { eyesApart: 0.18, gaze: { x: 0, y: 0.6 } } });
+  }, "гаснет под плашкой (89209a4): холст прохода закрывал её", "сидит в своём окошке, из пилюли не выходит");
+  pair("§12.14", "Медленный переход", (s) => {
+    hdr(s); abs(s, 0, 0, 220, 150, "background:rgba(0,0,0,.45)");
+    K(s, { x: 110, y: 120, s: 1.3, ink: "block", mood: "think", pose: { reduce: true } });
+  }, (s) => {
+    hdr(s); abs(s, 0, 0, 120, 2, "background:#3ca2ff");
+    const tx = 158; K(s, { x: tx, y: 58, s: 0.86, ink: "block", mood: "work", face: -1, pose: { pick: 1 } });
+    txt(s, 10, 86, "данные видны, ждёт он сам", "font:400 13px 'IBM Plex Sans';color:#c6c6c6");
+  }, "ScanWait: затемнение и Пиксель в центре", "«толкает дверь» в нише; полоска 2 px остаётся");
+  pair("§12.15", "Черта «читает»", (s) => {
+    hdr(s); abs(s, 86, 46, 48, 2, `background:${INK.block}`);
+    K(s, { x: 150, y: 58, s: 0.86, ink: "block", mood: "work", pose: { look: -1 } });
+    txt(s, 10, 86, "черта рисуется на холсте", "font:400 13px 'IBM Plex Sans';color:#c6c6c6");
+  }, (s) => {
+    hdr(s); abs(s, 86, 46, 48, 2, `background:${INK.block}`);
+    K(s, { x: 150, y: 58, s: 0.86, ink: "block", mood: "work", pose: { look: -1 } });
+    txt(s, 10, 86, "та же черта — элемент страницы", "font:400 13px 'IBM Plex Sans';color:#c6c6c6");
+  }, "в маленький холст обхода не влезает", "на вид ничего не меняется");
+  pair("§12.16", "«Кайоло, что?» во время прохода", (s) => {
+    abs(s, 0, 10, 220, 52, "background:#1a1a1a;border-radius:12px");
+    abs(s, 12, 29, 12, 12, "border:2px solid #c6c6c6;border-radius:7px"); txt(s, 30, 26, "транзак", "font:500 13px 'IBM Plex Sans'");
+    K(s, { x: 60, y: 58, s: 0.86, ink: "block", mood: "look" });
+    abs(s, 44, 32, 32, 30, "border:2px dashed #6ee7a8;border-radius:6px");
+    txt(s, 10, 80, "обещан хит по нему везде", "font:400 13px 'IBM Plex Sans';color:#c6c6c6");
+  }, (s) => {
+    abs(s, 0, 10, 220, 52, "background:#1a1a1a;border-radius:12px");
+    shade(s, 6, 18, 120, 36, "rgba(255,84,104,.22)");
+    abs(s, 12, 29, 12, 12, "border:2px solid #c6c6c6;border-radius:7px"); txt(s, 30, 26, "транзак", "font:500 13px 'IBM Plex Sans'");
+    K(s, { x: 60, y: 58, s: 0.86, ink: "block", mood: "look" });
+    K(s, { x: 150, y: 58, s: 0.86, ink: "block", mood: "look", ghost: 0.9 });
+    abs(s, 134, 32, 32, 30, "border:2px dashed #6ee7a8;border-radius:6px");
+    txt(s, 10, 80, "над поиском клик — поиску;<br>вопрос — только в зазорах", "font:400 13px/1.35 'IBM Plex Sans';color:#c6c6c6");
+  }, "на деле почти недостижим", "честно: срабатывает редко, клики важнее");
+  pair("§12.6", "Деньги", (s) => {
+    abs(s, 0, 10, 220, 52, "background:#1a1a1a;border-radius:12px");
+    txt(s, 18, 30, "Цена ERG <b>$0.1786</b>", "font:500 13px 'IBM Plex Sans'");
+    K(s, { x: 180, y: 58, s: 0.86, ink: "block", mood: "happy", before: "happy" });
+    txt(s, 10, 80, "радуется цене и mcap;<br>dust сжимается, overlord растёт", "font:400 13px/1.35 'IBM Plex Sans';color:#c6c6c6");
+  }, (s) => {
+    abs(s, 0, 10, 220, 52, "background:#1a1a1a;border-radius:12px");
+    txt(s, 18, 30, "Цена ERG <b>$0.1786</b>", "font:500 13px 'IBM Plex Sans'");
+    K(s, { x: 180, y: 58, s: 0.86, ink: "block", mood: "curious", face: -1 });
+    txt(s, 10, 80, "смотрит с интересом, тот же стук;<br>все полосы — взгляд и кивок", "font:400 13px/1.35 'IBM Plex Sans';color:#c6c6c6");
+  }, "scoutMood: price/mcap → happy", "персонаж не оценивает деньги");
+  b.append(grid);
+}
+
+/* ---------- draw after fonts ---------- */
+(async () => {
+  try { await document.fonts.ready; } catch (e) {}
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  for (const f of later) f();
+  document.title = "ready";
+})();
+</script>
+</body>
+</html>

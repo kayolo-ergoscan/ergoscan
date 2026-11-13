@@ -5,7 +5,9 @@ import { usePathname } from "next/navigation";
 import { addressIdOf, addressReturnGate, askWaitsForSlip, isAddressHome, rentScratch, SCOUT_CUES_EN, SCOUT_CUES_RU, scoutBeats, type ScoutBeat } from "@/lib/header-scout";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { lookupScoutRent } from "@/lib/scout-rent";
-import { drawPixel, pixelColor, pixelInkForPath, type PixelMood, type PixelPose } from "./pixel";
+import { INK_EVENT } from "@/lib/skin-ink";
+import { REDUCE_QUERY, useMediaTick, WIDE_QUERY } from "@/lib/kayolo/motion";
+import { drawPixel, pixelColor, pixelInkForPath, pixelWake, type PixelMood, type PixelPose } from "./pixel";
 
 /**
  * «Пиксель» (components/pixel.ts), in the page's entity colour.
@@ -180,6 +182,105 @@ function drawScout(ctx: CanvasRenderingContext2D, pose: Omit<PixelPose, "color" 
   });
 }
 
+function setBeat(canvas: HTMLCanvasElement, beat: string) {
+  if (canvas.dataset.scoutBeat !== beat) canvas.dataset.scoutBeat = beat;
+}
+
+/** A parked pose keeps drawing this long (the face eases, a glance lands), then the loop sleeps. */
+const SETTLE_MS = 900;
+/** Parked past the search word he looks around once: one full sweep of the old seek glance. */
+const SEEK_LOOK_MS = Math.round(2 * Math.PI * 880);
+
+type Loop = { again: () => void; stop: () => void };
+
+/** One rAF at a time. At rest a pose stops asking for frames; events ask again. */
+function frameLoop(paint: (now: number) => void): Loop {
+  let raf = 0;
+  let dead = false;
+  const run = (now: number) => {
+    raf = 0;
+    if (!dead) paint(now);
+  };
+  return {
+    again() {
+      if (!dead && !raf) raf = requestAnimationFrame(run);
+    },
+    stop() {
+      dead = true;
+      if (raf) cancelAnimationFrame(raf);
+      raf = 0;
+    },
+  };
+}
+
+/** Parked long enough and his face is still: the frame just drawn can stay on the canvas. */
+function settled(ctx: CanvasRenderingContext2D, now: number, since: number) {
+  return now - since >= SETTLE_MS && pixelWake(ctx) > performance.now();
+}
+
+/**
+ * Wakes a sleeping loop on what can change a parked pose: the bar or the window resized, the ink,
+ * the tab came back; when asked, scroll and a note line that appears, changes or goes.
+ */
+function wakeOn(
+  root: HTMLElement,
+  wake: () => void,
+  opt: { scroll?: () => boolean; note?: () => HTMLElement | null } = {}
+): () => void {
+  const onVis = () => {
+    if (document.visibilityState === "visible") wake();
+  };
+  const onInk = () => {
+    inkAt = -1e9;
+    wake();
+  };
+  const onScroll = () => {
+    if (opt.scroll?.()) wake();
+  };
+  const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => wake());
+  ro?.observe(root);
+  window.addEventListener("resize", wake);
+  window.addEventListener(INK_EVENT, onInk);
+  document.addEventListener("visibilitychange", onVis);
+  if (opt.scroll) window.addEventListener("scroll", onScroll, { passive: true });
+  let mo: MutationObserver | null = null;
+  const find = opt.note;
+  if (find && typeof MutationObserver !== "undefined") {
+    let el = find();
+    let line = el?.getAttribute("data-fav-note") ?? null;
+    mo = new MutationObserver(() => {
+      const next = find();
+      const text = next?.getAttribute("data-fav-note") ?? null;
+      if (next === el && text === line) return;
+      el = next;
+      line = text;
+      wake();
+    });
+    mo.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-fav-note"] });
+  }
+  return () => {
+    ro?.disconnect();
+    mo?.disconnect();
+    window.removeEventListener("resize", wake);
+    window.removeEventListener(INK_EVENT, onInk);
+    document.removeEventListener("visibilitychange", onVis);
+    window.removeEventListener("scroll", onScroll);
+  };
+}
+
+/**
+ * The note line reads by default (`--scratch: 1`). He hides it only as he sets off to write it on
+ * screen, so without him (no JS, reduced motion, a hidden tab) the line is simply there.
+ */
+function claimNote(el: HTMLElement) {
+  const r = el.getBoundingClientRect();
+  if (r.bottom > 0 && r.top < window.innerHeight) el.style.setProperty("--scratch", "0");
+}
+
+function releaseNotes() {
+  for (const el of document.querySelectorAll<HTMLElement>("[data-fav-note]")) el.style.removeProperty("--scratch");
+}
+
 type PerchPhase =
   | "fall"
   | "settle"
@@ -206,6 +307,34 @@ type RentNote = { due: boolean; lines: [string, string, string] };
 
 const CARVE_LINE_MS = 680;
 
+const HIT_W = 52;
+const HIT_H = 56;
+const CLICKABLE =
+  'a[href],button,input,select,textarea,summary,label,[role="button"],[role="link"],[role="tab"],[contenteditable="true"]';
+
+/** A link or control under any part of his button: then the click belongs to it. */
+function clickableUnder(hit: HTMLElement, left: number, top: number): boolean {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  for (const fx of [0.06, 0.35, 0.65, 0.94]) {
+    for (const fy of [0.06, 0.35, 0.65, 0.94]) {
+      const px = left + HIT_W * fx;
+      const py = top + HIT_H * fy;
+      if (px < 0 || py < 0 || px >= vw || py >= vh) continue;
+      const under = document.elementsFromPoint(px, py).find((el) => el !== hit);
+      if (under?.closest(CLICKABLE)) return true;
+    }
+  }
+  return false;
+}
+
+type HitMemo = { on: boolean; label: string; left: number; top: number; open: boolean; at: number };
+const hitMemo = new WeakMap<HTMLButtonElement, HitMemo>();
+
+/**
+ * His 52×56 button follows him and stays in the Tab order, but over the search, the price or any
+ * link it lets clicks through (pointer-events: none). The DOM is written only when something changed.
+ */
 function placeHit(
   hit: HTMLButtonElement | null,
   on: boolean,
@@ -214,13 +343,39 @@ function placeHit(
   label?: string
 ) {
   if (!hit) return;
-  hit.tabIndex = on ? 0 : -1;
-  hit.style.pointerEvents = on ? "auto" : "none";
-  hit.setAttribute("aria-hidden", on ? "false" : "true");
-  if (on && label) hit.setAttribute("aria-label", label);
-  if (!on) return;
-  hit.style.left = `${x - 26}px`;
-  hit.style.top = `${floor - 48}px`;
+  let m = hitMemo.get(hit);
+  if (!m) {
+    m = { on: !on, label: "", left: NaN, top: NaN, open: false, at: -1e9 };
+    hitMemo.set(hit, m);
+  }
+  if (m.on !== on) {
+    m.on = on;
+    hit.tabIndex = on ? 0 : -1;
+    hit.setAttribute("aria-hidden", on ? "false" : "true");
+  }
+  if (!on) {
+    if (m.open || hit.style.pointerEvents !== "none") hit.style.pointerEvents = "none";
+    m.open = false;
+    m.left = NaN;
+    return;
+  }
+  if (label && label !== m.label) {
+    m.label = label;
+    hit.setAttribute("aria-label", label);
+  }
+  const left = x - HIT_W / 2;
+  const top = floor - 48;
+  const now = performance.now();
+  if (Math.abs(left - m.left) >= 2 || Math.abs(top - m.top) >= 2 || now - m.at > 500 || Number.isNaN(m.left)) {
+    const open = !clickableUnder(hit, left, top);
+    m.at = now;
+    if (open !== m.open || hit.style.pointerEvents === "") hit.style.pointerEvents = open ? "auto" : "none";
+    m.open = open;
+  }
+  if (left !== m.left) hit.style.left = `${left}px`;
+  if (top !== m.top) hit.style.top = `${top}px`;
+  m.left = left;
+  m.top = top;
 }
 
 /** Drop along the rail and sit by Addresses. A click turns him back to the header. */
@@ -303,7 +458,8 @@ function runAddressPerch(
     addressId: string | null;
     blocks: { current: number | null | undefined };
     scratch: (blocks: number) => RentNote;
-  }
+  },
+  wakeRef: { current: () => void }
 ) {
   const header = canvas.parentElement;
   if (!header) return () => {};
@@ -317,10 +473,10 @@ function runAddressPerch(
   canvas.style.bottom = "auto";
   canvas.style.zIndex = "30";
 
-  let raf = 0;
   let dead = false;
   let handed = false;
   let last = 0;
+  let wokeAt = 0;
   let beatAt = 0;
   let ready = false;
   let x = 0;
@@ -339,8 +495,13 @@ function runAddressPerch(
   let leaveQueued = false;
   let noteA = 0;
   let writtenEmpty = "";
+  let near = false;
   const onMove = (e: PointerEvent) => {
     aim = { x: e.clientX, y: e.clientY };
+    // Parked, his eyes follow a pointer within 160 px: wake for it, and once more as it leaves.
+    const close = Math.hypot(e.clientX - x, e.clientY - y) < 220;
+    if (close || near) wake();
+    near = close;
   };
   window.addEventListener("pointermove", onMove, { passive: true });
 
@@ -351,7 +512,7 @@ function runAddressPerch(
     canvas.style.width = `${w}px`;
     canvas.style.height = `${h}px`;
     if (w < 8 || h < 8) {
-      raf = requestAnimationFrame(paint);
+      loop.again();
       return;
     }
     const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -367,14 +528,14 @@ function runAddressPerch(
     const door = addressDoor();
     if (!door) {
       placeHit(hit, false, 0, 0);
-      raf = requestAnimationFrame(paint);
+      loop.again();
       return;
     }
     if (!ready) {
       if (phase === "nest") {
         const g = searchSlip(header);
         if (!g) {
-          raf = requestAnimationFrame(paint);
+          loop.again();
           return;
         }
         faceHome = g.slips ? -1 : 1;
@@ -450,20 +611,19 @@ function runAddressPerch(
       const cue = rent.blocks.current;
       const lane =
         rent.addressId && rentTold !== rent.addressId && cue != null ? measureRentLane() : null;
-      if (lane && rent.addressId && cue != null) {
+      // He never scrolls the page: a lane off screen waits until the person scrolls to it.
+      const inView = lane != null && lane.cols.top <= window.innerHeight - 72 && lane.cols.bottom >= 96;
+      if (lane && inView && rent.addressId && cue != null) {
         rentTold = rent.addressId;
         note = rent.scratch(cue);
         noteA = 0;
-        const cols = lane.cols;
-        if (cols.top > window.innerHeight - 72 || cols.bottom < 96) {
-          document.querySelector(".addr-head.addr-history")?.scrollIntoView({ block: "nearest", inline: "nearest" });
-        }
         phase = "shelf";
         beatAt = now;
         segFromX = x;
         segFromY = y;
       } else if (emptyNote()) {
         writtenEmpty = "";
+        claimNote(emptyNote()!);
         phase = "note-drive";
         beatAt = now;
         segFromX = x;
@@ -588,6 +748,7 @@ function runAddressPerch(
       const lineEl = emptyNote();
       if (lineEl && !leaveQueued) {
         writtenEmpty = "";
+        claimNote(lineEl);
         phase = "note-drive";
         beatAt = now;
         segFromX = x;
@@ -746,6 +907,7 @@ function runAddressPerch(
     } else if (phase === "note-rise") {
       const back = addressDoor() ?? door;
       if (emptyNote()) {
+        claimNote(emptyNote()!);
         phase = "note-drive";
         beatAt = now;
         segFromY = y;
@@ -770,6 +932,7 @@ function runAddressPerch(
     } else if (phase === "note-roll") {
       const back = addressDoor() ?? door;
       if (emptyNote()) {
+        claimNote(emptyNote()!);
         phase = "note-drive";
         beatAt = now;
         segFromY = y;
@@ -910,7 +1073,8 @@ function runAddressPerch(
       if (u >= 1 && !handed) {
         handed = true;
         dead = true;
-        cancelAnimationFrame(raf);
+        loop.stop();
+        unwake();
         window.removeEventListener("pointermove", onMove);
         restorePerchCanvas();
         onArrived(x);
@@ -934,7 +1098,7 @@ function runAddressPerch(
       orbit = 0.55;
     }
 
-    canvas.dataset.scoutBeat = phase;
+    setBeat(canvas, phase);
     const floor = y - lift + crouch;
     const air = Math.min(1, lift / 4);
     const landed = phase === "fall" ? clamp(1 - (door.y - y) / Math.max(door.y, 1), 0.15, 1) : 1;
@@ -1014,7 +1178,11 @@ function runAddressPerch(
       ctx.restore();
     }
 
-    raf = requestAnimationFrame(paint);
+    // At the door, watching, or by a written note: once still, no more frames until an event.
+    const resting = phase === "home" || phase === "watch" || phase === "note-live" || phase === "nest";
+    const blinking = phase === "note-live" && (now - beatAt) % 2600 < 90;
+    if (resting && !blinking && settled(ctx, now, Math.max(beatAt, wokeAt))) return;
+    loop.again();
   };
 
   const restorePerchCanvas = () => {
@@ -1024,12 +1192,21 @@ function runAddressPerch(
     else canvas.setAttribute("style", prev);
   };
 
-  raf = requestAnimationFrame(paint);
+  const loop = frameLoop(paint);
+  const wake = () => {
+    wokeAt = performance.now();
+    loop.again();
+  };
+  wakeRef.current = wake;
+  const unwake = wakeOn(header, wake, { scroll: () => true, note: emptyNote });
+  loop.again();
   return () => {
     dead = true;
-    cancelAnimationFrame(raf);
+    loop.stop();
+    unwake();
     window.removeEventListener("pointermove", onMove);
     if (handed) return;
+    releaseNotes();
     placeHit(hit, false, 0, 0);
     restorePerchCanvas();
   };
@@ -1152,10 +1329,13 @@ function runHeaderPass(
   hit: HTMLButtonElement | null,
   pokeRef: { current: boolean },
   askLabel: string,
-  start: { from: PassFrom; x?: number; markDone?: boolean }
+  start: { from: PassFrom; x?: number; markDone?: boolean },
+  wakeRef: { current: () => void },
+  /** Address pages: an empty tokens, NFTs or boxes line can appear and wake him. */
+  watchNotes = false
 ) {
-  let raf = 0;
   let dead = false;
+  let wokeAt = 0;
   let last = 0;
   let beatI = 0;
   let beatAt = 0;
@@ -1213,7 +1393,7 @@ function runHeaderPass(
       }
       const ctx = canvas.getContext("2d");
       if (!ctx) {
-        raf = requestAnimationFrame(paint);
+        loop.again();
         return;
       }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -1241,6 +1421,7 @@ function runHeaderPass(
           roll: scoutPose?.roll ?? roll,
           face: scoutPose?.face ?? face,
         };
+        if (lineElNow) claimNote(lineElNow);
       }
       const drive = emptyDrive;
       const lineEl = emptyNote();
@@ -1369,6 +1550,7 @@ function runHeaderPass(
       } else if (drive.mode === "rise") {
         const home = park();
         if (lineEl) {
+          claimNote(lineEl);
           drive.mode = "cross";
           drive.beatAt = now;
           drive.fromY = drive.y;
@@ -1391,6 +1573,7 @@ function runHeaderPass(
       } else {
         const home = park();
         if (lineEl) {
+          claimNote(lineEl);
           drive.mode = "cross";
           drive.beatAt = now;
           drive.fromY = drive.y;
@@ -1413,7 +1596,7 @@ function runHeaderPass(
             if (emptyCanvas == null) canvas.removeAttribute("style");
             else canvas.setAttribute("style", emptyCanvas);
             emptyCanvas = null;
-            raf = requestAnimationFrame(paint);
+            loop.again();
             return;
           }
         }
@@ -1438,13 +1621,16 @@ function runHeaderPass(
           mood: emptyDrive.mode === "write" ? "work" : emptyDrive.mode === "drop" ? "surprised" : "curious",
         });
       }
-      raf = requestAnimationFrame(paint);
+      // By the written line: once still, no frames until scroll, a change of the line or a resize.
+      const blink = drive.mode === "live" && (now - drive.beatAt) % 2600 < 90;
+      if (emptyDrive && drive.mode === "live" && !blink && settled(ctx, now, Math.max(drive.beatAt, wokeAt))) return;
+      loop.again();
       return;
     }
     const w = root.clientWidth;
     const h = root.clientHeight;
     if (w < 8 || h < 8) {
-      raf = requestAnimationFrame(paint);
+      loop.again();
       return;
     }
     const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -1534,10 +1720,10 @@ function runHeaderPass(
         approaching = false;
         beatAt = now;
       }
-      canvas.dataset.scoutBeat = "to-title";
+      setBeat(canvas, "to-title");
       draw(ctx, root, g, x, floor, floor, 0, face, roll, 0, 0, 0, 0, 0, 0, 0, 0, 0);
       follow(floor);
-      raf = requestAnimationFrame(paint);
+      loop.again();
       return;
     }
 
@@ -1555,15 +1741,15 @@ function runHeaderPass(
         face = dx >= 8 ? 1 : dx <= -8 ? -1 : askFace;
       } else face = askFace;
       const look = 0.2 + Math.sin(now / 380) * 0.3 * pop;
-      canvas.dataset.scoutBeat = "ask";
+      setBeat(canvas, "ask");
       if (au >= 1) endAsk();
       draw(ctx, root, g, x, floor - lift, floor, lift, face, roll, apart, head, look, pick, eye, -Math.PI / 2, 1.05 * pop, 0, 0);
       follow(floor - lift);
-      raf = requestAnimationFrame(paint);
+      loop.again();
       return;
     }
 
-    canvas.dataset.scoutBeat = beat;
+    setBeat(canvas, beat);
     let head = 0;
     let look = 0;
     let pick = 0;
@@ -1604,12 +1790,12 @@ function runHeaderPass(
         }
       }
       if (asking) {
-        raf = requestAnimationFrame(paint);
+        loop.again();
         return;
       }
       draw(ctx, root, g, x, y, floor, 0, face, roll, 0, 0, 0, 0, 0, 0, 0, lineA, lineTo);
       follow(y);
-      raf = requestAnimationFrame(paint);
+      loop.again();
       return;
     }
 
@@ -1697,17 +1883,20 @@ function runHeaderPass(
         beatAt = now;
       }
     } else {
+      // Parked past the search word: one look around, then he settles and the loop sleeps.
+      const s = now - beatAt;
+      const calm = smooth((s - SEEK_LOOK_MS + 700) / 700);
       apart = 0;
       face = -1;
-      eye = 0.95;
-      look = Math.sin(now / 880) * 1.55;
+      eye = 0.95 - 0.55 * calm;
+      look = s < SEEK_LOOK_MS ? Math.sin(s / 880) * 1.55 : 0;
       head = look * 0.18;
-      pupil = now * 0.004;
-      orbit = 0.55;
+      pupil = Math.min(s, SEEK_LOOK_MS) * 0.004;
+      orbit = 0.55 * (1 - calm);
     }
 
     if (asking) {
-      raf = requestAnimationFrame(paint);
+      loop.again();
       return;
     }
 
@@ -1716,14 +1905,24 @@ function runHeaderPass(
     scoutPose = { x: box.left + x, y: box.top + spriteY, face, roll };
     draw(ctx, root, g, x, spriteY, floor, lift, face, roll, apart, head, look, pick, eye, pupil, orbit, lineA, lineTo);
     follow(spriteY);
-    raf = requestAnimationFrame(paint);
+    if (beat === "seek" && !askQueued && settled(ctx, now, Math.max(beatAt + SEEK_LOOK_MS, wokeAt))) return;
+    loop.again();
   };
 
-  raf = requestAnimationFrame(paint);
+  const loop = frameLoop(paint);
+  const wake = () => {
+    wokeAt = performance.now();
+    loop.again();
+  };
+  wakeRef.current = wake;
+  const unwake = wakeOn(root, wake, { scroll: () => emptyDrive != null, note: watchNotes ? emptyNote : undefined });
+  loop.again();
   return () => {
     dead = true;
-    cancelAnimationFrame(raf);
+    loop.stop();
+    unwake();
     window.removeEventListener("pointermove", onMove);
+    if (watchNotes) releaseNotes();
     placeHit(hit, false, 0, 0);
   };
 }
@@ -1732,7 +1931,7 @@ function runHeaderPass(
  * Favorites empty slot. The same scout leaves whatever point he is on,
  * drops to the line, and scratches it out with the pick.
  */
-function runFavoritesErrand(canvas: HTMLCanvasElement, header: HTMLElement) {
+function runFavoritesErrand(canvas: HTMLCanvasElement, header: HTMLElement, wakeRef: { current: () => void }) {
   const prev = canvas.getAttribute("style");
   canvas.style.position = "fixed";
   canvas.style.top = "0";
@@ -1741,9 +1940,9 @@ function runFavoritesErrand(canvas: HTMLCanvasElement, header: HTMLElement) {
   canvas.style.bottom = "auto";
   canvas.style.zIndex = "30";
 
-  let raf = 0;
   let dead = false;
   let last = 0;
+  let wokeAt = 0;
   let beatAt = 0;
   let ready = false;
   let x = scoutPose?.x ?? 80;
@@ -1758,8 +1957,13 @@ function runFavoritesErrand(canvas: HTMLCanvasElement, header: HTMLElement) {
   type Phase = "home" | "rail" | "drop" | "rollin" | "write" | "live" | "retreat" | "rise";
   let phase: Phase = "home";
 
+  let near = false;
   const onMove = (e: PointerEvent) => {
     aim = { x: e.clientX, y: e.clientY };
+    // At rest his eyes follow a pointer within 140–160 px: wake for it, and once more as it leaves.
+    const close = Math.hypot(e.clientX - x, e.clientY - y) < 220;
+    if (close || near) wake();
+    near = close;
   };
   window.addEventListener("pointermove", onMove, { passive: true });
 
@@ -1796,6 +2000,8 @@ function runFavoritesErrand(canvas: HTMLCanvasElement, header: HTMLElement) {
     phase = "rail";
     beatAt = now;
     written = "";
+    const note = noteEl();
+    if (note) claimNote(note);
   };
 
   const paint = (now: number) => {
@@ -2024,14 +2230,26 @@ function runFavoritesErrand(canvas: HTMLCanvasElement, header: HTMLElement) {
       pupilOrbit: orbit,
       mood: phase === "write" ? "work" : phase === "drop" ? "surprised" : phase === "retreat" ? "happy" : phase === "live" ? "curious" : "idle",
     });
-    raf = requestAnimationFrame(paint);
+    // By the title or by the written line: once still, no frames until an event.
+    const blinking = phase === "home" ? now % 2700 < 80 : phase === "live" ? (now - beatAt) % 2600 < 90 : false;
+    if ((phase === "home" || phase === "live") && !blinking && settled(ctx, now, Math.max(beatAt, wokeAt))) return;
+    loop.again();
   };
 
-  raf = requestAnimationFrame(paint);
+  const loop = frameLoop(paint);
+  const wake = () => {
+    wokeAt = performance.now();
+    loop.again();
+  };
+  wakeRef.current = wake;
+  const unwake = wakeOn(header, wake, { scroll: () => true, note: noteEl });
+  loop.again();
   return () => {
     dead = true;
-    cancelAnimationFrame(raf);
+    loop.stop();
+    unwake();
     window.removeEventListener("pointermove", onMove);
+    releaseNotes();
     if (prev == null) canvas.removeAttribute("style");
     else canvas.setAttribute("style", prev);
   };
@@ -2043,9 +2261,16 @@ export function HeaderScout() {
   const ref = useRef<HTMLCanvasElement>(null);
   const hitRef = useRef<HTMLButtonElement>(null);
   const leaveRef = useRef(false);
+  /** The running pass sleeps when parked; a click on him or a rent answer wakes it. */
+  const wakeRef = useRef<() => void>(() => {});
+  // Live media: a changed motion setting restarts him; on address pages so does crossing 1024 px.
+  const reduceTick = useMediaTick(REDUCE_QUERY);
+  const wideTick = useMediaTick(WIDE_QUERY);
+  const perchTick = isAddressHome(path) ? wideTick : 0;
 
   useEffect(() => {
     leaveRef.current = false;
+    wakeRef.current = () => {};
     if (path === "/") {
       perchedOnAddresses = false;
       returnedToHeader = false;
@@ -2056,8 +2281,13 @@ export function HeaderScout() {
     const canvas = ref.current;
     const root = canvas?.parentElement;
     if (!canvas || !root) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const wide = window.matchMedia("(min-width: 1024px)").matches;
+    if (window.matchMedia(REDUCE_QUERY).matches) {
+      // No scout under reduced motion. Switched on live, the last frame must not stay behind.
+      canvas.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
+      placeHit(hitRef.current, false, 0, 0);
+      return;
+    }
+    const wide = window.matchMedia(WIDE_QUERY).matches;
     const homeLabel = t("scout.home");
     const askLabel = t("scout.ask");
     const addressId = addressIdOf(path);
@@ -2067,7 +2297,9 @@ export function HeaderScout() {
     let cancelRent = false;
     if (addressId && wide && !returnedToHeader) {
       void lookupScoutRent(addressId).then((n) => {
-        if (!cancelRent) blocks.current = n;
+        if (cancelRent) return;
+        blocks.current = n;
+        wakeRef.current();
       });
     }
     const scratch = (n: number) =>
@@ -2089,8 +2321,8 @@ export function HeaderScout() {
           from: "after-fall",
           x: local,
           markDone: true,
-        });
-      }, { addressId, blocks, scratch });
+        }, wakeRef, true);
+      }, { addressId, blocks, scratch }, wakeRef);
       return () => {
         cancelRent = true;
         stopPerch();
@@ -2104,13 +2336,12 @@ export function HeaderScout() {
       rentTold = "";
     }
     placeHit(hitRef.current, false, 0, 0);
-    if (path === "/favorites") return runFavoritesErrand(canvas, root);
+    if (path === "/favorites") return runFavoritesErrand(canvas, root, wakeRef);
     return runHeaderPass(canvas, root, hitRef.current, leaveRef, askLabel, {
       from: isAddressHome(path) && wide && addressPassed ? "seek" : isAddressHome(path) && wide ? "after-fall" : "start",
       markDone: isAddressHome(path) && wide,
-    });
-
-  }, [path, locale, t]);
+    }, wakeRef, isAddressHome(path));
+  }, [path, locale, t, reduceTick, perchTick]);
 
   if (path === "/") return null;
   return (
@@ -2130,9 +2361,11 @@ export function HeaderScout() {
           e.preventDefault();
           e.stopPropagation();
           leaveRef.current = true;
+          wakeRef.current();
         }}
         onClick={() => {
           leaveRef.current = true;
+          wakeRef.current();
         }}
       />
     </>

@@ -407,6 +407,28 @@ export function drawPixel(ctx: CanvasRenderingContext2D, pose: PixelPose) {
   }
 }
 
+/**
+ * When this face next changes on its own, on the clock of its last frame. That frame's time while
+ * a blink, hop, gait, glance or mood ease is still running (and always for think, sleepy and sad,
+ * which never stand still); otherwise the next blink or glance. Infinity before the first frame.
+ * Read-only: drawing is unchanged. A caller may stop its frames once this is later than now.
+ */
+export function pixelWake(ctx: CanvasRenderingContext2D, id = "main"): number {
+  const s = states.get(ctx.canvas)?.get(id);
+  if (!s) return Infinity;
+  const now = s.t;
+  if (s.mood === "think" || s.mood === "sleepy" || s.mood === "sad") return now;
+  const blinkLen = 150;
+  if (now < s.blinkAt + (s.blinkTwice ? blinkLen * 2 + 70 : blinkLen)) return now;
+  if (s.hopKind || s.speed > 15 || s.smear > 0.01) return now;
+  if (Math.abs(s.glanceTo.x - s.glance.x) > 0.01 || Math.abs(s.glanceTo.y - s.glance.y) > 0.01) return now;
+  const target: Face = { ...BASE, ...MOODS[s.mood] };
+  for (const key of Object.keys(target) as (keyof Face)[]) {
+    if (s.f[key] !== target[key]) return now;
+  }
+  return Math.min(s.blinkNext, s.glanceNext);
+}
+
 /** Entity colour the page wears: block, tx, address, token, box, or the brand orange. */
 export type PixelInk = "block" | "tx" | "addr" | "token" | "box" | "brand";
 
