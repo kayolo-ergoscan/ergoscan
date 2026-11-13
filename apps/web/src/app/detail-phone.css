@@ -130,7 +130,8 @@
   }
 
   /* Pixel steps aside while the strip rides under the pill, as he does for a pinned plate. */
-  html:has(.detail-tabs[data-stuck]) .header-scout {
+  html:has(.detail-tabs[data-stuck]) .header-scout,
+  html:has(.detail-tabs[data-stuck]) .kayolo-layer {
     opacity: 0;
     visibility: hidden;
     transition: opacity 120ms var(--ease), visibility 0s linear 120ms;
@@ -271,6 +272,7 @@
 
 @media (max-width: 1023px) and (prefers-reduced-motion: reduce) {
   html:has(.detail-tabs[data-stuck]) .header-scout,
+  html:has(.detail-tabs[data-stuck]) .kayolo-layer,
   .detail-tab {
     transition: none;
   }
