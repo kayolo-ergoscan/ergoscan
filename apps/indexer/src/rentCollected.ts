@@ -178,6 +178,56 @@ async function writeHistorySnap(
   );
 }
 
+/**
+ * The seed above and the claim verify pass each write the series once. New protocol claims
+ * keep landing in rent_collected (rent writer, tip and full scan), so the rent writer rebuilds
+ * the series from them every few minutes: one daily and one 7-day hourly aggregate, the same
+ * snapshot row updated in place. `lastHeight` is the height both claim scans have passed.
+ */
+export const RENT_SERIES_REFRESH_MS = 10 * 60_000;
+let refreshedAt = 0;
+let refreshing = false;
+
+export async function maybeRefreshRentHistory(pool: pg.Pool, now = Date.now()): Promise<boolean> {
+  if (refreshing || now - refreshedAt < RENT_SERIES_REFRESH_MS) return false;
+  refreshing = true;
+  // A failed run waits for the next window too: no tight retry loop against the database.
+  refreshedAt = now;
+  const client = await pool.connect();
+  try {
+    const live = Number((await getState(client, "rent_claim_live_height")) || 0);
+    const full = Number((await getState(client, "rent_claim_full_height")) || 0);
+    const scanned = live && full ? Math.min(live, full) : live || full;
+    if (!scanned) return false;
+    await client.query("BEGIN");
+    await client.query(`SET LOCAL statement_timeout = ${TIMEOUT_MS}`);
+    const daily = await loadFullSeries(client, RENT_SERIES_DAY_MS);
+    const series = fillRentWeekGaps(rollupRentSeries(daily, "week"));
+    const hourly = await loadHourlySeries(client);
+    if (daily.length < 2 || series.length < 2) {
+      await client.query("ROLLBACK");
+      return false;
+    }
+    await writeHistorySnap(client, scanned, series, daily, hourly);
+    await client.query("COMMIT");
+    console.log(
+      `[rent-writer] rent series h=${scanned} days=${daily.length} weeks=${series.length} hours=${hourly.length}`
+    );
+    return true;
+  } catch (e) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {
+      /* */
+    }
+    console.warn("[rent-writer] rent series", String(e));
+    return false;
+  } finally {
+    client.release();
+    refreshing = false;
+  }
+}
+
 export async function maybeBackfillRentCollected(pool: pg.Pool): Promise<boolean> {
   if (!ENABLED || running) return false;
   running = true;
