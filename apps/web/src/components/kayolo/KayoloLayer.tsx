@@ -399,6 +399,12 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
     let due = sched.nextDue(now);
     if (running || after || pokeQueued || walk || fade) return now;
     if (handed) return now;
+    if (mode === "asleep") {
+      // The eyes finish closing, then not a frame more (§4.6). No timer (a scheduler edge, a gaze,
+      // the reading edge) may paint either: any paint would start the next idle blink. The choice
+      // itself paints once (refreshMode → frame); waking goes through refreshMode too.
+      return ctx && pixelSettling(ctx, "main") ? pixelWake(ctx, "main") : Infinity;
+    }
     if (gaze) due = Math.min(due, gazeUntil);
     const quietFor = sched.sinceInput(now);
     if (welcome !== "none" && quietFor < WELCOME_PAUSE_MS) due = Math.min(due, now + WELCOME_PAUSE_MS - quietFor);
@@ -415,13 +421,10 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
       if (r.moving) return Math.max(paintedAt + 1000 / K.GAZE_FPS, slow);
       due = Math.min(due, now + r.next);
     } else if (lv === 3 && inLv < 4200) return slow;
-    else if (lv === 4 && mode !== "asleep") {
+    else if (lv === 4) {
       if (inLv < K.ZZZ_MS) return paintedAt + 1000 / K.ZZZ_FPS;
       if (inLv < K.ZZZ_MS + 500) return paintedAt + 100;
       return due;
-    } else if (mode === "asleep") {
-      // The eyes finish closing, then not a frame more (§4.6): no idle blinks or glances asleep.
-      return ctx && pixelSettling(ctx, "main") ? Math.min(due, pixelWake(ctx, "main")) : due;
     }
     if (ctx) due = Math.min(due, pixelWake(ctx, "main"));
     return lv >= 2 ? Math.max(due, slow) : due;
