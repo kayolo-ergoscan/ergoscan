@@ -50,6 +50,9 @@ type PageSync = {
   markSynced: (at?: number | string | null) => void;
 };
 
+/** The gateway's fee levels for what waits now (`fees.histogram` recommend) and its block average. */
+export type StreamFees = { normal: number; turbo: number; avgBlockMs: number | null };
+
 type StreamMempool = {
   mempoolCount: number | null;
   streamLive: boolean;
@@ -57,6 +60,7 @@ type StreamMempool = {
   totalSize: number | null;
   totalFees: number | null;
   seal: SealEvent | null;
+  fees: StreamFees | null;
 };
 
 const Ctx = createContext<PageSync>({
@@ -73,6 +77,7 @@ const MempoolCtx = createContext<StreamMempool>({
   totalSize: null,
   totalFees: null,
   seal: null,
+  fees: null,
 });
 
 function parseSyncAt(at?: number | string | null): number {
@@ -121,6 +126,16 @@ function parseStreamBall(raw: unknown): StreamMempoolBall | null {
     action: typeof b.action === "string" && b.action ? b.action : null,
     value: Number.isFinite(Number(b.value)) ? Number(b.value) : 0,
   };
+}
+
+function parseStreamFees(raw: unknown): StreamFees | null {
+  if (!raw || typeof raw !== "object") return null;
+  const d = raw as { recommend?: { normal?: unknown; turbo?: unknown }; eta?: { avgIntervalMs?: unknown } };
+  const normal = Number(d.recommend?.normal);
+  const turbo = Number(d.recommend?.turbo);
+  if (!Number.isFinite(normal) || !Number.isFinite(turbo) || normal <= 0 || turbo <= 0) return null;
+  const avg = Number(d.eta?.avgIntervalMs);
+  return { normal, turbo, avgBlockMs: Number.isFinite(avg) && avg > 0 ? avg : null };
 }
 
 function capStreamBalls(rows: StreamMempoolBall[]): StreamMempoolBall[] {
@@ -180,6 +195,7 @@ type StreamSetters = {
   setTotalSize: Dispatch<SetStateAction<number | null>>;
   setTotalFees: Dispatch<SetStateAction<number | null>>;
   setSeal: Dispatch<SetStateAction<SealEvent | null>>;
+  setFees: Dispatch<SetStateAction<StreamFees | null>>;
   ballsRef: { current: StreamMempoolBall[] };
   heldRef: { current: Map<string, HeldBall> };
   sealedRef: { current: SealedBag };
@@ -262,6 +278,11 @@ function applyStreamMessage(msg: unknown, s: StreamSetters) {
     }
     return;
   }
+  if (m.type === "fees.histogram") {
+    const next = parseStreamFees(m.data);
+    if (next) s.setFees((prev) => (prev && prev.normal === next.normal && prev.turbo === next.turbo && prev.avgBlockMs === next.avgBlockMs ? prev : next));
+    return;
+  }
   if (m.type === "block.sealed" && isSealEvent(m.data)) {
     s.sealedRef.current = { until: Date.now() + 30_000, ids: new Set(m.data.txIds) };
     s.setSeal(m.data);
@@ -287,6 +308,7 @@ export function PageSyncProvider({ children }: { children: ReactNode }) {
   const [totalSize, setTotalSize] = useState<number | null>(null);
   const [totalFees, setTotalFees] = useState<number | null>(null);
   const [seal, setSeal] = useState<SealEvent | null>(null);
+  const [fees, setFees] = useState<StreamFees | null>(null);
   const ballsRef = useRef<StreamMempoolBall[]>([]);
   ballsRef.current = balls;
   const heldRef = useRef<Map<string, HeldBall>>(new Map());
@@ -341,6 +363,7 @@ export function PageSyncProvider({ children }: { children: ReactNode }) {
               setTotalSize,
               setTotalFees,
               setSeal,
+              setFees,
               ballsRef,
               heldRef,
               sealedRef,
@@ -368,8 +391,8 @@ export function PageSyncProvider({ children }: { children: ReactNode }) {
     [bump, syncedAt, tip, markSynced]
   );
   const mempoolValue = useMemo(
-    () => ({ mempoolCount, streamLive, balls, totalSize, totalFees, seal }),
-    [mempoolCount, streamLive, balls, totalSize, totalFees, seal]
+    () => ({ mempoolCount, streamLive, balls, totalSize, totalFees, seal, fees }),
+    [mempoolCount, streamLive, balls, totalSize, totalFees, seal, fees]
   );
 
   return (

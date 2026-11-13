@@ -8,7 +8,7 @@ export const KAYOLO_CHAIN = true;
 /** His window, the layer and the hand-over. False gives the header back to HeaderScout as in Э1a. */
 export const KAYOLO_LAYER = true;
 
-/** A block with this many transactions or more is big (CadenceYard.tsx BUSY_TX). */
+/** A block with this many transactions or more is big (also Kayolo's surprise on the home city, lib/home-city/city.ts). */
 export const BUSY_TX = 39;
 
 /** Body scale in the header (HeaderScout SCALE): a 22.4 px square. */

@@ -15,27 +15,23 @@ import { patchHomeStats, type ChainStats, type PoolShare } from "@/lib/chain-sta
 import { KpiNum } from "@/components/KpiGrid";
 import { KpiMark } from "@/components/kpi-marks";
 import { ReelText } from "@/components/ReelText";
-import { HOME } from "@/lib/palette";
+import { DONUT_SLICES, HOME } from "@/lib/palette";
+import { lookInk } from "@/lib/look";
 import { fetchErgChart } from "@/lib/price-history";
 import type { ErgMarket } from "@/lib/list-snapshots";
 import {
-  formatBytes,
   formatCompact,
   formatGroupedNumber,
-  formatDottedDate,
   formatDottedDay,
-  formatErgPrecise,
   formatH24,
   formatHashrate,
   formatInt,
   formatUsdPrice,
 } from "@/lib/format";
-import { useReducedMotion } from "framer-motion";
 import { lineChange, type LinePoint } from "@lumen/amm-chart";
 import { useT, useI18n } from "@/lib/i18n/I18nProvider";
 import { useChainTipRefresh, usePageSync, useStreamMempool } from "@/lib/page-sync";
 import { SNAPSHOT_FETCH, snapshotPath } from "@/lib/keyed-enter";
-import { majorityColorInk, majorityTxInk } from "@/lib/block-ink";
 import {
   parseLithosHome,
   parseRentTape,
@@ -47,11 +43,9 @@ import {
 import { HomeLithos } from "@/components/HomeLithos";
 import { HomeRentTape } from "@/components/HomeRentTape";
 import { parseRentDanger, type RentDangerRow } from "@/lib/rent-danger";
-import { HomeMempoolStage } from "@/components/HomeMempoolStage";
-import { CadenceYard, type CadenceYardBlock } from "@/components/CadenceYard";
-import { Tip, TipHead, TipInfo, TipNote, TipRow, TipRows } from "@/components/Tip";
+import { HomeCityPair } from "@/components/HomeCity";
+import { Tip, TipInfo } from "@/components/Tip";
 import { HomeVersionNodes } from "@/components/HomeVersionNodes";
-import { ERGO_MAX_BLOCK_SIZE } from "@/lib/ergo-emission";
 import { isSupplyDigit, zipSupplyGlyphs } from "@/lib/supply-flip";
 
 function ChartSparkSlot() {
@@ -80,8 +74,9 @@ type BlockRow = {
   color?: string | null;
   /** True when this block was mined with Lithos. Omitted until the snapshot says so. */
   lithos?: boolean;
-  /** Snapshot extras, read by the crate tip. A live seal has none. */
+  /** Snapshot extras, read by the tower tip and its flag. A live seal has none. */
   minerName?: string | null;
+  minerAddress?: string | null;
   feeNano?: string | number | null;
 };
 
@@ -109,6 +104,7 @@ function mergeBlockRow(prev: BlockRow[], row: BlockRow): BlockRow[] {
       color: row.color || old.color,
       lithos: row.lithos === true || (row.lithos == null && old.lithos === true),
       minerName: row.minerName || old.minerName,
+      minerAddress: row.minerAddress || old.minerAddress,
       feeNano: row.feeNano || old.feeNano,
     };
     return next.sort((a, b) => b.height - a.height).slice(0, CADENCE + 1);
@@ -134,7 +130,8 @@ function formatFeeAxis(v: number): string {
   if (Math.abs(v) >= 1) return v.toFixed(1);
   return v.toFixed(2);
 }
-const CADENCE = 8;
+/** Blocks on the street: all the home snapshot gives (10); the tape keeps one more from a seal. */
+const CADENCE = 10;
 const PRICE_UP = "#3dd68c";
 const PRICE_DOWN = "#ff5a6a";
 
@@ -553,6 +550,8 @@ export function HomeExplorer({
       <HomeLiveStrip
         blocks={blocks}
         mempoolCount={mempool ?? 0}
+        pools={pools}
+        avgBlockMs={avgBlockMs}
         title={t("home.cadence")}
         mempoolTitle={t("home.mempool")}
         all={t("home.viewAll")}
@@ -1219,118 +1218,7 @@ function EpochBar({
   );
 }
 
-const CADENCE_TRACK = 52;
-/**
- * Room above the tallest crate for a Lithos mark, including the hop and the toss.
- * The tile title sits outside this canvas, so the mark stays under that line.
- * Budget: ground pad 10, hop 10, crate peak 4, body 54, gap 3, mark 18, toss 10, top pad 7.
- */
-const CADENCE_HEAD = 64;
 const MEMPOOL_HTTP_MS = 8_000;
-/** Tip can move before block.sealed brings the tx list. Don't close the slot on that gap. */
-const SEAL_LIST_WAIT_MS = 8_000;
-/** Backup if the pour canvas never calls done. Longer than the pour itself. */
-const ASSEMBLE_FAILSAFE_MS = 20_000;
-
-function barWeight(b: BlockRow): number {
-  if (b.txCount != null && b.txCount > 0) return b.txCount;
-  if (b.size > 0) return Math.max(1, Math.round(b.size / 400));
-  return 1;
-}
-
-function barInk(b: BlockRow, fetched: Record<string, string>): string {
-  return fetched[b.id] || b.color || HOME.txs;
-}
-
-function useCadenceInk(blocks: readonly BlockRow[]): { ink: Record<string, string>; ready: boolean } {
-  const [ink, setInk] = useState<Record<string, string>>({});
-  const [ready, setReady] = useState(false);
-  const cache = useRef<Record<string, string>>({});
-  const opened = useRef(false);
-  const key = blocks.map((b) => b.id).join(",");
-  useEffect(() => {
-    let dead = false;
-    const ids = key.split(",").filter((id) => id.length >= 16 && !id.startsWith("seal-"));
-    const missing = ids.filter((id) => !cache.current[id]);
-    const paint = () => {
-      if (dead) return;
-      const next: Record<string, string> = {};
-      for (const id of ids) {
-        const c = cache.current[id];
-        if (c) next[id] = c;
-      }
-      setInk(next);
-    };
-    const finish = () => {
-      if (dead) return;
-      opened.current = true;
-      setReady(true);
-    };
-    if (!missing.length) {
-      paint();
-      finish();
-      return;
-    }
-    if (!opened.current) setReady(false);
-    void Promise.all(
-      missing.map(async (id) => {
-        try {
-          const r = await fetch(
-            `${getGateway()}/v1/blocks/${encodeURIComponent(id)}?limit=80&offset=0`,
-            SNAPSHOT_FETCH
-          );
-          if (!r.ok) return;
-          const j = (await r.json()) as { txs?: Array<{ category?: string; color?: string }> };
-          cache.current[id] = majorityTxInk(Array.isArray(j.txs) ? j.txs : []);
-        } catch {
-          /* keep fallback cyan */
-        }
-      })
-    ).then(() => {
-      paint();
-      finish();
-    });
-    return () => {
-      dead = true;
-    };
-  }, [key]);
-  return { ink, ready };
-}
-
-function collectClock(ts: number, now: number): string {
-  const ms = ts > 1e12 ? ts : ts * 1000;
-  const s = Math.max(0, Math.floor((now - ms) / 1000));
-  const m = Math.floor(s / 60);
-  const r = s % 60;
-  if (m >= 60) {
-    const h = Math.floor(m / 60);
-    return `${h}:${String(m % 60).padStart(2, "0")}:${String(r).padStart(2, "0")}`;
-  }
-  return `${m}:${String(r).padStart(2, "0")}`;
-}
-
-function FormingAge({ ts }: { ts: number | null }) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (ts == null) return;
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(id);
-  }, [ts]);
-  if (ts == null) return <span className="tabular-nums">—</span>;
-  return (
-    <span suppressHydrationWarning className="tabular-nums">
-      {collectClock(ts, now)}
-    </span>
-  );
-}
-
-function fmtCreated(ts: number, _locale: string): string {
-  const ms = ts > 1e12 ? ts : ts * 1000;
-  const date = formatDottedDate(ms);
-  const time = formatH24(ms, undefined, false);
-  if (date === "—" || time === "—") return "—";
-  return `${date}, ${time}`;
-}
 
 type HomeMempoolBall = {
   id: string;
@@ -1478,12 +1366,15 @@ function useHomeMempool(initialCount: number) {
   const totalSize = (live ? stream.totalSize : null) ?? httpSize;
   const totalFees = (live ? stream.totalFees : null) ?? httpFees;
   const seal = live ? stream.seal : null;
-  return { pool, balls, totalSize, totalFees, seal };
+  const fees = live ? stream.fees : null;
+  return { pool, balls, totalSize, totalFees, seal, fees, streamLive: live };
 }
 
 function HomeLiveStrip({
   blocks,
   mempoolCount,
+  pools,
+  avgBlockMs,
   title,
   mempoolTitle,
   all,
@@ -1491,32 +1382,18 @@ function HomeLiveStrip({
 }: {
   blocks: BlockRow[];
   mempoolCount: number;
+  pools: readonly PoolShare[];
+  avgBlockMs: number | null;
   title: string;
   mempoolTitle: string;
   all: string;
   txUnit: string;
 }) {
-  const t = useT();
-  const reduce = useReducedMotion();
   const { tip } = usePageSync();
   const mp = useHomeMempool(mempoolCount);
   const [tape, setTape] = useState(blocks);
-  const [commitH, setCommitH] = useState<number | null>(() => blocks[0]?.height ?? null);
-  const [grow, setGrow] = useState<{ n: number; total: number; ink: string } | null>(null);
   const [formSince, setFormSince] = useState<number | null>(null);
   const formKey = useRef<string | null>(null);
-  const newestH = tape[0]?.height ?? null;
-  const holding = Boolean(!reduce && commitH != null && newestH != null && newestH !== commitH);
-  const assembling = Boolean(holding && grow && (grow.total === 0 || grow.n > 0));
-  const cadenceBlocks = useMemo(() => {
-    if (!holding || assembling || commitH == null) return tape;
-    const kept = tape.filter((b) => b.height <= commitH);
-    return kept.length ? kept : tape;
-  }, [assembling, commitH, holding, tape]);
-
-  useEffect(() => {
-    if (commitH == null && newestH != null) setCommitH(newestH);
-  }, [commitH, newestH]);
 
   useEffect(() => {
     setTape((prev) => mergeBlockRows(prev, blocks));
@@ -1537,11 +1414,6 @@ function HomeLiveStrip({
     );
   }, [mp.seal]);
 
-  const commitAssemble = useCallback(() => {
-    if (newestH != null) setCommitH(newestH);
-    setGrow(null);
-  }, [newestH]);
-
   useEffect(() => {
     const s = mp.seal;
     if (!s || !Number.isFinite(s.height)) return;
@@ -1554,298 +1426,37 @@ function HomeLiveStrip({
     setFormSince(fresh ? ms : Date.now());
   }, [mp.seal]);
 
-  useEffect(() => {
-    if (!holding) return;
-    const waiting = !grow || (grow.total > 0 && grow.n === 0);
-    const wait = window.setTimeout(
-      () => commitAssemble(),
-      waiting ? SEAL_LIST_WAIT_MS : ASSEMBLE_FAILSAFE_MS
-    );
-    return () => window.clearTimeout(wait);
-  }, [holding, grow, commitAssemble]);
+  // A pool's roof flag is its slice ink on the «Mining pools» donut; the last (grey) slice and solo miners stay grey.
+  const poolInk = useMemo(() => {
+    const out: Record<string, string> = {};
+    pools.forEach((p, i) => {
+      if (!p.address) return;
+      const raw = DONUT_SLICES[i % DONUT_SLICES.length]!;
+      if (!raw.startsWith("rgba(255")) out[p.address] = lookInk(raw);
+    });
+    return out;
+  }, [pools]);
 
   return (
-    <div className="relative">
-      <div className="grid grid-cols-1 items-stretch gap-2 lg:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]">
-        {tape.length > 0 ? (
-          <BlockCadence
-            blocks={cadenceBlocks}
-            title={title}
-            all={all}
-            txUnit={txUnit}
-            holding={assembling}
-            grow={grow}
-            onAssembleDone={commitAssemble}
-          />
-        ) : null}
-        <HomeMempoolTile
-          pool={mp.pool}
-          balls={mp.balls}
-          totalSize={mp.totalSize}
-          totalFees={mp.totalFees}
-          title={mempoolTitle}
-          all={all}
-          txUnit={txUnit}
-          reduce={!!reduce}
-          pitLabel={t("home.mempoolPit")}
-          formingHeight={Math.max(tip?.height ?? 0, mp.seal?.height ?? 0, tape[0]?.height ?? 0) + 1}
-          formingSince={formSince ?? tape[0]?.timestamp ?? null}
-          onSealPour={(seeds) => {
-            const ink = seeds.length
-              ? majorityColorInk(
-                  seeds.map((s) => s.color),
-                  HOME.txs
-                )
-              : HOME.txs;
-            if (!seeds.length) {
-              setGrow({ n: 1, total: 0, ink });
-              return;
-            }
-            setGrow((prev) => prev ?? { n: 0, total: seeds.length, ink });
-          }}
-          onSealArrive={(hit) => {
-            setGrow((prev) => ({
-              n: hit.n,
-              total: hit.total,
-              ink: prev?.ink || hit.color || HOME.txs,
-            }));
-          }}
-        />
-      </div>
-    </div>
-  );
-}
-
-function HomeMempoolTile({
-  pool,
-  balls,
-  totalSize,
-  totalFees,
-  title,
-  all,
-  txUnit,
-  reduce,
-  pitLabel,
-  formingHeight,
-  formingSince,
-  onSealPour,
-  onSealArrive,
-}: {
-  pool: number;
-  balls: HomeMempoolBall[];
-  totalSize: number;
-  totalFees: number;
-  title: string;
-  all: string;
-  txUnit: string;
-  reduce: boolean;
-  pitLabel: string;
-  formingHeight: number;
-  formingSince: number | null;
-  onSealPour?: (seeds: { id: string; color: string; r: number; delayMs: number }[]) => void;
-  onSealArrive?: (hit: { id: string; color: string; n: number; total: number }) => void;
-}) {
-  const t = useT();
-  const { locale } = useI18n();
-  const loc = locale === "ru" ? "ru-RU" : "en-US";
-  const [pitCount, setPitCount] = useState(0);
-  const shown = Math.max(pool, pitCount);
-  const fill = totalSize > 0 ? Math.min(100, Math.round((totalSize / ERGO_MAX_BLOCK_SIZE) * 100)) : 0;
-  const foot =
-    shown <= 0 && balls.length === 0
-      ? t("mempool.empty")
-      : [fill > 0 ? `${fill}%` : null, totalSize > 0 ? formatBytes(totalSize) : null, totalFees > 0 ? formatErgPrecise(totalFees, locale) : null]
-          .filter(Boolean)
-          .join(" · ") || t("mempool.kpiWaitSub");
-
-  return (
-    <section
-      className="home-tile-enter home-meet-right mod flex h-full min-w-0 flex-col rounded-[20px] border border-[var(--border)] bg-[var(--module)] px-3.5 py-3 sm:px-5"
-      style={enterAt(1)}
-    >
-      <div className="mb-2 flex h-[22px] items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2 overflow-hidden">
-          <h2 className="m-0 shrink-0 text-[13px] leading-none" style={{ color: HOME.forming }}>{title}</h2>
-          <span
-            className={clsx("mb-px inline-block h-1.5 w-1.5 shrink-0 rounded-full", !reduce && "cadence-live-dot")}
-            style={{ background: HOME.forming }}
-          />
-          <span className="min-w-0 truncate text-[13px] font-semibold tabular-nums leading-[1.15] tracking-tight text-[var(--text)]">
-            <ReelText text={formingHeight > 1 ? formingHeight.toLocaleString(loc) : "—"} />
-          </span>
-          <KpiNum className="max-w-none shrink-0 text-[13px] font-semibold tabular-nums leading-none tracking-tight">
-            <ReelText text={shown.toLocaleString(loc)} />
-            <span className="ml-0.5 text-[12px] font-medium text-[var(--muted-2)]">{txUnit}</span>
-          </KpiNum>
-          <span className="shrink-0 text-[12px] leading-none text-[var(--muted)]">
-            <FormingAge ts={formingSince} />
-          </span>
-        </div>
-        <Link prefetch={false} href="/mempool" className="tap-44 text-[13px] leading-none text-[var(--muted)] hover:text-[var(--text)]">
-          {all}
-        </Link>
-      </div>
-      <div className="home-pit relative" style={{ height: CADENCE_TRACK + CADENCE_HEAD }}>
-        <HomeMempoolStage
-          balls={balls}
-          ariaLabel={pitLabel}
-          moreTitle={(n) => t("mempool.more").replace("{n}", String(n))}
-          onDyingCount={setPitCount}
-          onSealPour={onSealPour}
-          onSealArrive={onSealArrive}
-        />
-      </div>
-      <p className="mt-1.5 truncate text-[12px] tabular-nums leading-[1.15] text-[var(--muted-2)]">{foot}</p>
-    </section>
-  );
-}
-
-function BlockCadence({
-  blocks,
-  title,
-  all,
-  txUnit,
-  holding,
-  grow,
-  onAssembleDone,
-}: {
-  blocks: BlockRow[];
-  title: string;
-  all: string;
-  txUnit: string;
-  holding: boolean;
-  grow: { n: number; total: number; ink: string } | null;
-  onAssembleDone: () => void;
-}) {
-  const { locale, t } = useI18n();
-  const reduce = useReducedMotion();
-  const [hoverId, setHoverId] = useState<string | null>(null);
-
-  const slots = useMemo(() => [...blocks].slice(0, CADENCE).reverse(), [blocks]);
-  const { ink: inkById, ready: inkReady } = useCadenceInk(blocks);
-  const last = slots[slots.length - 1];
-  const confirmed = useMemo(
-    () => (holding && last ? slots.slice(0, -1) : slots),
-    [holding, last, slots]
-  );
-  const yard = useMemo(() => {
-    const rows: CadenceYardBlock[] = confirmed.map((b) => ({
-      id: b.id,
-      height: b.height,
-      weight: barWeight(b),
-      ink: barInk(b, inkById),
-      frac: 1,
-      lithos: b.lithos === true,
-    }));
-    if (holding && last && grow && (grow.total === 0 || grow.n > 0)) {
-      rows.push({
-        id: last.id,
-        height: last.height,
-        weight: barWeight(last),
-        ink: grow.ink || barInk(last, inkById),
-        frac: grow.total <= 0 ? 1 : Math.min(1, grow.n / grow.total),
-        lithos: last.lithos === true,
-      });
-    }
-    return rows;
-  }, [confirmed, grow, holding, inkById, last]);
-  const full = Boolean(holding && grow && (grow.total <= 0 || grow.n >= grow.total));
-  useEffect(() => {
-    if (!full) return;
-    const t = window.setTimeout(() => onAssembleDone(), reduce ? 0 : 480);
-    return () => window.clearTimeout(t);
-  }, [full, onAssembleDone, reduce]);
-
-  const loc = locale === "ru" ? "ru-RU" : "en-US";
-  const active =
-    yard.find((b) => b.id === hoverId) ??
-    yard[yard.length - 1] ??
-    null;
-  const activeRow = active ? slots.find((b) => b.id === active.id) ?? null : null;
-  // The pour counter belongs to the new block only while it is in the yard (holding).
-  // Before its first ball lands, `last` is still the previous block and keeps its own count.
-  const activeTxs =
-    holding && active && grow && last && active.id === last.id && grow.total > 0
-      ? grow.n
-      : (activeRow?.txCount ?? 0);
-
-  return (
-    <section
-      className="home-tile-enter mod h-full min-w-0 rounded-[20px] border border-[var(--border)] bg-[var(--module)] px-4 py-3 sm:px-5"
-      style={enterAt(0)}
-    >
-      <div className="mb-2 flex h-[22px] items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2 overflow-hidden">
-          <h2 className="m-0 shrink-0 text-[13px] leading-none" style={{ color: HOME.forming }}>{title}</h2>
-          {active ? (
-            <>
-              <span className="shrink-0 text-[13px] font-semibold tabular-nums leading-none tracking-tight">
-                <ReelText text={active.height.toLocaleString(loc)} />
-              </span>
-              <span className="shrink-0 text-[12px] font-medium leading-none text-[var(--muted-2)]">
-                <ReelText text={activeTxs.toLocaleString(loc)} />
-                <span className="ml-0.5">{txUnit}</span>
-              </span>
-              {activeRow ? (
-                <span
-                  key={activeRow.timestamp}
-                  className="hover-stamp min-w-0 truncate text-[12px] font-medium leading-none tabular-nums text-[var(--muted)]"
-                >
-                  {fmtCreated(activeRow.timestamp, locale)}
-                </span>
-              ) : null}
-            </>
-          ) : null}
-        </div>
-        <Link prefetch={false} href="/blocks" className="tap-44 shrink-0 text-[13px] leading-none text-[var(--muted)] hover:text-[var(--text)]">
-          {all}
-        </Link>
-      </div>
-
-      <div className="relative w-full" style={{ height: CADENCE_TRACK + CADENCE_HEAD }}>
-        <CadenceYard
-          blocks={yard}
-          reduce={!!reduce}
-          colorsReady={inkReady}
-          label={title}
-          onHover={(id) => setHoverId((cur) => (cur === id ? cur : id))}
-          tip={(id) => {
-            const row = slots.find((b) => b.id === id);
-            if (!row) return null;
-            const txs =
-              grow && last && id === last.id && grow.total > 0 ? grow.n : row.txCount;
-            const feeRaw = row.feeNano != null ? String(row.feeNano) : "";
-            const fee = /^\d+$/.test(feeRaw) && feeRaw !== "0" ? feeRaw : null;
-            return (
-              <>
-                <TipHead chip={t("tip.block")} ink="var(--c-block, #ffd23c)" mono>
-                  {row.height.toLocaleString(loc)}
-                </TipHead>
-                <TipRows>
-                  <TipRow label={t("tip.txs")}>{txs != null ? txs.toLocaleString(loc) : "—"}</TipRow>
-                  {row.size > 0 ? <TipRow label={t("tip.size")}>{formatBytes(row.size)}</TipRow> : null}
-                  {fee ? <TipRow label={t("tip.fees")}>{formatErgPrecise(fee, locale)}</TipRow> : null}
-                  {row.minerName ? (
-                    <TipRow label={t("tip.miner")} text>
-                      {row.minerName}
-                    </TipRow>
-                  ) : null}
-                  <TipRow label={t("tip.time")}>{fmtCreated(row.timestamp, locale)}</TipRow>
-                </TipRows>
-                {row.lithos ? <TipNote>{t("block.chip.lithosHint")}</TipNote> : null}
-              </>
-            );
-          }}
-        />
-      </div>
-      <div className="sr-only">
-        {yard.map((b) => (
-          <Link prefetch={false} key={b.id} href={`/block/${encodeURIComponent(b.id)}`}>
-            {b.height.toLocaleString(loc)}
-          </Link>
-        ))}
-      </div>
-    </section>
+    <HomeCityPair
+      blocks={tape}
+      balls={mp.balls}
+      pool={mp.pool}
+      totalSize={mp.totalSize}
+      totalFees={mp.totalFees}
+      streamFees={mp.fees}
+      streamLive={mp.streamLive}
+      seal={mp.seal}
+      poolInk={poolInk}
+      avgBlockMs={avgBlockMs}
+      title={title}
+      mempoolTitle={mempoolTitle}
+      all={all}
+      txUnit={txUnit}
+      formingHeight={Math.max(tip?.height ?? 0, mp.seal?.height ?? 0, tape[0]?.height ?? 0) + 1}
+      formingSince={formSince ?? tape[0]?.timestamp ?? null}
+      enter={[enterAt(0), enterAt(1)]}
+    />
   );
 }
 
