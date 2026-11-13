@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { encode } from "uqr";
 import clsx from "clsx";
+import { copyText } from "@/lib/copy-text";
 
 function encodeOrThrow(text: string) {
   return encode(text, { ecc: "M", border: 2, maxVersion: 40 });
@@ -183,7 +184,7 @@ export function AddressQr({
       )}
       style={enter != null ? { ["--enter" as string]: enter } : undefined}
       onClick={() => {
-        void navigator.clipboard?.writeText(address).then(() => {
+        void copyText(address)?.then(() => {
           setCopied(true);
           window.setTimeout(() => setCopied(false), 1200);
         });

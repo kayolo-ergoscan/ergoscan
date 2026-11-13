@@ -34,6 +34,7 @@ import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
 import clsx from "clsx";
 import { placeTip, type TipRect, type TipSide } from "@/lib/tip-place";
+import { say } from "@/lib/kayolo/events";
 
 export type { TipSide, TipRect };
 
@@ -71,8 +72,17 @@ let graceTimer = 0;
 const listeners = new Set<() => void>();
 let place: (() => void) | null = null;
 
+/** The owner Kayolo was last told about: he hears a tip open or go, not every content update. */
+let toldOwner: symbol | null = null;
+
 function emit() {
   for (const l of listeners) l();
+  const owner = cur?.owner ?? null;
+  if (owner === toldOwner) return;
+  toldOwner = owner;
+  if (!cur) say({ k: "ui:tip-close" });
+  else if (cur.anchor instanceof Element) say({ k: "ui:tip-open", el: cur.anchor });
+  else say({ k: "ui:tip-open", rect: cur.anchor });
 }
 
 function subscribe(l: () => void) {

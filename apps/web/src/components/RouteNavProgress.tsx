@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { ScanWait, SCAN_WAIT_SLOW_MS } from "@/components/ScanWait";
+import { ScanWait } from "@/components/ScanWait";
 import { useT } from "@/lib/i18n/I18nProvider";
+import { say } from "@/lib/kayolo/events";
 import {
   locKey,
   navArrived,
@@ -19,15 +20,16 @@ const KILL_MS = 15_000;
 
 /**
  * AdaStat wait: previous page stays. Wide full-width top bar on every
- * internal route — home, favorites — not only slow RSC. Overlay
- * after 500ms. One pending target (rapid hops replace `to`, keep `from`).
+ * internal route — home, favorites — not only slow RSC. No overlay: from 500 ms
+ * Kayolo pushes the door at home (design/brand/kayolo-life.md §7.1, §12.14); he is
+ * told when the wait starts and how it ends. One pending target (rapid hops
+ * replace `to`, keep `from`).
  */
 export function RouteNavProgress() {
   const path = usePathname();
   const t = useT();
   const [pending, setPending] = useState<Pending | null>(null);
   const [bar, setBar] = useState(false);
-  const [slow, setSlow] = useState(false);
   const shownAt = useRef(0);
 
   useEffect(() => {
@@ -68,7 +70,7 @@ export function RouteNavProgress() {
       if (Date.now() - shownAt.current < MIN_MS) return;
       setPending(null);
       setBar(false);
-      setSlow(false);
+      say({ k: "nav:end", ok: true });
     };
     check();
     const id = window.setInterval(check, 50);
@@ -78,24 +80,20 @@ export function RouteNavProgress() {
   useEffect(() => {
     if (!pending) {
       setBar(false);
-      setSlow(false);
       return;
     }
     shownAt.current = Date.now();
     setBar(true);
-    const overlay = window.setTimeout(() => setSlow(true), SCAN_WAIT_SLOW_MS);
+    say({ k: "nav:start", to: pending.to });
     const kill = window.setTimeout(() => {
       setPending(null);
       setBar(false);
-      setSlow(false);
+      say({ k: "nav:end", ok: false });
     }, KILL_MS);
-    return () => {
-      window.clearTimeout(overlay);
-      window.clearTimeout(kill);
-    };
+    return () => window.clearTimeout(kill);
   }, [pending]);
 
   if (!pending || !bar) return null;
 
-  return <ScanWait slow={slow} label={t("common.loading")} />;
+  return <ScanWait kind="route" label={t("common.loading")} />;
 }

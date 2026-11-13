@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import clsx from "clsx";
+import { copyText } from "@/lib/copy-text";
 
 /** The copy button next to a tx id: a check for a moment after it copies. */
 export function CopyChip({
@@ -20,7 +21,7 @@ export function CopyChip({
     <button
       type="button"
       onClick={() => {
-        void navigator.clipboard?.writeText(text).then(() => {
+        void copyText(text)?.then(() => {
           setOk(true);
           window.setTimeout(() => setOk(false), 1200);
         });

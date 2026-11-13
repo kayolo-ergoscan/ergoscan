@@ -17,7 +17,7 @@ function run(s: ReturnType<typeof createScheduler>, o: Offer, t: number) {
 }
 
 test("alertness: A0 0–8 s, A1 8–30 s, A2 30–90 s, A3 90–180 s, A4 after", () => {
-  assert.deepEqual([0, 7_999, 8_000, 29_999, 30_000, 89_999, 90_000, 179_999, 180_000, 3_600_000].map(levelAt), [0, 0, 1, 1, 2, 2, 3, 3, 4, 4]);
+  assert.deepEqual([0, 7_999, 8_000, 29_999, 30_000, 89_999, 90_000, 179_999, 180_000, 3_600_000].map((ms) => levelAt(ms)), [0, 0, 1, 1, 2, 2, 3, 3, 4, 4]);
   const s = createScheduler(0);
   assert.equal(s.level(100_000), 3);
   assert.equal(s.input(100_000), 3, "input tells the level he woke from");
@@ -132,4 +132,17 @@ test("a poke goes at once, interrupts an act and is never cut by the budget", ()
   assert.equal(s.next(1700), null, "a spontaneous offer during an act is dropped");
   s.input(5000);
   assert.equal(run(s, block("after"), 5000)?.step.act, "nod", "spontaneous T2 waits 10 s after a poke");
+});
+
+test("night (§2.3): A2 from 15 s, A3 from 60 s, A4 from 120 s; spontaneous one tier lower", () => {
+  assert.deepEqual([7_999, 8_000, 14_999, 15_000, 59_999, 60_000, 119_999, 120_000].map((ms) => levelAt(ms, true)), [0, 1, 1, 2, 2, 3, 3, 4]);
+  const s = createScheduler(0);
+  s.night(true);
+  assert.equal(s.level(20_000), 2);
+  assert.equal(s.nextDue(16_000), 60_000, "the next edge is the night A3");
+  s.input(100_000);
+  assert.equal(run(s, block("a"), 101_000)?.step.act, "nod", "a hop comes as a nod at night");
+  s.night(false);
+  s.input(139_000);
+  assert.equal(run(s, block("b"), 140_000)?.step.act, "hop", "by day the hop again");
 });

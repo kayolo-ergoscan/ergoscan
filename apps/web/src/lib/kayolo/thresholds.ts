@@ -21,6 +21,17 @@ export const A1_MS = 8_000;
 export const A2_MS = 30_000;
 export const A3_MS = 90_000;
 export const A4_MS = 180_000;
+/* Night, 23:00–05:59 local (§2.3): A2 from 15 s, A3 from 60 s, A4 from 120 s (frozen at 150 s). */
+export const NIGHT_A2_MS = 15_000;
+export const NIGHT_A3_MS = 60_000;
+export const NIGHT_A4_MS = 120_000;
+export const NIGHT_FROM_H = 23;
+export const NIGHT_TO_H = 6;
+/** Blinks at night come 1.3× rarer. */
+export const NIGHT_BLINK_GAP = 1.3;
+/** The morning stretch, once a day, on the first visit between 06:00 and 10:59. */
+export const MORNING_FROM_H = 6;
+export const MORNING_TO_H = 11;
 /** Asleep: this long of breathing and drifting squares at 12 fps, then the frozen frame. */
 export const ZZZ_MS = 30_000;
 export const ZZZ_FPS = 12;
@@ -84,3 +95,35 @@ export const NOOK_GAP = 14;
 export const NOOK_HALF = 11;
 /** A step to a new niche: 140 px/s. */
 export const STEP_PX_S = 140;
+
+/* Э3 answers (§6.2, §7). */
+/** A route wait: think first, then he pushes the door (a knock every 700 ms). */
+export const DOOR_AFTER_MS = 500;
+export const DOOR_KNOCK_MS = 700;
+/** Still waiting: a look at the person and a big shrug; later he sits down to wait. */
+export const DOOR_SHRUG_MS = 4_000;
+export const DOOR_SIT_MS = 8_000;
+/** The arrival beat (a look at the page's key figure) comes this long after the arrival act. */
+export const ARRIVE_BEAT_MS = 800;
+/** A copy answers with a nod at most every 2 s, a heart every 3 s, a page step every 3 s; else eyes. */
+export const COPY_GAP_MS = 2_000;
+export const FAV_GAP_MS = 3_000;
+export const PAGE_GAP_MS = 3_000;
+/** Any other answer to the same kind of action: a gesture at most every 2 s, else the eyes (§2.8). */
+export const ANSWER_GAP_MS = 2_000;
+/** A hovered or focused thing that means something: looked at after 300 ms, held ≤ 1.2 s, ≥ 1.5 s apart. */
+export const HOVER_MS = 300;
+export const HOVER_HOLD_MS = 1_200;
+export const HOVER_GAP_MS = 1_500;
+/** Focus: at most every 400 ms. A tap on the phone: eyes on the point 1.5 s, ≥ 400 ms apart. */
+export const FOCUS_GAP_MS = 400;
+export const TAP_HOLD_MS = 1_500;
+export const TAP_GAP_MS = 400;
+/** The palette edge (§3.3): only from 1280 px wide; the jump there and back takes ≤ 400 ms. */
+export const EDGE_MIN_W = 1280;
+export const EDGE_JUMP_MS = 380;
+/** Typing in the palette: the eyes follow the caret on a move ≥ 12 px or after a 150 ms pause. */
+export const CARET_PX = 12;
+export const CARET_PAUSE_MS = 150;
+/** The recolour blink (§7.1): the colour changes while the eyes are shut. */
+export const RECOLOR_MS = 240;

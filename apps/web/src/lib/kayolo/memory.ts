@@ -10,6 +10,8 @@
  * Every storage access is in try/catch; without storage the defaults live in memory.
  */
 
+import { MORNING_FROM_H, MORNING_TO_H } from "./thresholds";
+
 export type Mode = "live" | "calm" | "asleep" | "hidden" | "off";
 export type Home = "r" | "l" | "p";
 
@@ -149,6 +151,8 @@ export type Memory = Record<string, unknown> & {
   pets?: number;
   hint?: number;
   hello?: number;
+  /** The day of the last morning stretch (§2.3), YYYY-MM-DD. */
+  morn?: string;
 };
 
 export function parseMemory(raw: string | null): Memory {
@@ -176,6 +180,8 @@ export type Draft = {
   hint?: number;
   /** The introduction happened (or he was already known). */
   hello?: boolean;
+  /** The morning stretch was played on this day. */
+  morn?: string;
   newDay: boolean;
 };
 
@@ -208,6 +214,9 @@ export function mergeMemory(disk: Memory, mine: Draft): Memory {
   const hint = Math.min(HINT_MAX, Math.max(num(disk.hint), mine.hint ?? 0));
   if (hint) out.hint = hint;
   if (num(disk.hello) || mine.hello) out.hello = 1;
+  const mornDisk = typeof disk.morn === "string" ? disk.morn : "";
+  const morn = mine.morn && mine.morn > mornDisk ? mine.morn : mornDisk;
+  if (morn) out.morn = morn;
   return out;
 }
 
@@ -240,7 +249,7 @@ export function createMemory(deps: MemoryDeps) {
     }
     if (text.length <= MEMORY_MAX && set(deps.local, MEMORY_KEY, text)) {
       wroteAt = t;
-      draft = { day: draft.day, secs: [], pokes: 0, hint: draft.hint, hello: draft.hello, newDay: false };
+      draft = { day: draft.day, secs: [], pokes: 0, hint: draft.hint, hello: draft.hello, morn: draft.morn, newDay: false };
     }
   };
   const lastBefore = () => {
@@ -304,6 +313,17 @@ export function createMemory(deps: MemoryDeps) {
     },
     noteHello() {
       draft.hello = true;
+      flush(true);
+    },
+    /** The morning stretch is due: 06:00–10:59 local and not played yet today (in any tab). */
+    morningDue(): boolean {
+      const t = deps.now();
+      const h = new Date(t).getHours();
+      if (h < MORNING_FROM_H || h >= MORNING_TO_H) return false;
+      return view().morn !== dayKey(t);
+    },
+    noteMorning() {
+      draft.morn = dayKey(deps.now());
       flush(true);
     },
     flush,

@@ -17,6 +17,7 @@ import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import { AnimatePresence, motion, useDragControls, useReducedMotion } from "framer-motion";
 import { useT } from "@/lib/i18n/I18nProvider";
+import { say } from "@/lib/kayolo/events";
 
 const EASE: [number, number, number, number] = [0.4, 0, 0.2, 1];
 
@@ -158,6 +159,20 @@ export function BottomSheet({
   const { leave } = useSheetHistory(open, onClose);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
+
+  useEffect(() => {
+    if (!open) return;
+    // Kayolo stays home under the scrim, eyes on the sheet (§3.5). Close pairs with open only.
+    let told = false;
+    const id = window.requestAnimationFrame(() => {
+      told = true;
+      say({ k: "ui:sheet-open", el: panel.current });
+    });
+    return () => {
+      window.cancelAnimationFrame(id);
+      if (told) say({ k: "ui:sheet-close" });
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;

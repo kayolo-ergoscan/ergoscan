@@ -2,7 +2,8 @@
  * Kayolo's scheduler (design/brand/kayolo-life.md §2.2, §2.8, §9.3). Pure: no DOM, no clock of its
  * own (every call takes `t`, ms), so tests drive it with a fake clock.
  *
- * - Alertness A0–A4 from the last input: 8 / 30 / 90 / 180 s.
+ * - Alertness A0–A4 from the last input: 8 / 30 / 90 / 180 s; at night (§2.3) 8 / 15 / 60 / 120 s,
+ *   and spontaneous offers come one tier lower.
  * - An offer carries a ladder of steps, loudest first (T3 bigBlock → T2 hop → T1 nod → T0 glance).
  *   The budget walks it down; nothing fits → dropped, never queued.
  * - Spontaneous offers (P3–P5) wait in a 400 ms merge window: the lowest P wins, then the loudest
@@ -26,6 +27,9 @@ import {
   ATTN_60S_MS,
   EYE_GAP_MS,
   MERGE_MS,
+  NIGHT_A2_MS,
+  NIGHT_A3_MS,
+  NIGHT_A4_MS,
   PENDING_DEMOTE_MS,
   T1_GAP_MS,
   T1_REFILL_MS,
@@ -61,10 +65,16 @@ export type Play = { key: string; prio: Prio; step: Step; wake: boolean };
 type Waiting = Offer & { at: number };
 
 const LEVELS = [A1_MS, A2_MS, A3_MS, A4_MS];
+const NIGHT_LEVELS = [A1_MS, NIGHT_A2_MS, NIGHT_A3_MS, NIGHT_A4_MS];
 
-export function levelAt(sinceInputMs: number): Level {
+/** The level edges (A1…A4, ms without input), by day or at night. */
+export function levelEdges(night = false): readonly number[] {
+  return night ? NIGHT_LEVELS : LEVELS;
+}
+
+export function levelAt(sinceInputMs: number, night = false): Level {
   let l = 0;
-  for (const edge of LEVELS) if (sinceInputMs >= edge) l += 1;
+  for (const edge of levelEdges(night)) if (sinceInputMs >= edge) l += 1;
   return l as Level;
 }
 
@@ -72,6 +82,7 @@ export function createScheduler(t0 = 0) {
   let lastInput = t0;
   let busyUntil = -Infinity;
   let mode: SchedMode = "live";
+  let night = false;
   let running: { until: number; prio: Prio } | null = null;
   let inbox: Waiting[] = [];
   let windowEnd = -Infinity;
@@ -151,7 +162,7 @@ export function createScheduler(t0 = 0) {
   const better = (a: Waiting, b: Waiting) =>
     a.prio !== b.prio ? a.prio < b.prio : (a.ladder[0]?.tier ?? 0) !== (b.ladder[0]?.tier ?? 0) ? (a.ladder[0]?.tier ?? 0) > (b.ladder[0]?.tier ?? 0) : a.at >= b.at;
 
-  const level = (t: number) => levelAt(t - lastInput);
+  const level = (t: number) => levelAt(t - lastInput, night);
 
   const playing = (t: number) => running != null && t < running.until;
 
@@ -171,6 +182,10 @@ export function createScheduler(t0 = 0) {
         inbox = [];
         pending = null;
       }
+    },
+    /** Night (23:00–05:59 local): earlier levels, spontaneous offers one tier lower. */
+    night(on: boolean) {
+      night = on;
     },
     /** Input from the person. Returns the level he was at (A2+ means a wake-up is due). */
     input(t: number): Level {
@@ -236,6 +251,7 @@ export function createScheduler(t0 = 0) {
       const lv = level(t);
       if (t - o.at > PENDING_DEMOTE_MS) from += 1;
       if (lv === 2 && o.prio >= 4) from += 1;
+      if (night) from += 1;
       let ladder = o.ladder;
       let wake = false;
       if (lv === 3 && o.prio === 5) ladder = ladder.filter((s) => s.tier === 0);
@@ -258,7 +274,7 @@ export function createScheduler(t0 = 0) {
     nextDue(t: number): number {
       let due = Infinity;
       const since = t - lastInput;
-      for (const edge of LEVELS) if (since < edge) due = Math.min(due, lastInput + edge);
+      for (const edge of levelEdges(night)) if (since < edge) due = Math.min(due, lastInput + edge);
       if (inbox.length) due = Math.min(due, Math.max(t, windowEnd));
       if (pending) {
         due = Math.min(due, pending.at + pending.ttlMs);

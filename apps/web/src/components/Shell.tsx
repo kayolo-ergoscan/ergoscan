@@ -279,11 +279,29 @@ function useSearchCue(words: string[]): string {
       return;
     }
     let dead = false;
-    const timers: number[] = [];
-    const wait = (ms: number) =>
-      new Promise<void>((resolve) => {
-        timers.push(window.setTimeout(resolve, ms));
+    // One step waits at a time: one timer to clear (a list would grow for as long as the tab is open).
+    let timer = 0;
+    let onShown: (() => void) | null = null;
+    // A hidden tab types nothing: the next step waits until the tab is seen again.
+    const shown = () =>
+      document.visibilityState !== "hidden"
+        ? Promise.resolve()
+        : new Promise<void>((resolve) => {
+            onShown = () => {
+              if (document.visibilityState === "hidden") return;
+              if (onShown) document.removeEventListener("visibilitychange", onShown);
+              onShown = null;
+              resolve();
+            };
+            document.addEventListener("visibilitychange", onShown);
+          });
+    const wait = async (ms: number) => {
+      await shown();
+      if (dead) return;
+      await new Promise<void>((resolve) => {
+        timer = window.setTimeout(resolve, ms);
       });
+    };
     const run = async () => {
       setText("");
       await wait(1200);
@@ -308,7 +326,8 @@ function useSearchCue(words: string[]): string {
     void run();
     return () => {
       dead = true;
-      for (const id of timers) window.clearTimeout(id);
+      window.clearTimeout(timer);
+      if (onShown) document.removeEventListener("visibilitychange", onShown);
     };
   }, [key]);
   return text;

@@ -96,6 +96,8 @@ export type PixelPose = {
   glanceRange?: number;
   /** Multiplies the hop height (default 1). */
   hopScale?: number;
+  /** Multiplies the time between his own blinks (default 1; at night 1.3). */
+  blinkGap?: number;
   /** Highest hop in CSS px (the phone keeps hops at 6 px or lower). */
   hopMax?: number;
 };
@@ -290,7 +292,7 @@ export function drawPixel(ctx: CanvasRenderingContext2D, pose: PixelPose) {
     s.blinkAt = now;
     s.blinkTwice = rnd() < 0.2;
     const calm = mood === "think" ? 0.6 : mood === "sleepy" ? 1.6 : 1;
-    s.blinkNext = now + (1800 + rnd() * 3600) * calm;
+    s.blinkNext = now + (1800 + rnd() * 3600) * calm * (pose.blinkGap ?? 1);
   }
   const blinkLen = mood === "sleepy" ? 420 : 150;
   let blink = blinkCurve(now - s.blinkAt, blinkLen);

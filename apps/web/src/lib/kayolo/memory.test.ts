@@ -191,3 +191,21 @@ test("pets add up across tabs, the menu hint stops after 3, hello sticks; last-b
   now += 1000;
   assert.ok((local.map.get(MEMORY_KEY) ?? "").length <= MEMORY_MAX);
 });
+
+test("the morning stretch (§2.3): 06:00–10:59 local, once a day across tabs", () => {
+  let now = new Date(2026, 10, 13, 5, 59).getTime();
+  const local = store();
+  const a = createMemory({ local: () => local, session: () => null, now: () => now });
+  const b = createMemory({ local: () => local, session: () => null, now: () => now });
+  assert.equal(a.morningDue(), false, "05:59 is still night");
+  now = new Date(2026, 10, 13, 6, 0).getTime();
+  assert.equal(a.morningDue(), true);
+  a.noteMorning();
+  assert.equal(a.morningDue(), false, "once");
+  assert.equal(b.morningDue(), false, "another tab knows");
+  now = new Date(2026, 10, 13, 11, 0).getTime();
+  assert.equal(b.morningDue(), false, "11:00 is too late");
+  now = new Date(2026, 10, 14, 10, 59).getTime();
+  assert.equal(b.morningDue(), true, "the next day again");
+  assert.ok((local.map.get(MEMORY_KEY) ?? "").length <= MEMORY_MAX);
+});

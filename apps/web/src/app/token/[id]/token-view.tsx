@@ -60,6 +60,7 @@ import { SNAPSHOT_FETCH, enteringIds, useEnterIds } from "@/lib/keyed-enter";
 import type { TokenHoldersPage, TokenListItem } from "@/lib/list-snapshots";
 import { peekTokenHolders, putTokenHolders } from "@/lib/token-page-cache";
 import { useFavoriteAddresses, useFavoriteOf } from "@/lib/favorites";
+import { copyText } from "@/lib/copy-text";
 
 const HOLDERS_PACK = 25;
 const TX_PACK = 25;
@@ -1810,7 +1811,7 @@ function CopyChip({
     <button
       type="button"
       onClick={() => {
-        void navigator.clipboard?.writeText(text).then(() => {
+        void copyText(text)?.then(() => {
           setOk(true);
           window.setTimeout(() => setOk(false), 1200);
         });

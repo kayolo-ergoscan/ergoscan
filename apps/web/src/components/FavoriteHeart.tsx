@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import clsx from "clsx";
 import { useFloatTip, useTip } from "@/components/Tip";
 import { useT } from "@/lib/i18n/I18nProvider";
+import { say } from "@/lib/kayolo/events";
 
 const HEART = "#e25563";
 const POP_MS = 480;
@@ -52,6 +53,7 @@ export function FavoriteHeart({
         e.stopPropagation();
         const next = !on;
         onToggle();
+        say({ k: next ? "ui:fav-on" : "ui:fav-off", el: e.currentTarget });
         const r = e.currentTarget.getBoundingClientRect();
         said.show(
           { left: r.left, top: r.top, width: r.width, height: r.height },

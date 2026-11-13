@@ -34,6 +34,8 @@ import { formatDottedDate, formatH24, formatScaledAmount, formatScaledFixed, for
 import { tokenDecimals, tokenSymbol } from "@/lib/token-meta";
 import { FeedGlyph, type FeedGlyphId } from "./FeedGlyph";
 import { useStuckPlate } from "@/components/StuckPin";
+import { copyText } from "@/lib/copy-text";
+import { say } from "@/lib/kayolo/events";
 
 export type FeedKind =
   | "transfer"
@@ -314,7 +316,12 @@ export function FeedSort<K extends string>({
             className="feed-sort-chip"
             aria-pressed={on}
             disabled={disabled}
-            onClick={() => onSort(o.key)}
+            onClick={(e) => {
+              onSort(o.key);
+              // The pressed chip again flips the order; the eyes run the list that way.
+              const next = dir && on ? (dir === "desc" ? "asc" : "desc") : dir;
+              say(next ? { k: "ui:sort", el: e.currentTarget, dir: next } : { k: "ui:filter", el: e.currentTarget });
+            }}
           >
             {o.label}
             {on && dir ? (
@@ -472,6 +479,7 @@ export function FeedRow({
   const toggle = () => {
     if (!open) setGoTo(href ?? titleLink(ref.current)?.getAttribute("href") ?? null);
     setOpen(!open);
+    say({ k: "ui:expand", el: ref.current, open: !open });
   };
   const openItem = (): boolean => {
     if (href) {
@@ -827,7 +835,7 @@ export function FeedCopy({ text }: { text: string }) {
       type="button"
       className="feed-copy"
       onClick={() => {
-        void navigator.clipboard?.writeText(text).then(() => {
+        void copyText(text)?.then(() => {
           setCopied(true);
           window.setTimeout(() => setCopied(false), 1200);
         });

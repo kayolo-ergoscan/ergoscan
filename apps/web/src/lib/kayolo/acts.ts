@@ -1,6 +1,8 @@
 /**
- * Kayolo's acts for Э1b (design/brand/kayolo-life.md §2.7, §4.2): glance, shrug, nod, pleased,
- * hops, the big block, waking, a stir in his sleep, noticing, the first three pokes. Pure: an act is
+ * Kayolo's acts (design/brand/kayolo-life.md §2.7, §4.2): glance, shrug, nod, pleased, hops, the
+ * big block, waking, a stir in his sleep, noticing, the whole poke ladder, and Э3's answers to what a
+ * person does (lean, knock, hug, sniff, shrugBig, tilt, dizzy, reading a list, the arrival, a look
+ * back, the morning stretch). Pure: an act is
  * a duration and a pose delta over time, laid on his resting pose by the layer. Every act ends in
  * the resting pose. Under reduced motion («Тихий») there are no hops, tilts or squash: eyes, blinks
  * and faces only (§10). Lengths vary ±20 %, and an act with variants never repeats one twice in a row.
@@ -36,14 +38,44 @@ export type ActName =
   | "welcome1"
   | "welcome2"
   | "welcome3"
-  | "wakeUp";
+  | "wakeUp"
+  /* Э3: answers to the page (§6.2), transitions (§7), the rest of the poke ladder (§4.2), morning (§2.3). */
+  | "lean"
+  | "knock"
+  | "hug"
+  | "sniff"
+  | "shrugBig"
+  | "tilt"
+  | "dizzy"
+  | "enough"
+  | "poke4"
+  | "blink1"
+  | "blinkLong"
+  | "stretch"
+  | "lookBack"
+  | "here"
+  | "aside"
+  | "arrive"
+  | "sidestep"
+  | "railJolt"
+  | "readList"
+  | "runList"
+  | "tear"
+  | "tabLook";
 
 export type Vec = { x: number; y: number };
 
 /** What an act changes for a frame. Missing fields keep the resting pose. */
 export type PoseDelta = Partial<
-  Pick<PixelPose, "mood" | "gaze" | "head" | "pick" | "eyeScale" | "eyeLift" | "squash" | "wink" | "doze" | "zzz">
-> & { flip?: boolean };
+  Pick<
+    PixelPose,
+    "mood" | "gaze" | "head" | "pick" | "eyeScale" | "eyeLift" | "squash" | "wink" | "doze" | "zzz" | "pupil" | "pupilOrbit" | "hopMax"
+  >
+> & {
+  flip?: boolean;
+  /** Sideways in his own canvas, CSS px (a side step that comes back, ≤ 8). */
+  shift?: number;
+};
 
 export type Act = {
   name: ActName;
@@ -57,6 +89,8 @@ export type ActInput = {
   reduce: boolean;
   /** Screen-space gaze toward the act's anchor (the tip, the person). */
   target?: Vec | null;
+  /** A second anchor, for acts that look at two things (the heart, then Favorites in the rail). */
+  target2?: Vec | null;
   /** The eyes when the act began: the act returns them there. */
   rest?: Vec;
   /** Facing: the eyes "at the person" cancel the facing offset. */
@@ -103,6 +137,28 @@ export const ACT_MS: Record<ActName, number> = {
   welcome2: 1420,
   welcome3: 2900,
   wakeUp: 900,
+  lean: 440,
+  knock: 400,
+  hug: 1200,
+  sniff: 600,
+  shrugBig: 360,
+  tilt: 1400,
+  dizzy: 1100,
+  enough: 700,
+  poke4: 480,
+  blink1: 150,
+  blinkLong: 240,
+  stretch: 900,
+  lookBack: 1100,
+  here: 900,
+  aside: 1000,
+  arrive: 760,
+  sidestep: 520,
+  railJolt: 900,
+  readList: 1000,
+  runList: 660,
+  tear: 1200,
+  tabLook: 1100,
 };
 
 const TIER: Record<ActName, Tier> = {
@@ -132,7 +188,38 @@ const TIER: Record<ActName, Tier> = {
   welcome2: 2,
   welcome3: 3,
   wakeUp: 1,
+  lean: 0,
+  knock: 1,
+  hug: 1,
+  sniff: 1,
+  shrugBig: 1,
+  tilt: 1,
+  dizzy: 1,
+  enough: 1,
+  poke4: 2,
+  blink1: 0,
+  blinkLong: 1,
+  stretch: 1,
+  lookBack: 0,
+  here: 0,
+  aside: 0,
+  arrive: 1,
+  sidestep: 1,
+  railJolt: 1,
+  readList: 0,
+  runList: 0,
+  tear: 1,
+  tabLook: 0,
 };
+
+/**
+ * The poke ladder (§4.2): 1 pleased + a look, 2 a hop, 3 a hop with a turn, 4 a lower hop, 5 dizzy,
+ * 6 a double blink, 7 «ну хватит», 8–9 a blink, 10 the secret (Э7; until then as 7), 11+ as 7.
+ */
+export function pokeAct(n: number): ActName {
+  const ladder: ActName[] = ["poke1", "poke2", "poke3", "poke4", "dizzy", "blink2", "enough", "blink1", "blink1"];
+  return n >= 1 && n <= ladder.length ? ladder[n - 1] : n < 1 ? "poke1" : "enough";
+}
 
 const VARIANTS: Partial<Record<ActName, number>> = { glance: 3, nod: 3, shrug: 2, pleased: 2 };
 const lastVariant = new Map<ActName, number>();
@@ -164,6 +251,25 @@ function look(t: number, hold: number, back: number, rest: Vec, to: Vec, oversho
   if (t < 120) return overshoot ? mix({ x: to.x * (1 + overshoot), y: to.y * (1 + overshoot) }, to, smooth((t - SACCADE) / (120 - SACCADE))) : to;
   if (t < 120 + hold) return to;
   return mix(to, rest, smooth((t - 120 - hold) / back));
+}
+
+/**
+ * Eyes at one anchor, then a second: rest → a (saccade), hold until `ta`, a → b, hold `tb`, back
+ * to rest over `back`. Total ta + tb + back.
+ */
+function look2(t: number, rest: Vec, a: Vec, b: Vec, ta: number, tb: number, back: number): Vec {
+  if (t < SACCADE) return mix(rest, a, smooth(t / SACCADE));
+  if (t < ta) return a;
+  if (t < ta + SACCADE) return mix(a, b, smooth((t - ta) / SACCADE));
+  if (t < ta + tb) return b;
+  return mix(b, rest, smooth((t - ta - tb) / back));
+}
+
+/** One knock: pick 0 → 1 in 70 ms, back to 0 in 90 (§2.7). */
+function knockAt(t: number, at: number): number {
+  const u = t - at;
+  if (u <= 0 || u >= 160) return 0;
+  return u < 70 ? u / 70 : 1 - (u - 70) / 90;
 }
 
 /** Eyes closed for a moment: 0…1 of a blink at t inside [a, a + len]. */
@@ -368,5 +474,178 @@ export function makeAct(name: ActName, input: ActInput): Act {
         eyeScale: t < 240 ? 0.15 + 0.85 * smooth(t / 240) : 1 + (reduce ? 0.1 : 0.25) * bump(t, 240, 520),
         gaze: t < 520 ? undefined : look(t - 520, 140, 118, rest, person),
       }));
+    /* ---------------- Э3 ---------------- */
+    case "lean": {
+      // Toward what was clicked: eyes and a tilt of 0.28 in 160 ms, then back (§2.7). RM: eyes only.
+      const ms = 440 * vary;
+      const s = toward(to, face);
+      return act(ms, (t) => ({
+        gaze: look(t, ms - 120 - 240, 240, rest, to),
+        head: reduce ? undefined : 0.28 * s * (t < 160 ? smooth(t / 160) : 1 - smooth((t - 160) / (ms - 160))),
+      }));
+    }
+    case "knock": {
+      // Faces the anchor (a turn if it is behind) and knocks once. RM: a look and a blink.
+      const behind = to.x * face < -0.05;
+      return act(400, (t) => ({
+        gaze: look(t, 180, 100, rest, to),
+        pick: reduce ? undefined : knockAt(t, 140),
+        flip: !reduce && behind && t < 340,
+        eyeScale: reduce ? 1 - 0.9 * blinkAt(t, 160, 150) : undefined,
+      }));
+    }
+    case "hug": {
+      // ^ ^ toward the heart with a squeeze, then a look at Favorites in the rail (§6.2).
+      const s = toward(to, face);
+      return act(1200, (t) => ({
+        mood: t < 560 ? "pleased" : undefined,
+        squash: reduce ? undefined : -0.12 * bump(t, 0, 560),
+        head: reduce ? undefined : 0.2 * s * bump(t, 0, 560),
+        gaze: look2(t, rest, to, input.target2 ?? to, 560, 480, 160),
+      }));
+    }
+    case "sniff": {
+      // Nothing found: three small dips with the eyes down at the field.
+      const down = { x: to.x * 0.5, y: 0.9 };
+      return act(600, (t) => ({
+        gaze: look(t, 340, 140, rest, down),
+        head: reduce ? undefined : 0.12 * Math.abs(Math.sin((t / 600) * Math.PI * 3)) * bump(t, 0, 600),
+      }));
+    }
+    case "shrugBig":
+      // Eyebrows up twice with the head side to side (2 × 180). RM: the eyes go up and come back.
+      return act(360, (t) => ({
+        eyeLift: 1.5 * (bump(t, 0, 180) + bump(t, 180, 360)),
+        head: reduce ? undefined : 0.15 * (bump(t, 0, 180) - bump(t, 180, 360)),
+        gaze: reduce ? look(t, 120, 120, rest, person) : undefined,
+      }));
+    case "tilt": {
+      // Curious, head a little to the side, eyes on the chip that gave nothing.
+      const s = toward(to, face);
+      return act(1400, (t) => ({
+        mood: t < 1240 ? "curious" : undefined,
+        head: reduce ? undefined : 0.45 * s * smooth(t / 200) * (1 - smooth((t - 1150) / 250)),
+        gaze: look(t, 1080, 200, rest, to),
+      }));
+    }
+    case "dizzy": {
+      // Poke 5: the pupils go round twice (orbit 1.6) and he sways. RM: the circles only.
+      return act(1100, (t) => {
+        const env = smooth(t / 150) * (1 - smooth((t - 950) / 150));
+        return {
+          pupil: (t / 1100) * Math.PI * 4,
+          pupilOrbit: 1.6 * env,
+          head: reduce ? undefined : 0.4 * Math.sin((t / 1100) * Math.PI * 4) * env,
+        };
+      });
+    }
+    case "enough": {
+      // Poke 7, «ну хватит»: leans back, a work squint, no anger.
+      return act(700, (t) => {
+        const k = smooth(t / 140) * (1 - smooth((t - 520) / 180));
+        return { mood: t < 560 ? "work" : undefined, head: reduce ? undefined : -0.4 * k };
+      });
+    }
+    case "poke4":
+      // Poke 4: a lower hop, 6 px at most.
+      return reduce ? mood("pleased", 480) : act(480, () => ({ mood: "happy", hopMax: 6 }));
+    case "blink1":
+      return act(150, (t) => ({ eyeScale: 1 - 0.9 * blinkAt(t, 0, 140) }));
+    case "blinkLong":
+      // A long blink (the language changed): 240 ms.
+      return act(240, (t) => ({ eyeScale: 1 - 0.92 * blinkAt(t, 0, 230) }));
+    case "stretch":
+      // Morning (§2.3): squash −0.12 → +0.16 → 0 over 900 ms and a double blink. RM: the blinks.
+      return act(900, (t) => ({
+        squash: reduce
+          ? undefined
+          : t < 250
+            ? -0.12 * smooth(t / 250)
+            : t < 550
+              ? -0.12 + 0.28 * smooth((t - 250) / 300)
+              : 0.16 * (1 - smooth((t - 550) / 300)),
+        eyeScale: 1 - 0.9 * Math.max(blinkAt(t, 560, 120), blinkAt(t, 720, 120)),
+      }));
+    case "lookBack": {
+      // Back / Forward (§7.2): 300 ms facing that way, then «I was here» at the title and a blink.
+      const behind = to.x * face < -0.05;
+      return act(1100, (t) => ({
+        flip: !reduce && behind && t < 300,
+        gaze: look2(t, rest, to, input.target2 ?? person, 300, 560, 240),
+        eyeScale: 1 - 0.9 * blinkAt(t, 760, 150),
+      }));
+    }
+    case "here":
+      // The same URL clicked: «уже здесь», a look at the title and a blink.
+      return act(900, (t) => ({ gaze: look(t, 480, 300, rest, to), eyeScale: 1 - 0.9 * blinkAt(t, 600, 150) }));
+    case "aside": {
+      // Ctrl/Cmd/middle click: a look at the link, then up toward the browser's tabs.
+      const up = { x: to.x * 0.3, y: -1 };
+      return act(1000, (t) => ({ gaze: look2(t, rest, to, up, 420, 400, 180) }));
+    }
+    case "arrive": {
+      // §7.1: the eyes see the old title off upward (0.4 s), a nod at the new one (pick 0.6, 220 ms).
+      const title = to;
+      const next = input.target2 ?? to;
+      const up = { x: title.x, y: -1 };
+      return act(760, (t) => ({
+        gaze:
+          t < SACCADE
+            ? mix(rest, title, smooth(t / SACCADE))
+            : t < 400
+              ? mix(title, up, smooth((t - SACCADE) / (400 - SACCADE)))
+              : t < 440
+                ? mix(up, next, smooth((t - 400) / 40))
+                : t < 620
+                  ? next
+                  : mix(next, rest, smooth((t - 620) / 140)),
+        pick: reduce ? undefined : 0.6 * bump(t, 400, 620),
+        eyeScale: reduce ? 1 - 0.9 * blinkAt(t, 430, 150) : undefined,
+      }));
+    }
+    case "sidestep": {
+      // HopNav: a little step toward the neighbour and back, the eyes that way.
+      const d = to.x >= 0 ? 1 : -1;
+      return act(520, (t) => ({
+        shift: reduce ? undefined : 6 * d * bump(t, 0, 520),
+        squash: reduce ? undefined : -0.04 * (bump(t, 0, 130) + bump(t, 390, 520)),
+        gaze: look(t, 200, 200, rest, { x: d * 0.6, y: 0 }),
+      }));
+    }
+    case "railJolt": {
+      // The rail folds (§3.5): a start, eyes on the rail with the head after it, then on the button.
+      const s = toward(to, face);
+      return act(900, (t) => ({
+        eyeScale: 1 + 0.2 * bump(t, 0, 140),
+        squash: reduce ? undefined : 0.06 * bump(t, 0, 140),
+        head: reduce ? undefined : 0.15 * s * bump(t, 140, 700),
+        gaze: look2(t, rest, to, input.target2 ?? to, 600, 180, 120),
+      }));
+    }
+    case "readList": {
+      // Hits came: the eyes read the list from the top down.
+      const end = input.target2 ?? { x: to.x, y: clamp(to.y + 0.6, -1, 1) };
+      return act(1000, (t) => ({
+        gaze: t < SACCADE ? mix(rest, to, smooth(t / SACCADE)) : t < 800 ? mix(to, end, smooth((t - SACCADE) / (800 - SACCADE))) : mix(end, rest, smooth((t - 800) / 200)),
+      }));
+    }
+    case "runList": {
+      // A new sort: the eyes run the list in 500 ms (down for ↓, up for ↑).
+      const end = input.target2 ?? { x: to.x, y: clamp(to.y + 0.6, -1, 1) };
+      return act(660, (t) => ({
+        gaze: t < SACCADE ? mix(rest, to, smooth(t / SACCADE)) : t < 540 ? mix(to, end, smooth((t - SACCADE) / 500)) : mix(end, rest, smooth((t - 540) / 120)),
+      }));
+    }
+    case "tear":
+      // The page did not come in 15 s: one tear, and he stays (§7.1). RM: the sad face.
+      return act(1200, () => ({ mood: "sad" }));
+    case "tabLook":
+      // A tab: a look at it, then down into its panel.
+      return act(1100, (t) => ({ gaze: look2(t, rest, to, input.target2 ?? to, 420, 520, 160) }));
   }
+}
+
+/** +1 leans toward the facing, −1 back: toward a screen-space gaze. */
+function toward(to: Vec, face: 1 | -1): 1 | -1 {
+  return to.x * face >= 0 ? 1 : -1;
 }
