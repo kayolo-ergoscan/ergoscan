@@ -43,7 +43,6 @@ export type KayoloEvent =
   /** E13: fees spike (p50 against its hour) and calm down again. */
   | { k: "chain:fee"; state: "spike" | "calm"; p50: number; base: number }
   /** E15: a sealed block carried oracle txs. */
-  | { k: "chain:oracle"; txIds: string[]; height: number }
   /** E21: an epoch of 1024 blocks began. */
   | { k: "chain:epoch"; height: number }
   /**

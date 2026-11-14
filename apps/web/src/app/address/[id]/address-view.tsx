@@ -52,7 +52,9 @@ import { suggestNameUrl } from "@/lib/address-book";
 import type { AddressRegistryName } from "@/lib/list-snapshots";
 import { useFavorite } from "@/lib/favorites";
 import { say } from "@/lib/kayolo/events";
-import { chainAwait, chainNow } from "@/lib/kayolo/chain-sense";
+import { chainAwait, chainListen } from "@/lib/kayolo/chain-sense";
+import { pendingNod, rentNoteParts } from "@/lib/kayolo/page-data";
+import { ONCE_REREAD_MS, RENT_REREAD_GAP_MS, REREAD_JITTER_MS } from "@/lib/kayolo/thresholds";
 
 /** Ergo: ≈ 720 blocks a day (2 min). The rent line's danger tone starts at 7 days. */
 const BLOCKS_PER_DAY = 720;
@@ -212,6 +214,14 @@ function isHeaderOnly(d: AddrData | null): boolean {
 function addrFailCopy(err: string, t: (k: string) => string): string {
   if (err === "stale" || err === "503") return t("address.stale");
   return t("address.err");
+}
+
+/** E23's line: «сейчас», minutes or hours below a day (1 block is not «1 д»), else whole days. */
+function rentNoteText(blocks: number, t: (k: string) => string, locale: string): string {
+  const p = rentNoteParts(blocks);
+  if (p.unit === "now") return t("address.rentNoteNow");
+  const key = p.unit === "min" ? "address.rentNoteMin" : p.unit === "h" ? "address.rentNoteH" : "address.rentNote";
+  return t(key).replace(p.unit === "d" ? "{d}" : "{n}", formatInt(p.n, locale));
 }
 
 /** Tape is paint-ready only when the same GET already has activity (AdaStat one-shot). */
@@ -1064,28 +1074,91 @@ export function AddressView({
     if (!tileLanded || rentBlocks == null || !rentTone) return;
     say({ k: "page:rent", address, tone: rentTone, blocks: rentBlocks });
   }, [tileLanded, rentBlocks, rentTone, address]);
-  // A pending tx on this address: eyes on it; it went into a block: a nod (by the page's own list).
+  // A pending tx on this address: eyes on it. The list emptied and seals carried every tx that left
+  // it: a nod «в блок» (by the page's own list). A tx evicted or double-spent (a miner's own claim
+  // took the box) leaves the list too — then he says nothing (§12.23).
   const pendingIds = (data?.mempoolTxs ?? []).map((t) => t.id).join(",");
   const pendingCount = data ? (data.mempoolTxs?.length ?? 0) : null;
-  const pendSeen = useRef<{ address: string; n: number } | null>(null);
+  const pendSeen = useRef<{ address: string; ids: readonly string[] } | null>(null);
+  /** This address's pending txs that a seal carried → that seal's height. */
+  const sealedPending = useRef<{ address: string; ids: Map<string, number> }>({ address, ids: new Map() });
   const favOn = fav.on;
   useEffect(() => {
     if (pendingCount == null) return;
-    const prev = pendSeen.current?.address === address ? pendSeen.current.n : null;
-    pendSeen.current = { address, n: pendingCount };
-    if (pendingCount > 0 && (prev == null || pendingCount > prev)) {
-      say({ k: "page:addr-pending", address, count: pendingCount, ...(favOn ? { fav: true } : {}) });
-    } else if (pendingCount === 0 && prev != null && prev > 0) {
-      const h = chainNow().height;
-      say({ k: "page:addr-pending", address, count: 0, ...(favOn ? { fav: true } : {}), ...(h != null ? { height: h } : {}) });
+    const prev = pendSeen.current?.address === address ? pendSeen.current.ids : null;
+    const ids = pendingIds ? pendingIds.split(",") : [];
+    pendSeen.current = { address, ids };
+    if (ids.length > 0 && (prev == null || ids.length > prev.length)) {
+      say({ k: "page:addr-pending", address, count: ids.length, ...(favOn ? { fav: true } : {}) });
+    } else if (prev != null) {
+      const sealed = sealedPending.current.address === address ? sealedPending.current.ids : new Map<string, number>();
+      const nod = pendingNod(prev, ids, sealed);
+      if (nod) say({ k: "page:addr-pending", address, count: 0, ...(favOn ? { fav: true } : {}), height: nod.height });
     }
-  }, [pendingCount, address, favOn]);
+  }, [pendingIds, pendingCount, address, favOn]);
   useEffect(() => {
     if (!pendingIds) return;
     const ids = new Set(pendingIds.split(","));
-    // The seal that takes this address's pending tx: its E1 waits for the nod (§2.8).
-    return chainAwait(({ txIds }) => !!txIds?.some((id) => ids.has(id)));
-  }, [pendingIds]);
+    if (sealedPending.current.address !== address) sealedPending.current = { address, ids: new Map() };
+    const sealed = sealedPending.current.ids;
+    // The seal that takes the last of this address's pending txs: its E1 waits for the nod (§2.8). A
+    // pure test; the listener notes what each seal carried (any tab; a fork takes back what the
+    // replaced block took).
+    const offHold = chainAwait(({ txIds }) => !!txIds?.some((id) => ids.has(id)) && [...ids].every((id) => txIds.includes(id) || sealed.has(id)));
+    const off = chainListen((n) => {
+      if (n.k !== "seal") return;
+      if (n.replaced) for (const [id, h] of sealed) if (h === n.height) sealed.delete(id);
+      for (const id of n.txIds ?? []) if (ids.has(id)) sealed.set(id, n.height);
+      while (sealed.size > 200) sealed.delete(sealed.keys().next().value as string);
+    });
+    return () => {
+      offHold();
+      off();
+    };
+  }, [pendingIds, address]);
+  // E23 after a collection: «рента / сейчас» holds until the box is spent. A seal that spent rent
+  // boxes (the gateway counts them, it names no address) re-reads the due line at 3 s and 8 s — only
+  // while «now» shows, ≤ once a minute, never on a hidden tab (showing it then re-reads once).
+  const rentNow = rentBlocks != null && rentBlocks <= 0;
+  useEffect(() => {
+    if (!rentNow) return;
+    let dead = false;
+    let at = -Infinity;
+    let missed = false;
+    let timers: number[] = [];
+    const read = () => {
+      if (dead) return;
+      if (document.visibilityState !== "visible") {
+        missed = true;
+        return;
+      }
+      void lookupScoutRent(address, { fresh: true }).then((n) => {
+        if (!dead) setRentBlocks(n);
+      });
+    };
+    const off = chainListen((n) => {
+      if (n.k !== "seal" || !n.rentBoxes || n.replaced || performance.now() - at < RENT_REREAD_GAP_MS) return;
+      if (document.visibilityState !== "visible") {
+        missed = true;
+        return;
+      }
+      at = performance.now();
+      for (const t of timers) window.clearTimeout(t);
+      timers = [ONCE_REREAD_MS, ONCE_REREAD_MS + 5_000].map((ms) => window.setTimeout(read, ms + Math.random() * REREAD_JITTER_MS));
+    });
+    const onVis = () => {
+      if (!missed || document.visibilityState !== "visible") return;
+      missed = false;
+      read();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      dead = true;
+      off();
+      for (const t of timers) window.clearTimeout(t);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [rentNow, address]);
   const tokenPage = tokenRows.slice(tokenOffset, tokenOffset + TOKEN_PAGE);
   const tokenUsd = useMemo(() => {
     let sum = 0;
@@ -1293,9 +1366,7 @@ export function AddressView({
                     className={clsx("addr-rent-note", rentBlocks <= RENT_DANGER_BLOCKS && "is-danger")}
                     data-kayolo-note="rent"
                   >
-                    {rentBlocks <= 0
-                      ? t("address.rentNoteNow")
-                      : t("address.rentNote").replace("{d}", formatInt(Math.max(1, Math.ceil(rentBlocks / BLOCKS_PER_DAY)), locale))}
+                    {rentNoteText(rentBlocks, t, locale)}
                   </p>
                 ) : null}
                 {unconfirmed !== 0n && (

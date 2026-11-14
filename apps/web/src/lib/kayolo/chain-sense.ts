@@ -7,14 +7,19 @@
  *   gateway saw the block (the seal's `seenAt`, shifted by the server's clock from snapshot `ts`;
  *   without it, when this browser got it), never from the miner's header time (§4.8); right after a
  *   connect the stream's `eta.lastBlockTs` (also `seenAt`) stands in;
- * - E10 a tx of the page's topic; E11 a pool surge; E12 a drain after a seal; E13 a fee spike (p50
- *   against its own hour, never p90); E14 the price (neutral; the shell's poll feeds it); E15 oracle
- *   txs in a seal; E16–E18 the live feed and the browser being offline; E19 the site behind (index
- *   lag, node headers, peers); E21 an epoch; E22 a mock stream silences everything.
+ * - E10 a tx of the page's protocol (the ball's `platform`; its shape when it has none); E11 a pool
+ *   surge; E12 a drain after a seal; E13 a fee spike (p50 against its own hour, never p90); E14 the
+ *   price (neutral; the shell's poll feeds it); E15 the oracle txs a seal carried (the oracle page
+ *   decides by their action and tokens); E16–E18 the live feed and the browser being offline; E19 the
+ *   site behind (index lag, node headers, peers); E21 an epoch; E22 a mock stream silences everything.
  *
  * block.sealed is the trigger; chain.tip stands in when no seal came within 3 s. The first height
  * after (re)connecting is only a baseline. A hidden tab counts quietly. No requests, no React state:
  * the stream PageSync already reads is fed in here, plus the two polls the shell already makes.
+ *
+ * Pages hear every seal (`chainListen`): a new block, a late seal (after its tip stood in), a block
+ * that replaced the one shown at its height (a fork: no Kayolo reaction, only the pages re-check),
+ * and a tx leaving the pool. Their E1 test (`chainAwait`) is a pure question asked of every page.
  *
  * It also keeps what his status line needs: the height, when this browser got it, the mempool
  * count, the average, the wait, the feed and whether the site is behind.
@@ -43,11 +48,33 @@ export type ChainNow = {
   mock: boolean;
 };
 
+/** An oracle tx a seal carried (E15): what the ball said of it in the pool. */
+export type OracleTx = { id: string; action: string | null; tokens: readonly string[] };
+
+/** A block as the pages hear it. */
+export type Seal = {
+  height: number;
+  /** null when a tip stood in for the block. */
+  blockId: string | null;
+  /** null: the block was not read (a partial seal, or a tip without its seal) — any tx may be in it. */
+  txIds: readonly string[] | null;
+  /** The oracle txs this block took from the pool (E15). */
+  oracle: readonly OracleTx[];
+  /** Rent boxes the block spent (the gateway's count, no addresses). */
+  rentBoxes?: number;
+  /** A fork: this block replaced `replaces`, shown at this height before. The pages re-check; Kayolo says nothing. */
+  replaced?: boolean;
+  replaces?: string;
+};
+
+/** What a page hears: a seal (see Seal) or a tx that left the pool (sealed, evicted or double-spent). */
+export type ChainNote = ({ k: "seal" } & Seal) | { k: "gone"; id: string };
+
 /**
- * A page's test for a block (`oracle`: this block will say chain:oracle, E15): true when the page
- * will say a page:* about it, so its E1 waits for that (§2.8).
+ * A page's test for a new block: true when the page will say a page:* about it, so its E1 waits for
+ * that (§2.8). Pure: every page is asked, and none acts here — acting is `chainListen`'s.
  */
-export type Awaiter = (s: { height: number; txIds: readonly string[] | null; oracle?: boolean }) => boolean;
+export type Awaiter = (s: Seal) => boolean;
 
 /**
  * His status line in the Tip (§4.8), the first that fits: the feed lost ≥ 2 min → the feed down
@@ -108,15 +135,26 @@ export function nextWaitEdge(elapsed: number, avg: number): number {
   return due;
 }
 
-/** E10: the categories a page is about (§8.2). */
+/**
+ * E10: the protocols a page is about (§8.2), as the live ball names them in `platform` (its
+ * `category` is the tx's shape: transfer, contract…). No page is about a shape: there is no NFT shape.
+ */
 export function pageTopics(path: string): readonly string[] {
   const p = path.split("?")[0];
-  if (/^\/rosen(\/|$)/.test(p)) return ["bridge"];
-  if (/^\/defi\/(spectrum|lithos|pool)(\/|$)/.test(p)) return ["defi"];
-  if (/^\/defi\/stable(\/|$)/.test(p)) return ["stable"];
+  if (/^\/rosen(\/|$)/.test(p)) return ["rosen"];
+  if (/^\/defi\/spectrum(\/|$)/.test(p)) return ["spectrum"];
+  if (/^\/defi\/lithos(\/|$)/.test(p)) return ["lithos"];
+  if (/^\/defi\/pool(\/|$)/.test(p)) return ["spectrum", "lithos"];
+  if (/^\/defi\/stable(\/|$)/.test(p)) return ["sigmausd"];
   if (/^\/oracles(\/|$)/.test(p)) return ["oracle"];
-  if (/^\/nfts(\/|$)/.test(p)) return ["nft"];
   return [];
+}
+
+/** A ball's topic key (E10): its protocol, else its shape. The old recording's `category: "oracle"` is a protocol too. */
+export function ballTopic(b: { platform?: unknown; category?: unknown } | null | undefined): string {
+  const pl = typeof b?.platform === "string" && b.platform ? b.platform : null;
+  if (pl) return pl;
+  return typeof b?.category === "string" && b.category ? b.category : "unknown";
 }
 
 export function median(xs: readonly number[]): number {
@@ -166,6 +204,24 @@ export function createChainSense(deps: ChainDeps) {
     mock: false,
   };
   const awaiters = new Set<Awaiter>();
+  const listeners = new Set<(n: ChainNote) => void>();
+  /** Every page hears every seal and every tx that left the pool, whatever the tab; a mock stream is not the chain. */
+  const notify = (n: ChainNote) => {
+    if (mock) return;
+    for (const fn of [...listeners]) {
+      try {
+        fn(n);
+      } catch {
+        /* a page's listener failed: the others still hear */
+      }
+    }
+  };
+  /** The block ids seen at recent heights (a fork shows as another id at one of them). */
+  const blocks = new Map<number, string>();
+  const remember = (h: number, id: string) => {
+    blocks.set(h, id);
+    for (const k of blocks.keys()) if (k < h - K.BLOCK_IDS_KEPT || k > h + K.BLOCK_IDS_KEPT) blocks.delete(k);
+  };
   /** Spoken only when the tab is seen and the stream is real. */
   const speak = (ev: KayoloEvent) => {
     if (mock || !KAYOLO_CHAIN) return;
@@ -204,23 +260,42 @@ export function createChainSense(deps: ChainDeps) {
     }
   };
 
-  const holdFor = (height: number, txIds: readonly string[] | null, oracle: boolean) => {
-    for (const fn of awaiters) {
+  /** Every page is asked (a pure test each): one page's yes never hides the block from another. */
+  const holdFor = (s: Seal) => {
+    let hold = false;
+    for (const fn of [...awaiters]) {
       try {
-        if (fn({ height, txIds, ...(oracle ? { oracle } : {}) })) return true;
+        if (fn(s)) hold = true;
       } catch {
         /* a page's test failed: the block reacts as usual */
       }
     }
-    return false;
+    return hold;
   };
 
-  /* ---- E15: oracle txs waiting in the pool ---- */
-  const oracleIds = new Set<string>();
-  let oracleAt = -Infinity;
-  const noteOracle = (id: string) => {
-    oracleIds.add(id);
-    if (oracleIds.size > 200) oracleIds.delete(oracleIds.values().next().value as string);
+  /* ---- E15: oracle txs waiting in the pool (the ball's platform "oracle", its action and tokens) ---- */
+  const oracleTx = new Map<string, { action: string | null; tokens: readonly string[] }>();
+  const noteOracle = (id: string, action: string | null, tokens: readonly string[]) => {
+    oracleTx.set(id, { action, tokens });
+    if (oracleTx.size > 200) oracleTx.delete(oracleTx.keys().next().value as string);
+  };
+  const noteBall = (b: Record<string, unknown> | null | undefined, id: string) => {
+    if (!id || !b) return;
+    if (b.platform !== "oracle" && !(b.platform == null && b.category === "oracle")) return;
+    const tokens = Array.isArray(b.tokenIds) ? (b.tokenIds as unknown[]).filter((x): x is string => typeof x === "string") : [];
+    noteOracle(id, typeof b.action === "string" ? b.action : null, tokens);
+  };
+  /** The oracle txs of a block; the pool forgets them now. */
+  const sealedOracle = (txIds: readonly string[] | null): OracleTx[] => {
+    if (!txIds?.length || !oracleTx.size) return [];
+    const out: OracleTx[] = [];
+    for (const id of txIds) {
+      const o = oracleTx.get(id);
+      if (!o) continue;
+      oracleTx.delete(id);
+      out.push({ id, ...o });
+    }
+    return out;
   };
 
   /* ---- E12 ---- */
@@ -239,8 +314,9 @@ export function createChainSense(deps: ChainDeps) {
     }
   };
 
-  const tell = (height: number, txCount: number | null, size: number | null, txIds: readonly string[] | null) => {
-    if (told != null && height <= told) return;
+  /** Kayolo's reaction to a new height (false: an old one, nothing said). */
+  const tell = (height: number, txCount: number | null, size: number | null, seal: Seal) => {
+    if (told != null && height <= told) return false;
     const from = told;
     told = height;
     if (tipWait && tipWait.height <= height) {
@@ -254,15 +330,8 @@ export function createChainSense(deps: ChainDeps) {
       speak({ k: "chain:tip-wait", level: 0, sinceMs: 0 });
     }
     armWait();
-    // The oracle txs of this block (E15), whatever the tab: the pool forgets them now.
-    let oracle: string[] = [];
-    if (txIds?.length && oracleIds.size) {
-      oracle = txIds.filter((id) => oracleIds.has(id));
-      for (const id of oracle) oracleIds.delete(id);
-    }
-    if (mock || !KAYOLO_CHAIN || !visible()) return;
-    const oracleSaid = oracle.length > 0 && deps.now() - oracleAt >= K.ORACLE_GAP_MS;
-    const hold = holdFor(height, txIds, oracleSaid);
+    if (mock || !KAYOLO_CHAIN || !visible()) return true;
+    const hold = holdFor(seal);
     if (from != null && height - from >= K.CATCHUP_MIN) {
       say({ k: "chain:catchup", from, to: height, ...(hold ? { hold } : {}) });
     } else {
@@ -272,10 +341,7 @@ export function createChainSense(deps: ChainDeps) {
     if (from != null && Math.floor(height / K.EPOCH_LEN) > Math.floor(from / K.EPOCH_LEN)) {
       say({ k: "chain:epoch", height: Math.floor(height / K.EPOCH_LEN) * K.EPOCH_LEN });
     }
-    if (oracleSaid) {
-      oracleAt = deps.now();
-      say({ k: "chain:oracle", txIds: oracle, height });
-    }
+    return true;
   };
 
   /* ---- E16–E18 ---- */
@@ -306,9 +372,17 @@ export function createChainSense(deps: ChainDeps) {
 
   const onHeight = (
     h: number,
-    sealed: { txCount: number | null; size: number | null; txIds: readonly string[] | null; seenAt: number | null } | null
+    sealed: {
+      txCount: number | null;
+      size: number | null;
+      txIds: readonly string[] | null;
+      seenAt: number | null;
+      blockId: string | null;
+      rentBoxes: number | null;
+    } | null
   ) => {
     if (!Number.isInteger(h) || h <= 0) return;
+    if (sealed?.blockId != null && blocks.get(h) === sealed.blockId) return; // this block again
     if (top == null) {
       // The first message after connecting: a baseline, unless it is a seal (a real new block).
       top = h;
@@ -330,10 +404,25 @@ export function createChainSense(deps: ChainDeps) {
     learn(h, sealed?.seenAt != null ? fromGateway(sealed.seenAt) : deps.now());
     if (sealed) {
       top = Math.max(top, h);
-      if (now.mempool != null && now.mempool >= K.DRAIN_MIN && deps.now() >= quietUntil) {
-        drain = { height: h, prev: now.mempool, until: deps.now() + K.DRAIN_MS };
+      const fresh = told == null || h > told;
+      const was = blocks.get(h);
+      if (sealed.blockId != null) remember(h, sealed.blockId);
+      const seal: Seal = {
+        height: h,
+        blockId: sealed.blockId,
+        txIds: sealed.txIds,
+        oracle: sealedOracle(sealed.txIds),
+        ...(sealed.rentBoxes ? { rentBoxes: sealed.rentBoxes } : {}),
+        // Another block where one was shown: a fork. A seal for a height a tip stood in for is only late.
+        ...(!fresh && was != null && sealed.blockId != null ? { replaced: true, replaces: was } : {}),
+      };
+      if (fresh) {
+        if (now.mempool != null && now.mempool >= K.DRAIN_MIN && deps.now() >= quietUntil) {
+          drain = { height: h, prev: now.mempool, until: deps.now() + K.DRAIN_MS };
+        }
+        tell(h, sealed.txCount, sealed.size, seal);
       }
-      tell(h, sealed.txCount, sealed.size, sealed.txIds);
+      notify({ k: "seal", ...seal });
       return;
     }
     if (h <= top) return;
@@ -346,7 +435,8 @@ export function createChainSense(deps: ChainDeps) {
       height,
       timer: setTimer(() => {
         if (tipWait?.height === height) tipWait = null;
-        tell(height, null, null, null);
+        const seal: Seal = { height, blockId: null, txIds: null, oracle: [] };
+        if (tell(height, null, null, seal)) notify({ k: "seal", ...seal });
       }, SEAL_WAIT_MS),
     };
   };
@@ -356,25 +446,26 @@ export function createChainSense(deps: ChainDeps) {
   const seenCat = new Map<string, number>();
   let seenAll = 0;
   let topicAt = -Infinity;
-  const seeTx = (id: string, category: string) => {
+  /** `key`: the ball's topic (ballTopic: its protocol, else its shape). */
+  const seeTx = (id: string, key: string) => {
     if (!id || seenIds.has(id)) return false;
     if (seenIds.size > 5000) seenIds.clear();
     seenIds.add(id);
-    seenCat.set(category, (seenCat.get(category) ?? 0) + 1);
+    seenCat.set(key, (seenCat.get(key) ?? 0) + 1);
     seenAll += 1;
     return true;
   };
-  const topic = (id: string, category: string) => {
+  const topic = (id: string, key: string) => {
     if (!visible() || deps.now() - topicAt < K.TOPIC_GAP_MS) return;
     const path = deps.path?.() ?? "";
     let rare = false;
-    if (!pageTopics(path).includes(category)) {
+    if (!pageTopics(path).includes(key)) {
       if (path.split("?")[0] !== "/mempool" || seenAll < K.TOPIC_MIN_SEEN) return;
-      if ((seenCat.get(category) ?? 0) / seenAll >= K.TOPIC_RARE) return;
+      if ((seenCat.get(key) ?? 0) / seenAll >= K.TOPIC_RARE) return;
       rare = true;
     }
     topicAt = deps.now();
-    speak({ k: "chain:tx-topic", category, txId: id, rare });
+    speak({ k: "chain:tx-topic", category: key, txId: id, rare });
   };
 
   /* ---- E11 ---- */
@@ -486,13 +577,24 @@ export function createChainSense(deps: ChainDeps) {
       }
       if (m.type === "chain.tip") return onHeight(Number(data?.height), null);
       if (m.type === "block.sealed") {
-        const ids = Array.isArray(data?.txIds) ? (data.txIds as unknown[]).filter((x): x is string => typeof x === "string") : null;
-        // A partial seal (the gateway could not read the block) has no count: not an empty block.
-        const count = data?.partial === true ? null : Number.isFinite(Number(data?.txCount)) ? Number(data?.txCount) : (ids?.length ?? 0);
+        // A partial seal (the gateway could not read the block) carries `txIds: []`: its txs are
+        // unknown (null), never «none of yours»; and it has no count: not an empty block.
+        const partial = data?.partial === true;
+        const ids = partial ? null : Array.isArray(data?.txIds) ? (data.txIds as unknown[]).filter((x): x is string => typeof x === "string") : null;
+        const count = partial ? null : Number.isFinite(Number(data?.txCount)) ? Number(data?.txCount) : (ids?.length ?? 0);
         const size = Number.isFinite(Number(data?.size)) ? Number(data?.size) : null;
         // When the gateway saw it (its clock): the waits count from there, not from the header time.
         const seen = Number(data?.seenAt);
-        return onHeight(Number(data?.height), { txCount: count, size, txIds: ids, seenAt: Number.isFinite(seen) && seen > 1e12 ? seen : null });
+        const blockId = typeof data?.blockId === "string" && data.blockId ? data.blockId : null;
+        const rent = Number(data?.rentBoxes);
+        return onHeight(Number(data?.height), {
+          txCount: count,
+          size,
+          txIds: ids,
+          seenAt: Number.isFinite(seen) && seen > 1e12 ? seen : null,
+          blockId,
+          rentBoxes: Number.isFinite(rent) && rent > 0 ? rent : null,
+        });
       }
       if (m.type === "mempool.snapshot") {
         const ts = Number(data?.ts);
@@ -500,12 +602,11 @@ export function createChainSense(deps: ChainDeps) {
         const balls = Array.isArray(data?.balls) ? (data.balls as Record<string, unknown>[]) : null;
         for (const b of balls ?? []) {
           const id = String(b?.txId ?? b?.id ?? "");
-          const cat = typeof b?.category === "string" ? b.category : "unknown";
-          seeTx(id, cat);
-          if (cat === "oracle" && id) noteOracle(id);
+          seeTx(id, ballTopic(b));
+          noteBall(b, id);
         }
-        // The recorded stream keeps the oracle ids only.
-        if (Array.isArray(data?.oracle)) for (const id of data.oracle as unknown[]) if (typeof id === "string") noteOracle(id);
+        // The first recorded stream keeps the oracle ids only (no action, no tokens).
+        if (Array.isArray(data?.oracle)) for (const id of data.oracle as unknown[]) if (typeof id === "string") noteOracle(id, null, []);
         const c = Number(data?.count);
         if (Number.isFinite(c)) now.mempool = c;
         else if (balls) now.mempool = balls.length;
@@ -516,14 +617,16 @@ export function createChainSense(deps: ChainDeps) {
       if (m.type === "mempool.add") {
         now.mempool = (now.mempool ?? 0) + 1;
         const id = String(data?.txId ?? data?.id ?? "");
-        const cat = typeof data?.category === "string" ? data.category : "unknown";
-        if (cat === "oracle" && id) noteOracle(id);
-        if (seeTx(id, cat)) topic(id, cat);
+        const key = ballTopic(data);
+        noteBall(data, id);
+        if (seeTx(id, key)) topic(id, key);
         return;
       }
       if (m.type === "mempool.remove") {
         now.mempool = Math.max(0, (now.mempool ?? 0) - 1);
         checkDrain();
+        const id = typeof data?.id === "string" ? data.id : typeof data?.txId === "string" ? data.txId : "";
+        if (id) notify({ k: "gone", id });
         return;
       }
       if (m.type === "fees.histogram") {
@@ -678,6 +781,11 @@ export function createChainSense(deps: ChainDeps) {
       awaiters.add(fn);
       return () => awaiters.delete(fn);
     },
+    /** A page hears seals (new, late, replacing) and txs leaving the pool, on any tab; it acts on its own. */
+    listen(fn: (n: ChainNote) => void): () => void {
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    },
     state(): ChainNow {
       return { ...now, behind: { ...now.behind } };
     },
@@ -739,6 +847,16 @@ export function chainAwait(fn: Awaiter): () => void {
   if (typeof window === "undefined") return () => {};
   try {
     return pageSense().await(fn);
+  } catch {
+    return () => {};
+  }
+}
+
+/** A page hears every seal and every tx leaving the pool (see ChainNote); it decides itself what to re-read. */
+export function chainListen(fn: (n: ChainNote) => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  try {
+    return pageSense().listen(fn);
   } catch {
     return () => {};
   }

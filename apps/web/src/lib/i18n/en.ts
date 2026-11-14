@@ -1728,6 +1728,8 @@ export const en: Record<string, string> = {
   "address.unconfirmed": "Unconfirmed",
   "address.rentNote": "rent / {d} d",
   "address.rentNoteNow": "rent / now",
+  "address.rentNoteMin": "rent / {n} min",
+  "address.rentNoteH": "rent / {n} h",
   "address.txs": "Transactions",
   "address.boxes": "Boxes",
   "address.tokens": "Tokens",

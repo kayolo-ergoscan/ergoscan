@@ -13,11 +13,12 @@ export function cachedScoutRent(address: string): number | null | undefined {
  * Gateway reads the oldest unspent box (one index row). 0 = already due.
  * Null = nothing due within 90 days. Not the home tape.
  */
-export async function lookupScoutRent(address: string): Promise<number | null> {
+export async function lookupScoutRent(address: string, opts?: { fresh?: boolean }): Promise<number | null> {
   const key = address.trim();
   if (!key) return null;
   const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < 45_000) return hit.blocks;
+  // `fresh`: a seal spent rent boxes while the line says «now» — the cached answer may be the spent box.
+  if (hit && !opts?.fresh && Date.now() - hit.at < 45_000) return hit.blocks;
   try {
     const r = await fetch(
       `${getGateway()}/v1/addresses/${encodeURIComponent(key)}/rent-due`,

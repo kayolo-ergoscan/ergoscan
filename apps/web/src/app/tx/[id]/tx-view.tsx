@@ -53,9 +53,16 @@ import { useFavoriteOf } from "@/lib/favorites";
 import { readHashTab, setHashTab } from "@/lib/hash-tab";
 import { useKeepFresh, usePageSync } from "@/lib/page-sync";
 import { say } from "@/lib/kayolo/events";
-import { chainAwait } from "@/lib/kayolo/chain-sense";
-import { confirmationsAwait, confirmationsEvent, confirmationsLive } from "@/lib/kayolo/page-data";
-import { REREAD_PAUSES_MS } from "@/lib/kayolo/thresholds";
+import { chainAwait, chainListen } from "@/lib/kayolo/chain-sense";
+import {
+  confirmationsAwait,
+  confirmationsEvent,
+  confirmationsLive,
+  rereads,
+  sealCarries,
+  sealDoubts,
+} from "@/lib/kayolo/page-data";
+import { GONE_REREAD_MS, REREAD_PAUSES_MS } from "@/lib/kayolo/thresholds";
 import { ENTER_MS, SNAPSHOT_FETCH, enteringIds, useEnterIds } from "@/lib/keyed-enter";
 import { paintTxSnapshot } from "@/lib/tx-shape-paint";
 import { parseFullMeaning } from "@/lib/tx-meaning-row";
@@ -277,56 +284,89 @@ export function TxView({
   });
 
   // «Твоя tx в блоке» (Kayolo Э4, §6.4): the seal that carries this tx comes before the index knows
-  // the block, so the page re-reads with pauses 1–2–3–4–5 s (≤ 15 s) until it says «in a block».
-  // Only on that seal: no request on any other block. A tip without its seal re-reads once.
-  const sealRead = useRef(0);
+  // the block, so the page re-reads with pauses 1–2–3–4–5 s (≤ 15 s, each + 0–400 ms) until it says
+  // «in a block». A block not read (a partial seal, a tip without its seal) may carry it: the same
+  // re-reads, but that block's E1 does not wait. No request on any other block, none on a hidden tab
+  // (showing it re-reads once). The test for E1 is pure; the re-reads start from the listener.
+  // The tx left the pool without a seal that carried it (evicted, double-spent): one re-read, and
+  // the «думает» face goes — nothing is coming for it.
+  const [goneId, setGoneId] = useState<string | null>(null);
+  const dropped = goneId === id;
   useEffect(() => {
     if (!unconfirmed || !id) return;
-    let timer = 0;
-    let gen = 0;
-    const run = (k: number, my: number, pauses: readonly number[]) => {
-      timer = window.setTimeout(() => {
-        if (my !== gen) return;
-        loadRef.current(true);
-        if (k + 1 < pauses.length) run(k + 1, my, pauses);
-        else sealRead.current = 0;
-      }, pauses[k]);
-    };
-    const off = chainAwait(({ txIds }) => {
-      if (txIds && !txIds.includes(id)) return false;
-      if (sealRead.current) return txIds != null;
-      sealRead.current = 1;
-      gen += 1;
-      run(0, gen, txIds ? REREAD_PAUSES_MS : [3000]);
-      return txIds != null;
+    const r = rereads(() => loadRef.current(true));
+    let carried = false;
+    const offHold = chainAwait((s) => sealCarries(s, id) === "yes");
+    const off = chainListen((n) => {
+      if (n.k === "gone") {
+        if (n.id !== id || carried) return;
+        setGoneId(id);
+        if (!r.busy()) r.start([GONE_REREAD_MS]);
+        return;
+      }
+      const c = sealCarries(n, id);
+      if (c === "no") return;
+      if (c === "yes") {
+        // The seal that names it: the whole chain, even over a shorter one already running.
+        if (!carried) r.start(REREAD_PAUSES_MS);
+        carried = true;
+        return;
+      }
+      if (!r.busy()) r.start(REREAD_PAUSES_MS);
     });
     return () => {
+      offHold();
       off();
-      gen += 1;
-      window.clearTimeout(timer);
-      sealRead.current = 0;
+      r.stop();
     };
   }, [id, unconfirmed]);
 
-  // The page showed «confirmed» while it was open: his act is by the data, not by the event.
+  // A fork replaced the block this page shows (§12.23): no «в блоке» and no milestone nods for that
+  // block. The page re-reads as after a seal until the index names the block the chain kept, and
+  // once more on each later seal while it still names the replaced one.
+  const [goneBlocks, setGoneBlocks] = useState<readonly string[]>([]);
+  const shownBlock = data?.confirmed ? (data.blockId ?? null) : null;
+  const shownHeight = data?.confirmed ? (data.inclusionHeight ?? null) : null;
+  const doubt = shownBlock != null && goneBlocks.includes(shownBlock);
+  const doubtRef = useRef(doubt);
+  doubtRef.current = doubt;
+  useEffect(() => {
+    if (!id || shownBlock == null || shownHeight == null) return;
+    const r = rereads(() => loadRef.current(true));
+    const off = chainListen((n) => {
+      if (n.k !== "seal") return;
+      if (sealDoubts(n, shownHeight, shownBlock)) {
+        setGoneBlocks((xs) => (xs.includes(shownBlock) ? xs : [...xs.slice(-7), shownBlock]));
+        r.start(REREAD_PAUSES_MS);
+      } else if (doubtRef.current && !n.replaced && !r.busy()) r.start([GONE_REREAD_MS]);
+    });
+    return () => {
+      off();
+      r.stop();
+    };
+  }, [id, shownBlock, shownHeight]);
+
+  // The page showed «confirmed» while it was open: his act is by the data, not by the event. A
+  // block a fork replaced counts as not confirmed.
   const wasPending = useRef<boolean | null>(null);
   const favOn = txFav.on;
   useEffect(() => {
     if (!data) return;
     const was = wasPending.current;
-    wasPending.current = !data.confirmed;
-    if (was === true && data.confirmed && data.inclusionHeight != null) {
+    const pendingNow = !data.confirmed || doubt;
+    wasPending.current = pendingNow;
+    if (was === true && !pendingNow && data.inclusionHeight != null) {
       say({ k: "page:tx-confirmed", txId: id, height: data.inclusionHeight, ...(favOn ? { fav: true } : {}) });
     }
-  }, [data, id, favOn]);
+  }, [data, doubt, id, favOn]);
 
   // In the mempool: a still think, the eyes on the «mempool» field (§6.4).
   useEffect(() => {
-    if (!unconfirmed) return;
+    if (!unconfirmed || dropped) return;
     const el = document.querySelector('[data-kayolo="tx-pending"]');
     say({ k: "page:think", on: true, el });
     return () => say({ k: "page:think", on: false });
-  }, [unconfirmed]);
+  }, [unconfirmed, dropped]);
 
   useEffect(() => {
     if (err?.includes("not_found") && !data) say({ k: "page:miss" });
@@ -459,16 +499,18 @@ export function TxView({
   const index = data?.indexInBlock ?? null;
   // Confirmations follow the live tip (no request): tip − inclusion + 1, never below the snapshot.
   const liveConf = data?.confirmed ? confirmationsLive(data.numConfirmations ?? null, height, tip?.height ?? null) : null;
-  // Kayolo nods for confirmations 2…10, by the number on the page; that block's E1 waits for it.
+  // Kayolo nods for confirmations 2…10, by the number on the page (/tx counts the inclusion block:
+  // tip − h + 1); that block's E1 waits for it. None for a block a fork replaced.
+  const nodConf = doubt ? null : liveConf;
   const confSeen = useRef<number | null>(null);
   const tipHeight = tip?.height ?? null;
   useEffect(() => {
     const prev = confSeen.current;
-    confSeen.current = liveConf;
-    const ev = confirmationsEvent("tx", prev, liveConf, tipHeight);
+    confSeen.current = nodConf;
+    const ev = confirmationsEvent("tx", prev, nodConf, tipHeight);
     if (ev) say(ev);
-  }, [liveConf, tipHeight]);
-  const confAwait = confirmationsAwait("tx", liveConf);
+  }, [nodConf, tipHeight]);
+  const confAwait = confirmationsAwait("tx", nodConf);
   useEffect(() => (confAwait ? chainAwait(() => true) : undefined), [confAwait]);
   const feeRate =
     feeShown > 0n && data && data.size > 0 ? Number(feeShown) / data.size : 0;

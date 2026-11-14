@@ -41,9 +41,10 @@ import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { countText } from "@/lib/i18n/messages";
 import { ENTER_MS, enteringIds, useEnterIds } from "@/lib/keyed-enter";
 import { useKeepFresh, usePageSync } from "@/lib/page-sync";
-import { onKayolo, say } from "@/lib/kayolo/events";
-import { chainAwait } from "@/lib/kayolo/chain-sense";
-import { REREAD_PAUSES_MS } from "@/lib/kayolo/thresholds";
+import { say } from "@/lib/kayolo/events";
+import { chainAwait, chainListen, type Seal } from "@/lib/kayolo/chain-sense";
+import { oracleReread, rereads } from "@/lib/kayolo/page-data";
+import { ONCE_REREAD_MS, ORACLE_GAP_MS, PAGE_DATA_MS, REREAD_PAUSES_MS } from "@/lib/kayolo/thresholds";
 import {
   ORACLE_PACK,
   applyOracleFeed,
@@ -144,44 +145,51 @@ export function OracleFeedView({
 
   useKeepFresh(() => void load(true));
 
-  // Kayolo E15 (§6.7, §8.2): a block sealed oracle txs — the feed re-reads with pauses 1–2–3–4–5 s
-  // (≤ 15 s) until it shows a new answer or height; then he knocks at the price. Only after such a
-  // seal (≤ once in 2 min), never on other blocks. That block's E1 waits for it (§2.8).
+  // Kayolo E15 (§6.7, §8.2): a block sealed a refresh of this feed (it spends the pool box: the only
+  // oracle tx that moves the quote) — the feed re-reads with pauses 1–2–3–4–5 s (≤ 15 s, each
+  // + 0–400 ms) until it shows a new answer or height; then he knocks at the price. Datapoint posts
+  // and other feeds' txs ask nothing; an oracle tx the pool could not name gets one re-read. ≤ once in
+  // 2 min; a hidden tab asks nothing (showing it re-reads once, with no act). That block's E1 waits (§2.8).
   const loadRef = useRef(load);
   loadRef.current = load;
-  const oracleWatch = useRef<{ height: number; from: { height: number | null; quote: unknown } } | null>(null);
+  const oracleWatch = useRef<{ height: number; at: number; from: { height: number | null; quote: unknown } } | null>(null);
+  const oracleReads = useRef<ReturnType<typeof rereads> | null>(null);
   useEffect(() => {
-    const offHold = chainAwait((s) => !!s.oracle);
-    let timer = 0;
-    let gen = 0;
-    const off = onKayolo((ev) => {
-      if (ev.k !== "chain:oracle") return;
-      const my = ++gen;
-      window.clearTimeout(timer);
-      oracleWatch.current = { height: ev.height, from: { height: packRef.current.height ?? null, quote: packRef.current.quote } };
-      const step = (k: number) => {
-        timer = window.setTimeout(() => {
-          if (my !== gen || !oracleWatch.current) return;
-          void loadRef.current(true);
-          if (k + 1 < REREAD_PAUSES_MS.length) step(k + 1);
-          else timer = window.setTimeout(() => (oracleWatch.current = null), 2000);
-        }, REREAD_PAUSES_MS[k]);
-      };
-      step(0);
+    const feed = ORACLE_FEEDS[slug];
+    let lastAt = -Infinity;
+    const wants = (s: Seal) => {
+      if (!s.oracle.length || s.replaced || performance.now() - lastAt < ORACLE_GAP_MS) return null;
+      return oracleReread(s.oracle, feed);
+    };
+    const r = rereads(() => {
+      if (oracleWatch.current) void loadRef.current(true);
+    });
+    oracleReads.current = r;
+    const offHold = chainAwait((s) => wants(s) != null);
+    const off = chainListen((n) => {
+      if (n.k !== "seal") return;
+      const w = wants(n);
+      if (!w || document.visibilityState !== "visible") return;
+      lastAt = performance.now();
+      oracleWatch.current = { height: n.height, at: lastAt, from: { height: packRef.current.height ?? null, quote: packRef.current.quote } };
+      r.start(w === "steps" ? REREAD_PAUSES_MS : [ONCE_REREAD_MS]);
     });
     return () => {
       offHold();
       off();
-      gen += 1;
-      window.clearTimeout(timer);
+      r.stop();
+      oracleReads.current = null;
       oracleWatch.current = null;
     };
-  }, []);
+  }, [slug]);
   useEffect(() => {
     const w = oracleWatch.current;
     if (!w) return;
     if ((pack.height ?? null) === w.from.height && pack.quote === w.from.quote) return;
     oracleWatch.current = null;
+    oracleReads.current?.stop();
+    // Late (the tab hid mid-way and showed again): the data is new, the moment is gone.
+    if (performance.now() - w.at > PAGE_DATA_MS + 3_000) return;
     say({ k: "page:data", what: "oracle", height: w.height });
   }, [pack.height, pack.quote]);
   useEffect(() => {

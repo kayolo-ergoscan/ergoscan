@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { blockKind, createChainSense } from "./chain-sense";
+import { readFileSync } from "node:fs";
+import { blockKind, createChainSense, pageTopics, type ChainNote } from "./chain-sense";
 import type { KayoloEvent } from "./events";
 import { pageKind } from "./anchors";
 
@@ -197,20 +198,34 @@ test("E12: the pool drained right after a seal (≥ 100 before, ≤ 0.4 within 3
   assert.deepEqual(r.said.at(-1), { k: "chain:drain", height: 101 });
 });
 
-test("E10: a topic tx on its page, at most once in 3 min; on /mempool only a rare category", () => {
+test("E10: a tx of the page's protocol (the live ball's platform), at most once in 3 min; on /mempool only a rare one", () => {
   let path = "/rosen";
   const said: KayoloEvent[] = [];
   let t = 0;
   const s = createChainSense({ say: (e) => said.push(e), now: () => t, visible: () => true, setTimer: () => 0, clearTimer: () => {}, path: () => path });
-  s.feed({ type: "mempool.add", data: { txId: "a", category: "bridge" } });
-  s.feed({ type: "mempool.add", data: { txId: "b", category: "bridge" } });
-  assert.deepEqual(said, [{ k: "chain:tx-topic", category: "bridge", txId: "a", rare: false }]);
-  path = "/mempool";
+  // Live balls: `category` is the shape, `platform` the protocol.
+  s.feed({ type: "mempool.add", data: { txId: "a", category: "contract", platform: "rosen" } });
+  s.feed({ type: "mempool.add", data: { txId: "b", category: "contract", platform: "rosen" } });
+  assert.deepEqual(said, [{ k: "chain:tx-topic", category: "rosen", txId: "a", rare: false }]);
+  path = "/oracles/erg-usd";
   t = 200_000;
+  s.feed({ type: "mempool.add", data: { txId: "o", category: "contract", platform: "oracle", action: "oracle-datapoint" } });
+  assert.deepEqual(said.at(-1), { k: "chain:tx-topic", category: "oracle", txId: "o", rare: false });
+  path = "/mempool";
+  t = 400_000;
   for (let i = 0; i < 60; i++) s.feed({ type: "mempool.add", data: { txId: `p${i}`, category: "transfer" } });
-  assert.equal(said.length, 1, "a common category is not a topic");
-  s.feed({ type: "mempool.add", data: { txId: "n1", category: "nft" } });
-  assert.deepEqual(said.at(-1), { k: "chain:tx-topic", category: "nft", txId: "n1", rare: true });
+  assert.equal(said.length, 2, "a common one is not a topic");
+  s.feed({ type: "mempool.add", data: { txId: "l1", category: "contract", platform: "lithos" } });
+  assert.deepEqual(said.at(-1), { k: "chain:tx-topic", category: "lithos", txId: "l1", rare: true });
+});
+
+test("E10: page topics are protocols; no page is about a shape", () => {
+  assert.deepEqual(pageTopics("/defi/spectrum"), ["spectrum"]);
+  assert.deepEqual(pageTopics("/defi/lithos"), ["lithos"]);
+  assert.deepEqual(pageTopics("/defi/pool/abc"), ["spectrum", "lithos"]);
+  assert.deepEqual(pageTopics("/defi/stable"), ["sigmausd"]);
+  assert.deepEqual(pageTopics("/oracles/xau-erg?x=1"), ["oracle"]);
+  assert.deepEqual(pageTopics("/nfts"), []);
 });
 
 test("E11 / E13: a surge and a fee spike need two readings; the snapshot after a reconnect is not a surge", () => {
@@ -266,25 +281,148 @@ test("E13: p50 against p90 (2 215 / 1 052 631) is no spike; a small pool's p50 i
   assert.equal(r.said.filter((e) => e.k === "chain:fee").length, 0);
 });
 
-test("E15: oracle txs in a seal — the page's awaiter learns it, chain:oracle once in 2 min", () => {
+type Fixture = { messages: { t: number; type: string; data: Record<string, unknown> }[] };
+const liveOracle = JSON.parse(readFileSync(new URL("./fixtures/oracle-live.json", import.meta.url), "utf8")) as Fixture;
+
+test("E15 on the live stream (fixtures/oracle-live.json): the seal names its oracle txs with action and tokens", () => {
   const r = rig();
   r.s.socket(true);
-  r.tip(100);
-  const seen: { oracle?: boolean }[] = [];
+  const notes: ChainNote[] = [];
+  r.s.listen((n) => notes.push(n));
+  const asked: number[] = [];
   r.s.await((x) => {
-    seen.push({ oracle: x.oracle });
-    return !!x.oracle;
+    asked.push(x.height);
+    return x.oracle.some((o) => o.action === "oracle-refresh");
   });
-  r.s.feed({ type: "mempool.snapshot", data: { count: 3, balls: [{ txId: "o1", category: "oracle" }, { txId: "t1", category: "transfer" }] } });
-  sealIds(r, 101, ["o1", "t1"]);
-  assert.deepEqual(seen, [{ oracle: true }]);
-  const block = r.said.find((e) => e.k === "chain:block") as { hold?: boolean };
-  assert.equal(block.hold, true, "the page holds this block's E1");
-  assert.deepEqual(r.said.at(-1), { k: "chain:oracle", txIds: ["o1"], height: 101 });
-  r.s.feed({ type: "mempool.add", data: { txId: "o2", category: "oracle" } });
-  r.advance(60_000);
-  sealIds(r, 102, ["o2"]);
-  assert.equal(r.said.filter((e) => e.k === "chain:oracle").length, 1, "the next within 2 min is quiet");
+  for (const m of liveOracle.messages) r.s.feed({ type: m.type, data: m.data });
+  r.advance(5_000);
+  const seals = notes.filter((n): n is Extract<ChainNote, { k: "seal" }> => n.k === "seal");
+  assert.deepEqual(seals.map((n) => n.height), [1_916_557, 1_916_558, 1_916_559]);
+  assert.deepEqual(asked, [1_916_557, 1_916_558, 1_916_559], "every new block asks the pages");
+  assert.deepEqual(seals[0].oracle, []);
+  assert.deepEqual(
+    seals[1].oracle.map((o) => [o.id.slice(0, 10), o.action, o.tokens.map((x) => x.slice(0, 8))]),
+    [
+      ["054f327837", "oracle-datapoint", ["74fa4aee", "ae399fcb"]],
+      ["96cfdd4939", "oracle-refresh", ["6a2b821b", "ae399fcb", "19b7f2e2", "74fa4aee"]],
+    ]
+  );
+  assert.deepEqual(seals[2].oracle, [], "the next datapoint is still in the pool");
+  assert.equal(seals[2].rentBoxes, 2);
+  const block = r.said.find((e) => e.k === "chain:block" && e.height === 1_916_558) as { hold?: boolean };
+  assert.equal(block.hold, true, "the refresh holds its block's E1 for the oracle page");
+  assert.equal((r.said.find((e) => e.k === "chain:block" && e.height === 1_916_559) as { hold?: boolean }).hold, undefined);
+});
+
+test("E15: the first recording kept oracle ids only — they come without action or tokens", () => {
+  const r = rig();
+  r.tip(100);
+  const notes: ChainNote[] = [];
+  r.s.listen((n) => notes.push(n));
+  r.s.feed({ type: "mempool.snapshot", data: { count: 3, oracle: ["o1"], balls: [{ txId: "o2", category: "oracle" }] } });
+  sealIds(r, 101, ["o1", "o2", "t1"]);
+  assert.deepEqual(notes.at(-1), {
+    k: "seal",
+    height: 101,
+    blockId: "y".repeat(64),
+    txIds: ["o1", "o2", "t1"],
+    oracle: [
+      { id: "o1", action: null, tokens: [] },
+      { id: "o2", action: null, tokens: [] },
+    ],
+  });
+});
+
+test("seals for the pages: a partial seal's txs are unknown (null), a tip standing in too, a late seal still comes", () => {
+  const r = rig();
+  r.s.socket(true);
+  r.tip(200);
+  const notes: ChainNote[] = [];
+  const asked: (readonly string[] | null)[] = [];
+  r.s.listen((n) => notes.push(n));
+  r.s.await((x) => {
+    asked.push(x.txIds);
+    return false;
+  });
+  r.s.feed({ type: "block.sealed", data: { height: 201, blockId: "a".repeat(64), txIds: [], txCount: 0, timestamp: 0, seenAt: 0, partial: true } });
+  assert.deepEqual(asked, [null], "a partial seal is not «none of yours»");
+  assert.equal((notes[0] as { txIds: unknown }).txIds, null);
+  // A tip without its seal stands in after 3 s; the seal that comes later reaches the pages, no reaction.
+  r.tip(202);
+  r.advance(3_100);
+  assert.deepEqual(notes.at(-1), { k: "seal", height: 202, blockId: null, txIds: null, oracle: [] });
+  const blocks = r.said.filter((e) => e.k === "chain:block").length;
+  r.s.feed({ type: "block.sealed", data: { height: 202, blockId: "b".repeat(64), txIds: ["mine"], txCount: 2, size: 900, timestamp: 0 } });
+  assert.deepEqual(notes.at(-1), { k: "seal", height: 202, blockId: "b".repeat(64), txIds: ["mine"], oracle: [] }, "late, not a fork");
+  assert.equal(r.said.filter((e) => e.k === "chain:block").length, blocks);
+  assert.deepEqual(asked, [null, null], "a late seal asks no E1 question");
+});
+
+test("a fork: another block at a shown height reaches the pages as replaced, with no reaction; the same block again is nothing", () => {
+  const r = rig();
+  r.s.socket(true);
+  r.tip(300);
+  const notes: ChainNote[] = [];
+  let asked = 0;
+  r.s.listen((n) => notes.push(n));
+  r.s.await(() => {
+    asked += 1;
+    return true;
+  });
+  r.s.feed({ type: "block.sealed", data: { height: 301, blockId: "a".repeat(64), txIds: ["x1"], txCount: 1, timestamp: 0 } });
+  r.s.feed({ type: "block.sealed", data: { height: 301, blockId: "a".repeat(64), txIds: ["x1"], txCount: 1, timestamp: 0 } });
+  r.s.feed({ type: "block.sealed", data: { height: 301, blockId: "b".repeat(64), txIds: ["x1", "mine"], txCount: 2, timestamp: 0 } });
+  assert.equal(r.said.filter((e) => e.k === "chain:block").length, 1, "one reaction for the height");
+  assert.equal(asked, 1, "the replacement asks no E1 question");
+  assert.equal(notes.length, 2);
+  assert.deepEqual(notes[1], { k: "seal", height: 301, blockId: "b".repeat(64), txIds: ["x1", "mine"], oracle: [], replaced: true, replaces: "a".repeat(64) });
+});
+
+test("every page is asked: one page's yes does not hide the block from the next (no short-circuit)", () => {
+  const r = rig();
+  r.tip(400);
+  const calls: string[] = [];
+  r.s.await(() => {
+    calls.push("A");
+    return true;
+  });
+  r.s.await(() => {
+    calls.push("B");
+    return false;
+  });
+  sealIds(r, 401, ["x1"]);
+  assert.deepEqual(calls, ["A", "B"]);
+  assert.equal((r.said.at(-1) as { hold?: boolean }).hold, true);
+});
+
+test("a tx leaving the pool reaches the pages; a mock stream reaches none", () => {
+  const r = rig();
+  r.tip(500);
+  const notes: ChainNote[] = [];
+  r.s.listen((n) => notes.push(n));
+  r.s.feed({ type: "mempool.remove", data: { id: "t1" } });
+  assert.deepEqual(notes, [{ k: "gone", id: "t1" }]);
+  r.s.feed({ type: "hello", data: { mock: true } });
+  r.s.feed({ type: "mempool.remove", data: { id: "t2" } });
+  sealIds(r, 501, ["t3"]);
+  assert.equal(notes.length, 1);
+});
+
+test("a hidden tab: no reaction and no E1 question, but the pages still hear the seal", () => {
+  const r = rig();
+  r.tip(600);
+  r.setVisible(false);
+  const notes: ChainNote[] = [];
+  let asked = 0;
+  r.s.listen((n) => notes.push(n));
+  r.s.await(() => {
+    asked += 1;
+    return true;
+  });
+  sealIds(r, 601, ["t1"]);
+  assert.equal(asked, 0);
+  assert.equal(r.said.length, 0);
+  assert.equal(notes.length, 1);
 });
 
 test("E16–E18: down at 6 s, lost at 2 min, back with a cheer and the blocks missed; offline is its own", () => {

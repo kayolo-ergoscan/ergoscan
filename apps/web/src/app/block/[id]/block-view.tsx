@@ -38,8 +38,8 @@ import { splitExtension } from "@/lib/extension-section";
 import { readHashTab, setHashTab } from "@/lib/hash-tab";
 import { useChainTipRefresh, useKeepFresh, usePageSync } from "@/lib/page-sync";
 import { say } from "@/lib/kayolo/events";
-import { chainAwait } from "@/lib/kayolo/chain-sense";
-import { confirmationsAwait, confirmationsEvent } from "@/lib/kayolo/page-data";
+import { chainAwait, chainListen } from "@/lib/kayolo/chain-sense";
+import { confirmationsAwait, confirmationsEvent, sealDoubts } from "@/lib/kayolo/page-data";
 import { ENTER_MS, SNAPSHOT_FETCH, enteringIds, snapshotPath, useEnterIds } from "@/lib/keyed-enter";
 import {
   BLOCK_TX_PACK,
@@ -379,19 +379,28 @@ export function BlockView({
   const tipH = tip?.height ?? null;
   const confirmations =
     tipH != null && head != null ? Math.max(0, tipH - head.height) : null;
-  // Kayolo by the number on the page (§6.4): «›» opens at 1, nods to 10, the reward matures at 720.
-  // The block that moves it waits for this (its E1 is absorbed, §2.8). A new block page starts over.
+  // Kayolo by the number on the page (§6.4; /block counts the blocks after it: tip − h): «›» opens
+  // at 1, nods to 10, the reward matures at 720. The block that moves it waits for this (its E1 is
+  // absorbed, §2.8). A new block page starts over. A block a fork replaced gets no nods (§12.23).
   const confSeen = useRef<{ id: string; n: number | null } | null>(null);
   const headId = head?.id ?? null;
   const headHeight = head?.height ?? null;
+  const [replacedId, setReplacedId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!headId || headHeight == null) return;
+    return chainListen((n) => {
+      if (n.k === "seal" && sealDoubts(n, headHeight, headId)) setReplacedId(headId);
+    });
+  }, [headId, headHeight]);
+  const nodConf = replacedId != null && replacedId === headId ? null : confirmations;
   useEffect(() => {
     if (!headId) return;
     const prev = confSeen.current?.id === headId ? confSeen.current.n : null;
-    confSeen.current = { id: headId, n: confirmations };
-    const ev = confirmationsEvent("block", prev, confirmations, tipH);
+    confSeen.current = { id: headId, n: nodConf };
+    const ev = confirmationsEvent("block", prev, nodConf, tipH);
     if (ev) say(ev);
-  }, [headId, confirmations, tipH]);
-  const confAwait = headHeight != null && confirmationsAwait("block", confirmations);
+  }, [headId, nodConf, tipH]);
+  const confAwait = headHeight != null && confirmationsAwait("block", nodConf);
   useEffect(() => (confAwait ? chainAwait(() => true) : undefined), [confAwait]);
   const intervalMs =
     head?.prevTimestamp != null && head.timestamp

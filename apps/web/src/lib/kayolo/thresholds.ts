@@ -223,3 +223,15 @@ export const CONF_NODS = 10;
 export const CONF_REWARD = 720;
 /** A re-read after a seal: the pauses 1–2–3–4–5 s (≤ 15 s) until the index shows the block. */
 export const REREAD_PAUSES_MS = [1_000, 2_000, 3_000, 4_000, 5_000] as const;
+/** Each pause gets 0–400 ms more: tabs on one stream never ask the gateway in step. */
+export const REREAD_JITTER_MS = 400;
+/** A single re-read (an oracle tx the pool could not name): 3 s, when the index usually has the block. */
+export const ONCE_REREAD_MS = 3_000;
+/** One re-read after a pending tx left the pool without a seal that carried it (§12.23). */
+export const GONE_REREAD_MS = 1_000;
+/** /address rent: a seal with rent spends re-reads the due line at most this often (only while «now» shows). */
+export const RENT_REREAD_GAP_MS = 60_000;
+/** The layer's waiting rooms (held blocks, reactions deferred while the scout has the body): ≤ 3 each, oldest out. */
+export const QUEUE_MAX = 3;
+/** Heights whose block ids chain-sense keeps to see a fork (the gateway keeps 16). */
+export const BLOCK_IDS_KEPT = 16;

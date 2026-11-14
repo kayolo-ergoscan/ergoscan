@@ -1730,6 +1730,8 @@ export const ru: Record<string, string> = {
   "address.unconfirmed": "Неподтверждённый",
   "address.rentNote": "рента / {d} д",
   "address.rentNoteNow": "рента / сейчас",
+  "address.rentNoteMin": "рента / {n} мин",
+  "address.rentNoteH": "рента / {n} ч",
   "address.txs": "Транзакции",
   "address.boxes": "Боксы",
   "address.tokens": "Токены",

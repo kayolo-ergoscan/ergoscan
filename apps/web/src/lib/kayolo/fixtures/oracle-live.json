@@ -1,0 +1,170 @@
+{
+ "note": "Live stream 2026-11-14 ~11:10 UTC (gateway :4400, read-only): oracle balls (platform \"oracle\", category is the shape \"contract\") and the seals that took them. Balls keep every field but addresses and inputBoxIds; snapshots after the first are dropped (the first lists only the oracle balls of 2). 1916558 carries an erg-usd datapoint and the erg-usd refresh (pool NFT 6a2b821b, refresh NFT 19b7f2e2); 1916559 spends 2 rent boxes.",
+ "messages": [
+  {
+   "t": 5,
+   "type": "mempool.snapshot",
+   "data": {
+    "ts": 1794654627229,
+    "count": 2,
+    "balls": [
+     {
+      "id": "054f327837559441c107268c5142b523f13459b364293762307e8871aa2ba2e2",
+      "txId": "054f327837559441c107268c5142b523f13459b364293762307e8871aa2ba2e2",
+      "r": 11.70865064813192,
+      "size": 677,
+      "fee": 1500000,
+      "feeRate": 2215.6573116691284,
+      "category": "contract",
+      "color": "#A78BFA",
+      "label": "contract",
+      "tokenIds": [
+       "74fa4aee3607ceb7bdefd51a856861b5dbfa434a8f6c93bfe967de8ed1a30a78",
+       "ae399fcb751e8e247d0da8179a2bcca2aa5119fff9c85721ffab9cdc9a3cb2dd"
+      ],
+      "outputCount": 3,
+      "inputCount": 2,
+      "value": 1671000000,
+      "platform": "oracle",
+      "firstSeen": 1794654541957,
+      "action": "oracle-datapoint"
+     }
+    ]
+   }
+  },
+  {
+   "t": 5,
+   "type": "chain.tip",
+   "data": {
+    "height": 1916556,
+    "headerId": "3a34f2e099534c58b43a1cbd97f5a1b0d5d38a4aa2402e48d6a011f6f2e95b71",
+    "updatedAt": "2026-11-14T11:08:57.029Z"
+   }
+  },
+  {
+   "t": 252146,
+   "type": "block.sealed",
+   "data": {
+    "blockId": "93f173f0deca9b092a25d9153edf510f9ec758b75be10011cab0732d894ecef9",
+    "height": 1916557,
+    "timestamp": 1794654535296,
+    "txIds": [
+     "74223a59c8c3038cba23fb10312caccba6dc45b2134a713c4b4651ce89a51fd0"
+    ],
+    "replaySeed": "s1d365258:1916557",
+    "size": 3595,
+    "txCount": 1,
+    "seenAt": 1794654879365
+   }
+  },
+  {
+   "t": 252168,
+   "type": "mempool.add",
+   "data": {
+    "id": "96cfdd49399e67d145db16e9ac6de8a832b6281fa3804a26111096e5c2547b75",
+    "txId": "96cfdd49399e67d145db16e9ac6de8a832b6281fa3804a26111096e5c2547b75",
+    "r": 28,
+    "size": 4064,
+    "fee": 1500000,
+    "feeRate": 369.09448818897636,
+    "category": "contract",
+    "color": "#A78BFA",
+    "label": "contract",
+    "tokenIds": [
+     "6a2b821b5727e85beb5e78b4efb9f0250d59cd48481d2ded2c23e91ba1d07c66",
+     "ae399fcb751e8e247d0da8179a2bcca2aa5119fff9c85721ffab9cdc9a3cb2dd",
+     "19b7f2e2f11052c020800c8b620660f9f0b5fd5b3f2beacc8b44af960477a694",
+     "74fa4aee3607ceb7bdefd51a856861b5dbfa434a8f6c93bfe967de8ed1a30a78"
+    ],
+    "outputCount": 13,
+    "inputCount": 12,
+    "value": 126000000,
+    "platform": "oracle",
+    "firstSeen": 1794654879393,
+    "action": "oracle-refresh"
+   }
+  },
+  {
+   "t": 252388,
+   "type": "chain.tip",
+   "data": {
+    "height": 1916557,
+    "headerId": "93f173f0deca9b092a25d9153edf510f9ec758b75be10011cab0732d894ecef9",
+    "updatedAt": "2026-11-14T11:14:39.426Z"
+   }
+  },
+  {
+   "t": 386310,
+   "type": "block.sealed",
+   "data": {
+    "blockId": "78061e46f8c34553329eb05d005d9852b7be44df728760e5fbb317e82bae1146",
+    "height": 1916558,
+    "timestamp": 1794654981731,
+    "txIds": [
+     "19d5c74c7fe9d16c7ff40311d81e8f7a6461d47d89eeaf2744dcdfebd04aebf7",
+     "054e9227b166fc60cb5266a9ec48b0f2ebc5c69aef388c8dc51561d4f69d24c1",
+     "054f327837559441c107268c5142b523f13459b364293762307e8871aa2ba2e2",
+     "51058eb813f546b083802c054ee935f370efb4c5eae79aeef4c5bc7a41b6bd0c",
+     "96cfdd49399e67d145db16e9ac6de8a832b6281fa3804a26111096e5c2547b75",
+     "7f03c53e17234b8f15bb40d3f9302e70114fc5e0da244d9a10c53bbfafd5197e"
+    ],
+    "replaySeed": "s62c087bf:1916558",
+    "size": 37723,
+    "txCount": 6,
+    "seenAt": 1794655013529
+   }
+  },
+  {
+   "t": 387053,
+   "type": "chain.tip",
+   "data": {
+    "height": 1916558,
+    "headerId": "78061e46f8c34553329eb05d005d9852b7be44df728760e5fbb317e82bae1146",
+    "updatedAt": "2026-11-14T11:16:54.005Z"
+   }
+  },
+  {
+   "t": 389312,
+   "type": "mempool.add",
+   "data": {
+    "id": "32a5f28dd35ea3b2394add56478374224fbd585ff45d8108def760530742519d",
+    "txId": "32a5f28dd35ea3b2394add56478374224fbd585ff45d8108def760530742519d",
+    "r": 11.70865064813192,
+    "size": 677,
+    "fee": 1500000,
+    "feeRate": 2215.6573116691284,
+    "category": "contract",
+    "color": "#A78BFA",
+    "label": "contract",
+    "tokenIds": [
+     "74fa4aee3607ceb7bdefd51a856861b5dbfa434a8f6c93bfe967de8ed1a30a78",
+     "ae399fcb751e8e247d0da8179a2bcca2aa5119fff9c85721ffab9cdc9a3cb2dd"
+    ],
+    "outputCount": 3,
+    "inputCount": 2,
+    "value": 1669500000,
+    "platform": "oracle",
+    "firstSeen": 1794655016537,
+    "action": "oracle-datapoint"
+   }
+  },
+  {
+   "t": 405084,
+   "type": "block.sealed",
+   "data": {
+    "blockId": "d2b92da5428887eff625b8bdd52f5235ed863c0a669b43a8b3cb9dbe2fe1b9e7",
+    "height": 1916559,
+    "timestamp": 1794655013379,
+    "txIds": [
+     "aabab74c889c1f97e5173984585bb869ce5339e39b84e6277adf30c651ee34da",
+     "72ccef5f8f34f52517c9ae0a1136a3327912d9ee4c3d24e8131df3f192fd9980"
+    ],
+    "replaySeed": "s5ab06abf:1916559",
+    "size": 7593,
+    "txCount": 2,
+    "seenAt": 1794655032304,
+    "rentBoxes": 2
+   }
+  }
+ ]
+}

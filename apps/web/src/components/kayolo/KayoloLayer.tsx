@@ -297,10 +297,10 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
   /** /tx in the mempool: a still think face; the eyes on the «mempool» field the first 2 s (≤ 3 a visit). */
   let poolThink: { at: number; gaze: Aim } | null = null;
   let poolLooks = 0;
-  /** A block whose page re-reads for it: its reaction waits ≤ 5 s for the page:* (§2.8). */
-  let held: { r: Reaction; ev: KayoloEvent; until: number } | null = null;
-  /** A page:* that came while the scout had the body: offered once he has it, within its TTL. */
-  let deferred: { r: Reaction; ev: KayoloEvent; at: number } | null = null;
+  /** Blocks whose page re-reads for them: each reaction waits ≤ 5 s for its page:* (§2.8); ≤ 3, oldest out. */
+  let held: { r: Reaction; ev: KayoloEvent; until: number }[] = [];
+  /** page:* that came while the scout had the body: offered once he has it, within their TTL; ≤ 3, one per offer key. */
+  let deferred: { r: Reaction; ev: KayoloEvent; at: number }[] = [];
   /** E12: this block drained the pool; its act ends with a breath out. */
   let drainedH: number | null = null;
   const confirmedTx = new Set<string>();
@@ -738,11 +738,11 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
 
   /** Э4 follow-ups: a held block that nobody absorbed, the site-behind knocks. */
   const pumpE4 = (now: number) => {
-    if (held && now >= held.until) {
+    if (held.length && held.some((h) => now >= h.until)) {
       // The page did not say its page:* in time: the block reacts as usual (§2.8).
-      const h = held;
-      held = null;
-      if (hold) offerR(h.r, now);
+      const due = held.filter((h) => now >= h.until);
+      held = held.filter((h) => now < h.until);
+      if (hold) for (const h of due) offerR(h.r, now);
     }
     if (behind.on && behind.knocks < K.BEHIND_KNOCKS && now >= behind.knockAt && hold && !running) {
       behind.knockAt = now + K.BEHIND_KNOCK_MIN_MS + Math.random() * (K.BEHIND_KNOCK_MAX_MS - K.BEHIND_KNOCK_MIN_MS);
@@ -898,7 +898,7 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
     }
     if (gaze) due = Math.min(due, gazeUntil);
     if (eyes) due = Math.min(due, eyes.until);
-    if (held) due = Math.min(due, held.until);
+    for (const h of held) due = Math.min(due, h.until);
     if (awaitData) due = Math.min(due, awaitData.next);
     if (missDue) due = Math.min(due, missDue.at);
     if (hoverCand) due = Math.min(due, hoverCand.at + K.HOVER_MS);
@@ -1245,7 +1245,7 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
   /** A page:* about this height takes the block's own reaction (§2.8), held or waiting. */
   const absorbHeight = (h: number | undefined, now: number) => {
     if (h == null) return;
-    if (held && heightOf(held.ev) === h) held = null;
+    held = held.filter((x) => heightOf(x.ev) !== h);
     const key = `h${h}`;
     if (sched.absorb((k) => k === key, now)) {
       offerAim.delete(key);
@@ -1261,7 +1261,7 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
         const r = react(ev, ctxNow(now));
         if (!r) return;
         // The page on screen re-reads for this block: wait ≤ 5 s for its page:* (§2.8, §8.4).
-        if (ev.hold) held = { r, ev, until: now + K.HOLD_MS };
+        if (ev.hold) held = [...held, { r, ev, until: now + K.HOLD_MS }].slice(-K.QUEUE_MAX);
         else offerR(r, now);
         return;
       }
@@ -1270,7 +1270,7 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
         const key = `h${ev.height}`;
         if (running?.key === key) {
           if (!after) after = "relief";
-        } else if (sched.waiting(key) || (held && heightOf(held.ev) === ev.height)) drainedH = ev.height;
+        } else if (sched.waiting(key) || held.some((h) => heightOf(h.ev) === ev.height)) drainedH = ev.height;
         return;
       }
       case "chain:tip-wait":
@@ -1390,7 +1390,7 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
     const el = "el" in ev ? ev.el : null;
     if (!hold || (!taking && bodyOwner() !== "kayolo")) {
       // The scout has the body (the tour, the door walk): it waits for him within its TTL.
-      deferred = { r, ev, at: now };
+      deferred = [...deferred.filter((d) => d.r.offer.key !== r.offer.key), { r, ev, at: now }].slice(-K.QUEUE_MAX);
       return;
     }
     if (ev.k === "page:rent") {
@@ -1408,14 +1408,15 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
     offerR(r, now, el);
   };
 
-  /** A reaction that waited for him (the scout had the body), offered with the TTL it has left. */
+  /** The reactions that waited for him (the scout had the body), in order, with the TTL each has left. */
   const takeDeferred = (now: number, taking = false) => {
-    const d = deferred;
-    deferred = null;
-    if (!d) return;
-    const left = d.r.offer.ttlMs - (now - d.at);
-    if (left < 600) return;
-    placeR({ ...d.r, offer: { ...d.r.offer, ttlMs: left } }, d.ev, now, taking);
+    const ds = deferred;
+    deferred = [];
+    for (const d of ds) {
+      const left = d.r.offer.ttlMs - (now - d.at);
+      if (left < 600) continue;
+      placeR({ ...d.r, offer: { ...d.r.offer, ttlMs: left } }, d.ev, now, taking);
+    }
   };
 
   /** E23 waited for the beacon: it is on screen now (the person scrolled to it). */
@@ -2147,8 +2148,8 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
       if (prev !== next) {
         poolThink = null;
         poolLooks = 0;
-        held = null;
-        deferred = null;
+        held = [];
+        deferred = [];
         rentWait = null;
         behind.knocks = 0;
         if (behind.on) behind.knockAt = now + K.BEHIND_KNOCK_MIN_MS;
@@ -2233,8 +2234,8 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
         color,
         over: !!layerRoot?.classList.contains("is-over"),
         bg: bgNow()?.kind ?? null,
-        held: held ? heightOf(held.ev) : null,
-        deferred: deferred?.r.offer.key ?? null,
+        held: held.length ? held.map((h) => heightOf(h.ev)) : null,
+        deferred: deferred.length ? deferred.map((d) => d.r.offer.key) : null,
         rentWait: rentWait?.r.offer.key ?? null,
         net: net.state,
         behind: behind.on,
