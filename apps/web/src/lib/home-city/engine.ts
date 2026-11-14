@@ -102,6 +102,8 @@ export class CityEngine {
   private moment: Moment | null = null;
   /** Seals that came while a moment played, in arrival order: each plays (or just stands) in turn. */
   private queue: SealIn[] = [];
+  /** The newest seal that came past the queue during a moment: it stands (no moment) once that one ends. */
+  private skipped: number | null = null;
   private sealKeys = new Set<string>();
   private adds = new Map<string, number>();
   private seenTx = new Set<string>();
@@ -204,6 +206,7 @@ export class CityEngine {
     if (this.mark) this.mark.onload = null;
     this.moment = null;
     this.queue = [];
+    this.skipped = null;
   }
 
   setReduce(reduce: boolean) {
@@ -309,7 +312,8 @@ export class CityEngine {
     if (this.moment) {
       const q = queueSeal(this.queue, s);
       this.queue = q.queue;
-      for (const d of q.dropped) this.commit(d.height);
+      // Not now: the street must not pass the block whose tower is still going up.
+      for (const d of q.dropped) this.skipped = Math.max(this.skipped ?? d.height, d.height);
       this.lendYard(this.moment, s);
       return;
     }
@@ -396,6 +400,9 @@ export class CityEngine {
     if (!m) return;
     this.moment = null;
     this.commit(Math.max(m.seal.height, this.committed ?? m.seal.height));
+    // Blocks that came past the queue during the moment stand now, after its own.
+    if (this.skipped != null) this.commit(this.skipped);
+    this.skipped = null;
     this.cb.onBuilt(null);
     this.cb.onWaiting(null);
     this.lastBuilt = -2;
@@ -483,12 +490,14 @@ export class CityEngine {
     const waiting = this.queue;
     this.moment = null;
     this.queue = [];
+    const skipped = this.skipped;
+    this.skipped = null;
     this.adds.clear();
     this.rare = null;
     this.settleUntil = 0;
     try {
       if (m) {
-        const h = Math.max(m.seal.height, ...waiting.map((q) => q.height), this.committed ?? m.seal.height);
+        const h = Math.max(m.seal.height, ...waiting.map((q) => q.height), skipped ?? m.seal.height, this.committed ?? m.seal.height);
         if (this.committed == null || h > this.committed) {
           this.committed = h;
           this.scene = null;
