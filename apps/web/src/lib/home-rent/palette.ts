@@ -4,7 +4,9 @@
  * from the site tokens (readInks). To follow the light theme's tokens later, change `harbourInk`
  * or derive a palette from them here: the painters only see `HarbourPalette`.
  */
-import { INK } from "@/lib/palette";
+/** The site's gold and coral as hex: a canvas paints only real colours, never a CSS var(). */
+const GOLD = "#ebcb71";
+const CORAL = "#ff8a65";
 
 export type HarbourPalette = {
   name: "night" | "dusk";
@@ -55,19 +57,19 @@ const NIGHT: HarbourPalette = {
   foamDim: "rgba(169,188,205,0.5)",
   lighthouse: { wall: "#e2dacb", wallSh: "#b8ae9c", wallHi: "#f3eee4", band: "#d9775b", bandSh: "#ad5d47", roof: "#2b2622", glass: "#ffe2a0", frame: "#3b342d", door: "#2a231d" },
   hull: { side: "#5e4838", stripe: "#7a5e48", rail: "#9a8064", keel: "#352a21", cabin: "#c9c1b0", cabinSh: "#9d9585", roof: "#3f3830", mast: "#a39a88", yard: "#7d7466", port: "#8a7552", window: "#6d675c" },
-  tug: { hull: "#2e3641", hullHi: "#56606f", hullLo: "#1c2128", house: "#cdc5b4", houseSh: "#a69e8e", frame: "#3b342d", fender: "#15181d", crane: INK.gold, post: "#8a7a52", hook: "#9d9585" },
+  tug: { hull: "#2e3641", hullHi: "#56606f", hullLo: "#1c2128", house: "#cdc5b4", houseSh: "#a69e8e", frame: "#3b342d", fender: "#15181d", crane: GOLD, post: "#8a7a52", hook: "#9d9585" },
   waterline: "#33475c",
   wake: "#24364a",
   deep: "rgba(20,40,60,0.45)",
-  light: INK.gold,
+  light: GOLD,
   lightHot: "#fff2c4",
   coin: "#c9a24e",
   coinHi: "#fff2c4",
   plate: "rgba(16,20,26,0.74)",
   plateText: "rgba(255,255,255,0.92)",
   plateMuted: "rgba(255,255,255,0.6)",
-  gold: INK.gold,
-  coral: INK.coral,
+  gold: GOLD,
+  coral: CORAL,
   reefTextFade: false,
 };
 

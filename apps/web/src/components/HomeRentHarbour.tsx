@@ -50,10 +50,15 @@ function whenText(blocks: number, t: T): string {
   return clock.due ? t("home.rentDue") : t("home.rentIn").replace("{t}", clockText(blocks, t));
 }
 
-function toneInk(blocks: number): string | undefined {
+/** Figures printed in coral or gold take the theme's text ink when it has one (light card). */
+const TEXT_CORAL = `var(--ink-coral-text, ${INK.coral})`;
+const TEXT_GOLD = `var(--ink-gold-text, ${INK.gold})`;
+
+/** The «when» tone of a head boat or a token: words (`text`) or a mark (a tip's chip). */
+function toneInk(blocks: number, text = true): string | undefined {
   const tone = toneOf(blocks);
-  if (tone === "due") return INK.coral;
-  if (tone === "soon") return INK.gold;
+  if (tone === "due") return text ? TEXT_CORAL : INK.coral;
+  if (tone === "soon") return text ? TEXT_GOLD : INK.gold;
   return undefined;
 }
 
@@ -245,13 +250,13 @@ export function HomeRentHarbour({
       const ink = toneInk(r.blocksUntilRent);
       return (
         <>
-          <TipHead chip={t("home.harbourTipAddress")} ink={ink ?? "var(--c-address, #6db0f4)"} mono={!pip.name}>
+          <TipHead chip={t("home.harbourTipAddress")} ink={toneInk(r.blocksUntilRent, false) ?? "var(--c-address, #6db0f4)"} mono={!pip.name}>
             {pip.name || shortId(r.address, 6)}
           </TipHead>
           <TipRows>
             <TipRow label={t("home.harbourTipWhen")} ink={ink}>{whenText(r.blocksUntilRent, t)}</TipRow>
             <TipRow label={t("home.harbourTipBoxes")}>{r.boxCount.toLocaleString(loc)}</TipRow>
-            <TipRow label={t("home.harbourTipRent")} ink={INK.coral}>{formatErgFixed(r.rentNano, loc)}</TipRow>
+            <TipRow label={t("home.harbourTipRent")} ink={TEXT_CORAL}>{formatErgFixed(r.rentNano, loc)}</TipRow>
             <TipRow label={t("home.harbourTipValue")}>{formatErgFixed(r.valueNano, loc)}</TipRow>
           </TipRows>
           <TipNote>{t("home.harbourTipBoat")}</TipNote>
@@ -286,7 +291,7 @@ export function HomeRentHarbour({
             <TipRows>
               <TipRow label={t("home.harbourTipLast")}>{t("home.harbourBlock").replace("{n}", lastClaim.height.toLocaleString(loc))}</TipRow>
               <TipRow label={t("home.harbourTipBoxes")}>{lastClaim.boxes.toLocaleString(loc)}</TipRow>
-              {lastClaim.rentNano ? <TipRow label={t("home.harbourTipRent")} ink={INK.gold}>{`+${formatErgFixed(lastClaim.rentNano, loc)}`}</TipRow> : null}
+              {lastClaim.rentNano ? <TipRow label={t("home.harbourTipRent")} ink={TEXT_GOLD}>{`+${formatErgFixed(lastClaim.rentNano, loc)}`}</TipRow> : null}
             </TipRows>
           ) : null}
           <TipNote>{t("home.harbourTipTugNote")}</TipNote>
@@ -361,7 +366,7 @@ export function HomeRentHarbour({
               {rentLabel ? <span className="text-[15px] font-medium text-[var(--muted-2)]">{t("home.rentUpTo")}</span> : null}
               <span
                 className={clsx("whitespace-nowrap text-[26px] font-semibold tabular-nums tracking-tight lg:max-xl:text-[20px]", !rentLabel && "text-[var(--muted)]")}
-                style={rentLabel ? { color: INK.coral } : undefined}
+                style={rentLabel ? { color: TEXT_CORAL } : undefined}
               >
                 <ReelText text={rentLabel ?? "—"} />
               </span>
@@ -466,7 +471,7 @@ export function HomeRentHarbour({
               </div>
               <div className={clsx("mt-2 grid h-[18px] shrink-0 items-center gap-2 pr-1 text-[11px] text-[var(--muted-2)]", cols)}>
                 <span className="col-span-2 flex min-w-0 items-baseline gap-1.5 overflow-hidden whitespace-nowrap">
-                  <span className="font-semibold" style={{ color: INK.coral }}>{t("home.dangerReef")}</span>
+                  <span className="font-semibold" style={{ color: TEXT_CORAL }}>{t("home.dangerReef")}</span>
                   <span className="truncate">{t("home.dangerReefScale")}</span>
                 </span>
                 <span className="text-right lg:max-xl:hidden">≈ $</span>
@@ -561,7 +566,7 @@ function ReefRow({
               {`${whenText(group.soonest, t)}${height != null && group.soonest > 0 ? ` · ${t("home.harbourBlock").replace("{n}", (height + group.soonest).toLocaleString(loc))}` : ""}`}
             </TipRow>
             {lead ? <TipRow label={t("home.dangerTipErg")}>{formatErgFixed(lead.valueNano, loc)}</TipRow> : null}
-            {lead ? <TipRow label={t("home.dangerTipRent")} ink={INK.coral}>{formatErgFixed(lead.rentNano, loc)}</TipRow> : null}
+            {lead ? <TipRow label={t("home.dangerTipRent")} ink={TEXT_CORAL}>{formatErgFixed(lead.rentNano, loc)}</TipRow> : null}
             <TipRow label={t("home.dangerTipAll")}>{`${glance.exact} · ${countText(t, locale, "home.rentBoxes", group.boxes)}`}</TipRow>
           </TipRows>
           <TipNote>{t("home.dangerTipNote")}</TipNote>
