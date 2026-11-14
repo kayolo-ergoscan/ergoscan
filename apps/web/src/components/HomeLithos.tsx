@@ -11,7 +11,7 @@ import { drawPixel, pixelColor } from "@/components/pixel";
 import { canvasDpr, watchOnScreen } from "@/lib/canvas-run";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { REDUCE_QUERY, useMediaTick } from "@/lib/kayolo/motion";
-import { lookEdge } from "@/lib/look";
+import { lookEdge, onGround, sceneGround } from "@/lib/look";
 import { HOME } from "@/lib/palette";
 import { INK_EVENT } from "@/lib/skin-ink";
 import { formatInt } from "@/lib/format";
@@ -626,7 +626,8 @@ function LithosScene({ data, tip, text, label, tipFor }: SceneInput & { label: s
     };
     mark.src = "/lithos-mark.png";
 
-    const paint = (now: number) => {
+    const paint = (now: number) => onGround(sceneGround(), () => paintScene(now));
+    const paintScene = (now: number) => {
       raf = 0;
       if (dead) return;
       const dt = Math.min(0.05, (now - last) / 1000);
@@ -1068,6 +1069,7 @@ function LithosScene({ data, tip, text, label, tipFor }: SceneInput & { label: s
   return (
     <canvas
       ref={host}
+      data-scene="lithos"
       className="absolute inset-0 h-full w-full"
       role="img"
       aria-label={label}

@@ -12,6 +12,7 @@ import { neonLine } from "@/lib/chart-neon";
 import { TipHead, TipRow, TipRows, useFloatTip } from "@/components/Tip";
 import { pointRect } from "@/lib/tip-place";
 import { useInk } from "@/lib/use-ink";
+import { isLightInk } from "@/lib/skin-ink";
 import { usePhoneChart } from "@/lib/use-phone-chart";
 import {
   PHONE_CHART_PX,
@@ -326,7 +327,7 @@ export function DualLineChart({
     const c = chart.current;
     if (!c) return;
     const chrome = chartChrome();
-    const day = ink === "day";
+    const day = isLightInk(ink);
     const { seriesPts, windowMs, showTxs, showFees } = view;
     if (seriesPts.length < 2) {
       c.clear();

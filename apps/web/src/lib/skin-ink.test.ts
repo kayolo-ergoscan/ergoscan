@@ -5,6 +5,7 @@ import {
   INK_BOOT,
   INK_MODULE,
   colorSchemeFor,
+  isLightInk,
   parseSkinInk,
 } from "./skin-ink";
 
@@ -40,4 +41,13 @@ test("boot script lists every canvas hex", () => {
   assert.match(INK_BOOT, /#1c1b22/);
   assert.match(INK_BOOT, /#2e2d35/);
   assert.match(INK_BOOT, /#eceaf0/);
+});
+
+test("light inks are preview-only: a normal build parses them as OLED", () => {
+  assert.equal(parseSkinInk("light-a"), "oled");
+  assert.equal(parseSkinInk("light-c"), "oled");
+  assert.equal(isLightInk("day"), true);
+  assert.equal(isLightInk("light-b"), true);
+  assert.equal(isLightInk("oled"), false);
+  assert.equal(colorSchemeFor("dim"), "dark");
 });

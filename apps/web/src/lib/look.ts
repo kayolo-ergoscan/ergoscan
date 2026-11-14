@@ -64,11 +64,74 @@ function familyOf(rgb: [number, number, number]): Family {
   return "violet";
 }
 
+/**
+ * How a pixel scene sits on a light ink (`--scene` of the ink, light.css): «day» paints it in
+ * daylight on the card, «window» keeps the card dark (a window onto the night), «dusk» keeps the
+ * night town under a dusk sky. On the dark inks it is «night».
+ */
+export type SceneMode = "night" | "day" | "window" | "dusk";
+
+export function sceneMode(): SceneMode {
+  if (typeof document === "undefined") return "night";
+  const root = document.documentElement;
+  const ink = root.dataset.ink ?? "";
+  if (!ink.startsWith("light-")) return ink === "day" ? "day" : "night";
+  const v = getComputedStyle(root).getPropertyValue("--scene").trim();
+  return v === "day" || v === "window" || v === "dusk" ? v : "day";
+}
+
+/** The ground a scene paints on: its inks come from the dark family unless the scene is in daylight. */
+export function sceneGround(): "light" | "dark" {
+  return sceneMode() === "day" ? "light" : "dark";
+}
+
+let ground: "light" | "dark" | null = null;
+
+/** Paint `fn` on a given ground (a scene card), whatever the page ink is. Synchronous draws only. */
+export function onGround<T>(g: "light" | "dark", fn: () => T): T {
+  const prev = ground;
+  ground = g;
+  try {
+    return fn();
+  } finally {
+    ground = prev;
+  }
+}
+
+function lightGround(): boolean {
+  if (ground) return ground === "light";
+  if (typeof document === "undefined") return false;
+  return (document.documentElement.dataset.ink ?? "").startsWith("light-");
+}
+
 const memo = new Map<string, string>();
+const memoLight = new Map<string, string>();
+let lightFamily: { ink: string; fam: Record<Family, string>; edge: string } | null = null;
+
+/** The light ink's canvas families (`--lk-*` in light.css, the mark tier on the card). */
+function lightInks(): { fam: Record<Family, string>; edge: string } {
+  const ink = document.documentElement.dataset.ink ?? "";
+  if (lightFamily?.ink === ink) return lightFamily;
+  const cs = getComputedStyle(document.documentElement);
+  const fam = {} as Record<Family, string>;
+  for (const k of Object.keys(FAMILY) as Family[]) fam[k] = cs.getPropertyValue(`--lk-${k}`).trim() || FAMILY[k];
+  lightFamily = { ink, fam, edge: cs.getPropertyValue("--lk-edge").trim() || "#f2efe9" };
+  memoLight.clear();
+  return lightFamily;
+}
 
 /** Map a canvas ink into the look's palette. No look on the page: unchanged. */
 export function lookInk(color: string): string {
   if (!currentLook() || !color) return color;
+  if (lightGround()) {
+    const { fam } = lightInks();
+    const lit = memoLight.get(color);
+    if (lit) return lit;
+    const rgb = rgbOf(color);
+    const out = rgb ? fam[familyOf(rgb)] : color;
+    memoLight.set(color, out);
+    return out;
+  }
   const hit = memo.get(color);
   if (hit) return hit;
   const rgb = rgbOf(color);
@@ -79,5 +142,6 @@ export function lookInk(color: string): string {
 
 /** Edge stroke for drawn crates and balls. Null keeps the component's own. */
 export function lookEdge(): string | null {
-  return currentLook() ? "#0e0e0e" : null;
+  if (!currentLook()) return null;
+  return lightGround() ? lightInks().edge : "#0e0e0e";
 }

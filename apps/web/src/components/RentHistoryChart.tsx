@@ -24,6 +24,7 @@ import { formatDottedDate, formatDottedDay } from "@/lib/format";
 import { pickRentChartTip } from "@/lib/rent-chart-tip";
 import { TX_ACTIVITY_TZ } from "@/lib/tx-activity-bin";
 import { useInk } from "@/lib/use-ink";
+import { isLightInk } from "@/lib/skin-ink";
 import { usePhoneChart } from "@/lib/use-phone-chart";
 import { PHONE_X_LABELS, insideTicks, labelGutter, thinTicks, tickStep, tickText } from "@/lib/chart-axis";
 import { TipHead, TipRow, TipRows, useFloatTip } from "@/components/Tip";
@@ -508,7 +509,7 @@ export function RentHistoryChart({
               axisTick: { show: false, ...phoneY.axisTick },
               splitLine: {
                 show: true,
-                lineStyle: { color: chrome.hair, opacity: ink === "day" ? 0.16 : 0.2, width: 1 },
+                lineStyle: { color: chrome.hair, opacity: isLightInk(ink) ? 0.16 : 0.2, width: 1 },
               },
               axisLabel: {
                 inside: true,

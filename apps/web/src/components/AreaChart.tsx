@@ -10,6 +10,7 @@ import { chartChrome } from "@/lib/chart-chrome";
 import { formatDottedDate, formatH24 } from "@/lib/format";
 import { neonLine } from "@/lib/chart-neon";
 import { useInk } from "@/lib/use-ink";
+import { isLightInk } from "@/lib/skin-ink";
 import { TipFigure, TipHead, useFloatTip } from "@/components/Tip";
 import { pointRect } from "@/lib/tip-place";
 import {
@@ -118,7 +119,7 @@ export function AreaChart({
       return;
     }
     const chrome = chartChrome();
-    const day = ink === "day";
+    const day = isLightInk(ink);
     const up = seriesPts[seriesPts.length - 1]!.v >= seriesPts[0]!.v;
     const stroke = color ?? (up ? chrome.up : chrome.down);
     const data = seriesPts.map((p) => [p.t, p.v] as [number, number]);

@@ -5,13 +5,14 @@ import { Tip } from "./Tip";
 import { useT } from "@/lib/i18n/I18nProvider";
 import type { EvidenceKind } from "@/lib/trust-board";
 
+/** `--ev-*` lets a light ink give the dots their own mark-tier inks (the kind fills are too pale there). */
 export const EVIDENCE_TONE: Record<EvidenceKind, string> = {
-  chain: "var(--accent)",
-  decoded: "var(--k-nft, #9b87f5)",
-  telemetry: "var(--c-net, #59b7c7)",
-  live: "var(--up)",
-  heuristic: "var(--k-rent, #d99b2b)",
-  external: "var(--muted)",
+  chain: "var(--ev-chain, var(--accent))",
+  decoded: "var(--ev-decoded, var(--k-nft, #9b87f5))",
+  telemetry: "var(--ev-telemetry, var(--c-net, #59b7c7))",
+  live: "var(--ev-live, var(--up))",
+  heuristic: "var(--ev-heuristic, var(--k-rent, #d99b2b))",
+  external: "var(--ev-external, var(--muted))",
 };
 
 export function EvidenceBadge({

@@ -5,6 +5,7 @@
  * drawn and no frame is asked for. Under reduced motion every change is drawn once, as its final frame.
  */
 import { canvasDpr, watchOnScreen } from "@/lib/canvas-run";
+import { onGround, sceneGround } from "@/lib/look";
 import { pixelSettling } from "@/components/pixel";
 import { readInks, sealPlan, type CityBlock, type Fees, type Frame, type Inks, type Scene, type YardTx } from "./common";
 import { cityGeo, cityTarget, citySiteRest, drawCity, type CityHit, type KayoloCue } from "./city";
@@ -139,7 +140,7 @@ export class CityEngine {
     this.reduce = o.reduce;
     this.text = o.text;
     this.cb = o.cb;
-    this.inks = readInks(document.documentElement);
+    this.inks = readInks(o.city);
     if (typeof Image !== "undefined") {
       const img = new Image();
       img.onload = () => {
@@ -177,7 +178,7 @@ export class CityEngine {
       this.stops.push(() => ro.disconnect());
     }
     const onInk = () => {
-      this.inks = readInks(document.documentElement);
+      this.inks = readInks(this.city.el);
       this.kick();
     };
     window.addEventListener("ergoscan-ink", onInk);
@@ -423,6 +424,11 @@ export class CityEngine {
   }
 
   private paint(now: number): void {
+    // The scene's own ground: a light ink may keep it dark (a window) or paint it by day.
+    onGround(sceneGround(), () => this.paintScene(now));
+  }
+
+  private paintScene(now: number): void {
     // One chain only: a kick made while this frame runs (a commit at a moment's end) is folded in.
     if (this.raf) cancelAnimationFrame(this.raf);
     this.raf = 0;

@@ -592,6 +592,7 @@ function HomeCityPairLive({
           <div className="relative w-full" style={{ height: CITY_H }}>
             <canvas
               ref={cityRef}
+              data-scene="city"
               className="block h-full w-full select-none"
               role="img"
               aria-label={cityLabel}
@@ -664,6 +665,7 @@ function HomeCityPairLive({
           <div className="relative" style={{ height: CITY_H }}>
             <canvas
               ref={yardRef}
+              data-scene="yard"
               className="block h-full w-full select-none"
               role="img"
               aria-label={yardLabel}
