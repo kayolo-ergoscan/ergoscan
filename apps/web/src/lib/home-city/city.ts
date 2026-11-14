@@ -12,6 +12,7 @@
  * On a seal the crates that leave the yard land as storeys one by one, the roof closes, Kayolo hops
  * onto it and the street moves one lot left.
  */
+import type { CityCue } from "./beats";
 import { lookInk } from "@/lib/look";
 import { R, alpha, clamp, easeInOut, easeOut, noise, builtAt, sealPlan, shade, type CityBlock, type Frame, type Inks, type Scene } from "./common";
 import { BUSY_TX } from "@/lib/kayolo/thresholds";
@@ -322,14 +323,12 @@ function drawSite(ctx: CanvasRenderingContext2D, g: CityGeo, inks: Inks) {
 /** A tower on screen: where it can be pointed at. */
 export type CityHit = { id: string; x0: number; x1: number; top: number; bottom: number };
 
-/** What Kayolo does when no seal is playing: the component's choice (rest, a hover, sleep, a rare height). */
-export type KayoloCue = {
-  mood: "idle" | "look" | "happy" | "sleepy" | "pleased";
-  /** Look at a tower (its id), or ahead when null. */
-  at: string | null;
-  /** 0…1 of a hop in place (the rare height). */
-  hop: number;
-};
+/**
+ * What Kayolo does when no seal is playing: the component's choice (rest, a hover, sleep, a rare
+ * height, an Э4 beat or background — lib/home-city/beats.ts). `at`: a tower to look at (its id), or
+ * ahead when null; `gaze` wins over it; `hop`: 0…1 of a hop in place.
+ */
+export type KayoloCue = CityCue;
 
 export type CityOut = { hits: CityHit[]; kayolo: KayoloPose | null; built: number | null };
 
@@ -437,14 +436,15 @@ export function drawCity(
   } else if (newest) {
     const r = roofOf(newest);
     const at = room(r) ? r : street;
-    const cue = opt.cue ?? { mood: "idle", at: null, hop: 0 };
+    const cue: KayoloCue = opt.cue ?? { mood: "idle", at: null, hop: 0 };
     let gaze: { x: number; y: number } | null = { x: 0.9, y: -0.2 };
-    if (cue.at) {
+    if (cue.gaze !== undefined) gaze = cue.gaze;
+    else if (cue.at) {
       const tw = before.towers.find((x) => x.b.id === cue.at);
       if (tw) gaze = { x: clamp((tw.x + tw.fw / 2 - at.x) / 40, -1.3, 1.3), y: 0.15 };
     }
     if (cue.mood === "sleepy") gaze = null;
-    kayolo = { x: at.x, y: at.y - Math.sin(clamp(cue.hop, 0, 1) * Math.PI) * (small ? 6 : 9), mood: cue.mood, face: 1, gaze };
+    kayolo = { x: at.x, y: at.y - Math.sin(clamp(cue.hop, 0, 1) * Math.PI) * (small ? 6 : 9), mood: cue.mood, face: 1, gaze, ...(cue.px ? { px: cue.px } : {}) };
   }
   drawCrane(ctx, before, inks, hookX, hookY);
   return { hits, kayolo, built };

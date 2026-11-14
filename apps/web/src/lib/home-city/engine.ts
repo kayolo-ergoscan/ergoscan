@@ -10,6 +10,7 @@ import { readInks, sealPlan, type CityBlock, type Fees, type Frame, type Inks, t
 import { cityGeo, cityTarget, citySiteRest, drawCity, type CityHit, type KayoloCue } from "./city";
 import { KAYOLO_ID, drawKayolo, kayoloScale } from "./kayolo";
 import { momentPlays, sealMatch, sealStoreys, sealTargets, sealYard, waitingShown } from "./moment";
+import { BEAT_GAP_MS, BEAT_MS, beatCue, bgCue, type CityBeatKind, type CityBg } from "./beats";
 import { cableAt, drawCrateFlight, drawYard, drawYardCable, flightSize, yardCable, yardRest, type YardHit, type YardText } from "./yard";
 
 /** No new block for this long: the chain or the node is behind, he dozes. Ergo aims at 2 min. */
@@ -114,6 +115,10 @@ export class CityEngine {
   private mountAt = performance.now();
   private settleUntil = 0;
   private rare: { height: number; at: number; start: number | null } | null = null;
+  /** Э4: a short beat (frames while it runs) and the background face (one frame when it changes). */
+  private beat: { kind: CityBeatKind; at: number; gaze: { x: number; y: number } | null } | null = null;
+  private beatAt = -Infinity;
+  private bg: CityBg = null;
   private timers: number[] = [];
   private holdTimer = 0;
   private rareTimer = 0;
@@ -160,6 +165,7 @@ export class CityEngine {
           if (this.moment) this.finishMoment();
           this.adds.clear();
           this.rare = null;
+          this.beat = null;
         } else this.kick();
       })
     );
@@ -340,6 +346,32 @@ export class CityEngine {
     this.kick(true);
   }
 
+  /**
+   * Kayolo Э4 on home: a beat plays only on screen, with motion allowed, when no seal, rare height
+   * or other beat runs, and ≥ 20 s after the last one (§2.8); otherwise it is dropped (no queue).
+   */
+  beatOn(kind: CityBeatKind, gaze: { x: number; y: number } | null = null): boolean {
+    if (this.dead || this.reduce || !this.on || this.moment || this.rare || this.beat) return false;
+    const now = performance.now();
+    if (now - this.beatAt < BEAT_GAP_MS) return false;
+    this.beat = { kind, at: now, gaze };
+    this.beatAt = now;
+    this.kick(true);
+    return true;
+  }
+
+  /** The background face (§2.4): a face, not motion — drawn once when it changes. */
+  setBg(bg: CityBg) {
+    if (bg === this.bg) return;
+    this.bg = bg;
+    this.kick(true);
+  }
+
+  /** Test hook: what he is doing now. */
+  kayoloNow() {
+    return { beat: this.beat?.kind ?? null, bg: this.bg };
+  }
+
   private later(ms: number, fn: () => void) {
     const id = window.setTimeout(() => {
       this.timers = this.timers.filter((t) => t !== id);
@@ -447,6 +479,7 @@ export class CityEngine {
     this.moment = null;
     this.adds.clear();
     this.rare = null;
+    this.beat = null;
     this.settleUntil = 0;
     try {
       if (m) {
@@ -635,9 +668,18 @@ export class CityEngine {
         this.settleUntil = now + SETTLE_MS;
       }
     }
+    const b = this.beat;
+    if (b && !this.moment) {
+      const c = beatCue(b.kind, now - b.at, b.gaze, scene.blocks[0]?.id ?? null);
+      if (c) return { cue: c, rare: true };
+      this.beat = null;
+      this.settleUntil = now + SETTLE_MS;
+    } else if (b && now - b.at >= BEAT_MS[b.kind]) this.beat = null;
     if (this.hover.city) return { cue: { mood: "look", at: this.hover.city, hop: 0 }, rare: false };
     const ts = scene.blocks[0]?.ts ?? 0;
     if (ts && Date.now() - ts > STALE_MS) return { cue: { mood: "sleepy", at: null, hop: 0 }, rare: false };
+    const bg = bgCue(this.bg);
+    if (bg) return { cue: bg, rare: false };
     return { cue: { mood: "idle", at: null, hop: 0 }, rare: false };
   }
 

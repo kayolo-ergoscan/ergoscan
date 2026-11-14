@@ -61,7 +61,24 @@ export type ActName =
   | "readList"
   | "runList"
   | "tear"
-  | "tabLook";
+  | "tabLook"
+  /* Э4: the whole chain (§2.7, §8.3). */
+  | "count"
+  | "countNod"
+  | "catchUp"
+  | "rejoin"
+  | "wakeNod"
+  | "relief"
+  | "reliefHop"
+  | "eyePop"
+  | "flinch"
+  | "readFast"
+  | "priceLook"
+  | "txConfirmed"
+  | "txConfirmedBig"
+  | "knock2"
+  | "nodKnock"
+  | "glanceTilt";
 
 export type Vec = { x: number; y: number };
 
@@ -95,6 +112,8 @@ export type ActInput = {
   rest?: Vec;
   /** Facing: the eyes "at the person" cancel the facing offset. */
   face?: 1 | -1;
+  /** count(k): how many blocks the eyes count (1–3). */
+  n?: number;
   rnd: () => number;
 };
 
@@ -159,6 +178,22 @@ export const ACT_MS: Record<ActName, number> = {
   runList: 660,
   tear: 1200,
   tabLook: 1100,
+  count: 900,
+  countNod: 1260,
+  catchUp: 1760,
+  rejoin: 2210,
+  wakeNod: 810,
+  relief: 950,
+  reliefHop: 1810,
+  eyePop: 630,
+  flinch: 140,
+  readFast: 2820,
+  priceLook: 2120,
+  txConfirmed: 2440,
+  txConfirmedBig: 3240,
+  knock2: 640,
+  nodKnock: 760,
+  glanceTilt: 1600,
 };
 
 const TIER: Record<ActName, Tier> = {
@@ -210,6 +245,22 @@ const TIER: Record<ActName, Tier> = {
   runList: 0,
   tear: 1,
   tabLook: 0,
+  count: 0,
+  countNod: 1,
+  catchUp: 2,
+  rejoin: 2,
+  wakeNod: 1,
+  relief: 1,
+  reliefHop: 2,
+  eyePop: 1,
+  flinch: 1,
+  readFast: 1,
+  priceLook: 0,
+  txConfirmed: 2,
+  txConfirmedBig: 3,
+  knock2: 1,
+  nodKnock: 1,
+  glanceTilt: 1,
 };
 
 /**
@@ -224,9 +275,12 @@ export function pokeAct(n: number): ActName {
 const VARIANTS: Partial<Record<ActName, number>> = { glance: 3, nod: 3, shrug: 2, pleased: 2 };
 const lastVariant = new Map<ActName, number>();
 
-/** A scheduler step for an act. */
-export function step(name: ActName): Step {
-  return { tier: TIER[name], act: name, ms: ACT_MS[name] };
+/** A scheduler step for an act. Counting acts last k × 300 ms longer or shorter (k ≤ 3). */
+export function step(name: ActName, n?: number): Step {
+  // A rejoin counts only what was missed (0 is none); the others count at least one block.
+  const k = Math.max(name === "rejoin" ? 0 : 1, Math.min(3, Math.round(n ?? 3)));
+  const counted = name === "count" || name === "countNod" || name === "catchUp" || name === "rejoin";
+  return { tier: TIER[name], act: name, ms: ACT_MS[name] - (counted ? (3 - k) * 300 : 0) };
 }
 
 /** Variant index, never the same as the last one for this act. */
@@ -642,7 +696,155 @@ export function makeAct(name: ActName, input: ActInput): Act {
     case "tabLook":
       // A tab: a look at it, then down into its panel.
       return act(1100, (t) => ({ gaze: look2(t, rest, to, input.target2 ?? to, 420, 520, 160) }));
+    /* ---------------- Э4 ---------------- */
+    case "count":
+      // count(k): a jerk of the eyes toward the tip for every block (k ≤ 3, 300 ms each).
+      return act(300 * kOf(input), (t) => ({ gaze: countGaze(t, kOf(input), rest, to) }));
+    case "countNod": {
+      const c = 300 * kOf(input);
+      return act(c + 360, (t) => (t < c ? { gaze: countGaze(t, kOf(input), rest, to) } : nodAt(t - c, reduce)));
+    }
+    case "catchUp": {
+      // count(k) + a happy hop (§2.7 catchUp). RM: the counting and ^ ^.
+      const c = 300 * kOf(input);
+      return act(c + 860, (t) => (t < c ? { gaze: countGaze(t, kOf(input), rest, to) } : { mood: reduce ? "pleased" : "happy" }));
+    }
+    case "rejoin": {
+      // The feed is back after a long while: awake, count what he missed, a happy hop.
+      const k = Math.max(0, Math.min(3, Math.round(input.n ?? 3)));
+      const c = 300 * k;
+      return act(450 + c + 860, (t) => {
+        if (t < 450) return { mood: "idle", eyeScale: 1 + (reduce ? 0 : 0.34) * bump(t, 150, 450) };
+        if (t < 450 + c) return { gaze: countGaze(t - 450, k, rest, to) };
+        return { mood: reduce ? "pleased" : "happy" };
+      });
+    }
+    case "wakeNod":
+      return act(810, (t) => (t < 450 ? { mood: "idle", eyeScale: 1 + (reduce ? 0.15 : 0.34) * bump(t, 150, 450) } : nodAt(t - 450, reduce)));
+    case "relief":
+      return act(950, (t) => reliefAt(t, reduce));
+    case "reliefHop":
+      // The block came after a long wait: a breath out, then a happy hop.
+      return act(1810, (t) => (t < 950 ? reliefAt(t, reduce) : { mood: reduce ? "pleased" : "happy" }));
+    case "eyePop":
+      // Something on screen changed (a pending tx): eyes 1 → 1.34 and up (RM: no lift), at it.
+      return act(630, (t) => {
+        const k = smooth(t / 120) * (1 - smooth((t - 450) / 180));
+        return { eyeScale: 1 + 0.34 * k, eyeLift: reduce ? undefined : 2.2 * k, gaze: look(t, 330, 180, rest, to) };
+      });
+    case "flinch":
+      return act(140, (t) => ({ eyeScale: 1 + 0.2 * bump(t, 0, 140), eyeLift: reduce ? undefined : 2 * bump(t, 0, 140) }));
+    case "readFast": {
+      // A surge: 2 s of quick reading (work face, the eyes jerk along the pool), then a glance.
+      const span = 0.35;
+      return act(2000 + 820, (t) => {
+        if (t >= 2000) return { gaze: look(t - 2000, 500, 200, rest, to) };
+        const i = Math.floor(t / 250);
+        const jitter = ((i * 7) % 5) / 4 - 0.5;
+        return { mood: "work", gaze: { x: clamp(to.x + jitter * span, -1, 1), y: clamp(to.y + (i % 2 ? 0.08 : -0.08), -1, 1) } };
+      });
+    }
+    case "priceLook": {
+      // E14: a neutral look at the price, then the eyes run along the ticker. Never a mood.
+      const a = { x: clamp(to.x - 0.35, -1, 1), y: to.y };
+      const b = { x: clamp(to.x + 0.35, -1, 1), y: to.y };
+      return act(2120, (t) => {
+        if (t < 800) return { gaze: t < SACCADE ? mix(rest, to, smooth(t / SACCADE)) : to };
+        if (t < 2000) {
+          const u = (t - 800) / 1200;
+          return { gaze: u < 0.5 ? mix(to, a, smooth(u * 2)) : mix(a, b, smooth((u - 0.5) * 2)) };
+        }
+        return { gaze: mix(b, rest, smooth((t - 2000) / 120)) };
+      });
+    }
+    case "txConfirmed":
+    case "txConfirmedBig": {
+      // «Твоя tx в блоке» (§6.4): a flinch, a happy hop (two for a favourite), two knocks at the
+      // confirmations, a look at the block link. RM: the faces, blinks for the knocks.
+      const big = name === "txConfirmedBig";
+      const hopEnd = big ? 1940 : 1000;
+      const kAt = hopEnd;
+      const lookAt = kAt + 640;
+      const link = input.target2 ?? to;
+      return act(lookAt + 800, (t) => {
+        if (t < 140) return { eyeScale: 1 + 0.2 * bump(t, 0, 140), eyeLift: reduce ? undefined : 2 * bump(t, 0, 140) };
+        if (t < hopEnd) {
+          if (big && t >= 1000 && t < 1080) return { mood: "pleased" };
+          return { mood: reduce ? "pleased" : "happy" };
+        }
+        if (t < lookAt) {
+          const u = t - kAt;
+          return {
+            gaze: u < SACCADE ? mix(rest, to, smooth(u / SACCADE)) : to,
+            pick: reduce ? undefined : knockAt(u, 160) + knockAt(u, 400),
+            eyeScale: reduce ? 1 - 0.9 * Math.max(blinkAt(u, 160, 140), blinkAt(u, 400, 140)) : undefined,
+          };
+        }
+        return { gaze: look(t - lookAt, 480, 200, rest, link) };
+      });
+    }
+    case "knock2": {
+      // knock(a, 2): faces the anchor, two knocks (160 + 2 × 240). RM: a look and two blinks.
+      const behind = to.x * face < -0.05;
+      return act(640, (t) => ({
+        gaze: look(t, 360, 120, rest, to),
+        pick: reduce ? undefined : knockAt(t, 160) + knockAt(t, 400),
+        flip: !reduce && behind && t < 600,
+        eyeScale: reduce ? 1 - 0.9 * Math.max(blinkAt(t, 160, 140), blinkAt(t, 400, 140)) : undefined,
+      }));
+    }
+    case "nodKnock": {
+      // /block at 720 confirmations: a nod, then one knock at the reward (it matured).
+      const at2 = input.target2 ?? to;
+      return act(760, (t) =>
+        t < 360
+          ? nodAt(t, reduce)
+          : { gaze: look(t - 360, 160, 100, rest, at2), pick: reduce ? undefined : knockAt(t - 360, 140), eyeScale: reduce ? 1 - 0.9 * blinkAt(t - 360, 150, 140) : undefined }
+      );
+    }
+    case "glanceTilt": {
+      // A rare category: a glance at the row, then a curious tilt.
+      const s = toward(to, face);
+      return act(1600, (t) => ({
+        gaze: look(t, 1300, 180, rest, to),
+        mood: t >= 600 && t < 1450 ? "curious" : undefined,
+        head: reduce || t < 600 ? undefined : 0.4 * s * smooth((t - 600) / 200) * (1 - smooth((t - 1250) / 250)),
+      }));
+    }
   }
+}
+
+/** k of a counting act, 1–3. */
+function kOf(input: ActInput): number {
+  return Math.max(1, Math.min(3, Math.round(input.n ?? 3)));
+}
+
+/** count(k): the eyes jerk toward the tip once per block, each a little further along. */
+function countGaze(t: number, k: number, rest: Vec, to: Vec): Vec {
+  const i = Math.min(k - 1, Math.floor(t / 300));
+  const u = t - i * 300;
+  const at = { x: clamp(to.x + (i - (k - 1) / 2) * 0.18, -1, 1), y: to.y };
+  if (u < SACCADE) return mix(rest, at, smooth(u / SACCADE));
+  if (u < 200) return at;
+  return mix(at, rest, smooth((u - 200) / 100));
+}
+
+/** The nod of §2.7 at t (360 ms); RM: a blink. */
+function nodAt(t: number, reduce: boolean): PoseDelta {
+  if (reduce) return { eyeScale: 1 - 0.9 * blinkAt(t, 0, 150) };
+  let head = 0;
+  if (t < 140) head = 0.28 * smooth(t / 140);
+  else if (t < 260) head = 0.28 + (-0.06 - 0.28) * smooth((t - 140) / 120);
+  else head = -0.06 * (1 - smooth((t - 260) / 100));
+  return { head, squash: -0.05 * bump(t, 60, 300) };
+}
+
+/** relief (§2.7, ≈ 950 ms): sinks to 0.9 in 200, springs back in 250, a smile for 500. */
+function reliefAt(t: number, reduce: boolean): PoseDelta {
+  if (t >= 450) return { mood: "pleased" };
+  if (reduce) return {};
+  const squash = t < 200 ? -0.1 * smooth(t / 200) : -0.1 + 0.14 * smooth((t - 200) / 150) - 0.04 * smooth((t - 350) / 100);
+  return { squash, eyeScale: t < 200 ? 1 - 0.3 * smooth(t / 200) : 0.7 + 0.3 * smooth((t - 200) / 250) };
 }
 
 /** +1 leans toward the facing, −1 back: toward a screen-space gaze. */

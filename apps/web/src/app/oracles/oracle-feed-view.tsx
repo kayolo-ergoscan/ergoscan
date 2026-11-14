@@ -41,6 +41,9 @@ import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { countText } from "@/lib/i18n/messages";
 import { ENTER_MS, enteringIds, useEnterIds } from "@/lib/keyed-enter";
 import { useKeepFresh, usePageSync } from "@/lib/page-sync";
+import { onKayolo, say } from "@/lib/kayolo/events";
+import { chainAwait } from "@/lib/kayolo/chain-sense";
+import { REREAD_PAUSES_MS } from "@/lib/kayolo/thresholds";
 import {
   ORACLE_PACK,
   applyOracleFeed,
@@ -140,6 +143,47 @@ export function OracleFeedView({
   );
 
   useKeepFresh(() => void load(true));
+
+  // Kayolo E15 (§6.7, §8.2): a block sealed oracle txs — the feed re-reads with pauses 1–2–3–4–5 s
+  // (≤ 15 s) until it shows a new answer or height; then he knocks at the price. Only after such a
+  // seal (≤ once in 2 min), never on other blocks. That block's E1 waits for it (§2.8).
+  const loadRef = useRef(load);
+  loadRef.current = load;
+  const oracleWatch = useRef<{ height: number; from: { height: number | null; quote: unknown } } | null>(null);
+  useEffect(() => {
+    const offHold = chainAwait((s) => !!s.oracle);
+    let timer = 0;
+    let gen = 0;
+    const off = onKayolo((ev) => {
+      if (ev.k !== "chain:oracle") return;
+      const my = ++gen;
+      window.clearTimeout(timer);
+      oracleWatch.current = { height: ev.height, from: { height: packRef.current.height ?? null, quote: packRef.current.quote } };
+      const step = (k: number) => {
+        timer = window.setTimeout(() => {
+          if (my !== gen || !oracleWatch.current) return;
+          void loadRef.current(true);
+          if (k + 1 < REREAD_PAUSES_MS.length) step(k + 1);
+          else timer = window.setTimeout(() => (oracleWatch.current = null), 2000);
+        }, REREAD_PAUSES_MS[k]);
+      };
+      step(0);
+    });
+    return () => {
+      offHold();
+      off();
+      gen += 1;
+      window.clearTimeout(timer);
+      oracleWatch.current = null;
+    };
+  }, []);
+  useEffect(() => {
+    const w = oracleWatch.current;
+    if (!w) return;
+    if ((pack.height ?? null) === w.from.height && pack.quote === w.from.quote) return;
+    oracleWatch.current = null;
+    say({ k: "page:data", what: "oracle", height: w.height });
+  }, [pack.height, pack.quote]);
   useEffect(() => {
     if (skipMount.current) {
       skipMount.current = false;
@@ -252,6 +296,7 @@ export function OracleFeedView({
                 label: t("oracles.kpiAnswer"),
                 value: answer,
                 unavailable: pack.quote == null,
+                kayolo: "oracle-price",
                 sub: t(slug === "xau-erg" ? "oracles.kpiAnswerSubXau" : "oracles.kpiAnswerSub"),
                 mark: <KpiMark id="price" tone={INK.gold} />,
                 ink: INK.gold,

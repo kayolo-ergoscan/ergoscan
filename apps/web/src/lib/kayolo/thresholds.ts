@@ -59,6 +59,8 @@ export const T1_GAP_MS = 6_000;
 export const T2_GAP_MS = 20_000;
 export const T2_PER_2MIN = 3;
 export const T2_PER_HOUR = 20;
+/** The hour's hops spread out: ≤ 10 in any 30 min, so a fast half hour can't spend them at once (§9.11, §12.23). */
+export const T2_PER_HALF_HOUR = 10;
 export const T3_GAP_MS = 120_000;
 export const T3_PER_HOUR = 8;
 export const ATTN_5MIN_MS = 18_000;
@@ -127,3 +129,97 @@ export const CARET_PX = 12;
 export const CARET_PAUSE_MS = 150;
 /** The recolour blink (§7.1): the colour changes while the eyes are shut. */
 export const RECOLOR_MS = 240;
+
+/* ---------------- Э4: the whole chain (§2.4, §8.2, §8.3) ---------------- */
+/** Ergo aims at 2 min; the stream's own average (fees.histogram eta) replaces it. */
+export const AVG_BLOCK_MS = 120_000;
+/** E5 at 2× the average, E6 at 3×, E7 at 8 min — counted from when this browser got the block. */
+export const WAIT1_X = 2;
+export const WAIT2_X = 3;
+export const STALL_MS = 8 * 60_000;
+/** E4: the height went up by this much at once. Counting glances stop at 3. */
+export const CATCHUP_MIN = 2;
+export const COUNT_MAX = 3;
+/** E12: right after a seal the pool fell to ≤ 0.4 of what waited (≥ 100). */
+export const DRAIN_MS = 3_000;
+export const DRAIN_RATIO = 0.4;
+export const DRAIN_MIN = 100;
+/** E10: once in 3 min; on /mempool a category under 2 % of this session's txs (≥ 50 seen). */
+export const TOPIC_GAP_MS = 3 * 60_000;
+export const TOPIC_RARE = 0.02;
+export const TOPIC_MIN_SEEN = 50;
+/** E11: ≥ max(200, 2 × the median per-minute count of 30 min), two snapshots ≥ 2 s apart. */
+export const SURGE_FLOOR = 200;
+export const SURGE_X = 2;
+export const SURGE_WINDOW_MIN = 30;
+export const SURGE_CALM_X = 1.3;
+export const SURGE_CALM_MS = 2 * 60_000;
+export const SURGE_GAP_MS = 10 * 60_000;
+/** After a reconnect the first snapshots are not a surge or a drain. */
+export const RECONNECT_QUIET_MS = 10_000;
+/** Two readings of the same sensor count as two only this far apart (a snapshot comes twice in a seal). */
+export const TWICE_MS = 2_000;
+/** E13: p50 ≥ 3 × its hour's median (≥ 10 min of minutes), twice; calm at ≤ 1.5 × for 5 min; once in 30 min. */
+export const FEE_X = 3;
+export const FEE_WINDOW_MIN = 60;
+export const FEE_WARM_MIN = 10;
+export const FEE_CALM_X = 1.5;
+export const FEE_CALM_MS = 5 * 60_000;
+/** E13 judges p50 only with this many txs waiting (a pool of 6 swings 600×, §12.23). */
+export const FEE_MIN_POOL = 20;
+export const FEE_GAP_MS = 30 * 60_000;
+/** E14: ≥ 1 % since the last poll, or ≥ 2.5 % from the low or high of the last 10 polls; once in 15 min. */
+export const PRICE_STEP = 0.01;
+export const PRICE_SWING = 0.025;
+export const PRICE_POLLS = 10;
+export const PRICE_GAP_MS = 15 * 60_000;
+/** E15: once in 2 min; the act waits ≤ 15 s for the page to show the new price. */
+export const ORACLE_GAP_MS = 2 * 60_000;
+export const PAGE_DATA_MS = 15_000;
+/** E16/E17: down this long is «связь пропала»; after 2 min he stops waiting (a proxy may cut WS for good). */
+export const DOWN_MS = 6_000;
+export const LOST_MS = 2 * 60_000;
+/** Down this long is a rejoin with a hop, shorter a nod. */
+export const REJOIN_MS = 30_000;
+/** More than this many cycles in 2 min is a flapping feed: a nod, nothing more. */
+export const FLAP_CYCLES = 3;
+export const FLAP_WINDOW_MS = 2 * 60_000;
+/** After the feed is back, the tip that follows tells how far it moved; no tip this long — k 0. */
+export const REJOIN_WAIT_MS = 1_500;
+/** «Связь пропала» dozes after a minute (§2.4). */
+export const DOWN_DOZE_MS = 60_000;
+/** E19: index lag above 5 on two polls; ≤ 2 clears it. Node headers ahead by ≥ 3 for over 30 s. */
+export const BEHIND_LAG = 5;
+export const BEHIND_CLEAR = 2;
+export const NODE_BEHIND = 3;
+export const NODE_BEHIND_MS = 30_000;
+/** E19: a knock at the indicator every 60–90 s while it is on screen, ≤ 3 per visit. */
+export const BEHIND_KNOCK_MIN_MS = 60_000;
+export const BEHIND_KNOCK_MAX_MS = 90_000;
+export const BEHIND_KNOCKS = 3;
+/** E21: an epoch is 1024 blocks. */
+export const EPOCH_LEN = 1024;
+/** A background's think sway (and its darting eyes) runs this long, then the face holds still. */
+export const BACK_WOBBLE_MS = 2_000;
+/** A page:* about a height takes the block's own reaction this long after it (§2.8). */
+export const HOLD_MS = 5_000;
+/** TTLs (§8.3). */
+export const TTL_E4 = 8_000;
+export const TTL_TX_CONFIRMED = 45_000;
+export const TTL_PAGE = 20_000;
+export const TTL_E10 = 6_000;
+export const TTL_E11 = 30_000;
+export const TTL_E13 = 30_000;
+export const TTL_E14 = 20_000;
+export const TTL_E17 = 4_000;
+/** page:addr-pending: a gesture once in 30 s per address. */
+export const PENDING_GAP_MS = 30_000;
+/** E23: «later» gets a glance only when the rent is ≤ 90 days off (720 blocks a day). */
+export const RENT_LATER_BLOCKS = 90 * 720;
+/** /tx in the mempool: a look at the «mempool» field ≤ 3 per visit, never from A2 on. */
+export const POOL_LOOKS = 3;
+/** Confirmations get a nod up to this many (§6.4); /block also at 720 (the reward matured). */
+export const CONF_NODS = 10;
+export const CONF_REWARD = 720;
+/** A re-read after a seal: the pauses 1–2–3–4–5 s (≤ 15 s) until the index shows the block. */
+export const REREAD_PAUSES_MS = [1_000, 2_000, 3_000, 4_000, 5_000] as const;

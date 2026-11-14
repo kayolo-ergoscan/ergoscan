@@ -49,6 +49,10 @@ import { countText } from "@/lib/i18n/messages";
 import { useFavoriteOf } from "@/lib/favorites";
 import { readHashTab, setHashTab } from "@/lib/hash-tab";
 import { useKeepFresh, usePageSync } from "@/lib/page-sync";
+import { say } from "@/lib/kayolo/events";
+import { chainAwait } from "@/lib/kayolo/chain-sense";
+import { confirmationsAwait, confirmationsEvent, confirmationsLive } from "@/lib/kayolo/page-data";
+import { REREAD_PAUSES_MS } from "@/lib/kayolo/thresholds";
 import { ENTER_MS, SNAPSHOT_FETCH, enteringIds, useEnterIds } from "@/lib/keyed-enter";
 import { paintTxSnapshot } from "@/lib/tx-shape-paint";
 import { parseFullMeaning } from "@/lib/tx-meaning-row";
@@ -187,7 +191,7 @@ export function TxView({
   const t = useT();
   const txFav = useFavoriteOf("transactions", id);
   const { locale } = useI18n();
-  const { markSynced } = usePageSync();
+  const { markSynced, tip } = usePageSync();
   const ioIdsRef = useRef<string[]>([]);
   const [data, setData] = useState<TxPageSnapshot | null>(() => {
     const snap = asTxData(initial);
@@ -267,6 +271,62 @@ export function TxView({
   useKeepFresh((silent) => {
     void loadRef.current(silent);
   });
+
+  // «Твоя tx в блоке» (Kayolo Э4, §6.4): the seal that carries this tx comes before the index knows
+  // the block, so the page re-reads with pauses 1–2–3–4–5 s (≤ 15 s) until it says «in a block».
+  // Only on that seal: no request on any other block. A tip without its seal re-reads once.
+  const sealRead = useRef(0);
+  useEffect(() => {
+    if (!unconfirmed || !id) return;
+    let timer = 0;
+    let gen = 0;
+    const run = (k: number, my: number, pauses: readonly number[]) => {
+      timer = window.setTimeout(() => {
+        if (my !== gen) return;
+        loadRef.current(true);
+        if (k + 1 < pauses.length) run(k + 1, my, pauses);
+        else sealRead.current = 0;
+      }, pauses[k]);
+    };
+    const off = chainAwait(({ txIds }) => {
+      if (txIds && !txIds.includes(id)) return false;
+      if (sealRead.current) return txIds != null;
+      sealRead.current = 1;
+      gen += 1;
+      run(0, gen, txIds ? REREAD_PAUSES_MS : [3000]);
+      return txIds != null;
+    });
+    return () => {
+      off();
+      gen += 1;
+      window.clearTimeout(timer);
+      sealRead.current = 0;
+    };
+  }, [id, unconfirmed]);
+
+  // The page showed «confirmed» while it was open: his act is by the data, not by the event.
+  const wasPending = useRef<boolean | null>(null);
+  const favOn = txFav.on;
+  useEffect(() => {
+    if (!data) return;
+    const was = wasPending.current;
+    wasPending.current = !data.confirmed;
+    if (was === true && data.confirmed && data.inclusionHeight != null) {
+      say({ k: "page:tx-confirmed", txId: id, height: data.inclusionHeight, ...(favOn ? { fav: true } : {}) });
+    }
+  }, [data, id, favOn]);
+
+  // In the mempool: a still think, the eyes on the «mempool» field (§6.4).
+  useEffect(() => {
+    if (!unconfirmed) return;
+    const el = document.querySelector('[data-kayolo="tx-pending"]');
+    say({ k: "page:think", on: true, el });
+    return () => say({ k: "page:think", on: false });
+  }, [unconfirmed]);
+
+  useEffect(() => {
+    if (err?.includes("not_found") && !data) say({ k: "page:miss" });
+  }, [err, data]);
 
   useEffect(() => {
     if (initial) {
@@ -393,6 +453,19 @@ export function TxView({
   const isCoinbase = data?.indexInBlock === 0 || data?.category === "coinbase";
   const height = data?.inclusionHeight ?? null;
   const index = data?.indexInBlock ?? null;
+  // Confirmations follow the live tip (no request): tip − inclusion + 1, never below the snapshot.
+  const liveConf = data?.confirmed ? confirmationsLive(data.numConfirmations ?? null, height, tip?.height ?? null) : null;
+  // Kayolo nods for confirmations 2…10, by the number on the page; that block's E1 waits for it.
+  const confSeen = useRef<number | null>(null);
+  const tipHeight = tip?.height ?? null;
+  useEffect(() => {
+    const prev = confSeen.current;
+    confSeen.current = liveConf;
+    const ev = confirmationsEvent("tx", prev, liveConf, tipHeight);
+    if (ev) say(ev);
+  }, [liveConf, tipHeight]);
+  const confAwait = confirmationsAwait("tx", liveConf);
+  useEffect(() => (confAwait ? chainAwait(() => true) : undefined), [confAwait]);
   const feeRate =
     feeShown > 0n && data && data.size > 0 ? Number(feeShown) / data.size : 0;
   const declaredIn = data?.inputCount ?? null;
@@ -454,7 +527,7 @@ export function TxView({
               index,
               blockHref,
               timestamp: data.timestamp ?? (data.confirmed ? null : pool?.firstSeen ?? null),
-              confirmations: data.numConfirmations ?? null,
+              confirmations: liveConf,
               size: data.size,
               inputs: declaredIn ?? inputs.length,
               outputs: declaredOut ?? outputs.length,
@@ -572,7 +645,7 @@ export function TxView({
                 {data.confirmed && height != null ? (
                   blockHref ? (
                     <KpiNum>
-                      <Link prefetch={false} href={blockHref} className="text-accent hover:underline">
+                      <Link prefetch={false} href={blockHref} className="text-accent hover:underline" data-kayolo="block-link">
                         {height.toLocaleString(loc(locale))}
                       </Link>
                     </KpiNum>
@@ -580,7 +653,9 @@ export function TxView({
                     <KpiNum>{height.toLocaleString(loc(locale))}</KpiNum>
                   )
                 ) : (
-                  <KpiNum>{t("tx.mempool")}</KpiNum>
+                  <span data-kayolo="tx-pending">
+                    <KpiNum>{t("tx.mempool")}</KpiNum>
+                  </span>
                 )}
               </p>
               {(index != null || !data.confirmed) && (
@@ -605,13 +680,16 @@ export function TxView({
                   {data.timestamp ? formatClockTime(data.timestamp, locale) : dash}
                 </KpiNum>
               </p>
-              <p className="mt-0.5 truncate text-[12px] leading-none text-[var(--muted-2)]">
+              <p
+                className="mt-0.5 truncate text-[12px] leading-none text-[var(--muted-2)]"
+                data-kayolo={data.confirmed ? "confirmations" : undefined}
+              >
                 {[
                   data.timestamp ? formatNumericDate(data.timestamp, locale) : null,
                   data.confirmed
                     ? t("tx.confs").replace(
                         "{n}",
-                        String(data.numConfirmations ?? 0)
+                        String(liveConf ?? 0)
                       )
                     : t("tx.unconfirmed"),
                 ]

@@ -10,6 +10,7 @@ import { useKeepFresh } from "@/lib/page-sync";
 import { parseSiteTape, type SiteMarket } from "@/lib/site-market";
 import { tokenTickerInk } from "@/lib/token-meta";
 import type { SpectrumTapeRow } from "@/lib/list-snapshots";
+import { chainPrice } from "@/lib/kayolo/chain-sense";
 
 /** Header ERG/USD. The ticker and the price chip share one fetch. */
 export const ErgUsdContext = createContext<number | null>(null);
@@ -32,7 +33,11 @@ export function useSiteMarket(enabled: boolean, initial?: SiteMarket | null) {
       .then((p) => {
         if (!p || typeof p !== "object") return;
         const price = (p as { usd?: unknown }).usd;
-        if (typeof price === "number" && price > 0) setUsd(price);
+        if (typeof price === "number" && price > 0) {
+          setUsd(price);
+          // Kayolo E14 reads the same poll: a neutral look, never a mood.
+          chainPrice(price);
+        }
         const tape = parseSiteTape((p as { tape?: unknown }).tape);
         if (tape.length >= 2) {
           setRows(tape);

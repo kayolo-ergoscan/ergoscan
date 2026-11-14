@@ -38,6 +38,7 @@ import { getGateway, getWsUrl } from "@/lib/config";
 import {
   formatErgPrecise,
   formatGroupedNumber,
+  formatInt,
   formatRelTime,
   formatTs,
   nanoToUsd,
@@ -50,6 +51,12 @@ import { describeParty, isP2pkAddress } from "@/lib/address-labels";
 import { suggestNameUrl } from "@/lib/address-book";
 import type { AddressRegistryName } from "@/lib/list-snapshots";
 import { useFavorite } from "@/lib/favorites";
+import { say } from "@/lib/kayolo/events";
+import { chainAwait, chainNow } from "@/lib/kayolo/chain-sense";
+
+/** Ergo: ≈ 720 blocks a day (2 min). The rent line's danger tone starts at 7 days. */
+const BLOCKS_PER_DAY = 720;
+const RENT_DANGER_BLOCKS = 7 * BLOCKS_PER_DAY;
 import { NameMarquee } from "@/components/NameMarquee";
 import { partyNameMap, type AddrFlow, type AddrFlowKind } from "@/lib/tx-flow";
 import { asAddrFlowKind, rentTapeTone } from "@ergoscan/shared";
@@ -1051,6 +1058,34 @@ export function AddressView({
   const tokenCount =
     (data?.tokenCount ?? 0) > 0 ? (data?.tokenCount ?? 0) : tokenRows.length;
   const rentTone = rentBlocks == null ? null : rentTapeTone(rentBlocks);
+  // Kayolo E23 (§6.6): the tile landed with its beacon — once a card a session (the layer keeps
+  // the count and waits while the tile is off screen).
+  useEffect(() => {
+    if (!tileLanded || rentBlocks == null || !rentTone) return;
+    say({ k: "page:rent", address, tone: rentTone, blocks: rentBlocks });
+  }, [tileLanded, rentBlocks, rentTone, address]);
+  // A pending tx on this address: eyes on it; it went into a block: a nod (by the page's own list).
+  const pendingIds = (data?.mempoolTxs ?? []).map((t) => t.id).join(",");
+  const pendingCount = data ? (data.mempoolTxs?.length ?? 0) : null;
+  const pendSeen = useRef<{ address: string; n: number } | null>(null);
+  const favOn = fav.on;
+  useEffect(() => {
+    if (pendingCount == null) return;
+    const prev = pendSeen.current?.address === address ? pendSeen.current.n : null;
+    pendSeen.current = { address, n: pendingCount };
+    if (pendingCount > 0 && (prev == null || pendingCount > prev)) {
+      say({ k: "page:addr-pending", address, count: pendingCount, ...(favOn ? { fav: true } : {}) });
+    } else if (pendingCount === 0 && prev != null && prev > 0) {
+      const h = chainNow().height;
+      say({ k: "page:addr-pending", address, count: 0, ...(favOn ? { fav: true } : {}), ...(h != null ? { height: h } : {}) });
+    }
+  }, [pendingCount, address, favOn]);
+  useEffect(() => {
+    if (!pendingIds) return;
+    const ids = new Set(pendingIds.split(","));
+    // The seal that takes this address's pending tx: its E1 waits for the nod (§2.8).
+    return chainAwait(({ txIds }) => !!txIds?.some((id) => ids.has(id)));
+  }, [pendingIds]);
   const tokenPage = tokenRows.slice(tokenOffset, tokenOffset + TOKEN_PAGE);
   const tokenUsd = useMemo(() => {
     let sum = 0;
@@ -1240,7 +1275,7 @@ export function AddressView({
               }
             >
               <div className="mt-2 min-w-0">
-                <KpiNum className="max-w-none">
+                <KpiNum className="max-w-none" kayolo="balance">
                   <ErgFigure nano={confirmed} locale={locale} size="lg" />
                 </KpiNum>
                 {usd != null && (
@@ -1251,8 +1286,20 @@ export function AddressView({
                     ${formatGroupedNumber(usd, 2, 2, locale)}
                   </p>
                 )}
+                {rentBlocks != null && tileLanded ? (
+                  // E23 (§6.6, §12.8): the rent line under the figures; it shows itself within 1.2 s,
+                  // Kayolo knocks by the beacon as it comes. Danger tone only at ≤ 7 days.
+                  <p
+                    className={clsx("addr-rent-note", rentBlocks <= RENT_DANGER_BLOCKS && "is-danger")}
+                    data-kayolo-note="rent"
+                  >
+                    {rentBlocks <= 0
+                      ? t("address.rentNoteNow")
+                      : t("address.rentNote").replace("{d}", formatInt(Math.max(1, Math.ceil(rentBlocks / BLOCKS_PER_DAY)), locale))}
+                  </p>
+                ) : null}
                 {unconfirmed !== 0n && (
-                  <p className="addr-pending-blink mt-2 text-[12px] text-[var(--muted-2)]">
+                  <p className="addr-pending-blink mt-2 text-[12px] text-[var(--muted-2)]" data-kayolo="pending">
                     {t("address.unconfirmed")}{" "}
                     <ErgFigure
                       nano={unconfirmed}

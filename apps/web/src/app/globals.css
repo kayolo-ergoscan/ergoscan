@@ -4180,6 +4180,33 @@ html[data-look="c"] .holders-mark {
   animation: addr-pending-blink 2.2s var(--ease) infinite;
 }
 
+/* E23: the rent line under the balance (Kayolo knocks by the beacon as it comes, ≤ 1.2 s). */
+.addr-rent-note {
+  position: relative;
+  margin-top: 0.5rem;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--muted-2);
+  font-variant-numeric: tabular-nums;
+  animation: addr-rent-note-in 400ms var(--ease) 800ms both;
+}
+.addr-rent-note.is-danger {
+  color: var(--warning);
+}
+@keyframes addr-rent-note-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .addr-rent-note {
+    animation: none;
+  }
+}
+
 .addr-tx-mark {
   display: inline-flex;
   align-items: center;

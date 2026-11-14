@@ -37,6 +37,9 @@ import { countText } from "@/lib/i18n/messages";
 import { splitExtension } from "@/lib/extension-section";
 import { readHashTab, setHashTab } from "@/lib/hash-tab";
 import { useChainTipRefresh, useKeepFresh, usePageSync } from "@/lib/page-sync";
+import { say } from "@/lib/kayolo/events";
+import { chainAwait } from "@/lib/kayolo/chain-sense";
+import { confirmationsAwait, confirmationsEvent } from "@/lib/kayolo/page-data";
 import { ENTER_MS, SNAPSHOT_FETCH, enteringIds, snapshotPath, useEnterIds } from "@/lib/keyed-enter";
 import {
   BLOCK_TX_PACK,
@@ -376,6 +379,20 @@ export function BlockView({
   const tipH = tip?.height ?? null;
   const confirmations =
     tipH != null && head != null ? Math.max(0, tipH - head.height) : null;
+  // Kayolo by the number on the page (§6.4): «›» opens at 1, nods to 10, the reward matures at 720.
+  // The block that moves it waits for this (its E1 is absorbed, §2.8). A new block page starts over.
+  const confSeen = useRef<{ id: string; n: number | null } | null>(null);
+  const headId = head?.id ?? null;
+  const headHeight = head?.height ?? null;
+  useEffect(() => {
+    if (!headId) return;
+    const prev = confSeen.current?.id === headId ? confSeen.current.n : null;
+    confSeen.current = { id: headId, n: confirmations };
+    const ev = confirmationsEvent("block", prev, confirmations, tipH);
+    if (ev) say(ev);
+  }, [headId, confirmations, tipH]);
+  const confAwait = headHeight != null && confirmationsAwait("block", confirmations);
+  useEffect(() => (confAwait ? chainAwait(() => true) : undefined), [confAwait]);
   const intervalMs =
     head?.prevTimestamp != null && head.timestamp
       ? head.timestamp - head.prevTimestamp
@@ -543,7 +560,7 @@ export function BlockView({
                 />
               </p>
               {confirmations != null ? (
-                <p className="detail-sum-status is-ok lg:hidden">
+                <p className="detail-sum-status is-ok lg:hidden" data-kayolo="confirmations">
                   {countText(t, locale, "block.cap.time", confirmations, confirmations.toLocaleString(loc(locale)))}
                   {head.timestamp ? ` · ${formatRelTime(head.timestamp, locale)}` : ""}
                 </p>
@@ -666,7 +683,7 @@ export function BlockView({
               )}
             </p>
             <Tip content={t("block.cap.reward")}>
-              <p className="mt-0.5 truncate text-[12px] leading-none text-[var(--muted-2)]">
+              <p className="mt-0.5 truncate text-[12px] leading-none text-[var(--muted-2)]" data-kayolo="reward">
                 {formatErgPrecise(rewardNano, locale)}
               </p>
             </Tip>
@@ -712,7 +729,7 @@ export function BlockView({
             <p className="mt-0.5 truncate text-[17px] font-semibold leading-none tabular-nums tracking-tight">
               <KpiNum>{head.timestamp ? formatRelTime(head.timestamp, locale) : dash}</KpiNum>
             </p>
-            <p className="mt-0.5 truncate text-[12px] leading-none text-[var(--muted-2)]">
+            <p className="mt-0.5 truncate text-[12px] leading-none text-[var(--muted-2)]" data-kayolo="confirmations">
               {timeCaption}
             </p>
           </AddrFactCard>

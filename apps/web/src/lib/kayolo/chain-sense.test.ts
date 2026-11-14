@@ -112,3 +112,242 @@ test("page kinds for the block matrix", () => {
   assert.equal(pageKind("/favorites"), "n");
   assert.equal(pageKind("/tokens"), "n");
 });
+
+/* ---- Э4 ---- */
+
+const sealIds = (r: ReturnType<typeof rig>, height: number, txIds: string[]) =>
+  r.s.feed({ type: "block.sealed", data: { height, blockId: "y".repeat(64), txIds, txCount: txIds.length + 1, size: 3000, timestamp: 0 } });
+const kinds = (said: KayoloEvent[]) => said.map((e) => e.k);
+
+test("E4: a jump of ≥ 2 is one catch-up; a hidden tab or a reconnect is not replayed", () => {
+  const r = rig();
+  r.s.socket(true);
+  r.tip(100);
+  r.seal(101, 4);
+  r.setVisible(false);
+  r.seal(102, 4);
+  r.setVisible(true);
+  r.seal(103, 4);
+  assert.deepEqual(kinds(r.said), ["chain:block", "chain:block"]);
+  // The tip-only fallback skipped a height (two seals were lost): one catch-up.
+  r.tip(106);
+  r.advance(3100);
+  assert.deepEqual(r.said.at(-1), { k: "chain:catchup", from: 103, to: 106 });
+});
+
+test("E5–E7: one timer per edge — 2×, 3× the average, 8 min; a block ends it and is a relief", () => {
+  const r = rig();
+  r.s.socket(true);
+  r.tip(100);
+  r.seal(101, 4);
+  r.said.length = 0;
+  r.advance(240_100);
+  assert.equal(r.said.at(-1)?.k, "chain:tip-wait");
+  assert.equal((r.said.at(-1) as { level: number }).level, 1);
+  r.advance(120_000);
+  assert.equal((r.said.at(-1) as { level: number }).level, 2);
+  r.advance(120_000);
+  assert.equal((r.said.at(-1) as { level: number }).level, 3);
+  assert.equal(r.s.state().wait, 3);
+  r.seal(102, 4);
+  const block = r.said.find((e) => e.k === "chain:block") as { after?: string };
+  assert.equal(block.after, "stall");
+  assert.ok(r.said.some((e) => e.k === "chain:tip-wait" && e.level === 0));
+  assert.equal(r.s.state().wait, 0);
+  // While the feed is down the chain is not «late».
+  r.said.length = 0;
+  r.s.socket(false);
+  r.advance(600_000);
+  assert.equal(r.said.filter((e) => e.k === "chain:tip-wait").length, 0);
+});
+
+test("E12: the pool drained right after a seal (≥ 100 before, ≤ 0.4 within 3 s)", () => {
+  const r = rig();
+  r.s.socket(true);
+  r.tip(100);
+  r.advance(11_000);
+  r.s.feed({ type: "mempool.snapshot", data: { count: 150 } });
+  r.seal(101, 80);
+  r.advance(1500);
+  r.s.feed({ type: "mempool.snapshot", data: { count: 40 } });
+  assert.deepEqual(r.said.at(-1), { k: "chain:drain", height: 101 });
+});
+
+test("E10: a topic tx on its page, at most once in 3 min; on /mempool only a rare category", () => {
+  let path = "/rosen";
+  const said: KayoloEvent[] = [];
+  let t = 0;
+  const s = createChainSense({ say: (e) => said.push(e), now: () => t, visible: () => true, setTimer: () => 0, clearTimer: () => {}, path: () => path });
+  s.feed({ type: "mempool.add", data: { txId: "a", category: "bridge" } });
+  s.feed({ type: "mempool.add", data: { txId: "b", category: "bridge" } });
+  assert.deepEqual(said, [{ k: "chain:tx-topic", category: "bridge", txId: "a", rare: false }]);
+  path = "/mempool";
+  t = 200_000;
+  for (let i = 0; i < 60; i++) s.feed({ type: "mempool.add", data: { txId: `p${i}`, category: "transfer" } });
+  assert.equal(said.length, 1, "a common category is not a topic");
+  s.feed({ type: "mempool.add", data: { txId: "n1", category: "nft" } });
+  assert.deepEqual(said.at(-1), { k: "chain:tx-topic", category: "nft", txId: "n1", rare: true });
+});
+
+test("E11 / E13: a surge and a fee spike need two readings; the snapshot after a reconnect is not a surge", () => {
+  const r = rig();
+  r.s.socket(true);
+  for (let m = 0; m < 30; m++) {
+    r.advance(60_000);
+    r.s.feed({ type: "mempool.snapshot", data: { count: 40 } });
+    r.s.feed({ type: "fees.histogram", data: { p50: 2000, eta: { avgIntervalMs: 120_000 } } });
+  }
+  r.said.length = 0;
+  r.s.feed({ type: "mempool.snapshot", data: { count: 420 } });
+  assert.equal(r.said.length, 0, "one reading is not a surge");
+  r.advance(2500);
+  r.s.feed({ type: "mempool.snapshot", data: { count: 430 } });
+  assert.deepEqual(r.said.at(-1), { k: "chain:pool", state: "surge", count: 430, base: 40 });
+  r.s.feed({ type: "fees.histogram", data: { p50: 9000 } });
+  r.advance(2500);
+  r.s.feed({ type: "fees.histogram", data: { p50: 9100 } });
+  assert.deepEqual(r.said.at(-1), { k: "chain:fee", state: "spike", p50: 9100, base: 2000 });
+  // A reconnect: its first snapshot (10 s) never counts.
+  const q = rig();
+  q.s.socket(true);
+  for (let m = 0; m < 30; m++) {
+    q.advance(60_000);
+    q.s.feed({ type: "mempool.snapshot", data: { count: 40 } });
+  }
+  q.s.socket(false);
+  q.advance(3000);
+  q.s.socket(true);
+  q.said.length = 0;
+  q.s.feed({ type: "mempool.snapshot", data: { count: 500 } });
+  q.advance(2500);
+  q.s.feed({ type: "mempool.snapshot", data: { count: 500 } });
+  assert.equal(q.said.filter((e) => e.k === "chain:pool").length, 0);
+});
+
+test("E13: p50 against p90 (2 215 / 1 052 631) is no spike; a small pool's p50 is not judged", () => {
+  const r = rig();
+  r.s.socket(true);
+  r.s.feed({ type: "mempool.snapshot", data: { count: 36 } });
+  for (let m = 0; m < 70; m++) {
+    r.advance(60_000);
+    r.s.feed({ type: "fees.histogram", data: { p50: 2215, p90: 1_052_631, eta: { avgIntervalMs: 115_085 } } });
+  }
+  assert.equal(r.said.filter((e) => e.k === "chain:fee").length, 0);
+  // Six txs: the live p50 swings 1 746 → 96 948 → 1 052 632; nothing is said.
+  r.s.feed({ type: "mempool.snapshot", data: { count: 6 } });
+  for (const p50 of [1746, 96_948, 96_948, 1_052_632, 1_052_632]) {
+    r.advance(2500);
+    r.s.feed({ type: "fees.histogram", data: { p50 } });
+  }
+  assert.equal(r.said.filter((e) => e.k === "chain:fee").length, 0);
+});
+
+test("E15: oracle txs in a seal — the page's awaiter learns it, chain:oracle once in 2 min", () => {
+  const r = rig();
+  r.s.socket(true);
+  r.tip(100);
+  const seen: { oracle?: boolean }[] = [];
+  r.s.await((x) => {
+    seen.push({ oracle: x.oracle });
+    return !!x.oracle;
+  });
+  r.s.feed({ type: "mempool.snapshot", data: { count: 3, balls: [{ txId: "o1", category: "oracle" }, { txId: "t1", category: "transfer" }] } });
+  sealIds(r, 101, ["o1", "t1"]);
+  assert.deepEqual(seen, [{ oracle: true }]);
+  const block = r.said.find((e) => e.k === "chain:block") as { hold?: boolean };
+  assert.equal(block.hold, true, "the page holds this block's E1");
+  assert.deepEqual(r.said.at(-1), { k: "chain:oracle", txIds: ["o1"], height: 101 });
+  r.s.feed({ type: "mempool.add", data: { txId: "o2", category: "oracle" } });
+  r.advance(60_000);
+  sealIds(r, 102, ["o2"]);
+  assert.equal(r.said.filter((e) => e.k === "chain:oracle").length, 1, "the next within 2 min is quiet");
+});
+
+test("E16–E18: down at 6 s, lost at 2 min, back with a cheer and the blocks missed; offline is its own", () => {
+  const r = rig();
+  r.s.socket(true);
+  r.tip(100);
+  r.s.socket(false);
+  r.advance(5_900);
+  assert.equal(r.said.length, 0);
+  r.advance(200);
+  assert.deepEqual(kinds(r.said), ["net:state"]);
+  assert.equal((r.said[0] as { state: string }).state, "down");
+  r.advance(120_000);
+  assert.equal((r.said.at(-1) as { state: string }).state, "lost");
+  r.s.socket(true);
+  r.tip(103);
+  const back = r.said.at(-1) as { state: string; cheer?: boolean; missed?: number };
+  assert.equal(back.state, "live");
+  assert.equal(back.cheer, true);
+  assert.equal(back.missed, 3);
+  assert.equal(r.said.filter((e) => e.k === "chain:catchup").length, 0, "the rejoin counts them, not a catch-up");
+  r.s.online(false);
+  assert.equal((r.said.at(-1) as { state: string }).state, "offline");
+  assert.equal(r.s.state().net, "offline");
+});
+
+test("E19: behind after two lagging polls, cleared at ≤ 2; a node trailing its headers > 30 s", () => {
+  const r = rig();
+  r.s.indexer(9);
+  assert.equal(r.s.state().behind.on, false, "one poll is not enough");
+  r.s.indexer(9);
+  assert.deepEqual(r.said.at(-1), { k: "site:behind", on: true, lag: 9, node: false, peers: false });
+  r.s.indexer(4);
+  assert.equal(r.s.state().behind.on, true, "4 is not cleared yet");
+  r.s.indexer(2);
+  assert.equal((r.said.at(-1) as { on: boolean }).on, false);
+  r.s.feed({ type: "node.info", data: { headersHeight: 110, fullHeight: 100, peersCount: 8 } });
+  r.advance(29_000);
+  assert.equal(r.s.state().behind.on, false);
+  r.advance(2_000);
+  assert.equal(r.s.state().behind.node, true);
+});
+
+test("E21: crossing a multiple of 1024 says the epoch; E22: a mock stream says nothing of Э4", () => {
+  const r = rig();
+  r.tip(2047);
+  r.seal(2048, 3);
+  assert.deepEqual(r.said.at(-1), { k: "chain:epoch", height: 2048 });
+  const m = rig();
+  m.s.feed({ type: "hello", data: { mock: true } });
+  m.s.socket(true);
+  m.s.indexer(50);
+  m.s.indexer(50);
+  m.s.price(1);
+  m.s.price(2);
+  m.s.socket(false);
+  m.advance(10_000);
+  assert.equal(m.said.length, 0);
+});
+
+test("clock offset: after a connect the wait counts from the stream's last block on the server clock", () => {
+  const said: KayoloEvent[] = [];
+  let t = 1_000_000;
+  const timers: { at: number; fn: () => void }[] = [];
+  const s = createChainSense({
+    say: (e) => said.push(e),
+    now: () => t,
+    visible: () => true,
+    wall: () => 1_700_000_000_000,
+    setTimer: (fn, ms) => {
+      const x = { at: t + ms, fn };
+      timers.push(x);
+      return x;
+    },
+    clearTimer: (id) => {
+      const i = timers.indexOf(id as (typeof timers)[number]);
+      if (i >= 0) timers.splice(i, 1);
+    },
+  });
+  s.socket(true);
+  // The server clock runs 5 s ahead; its last block was 200 s ago on the server.
+  s.feed({ type: "mempool.snapshot", data: { count: 3, ts: 1_700_000_005_000 } });
+  s.feed({ type: "fees.histogram", data: { p50: 2000, eta: { avgIntervalMs: 120_000, lastBlockTs: 1_700_000_005_000 - 200_000 } } });
+  s.feed({ type: "chain.tip", data: { height: 500, headerId: "z".repeat(64) } });
+  assert.equal(s.state().at, 1_000_000 - 200_000);
+  // 2× the average (240 s) is 40 s away, not 240 s.
+  t += 40_100;
+  for (const x of [...timers]) if (x.at <= t) x.fn();
+  assert.equal(said.at(-1)?.k, "chain:tip-wait");
+});

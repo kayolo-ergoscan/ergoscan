@@ -25,9 +25,10 @@ import {
 } from "@/lib/kayolo/body";
 import { pageMemory, readHome, readKeyOn, type Mode } from "@/lib/kayolo/memory";
 import { nookPoint } from "@/lib/kayolo/anchors";
-import { chainNow } from "@/lib/kayolo/chain-sense";
+import { chainNow, statusOf } from "@/lib/kayolo/chain-sense";
+import { countText } from "@/lib/i18n/messages";
 import { useMediaTick, WIDE_QUERY } from "@/lib/kayolo/motion";
-import { KAYOLO_LAYER, NOTICE_MS, OFFLINE_MS, TIP_MS } from "@/lib/kayolo/thresholds";
+import { KAYOLO_LAYER, NOTICE_MS, TIP_MS } from "@/lib/kayolo/thresholds";
 
 /**
  * Kayolo's window (design/brand/kayolo-life.md §3.1, §3.2, §4, §10). Desktop: a 40×48 button in the
@@ -209,15 +210,27 @@ export function KayoloSlot({ phone = false }: { phone?: boolean }) {
   }, [tipOn, open]);
 
   const status = () => {
-    const c = chainNow();
-    const now = performance.now();
-    if (!c.live && c.downSince != null && now - c.downSince >= OFFLINE_MS) return t("kayolo.offline");
-    if (c.height == null || c.at == null) return null;
-    const s = Math.max(0, Math.round((now - c.at) / 1000));
-    const age = s < 60 ? t("kayolo.sec").replace("{n}", String(s)) : t("kayolo.min").replace("{n}", String(Math.floor(s / 60)));
-    const h = formatInt(c.height, locale);
-    if (c.mempool == null) return t("kayolo.statusBlock").replace("{h}", h).replace("{age}", age);
-    return t("kayolo.status").replace("{h}", h).replace("{age}", age).replace("{n}", formatInt(c.mempool, locale));
+    const st = statusOf(chainNow(), performance.now());
+    if (!st) return null;
+    const ageOf = (s: number) => (s < 60 ? t("kayolo.sec").replace("{n}", String(s)) : t("kayolo.min").replace("{n}", String(Math.floor(s / 60))));
+    switch (st.k) {
+      case "noStream":
+        return t("kayolo.noStream");
+      case "offline":
+        return t("kayolo.offline");
+      case "stall":
+        return t("kayolo.stall").replace("{m}", formatInt(st.min, locale));
+      case "wait":
+        return t("kayolo.wait").replace("{age}", ageOf(st.ageS));
+      case "behind":
+        return countText(t, locale, "kayolo.behind", st.lag, formatInt(st.lag, locale));
+      default: {
+        const h = formatInt(st.height, locale);
+        const age = ageOf(st.ageS);
+        if (st.mempool == null) return t("kayolo.statusBlock").replace("{h}", h).replace("{age}", age);
+        return t("kayolo.status").replace("{h}", h).replace("{age}", age).replace("{n}", formatInt(st.mempool, locale));
+      }
+    }
   };
 
   const label =
