@@ -898,7 +898,7 @@ BroadcastChannel не нужен: видимые окна живут каждо�
 - `chain.tip` — запасной, если seal не пришёл за 3 с;
 - `mempool.add` {category, value, txId} — ~2.6 в минуту;
 - `mempool.snapshot` — count раз в 2.5 с и серверный `ts` (поправка на часы, §4.8);
-- `fees.histogram` {p50, eta.avgIntervalMs, eta.lastBlockTs}; `lastBlockTs` — это `seal.timestamp`, метка майнера из заголовка (apps/gateway/src/index.ts:366-381), она нужна только для старта (§4.8);
+- `fees.histogram` {p50, eta.avgIntervalMs, eta.lastBlockTs}; `lastBlockTs` — это `seal.seenAt`, часы шлюза в момент, когда он увидел блок (с 14.11.2026; до того — метка майнера из заголовка, на минуту и больше раньше), она нужна только для старта (§4.8);
 - `node.info` {headersHeight, fullHeight, peersCount} — раз в 10 с;
 - `hello.mock`;
 - ws onopen/onclose (переподключение раз в 2 с), window online/offline;

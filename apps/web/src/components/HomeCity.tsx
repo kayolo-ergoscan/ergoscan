@@ -40,6 +40,8 @@ export type CityRow = {
   minerAddress?: string | null;
   minerName?: string | null;
   feeNano?: string | number | null;
+  /** When the gateway saw this block, on this browser's clock: only a live seal gives it. */
+  seenAt?: number | null;
 };
 
 export type CityBall = {
@@ -81,7 +83,8 @@ function finite(v: unknown): number {
   return typeof v === "number" && Number.isFinite(v) ? v : 0;
 }
 
-export function useBlockReads(blocks: readonly CityRow[], sealId: string | null): Record<string, CityTx[]> {
+/** Blocks just sealed (the newest few seals): their first read waits for the database. */
+export function useBlockReads(blocks: readonly CityRow[], sealIds: ReadonlySet<string>): Record<string, CityTx[]> {
   const [reads, setReads] = useState<Record<string, CityTx[]>>({});
   const cache = useRef<Record<string, CityTx[]>>({});
   const asked = useRef(new Set<string>());
@@ -90,8 +93,8 @@ export function useBlockReads(blocks: readonly CityRow[], sealId: string | null)
   const want = useRef<string[]>([]);
   const rows = useRef(blocks);
   rows.current = blocks;
-  const sealRef = useRef(sealId);
-  sealRef.current = sealId;
+  const sealRef = useRef(sealIds);
+  sealRef.current = sealIds;
   const alive = useRef(true);
   const abort = useRef<AbortController | null>(null);
   const key = blocks.map((b) => b.id).join(",");
@@ -126,7 +129,7 @@ export function useBlockReads(blocks: readonly CityRow[], sealId: string | null)
         return a.length === b.length && b.every((k) => prev[k] === next[k]) ? prev : next;
       });
     };
-    const fresh = (id: string) => id === sealRef.current || Date.now() - tsMs(rows.current.find((b) => b.id === id)?.timestamp ?? 0) < READ_FRESH_MS;
+    const fresh = (id: string) => sealRef.current.has(id) || Date.now() - tsMs(rows.current.find((b) => b.id === id)?.timestamp ?? 0) < READ_FRESH_MS;
     const wait = (id: string, ms: number) => {
       timers.current.set(
         id,
@@ -174,7 +177,7 @@ export function useBlockReads(blocks: readonly CityRow[], sealId: string | null)
     for (const id of ids) {
       if (cache.current[id] || asked.current.has(id) || timers.current.has(id)) continue;
       // The block just sealed is not in the database yet: its first read waits a moment.
-      if (id === sealRef.current && !tries.current.has(id)) {
+      if (sealRef.current.has(id) && !tries.current.has(id)) {
         tries.current.set(id, 0);
         wait(id, jitter(SEAL_READ_MS));
       } else ask(id);
@@ -242,7 +245,7 @@ function HomeCityPairLive({
   totalFees,
   streamFees,
   streamLive,
-  seal,
+  seals,
   poolInk,
   avgBlockMs,
   title,
@@ -260,7 +263,8 @@ function HomeCityPairLive({
   totalFees: number;
   streamFees: { normal: number; turbo: number; avgBlockMs: number | null } | null;
   streamLive: boolean;
-  seal: SealEvent | null;
+  /** Recent seals, oldest first: every block plays its moment, in turn. */
+  seals: readonly SealEvent[];
   /** Miner address → its slice ink on the «Mining pools» donut. */
   poolInk: Record<string, string>;
   avgBlockMs: number | null;
@@ -286,7 +290,11 @@ function HomeCityPairLive({
   const [committed, setCommitted] = useState<number | null>(null);
   const [hoverBlock, setHoverBlock] = useState<string | null>(null);
   const [wrapN, setWrapN] = useState(0);
-  const reads = useBlockReads(blocks, seal && typeof seal.blockId === "string" && seal.blockId.length >= 16 ? seal.blockId : null);
+  const sealIds = useMemo(
+    () => new Set(seals.slice(-3).flatMap((s) => (typeof s.blockId === "string" && s.blockId.length >= 16 ? [s.blockId] : []))),
+    [seals]
+  );
+  const reads = useBlockReads(blocks, sealIds);
 
   const fees: Fees | null = useMemo(() => {
     if (streamLive && streamFees) return { normal: streamFees.normal, turbo: streamFees.turbo };
@@ -303,6 +311,7 @@ function HomeCityPairLive({
           id: b.id,
           height: b.height,
           ts: tsMs(b.timestamp),
+          seenAt: b.seenAt ?? null,
           txCount: Number.isFinite(b.txCount) ? Math.max(0, b.txCount!) : (reads[b.id]?.length ?? 0),
           size: Math.max(0, finite(b.size)),
           flag: b.minerAddress ? (poolInk[b.minerAddress] ?? null) : null,
@@ -369,23 +378,28 @@ function HomeCityPairLive({
   useEffect(() => {
     engineRef.current?.setData({ blocks: cityBlocks, mem: { count: Math.max(pool, yardTxs.length), txs: yardTxs }, fees, avgBlockMs: avg, streamLive });
   }, [avg, cityBlocks, fees, pool, streamLive, yardTxs]);
-  // A seal the stream already held when the cards mounted happened before this view: no replay.
-  const mountSeal = useRef(seal);
+  // Seals the stream already held when the cards mounted happened before this view: no replay.
+  // Every later one goes to the engine once, in order (it queues a moment behind the one playing).
+  const mountSeals = useRef<readonly SealEvent[] | null>(seals);
+  const fedSeals = useRef(new WeakSet<SealEvent>());
   useEffect(() => {
-    const s = seal;
-    if (!s || !Number.isFinite(s.height) || typeof s.blockId !== "string" || s.blockId.length < 16) return;
-    const quiet = s === mountSeal.current;
-    mountSeal.current = null;
-    engineRef.current?.seal({
-      blockId: s.blockId,
-      height: s.height,
-      timestamp: s.timestamp || Date.now(),
-      txIds: Array.isArray(s.txIds) ? s.txIds : [],
-      txCount: s.txCount ?? (Array.isArray(s.txIds) ? s.txIds.length : 0),
-      size: s.size ?? 0,
-      quiet,
-    });
-  }, [seal]);
+    const held = mountSeals.current;
+    mountSeals.current = null;
+    for (const s of seals) {
+      if (fedSeals.current.has(s)) continue;
+      fedSeals.current.add(s);
+      if (!s || !Number.isFinite(s.height) || typeof s.blockId !== "string" || s.blockId.length < 16) continue;
+      engineRef.current?.seal({
+        blockId: s.blockId,
+        height: s.height,
+        timestamp: s.timestamp || Date.now(),
+        txIds: Array.isArray(s.txIds) ? s.txIds : [],
+        txCount: s.txCount ?? (Array.isArray(s.txIds) ? s.txIds.length : 0),
+        size: s.size ?? 0,
+        quiet: held?.includes(s) ?? false,
+      });
+    }
+  }, [seals]);
 
   /* ---------- the city card ---------- */
   const street = useMemo(() => (committed == null ? blocks : blocks.filter((b) => b.height <= committed)), [blocks, committed]);

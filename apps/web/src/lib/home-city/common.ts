@@ -13,8 +13,10 @@ export type CityTx = { color: string; category: string };
 export type CityBlock = {
   id: string;
   height: number;
-  /** Header timestamp, ms. */
+  /** Header timestamp, ms (the miner's template start): the street's gaps and the tower tip. */
   ts: number;
+  /** When the gateway saw this block, on this browser's clock (a live seal has it, the snapshot not). */
+  seenAt?: number | null;
   txCount: number;
   size: number;
   /** The pool's slice ink on the home «Mining pools» donut; null for a solo or unknown miner. */

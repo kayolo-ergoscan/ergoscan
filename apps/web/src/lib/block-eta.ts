@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { fromGatewayClock } from "./page-sync";
 
 export type BlockEtaInfo = {
   lastBlockTs?: number;
@@ -11,6 +12,7 @@ export type BlockEtaInfo = {
 /**
  * Seconds left to the next block, counted down every second from the last block and the
  * average interval (the server's `nextEtaSec` is a one-off snapshot). 0 means the block is due.
+ * `lastBlockTs` is when the gateway saw the block (its clock), put on this browser's clock.
  */
 export function useNextBlockLeft(eta: BlockEtaInfo | null | undefined): number | null {
   const [now, setNow] = useState(() => Date.now());
@@ -19,7 +21,7 @@ export function useNextBlockLeft(eta: BlockEtaInfo | null | undefined): number |
     return () => window.clearInterval(id);
   }, []);
   if (eta && (eta.lastBlockTs ?? 0) > 0 && (eta.avgIntervalMs ?? 0) > 0) {
-    return Math.max(0, (eta.lastBlockTs! + eta.avgIntervalMs! - now) / 1000);
+    return Math.max(0, (fromGatewayClock(eta.lastBlockTs!) + eta.avgIntervalMs! - now) / 1000);
   }
   const s = eta?.nextEtaSec;
   return s != null && Number.isFinite(s) ? Math.max(0, s) : null;
