@@ -357,7 +357,7 @@ function nullCtx(): CanvasRenderingContext2D {
   }) as unknown as CanvasRenderingContext2D;
 }
 
-const INKS = { day: false, text: "#fff", muted: "#999", muted2: "#777", wash: "#111", washMid: "#222", washStrong: "#333", kayolo: "#ffd23c", sans: "sans-serif", mono: "monospace" };
+const INKS = { text: "#fff", muted: "#999", muted2: "#777", wash: "#111", washMid: "#222", washStrong: "#333", kayolo: "#ffd23c", sans: "sans-serif", mono: "monospace" };
 
 test("Kayolo: one body, his hops stay within 9 px on a desktop and 6 px on a phone", () => {
   const streets: CityBlock[][] = [

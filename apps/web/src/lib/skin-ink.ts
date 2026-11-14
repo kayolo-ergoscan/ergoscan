@@ -38,6 +38,11 @@ export function parseInkChoice(v: string | null | undefined): InkChoice {
   return v === "light" || v === "system" ? v : "oled";
 }
 
+/** A choice the site knows. An unknown `?ink=` (an old `?ink=day` link) is not one: it is never kept. */
+export function isInkChoice(v: string | null | undefined): v is InkChoice {
+  return v === "oled" || v === "light" || v === "system";
+}
+
 export function colorSchemeFor(ink: SkinInk): "light" | "dark" {
   return ink === "light" ? "light" : "dark";
 }
@@ -58,9 +63,11 @@ export function resolveInk(choice: InkChoice): SkinInk {
 /**
  * Inline head script: paint the chosen ink before the first frame. Keep in lockstep with paintInk.
  * The metas may come later in the document, so they are set again once it is parsed.
- * `?ink=` (oled, light, system) is taken and kept, so a link can open the site in a theme.
+ * `?ink=` (oled, light, system) is taken and kept, so a link can open the site in a theme; an unknown
+ * value paints the default and is not kept. It paints first and stores after: a storage that throws
+ * (blocked, private mode) never costs the page its ink.
  */
-export const INK_BOOT = `(function(){try{var r=document.documentElement;var q=new URLSearchParams(location.search).get("ink");var c=q||localStorage.getItem("${INK_STORAGE}")||"oled";if(c!=="light"&&c!=="system")c="oled";if(q)localStorage.setItem("${INK_STORAGE}",c);var v=c==="system"?(matchMedia("${LIGHT_QUERY}").matches?"light":"oled"):c;var l=v==="light";r.setAttribute("data-ink",v);r.classList.toggle("dark",!l);r.style.colorScheme=l?"light":"dark";var bg=l?"${INK_BG.light}":"${INK_BG.oled}";var m=function(){document.querySelectorAll('meta[name="theme-color"]').forEach(function(t){t.setAttribute("content",bg)});var s=document.querySelector('meta[name="color-scheme"]');if(s)s.setAttribute("content",l?"light":"dark")};m();document.addEventListener("DOMContentLoaded",m);}catch(e){}})();`;
+export const INK_BOOT = `(function(){var r=document.documentElement,q=null,s=null;try{q=new URLSearchParams(location.search).get("ink")}catch(e){}var k=q==="oled"||q==="light"||q==="system";if(!q)try{s=localStorage.getItem("${INK_STORAGE}")}catch(e){}var c=k?q:q?"oled":s;if(c!=="light"&&c!=="system")c="oled";try{var v=c==="system"?(matchMedia("${LIGHT_QUERY}").matches?"light":"oled"):c;var l=v==="light";r.setAttribute("data-ink",v);r.classList.toggle("dark",!l);r.style.colorScheme=l?"light":"dark";var bg=l?"${INK_BG.light}":"${INK_BG.oled}";var m=function(){document.querySelectorAll('meta[name="theme-color"]').forEach(function(t){t.setAttribute("content",bg)});document.querySelectorAll('meta[name="color-scheme"]').forEach(function(t){t.setAttribute("content",l?"light":"dark")})};m();document.addEventListener("DOMContentLoaded",m)}catch(e){}if(k)try{localStorage.setItem("${INK_STORAGE}",q)}catch(e){}})();`;
 
 /** Paint an ink. The event goes out on every call (SkinSwitch calls on each page): listeners re-read. */
 function paintInk(ink: SkinInk): void {
@@ -69,7 +76,7 @@ function paintInk(ink: SkinInk): void {
   root.classList.toggle("dark", ink !== "light");
   root.style.colorScheme = colorSchemeFor(ink);
   document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute("content", INK_BG[ink]));
-  document.querySelector('meta[name="color-scheme"]')?.setAttribute("content", colorSchemeFor(ink));
+  document.querySelectorAll('meta[name="color-scheme"]').forEach((m) => m.setAttribute("content", colorSchemeFor(ink)));
   window.dispatchEvent(new Event(INK_EVENT));
 }
 

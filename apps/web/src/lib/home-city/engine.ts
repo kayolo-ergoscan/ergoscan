@@ -655,7 +655,7 @@ export class CityEngine {
     const t0 = plan.depart(0);
     const t1 = plan.depart(m.ids.length - 1) + plan.fly;
     const a = Math.min(Math.max(0, Math.min(1, (ms - t0 + 120) / 160)), Math.max(0, Math.min(1, (t1 + 160 - ms) / 160)));
-    drawYardCable(fly.ctx, cable, a, this.inks.day);
+    drawYardCable(fly.ctx, cable, a);
     m.ids.forEach((id, k) => {
       const u = (ms - plan.depart(k)) / plan.fly;
       if (u <= 0 || u >= 1) return;
@@ -665,7 +665,7 @@ export class CityEngine {
       const to = cityTarget(this.city.w, this.city.h, memScene, block, m.targets[k] ?? 0);
       const route = cable.route({ x: yr.left - hr.left + from.x, y: yr.top - hr.top + from.y }, { x: cr.left - hr.left + to.x, y: cr.top - hr.top + to.y });
       const p = cableAt(route, u);
-      drawCrateFlight(fly.ctx, p.x, p.y, tx.color, p.rope, small, this.inks.day, flightSize(from.w, small, u));
+      drawCrateFlight(fly.ctx, p.x, p.y, tx.color, p.rope, small, flightSize(from.w, small, u));
     });
   }
 

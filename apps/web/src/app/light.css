@@ -23,6 +23,13 @@ html[data-look="c"][data-ink="light"] {
   --chip-bg: #c6c5c3;
   --chip-hover: #bebdbb;
   --skel: #c4c3c1;
+  /* A pressed or hovered press-tile (globals.css): solid, a step under the card. The dark washes
+     replace the tile's fill, and a darker wash on the light page ground loses the tile's words. */
+  --tile-pressed: var(--row-open);
+  --tile-hover: var(--row-hover);
+  /* A faint lift off the page ground (a box's life nodes): dark lifts with a white wash, the light
+     ground lifts to the card. */
+  --lift-faint: var(--module);
   --track: #b9b8b6;
   --border: transparent;
   --border-soft: transparent;
@@ -69,6 +76,17 @@ html[data-look="c"][data-ink="light"] {
   --c-token-text: #304a90;
   --c-box-text: #025b37;
   --c-net-text: #025663;
+  /* A mark printed as words (a block's header facts and rows, the Lithos seam line): dark prints the
+     mark itself (the var() fallback where it is used), the light card needs the text tier. */
+  --c-block-word: var(--c-block-text);
+  --c-tx-word: var(--c-tx-text);
+  --c-addr-word: var(--c-addr-text);
+  --c-token-word: var(--c-token-text);
+  --c-box-word: var(--c-box-text);
+  --c-net-word: var(--c-net-text);
+  /* The tint under token words (a block's «sky» fact, a box's «out»): dark tints with the text tier,
+     the light card with the fill, or the wash would darken under its own word. */
+  --c-token-wash: var(--f-token);
   --f-block: #d6b973;
   --f-tx: #e0a383;
   --f-addr: #df9cb5;
@@ -89,10 +107,11 @@ html[data-look="c"][data-ink="light"] {
   --soft: #624b02;
   --soft-rgb: 98 75 2;
   --warning: #624b02;
-  --up: #045c2d;
-  --up-rgb: 4 92 45;
-  --down: #962428;
-  --down-rgb: 150 36 40;
+  /* Gains and losses are words, also on their own 16 % wash (a price chip, a box's «in»). */
+  --up: #005224;
+  --up-rgb: 0 82 36;
+  --down: #89141d;
+  --down-rgb: 137 20 29;
   --party: #88614b;
 
   /* Feed tiles: the fill tier under the text ink. The kind word leans further to the ink. */
@@ -218,6 +237,30 @@ html[data-look="c"][data-ink="light"] .feed-row.is-open .feed-tile.is-hollow {
 
 html[data-look="c"][data-ink="light"] .mcap-vol {
   color: var(--c-token-text);
+}
+
+/* A word dimmed beside its figure (a unit, «left», «/ 1,024»; `word-dim` or .feed-unit), in its
+   figure's ink. Dark dims it with opacity; on the light card that drops it under AA, so it is a solid
+   ink part way to --muted: both hold 4.5:1 on every card, so the blend does. */
+html[data-look="c"][data-ink="light"] :is(.word-dim, .feed-unit) {
+  opacity: 1;
+  color: color-mix(in oklab, currentColor 55%, var(--muted));
+}
+
+/* The chosen phone tab is the inverse plate; detail-phone.css dims its count with opacity, which
+   drops under AA on this plate: a solid ink part way to the plate instead. */
+@media (max-width: 1023px) {
+  html[data-look="c"][data-ink="light"] .detail-tab.seg-on .detail-tab-n {
+    opacity: 1;
+    color: color-mix(in oklab, currentColor 62%, var(--invert));
+  }
+}
+
+/* A tip chip takes whatever ink its caller passes (a mark, a fill, a canvas family, --up). On the
+   light card the chip is that ink lifted to the fill tier, under the tile ink. */
+html[data-look="c"][data-ink="light"] .tip-chip.is-ink {
+  background: color-mix(in oklab, var(--tip-ink) 50%, #ffffff);
+  color: var(--k-ink);
 }
 
 /* Sheets and the phone menu: a lighter shade on the light ground. */

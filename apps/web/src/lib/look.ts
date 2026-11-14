@@ -21,7 +21,7 @@ type Family = "red" | "orange" | "yellow" | "green" | "teal" | "blue" | "violet"
  * one lightness band (OKLCH L 0.73–0.85, C ≤ 0.13) so crates, balls and chart lines stay
  * apart by hue without glowing on the black panel.
  */
-const FAMILY: Record<Family, string> = {
+export const FAMILY: Record<Family, string> = {
   red: "#f4918e", // --down
   orange: "#ef945f", // --c-tx
   yellow: "#ebcb71", // --c-block

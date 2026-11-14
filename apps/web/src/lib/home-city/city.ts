@@ -19,8 +19,6 @@ import type { KayoloPose } from "./kayolo";
 
 type Wall = { front: string; line: string; side: string; top: string; topHi: string };
 const NIGHT: Wall = { front: "#5d4d3c", line: "#4c3f31", side: "#3f342a", top: "#8f7b60", topHi: "#a99271" };
-/** Daylight: sandstone, the windows keep their kind colours. */
-const DAY: Wall = { front: "#d8c7aa", line: "#c4b190", side: "#b49f80", top: "#eadcc1", topHi: "#f6ecd8" };
 const GOLD = "#ebcb71";
 const GOLD_HI = "#fff2c4";
 const GOLD_DEEP = "#c9a24e";
@@ -160,7 +158,7 @@ function drawTower(ctx: CanvasRenderingContext2D, g: CityGeo, t: Tower, inks: In
   const built = opt.built ?? t.floors;
   const shown = Math.min(built, t.floors);
   if (shown <= 0) return;
-  const W = inks.day ? DAY : NIGHT;
+  const W = NIGHT;
   const ground = g.ground;
   const { h: bodyH, cut } = bodyHeight(g, t, shown);
   const x0 = Math.round(t.x);
@@ -210,11 +208,11 @@ function drawTower(ctx: CanvasRenderingContext2D, g: CityGeo, t: Tower, inks: In
     }
     // Wet street: the storey's light, mirrored and faint, under the tower (night only).
     const my = ground + 1 + k * 2;
-    if (!inks.day && my < ground + 11) R(ctx, x0 + pad, my, fw - 2 * pad, 1, alpha(ink, 0.16 - k * 0.012));
+    if (my < ground + 11) R(ctx, x0 + pad, my, fw - 2 * pad, 1, alpha(ink, 0.16 - k * 0.012));
   }
   if (cut) {
     // Past the top edge: a soft fade and the tag with the whole count.
-    for (let i = 0; i < 4; i++) R(ctx, x0, top + i, fw + d, 1, alpha(inks.day ? "#ffffff" : "#000000", 0.4 - i * 0.1));
+    for (let i = 0; i < 4; i++) R(ctx, x0, top + i, fw + d, 1, alpha("#000000", 0.4 - i * 0.1));
     if (opt.tag) drawTag(ctx, x0 + (fw + d) / 2, top + 1, opt.tag(t.b.txCount || shown), inks, g.small);
   }
   // Roof: top face going back, a lit parapet line.
@@ -233,7 +231,7 @@ function drawTower(ctx: CanvasRenderingContext2D, g: CityGeo, t: Tower, inks: In
     if (pole > 0) {
       const px = x0 + fw - 3;
       const cloth = t.b.flag ?? "#8a8a8a";
-      R(ctx, px, top - 1 - dy - pole, 1, pole, inks.day ? "#8a8478" : "#c8c2b6");
+      R(ctx, px, top - 1 - dy - pole, 1, pole, "#c8c2b6");
       if (pole >= 6) {
         R(ctx, px - 5, top - 1 - dy - pole, 5, 3, cloth);
         R(ctx, px - 5, top - 1 - dy - pole, 5, 1, shadeMix(cloth, 0.25));
@@ -251,7 +249,7 @@ function drawTower(ctx: CanvasRenderingContext2D, g: CityGeo, t: Tower, inks: In
     R(ctx, x0 + fw - 2, top + 4, 2, Math.min(bodyH - 4, 12), GOLD_DEEP);
   }
   if (opt.scaffold) {
-    const sc = alpha(GOLD, inks.day ? 0.8 : 0.55);
+    const sc = alpha(GOLD, 0.55);
     R(ctx, x0 - 2, top - 4, 1, bodyH + 4, sc);
     R(ctx, x0 + fw + d + 1, top - 4 - Math.floor(d / 2), 1, bodyH + 4 + Math.floor(d / 2), sc);
     for (let y = ground - 6; y > top - 4; y -= 8) R(ctx, x0 - 3, y, fw + d + 5, 1, sc);
@@ -263,7 +261,7 @@ function drawTag(ctx: CanvasRenderingContext2D, cx: number, y: number, text: str
   ctx.font = `600 ${small ? 8 : 9}px ${inks.mono}`;
   const tw = Math.ceil(ctx.measureText(text).width) + 6;
   const x = Math.round(cx - tw / 2);
-  R(ctx, x, y, tw, small ? 10 : 11, inks.day ? "rgba(255,255,255,0.92)" : "rgba(14,14,14,0.88)");
+  R(ctx, x, y, tw, small ? 10 : 11, "rgba(14,14,14,0.88)");
   R(ctx, x, y, tw, 1, alpha(GOLD, 0.7));
   ctx.fillStyle = inks.text;
   ctx.textAlign = "center";
@@ -273,21 +271,21 @@ function drawTag(ctx: CanvasRenderingContext2D, cx: number, y: number, text: str
 
 function drawStreet(ctx: CanvasRenderingContext2D, g: CityGeo, inks: Inks) {
   const { w, h, ground } = g;
-  if (!inks.day) for (let i = 0; i < 6; i++) R(ctx, 0, ground - 6 - i * 3, w, 3, `rgba(255,190,120,${0.012 * (6 - i)})`);
+  for (let i = 0; i < 6; i++) R(ctx, 0, ground - 6 - i * 3, w, 3, `rgba(255,190,120,${0.012 * (6 - i)})`);
   R(ctx, 0, ground, w, 1, inks.washStrong);
   R(ctx, 0, ground + 1, w, 2, inks.wash);
-  R(ctx, 0, ground + 3, w, h - ground - 3, inks.day ? "rgba(20,19,26,0.06)" : "rgba(0,0,0,0.22)");
+  R(ctx, 0, ground + 3, w, h - ground - 3, "rgba(0,0,0,0.22)");
   for (let x = 2; x < w; x += 12) R(ctx, x, ground + 7, 5, 1, inks.washMid);
 }
 
 function drawLamp(ctx: CanvasRenderingContext2D, x: number, ground: number, inks: Inks) {
-  R(ctx, x, ground - 13, 1, 13, inks.day ? "#8a8478" : "#7a746a");
-  R(ctx, x - 1, ground - 14, 3, 1, inks.day ? "#c9a24e" : "#ffd98a");
-  if (!inks.day) for (let i = 0; i < 6; i++) R(ctx, x - i, ground - 1, 2 * i + 1, 1, `rgba(255,217,138,${0.05 + 0.02 * (6 - i)})`);
+  R(ctx, x, ground - 13, 1, 13, "#7a746a");
+  R(ctx, x - 1, ground - 14, 3, 1, "#ffd98a");
+  for (let i = 0; i < 6; i++) R(ctx, x - i, ground - 1, 2 * i + 1, 1, `rgba(255,217,138,${0.05 + 0.02 * (6 - i)})`);
 }
 
 function drawCrane(ctx: CanvasRenderingContext2D, g: CityGeo, inks: Inks, hookX: number, hookY: number) {
-  const steel = inks.day ? shade(inks.kayolo, 0.78) : inks.kayolo;
+  const steel = inks.kayolo;
   const dark = shade(steel, 0.55);
   const { mastX, jibY, ground, siteX } = g;
   R(ctx, mastX, jibY, 1, ground - jibY, steel);
@@ -300,10 +298,10 @@ function drawCrane(ctx: CanvasRenderingContext2D, g: CityGeo, inks: Inks, hookX:
   R(ctx, a, jibY, mastX + 10 - a, 1, steel);
   R(ctx, a, jibY + 3, mastX - a, 1, dark);
   for (let x = a + 1; x < mastX; x += 4) R(ctx, x, jibY + 1 + ((x >> 2) & 1), 1, 1, steel);
-  R(ctx, mastX + 5, jibY + 1, 5, 4, inks.day ? "#8a8478" : "#4a4a4a");
+  R(ctx, mastX + 5, jibY + 1, 5, 4, "#4a4a4a");
   R(ctx, mastX - 4, jibY + 4, 5, 5, dark);
   R(ctx, mastX - 3, jibY + 5, 3, 2, alpha("#bfe3ff", 0.6));
-  const rope = inks.day ? "#8a8478" : "#c8c2b6";
+  const rope = "#c8c2b6";
   R(ctx, hookX - 2, jibY + 1, 5, 2, rope);
   R(ctx, hookX, jibY + 3, 1, Math.max(0, hookY - jibY - 3), alpha(rope, 0.7));
   R(ctx, hookX - 1, hookY, 3, 2, rope);
@@ -312,11 +310,11 @@ function drawCrane(ctx: CanvasRenderingContext2D, g: CityGeo, inks: Inks, hookX:
 
 function drawSite(ctx: CanvasRenderingContext2D, g: CityGeo, inks: Inks) {
   const { siteX, siteW, ground } = g;
-  R(ctx, siteX - 2, ground - 2, siteW + 4, 2, inks.day ? "#b8b2a6" : "#55524c");
-  R(ctx, siteX - 2, ground - 2, siteW + 4, 1, inks.day ? "#cfc9bd" : "#77736b");
+  R(ctx, siteX - 2, ground - 2, siteW + 4, 2, "#55524c");
+  R(ctx, siteX - 2, ground - 2, siteW + 4, 1, "#77736b");
   for (let x = siteX - 2; x <= siteX + siteW + 2; x += 6) R(ctx, x, ground - 7, 1, 5, inks.washStrong);
   for (let x = siteX - 2; x < siteX + siteW + 2; x += 4)
-    R(ctx, x, ground - 6, 2, 1, x % 8 < 4 ? alpha(inks.kayolo, 0.7) : inks.day ? "rgba(60,58,54,0.5)" : "rgba(20,20,20,0.6)");
+    R(ctx, x, ground - 6, 2, 1, x % 8 < 4 ? alpha(inks.kayolo, 0.7) : "rgba(20,20,20,0.6)");
 }
 
 /** A tower on screen: where it can be pointed at. */

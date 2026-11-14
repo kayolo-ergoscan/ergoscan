@@ -199,8 +199,8 @@ export function LithosDailyChart({
       >
         <defs>
           <pattern id="lithos-hatch" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-            <rect width="4" height="4" fill="#ebcb71" fillOpacity="0.35" />
-            <rect width="2" height="4" fill="#ebcb71" />
+            <rect width="4" height="4" fill={INK} fillOpacity="0.35" />
+            <rect width="2" height="4" fill={INK} />
           </pattern>
         </defs>
         {ticks.map((v) => (

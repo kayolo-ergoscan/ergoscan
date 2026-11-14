@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { TipHead, TipRow, TipRows, useFloatTip, type TipRect } from "@/components/Tip";
 import { formatBytes, formatErgPrecise, shortId } from "@/lib/format";
 import { lookEdge, lookInk } from "@/lib/look";
+import { INK_EVENT } from "@/lib/skin-ink";
 import { txChipCaption } from "@/lib/tx-lock";
 import { usePageSync, useStreamMempool } from "@/lib/page-sync";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
@@ -935,6 +936,9 @@ export function TxBallPit({
       kick();
     };
     media.addEventListener("change", onReduce);
+    // A live theme switch: the inks are read while painting, so one more frame repaints the balls.
+    const onInk = () => kick();
+    window.addEventListener(INK_EVENT, onInk);
     const ro = new ResizeObserver(() => layout());
     ro.observe(host);
     layout();
@@ -1092,6 +1096,7 @@ export function TxBallPit({
       io.disconnect();
       document.removeEventListener("visibilitychange", onVisDoc);
       media.removeEventListener("change", onReduce);
+      window.removeEventListener(INK_EVENT, onInk);
       canvas.removeEventListener("pointermove", onMove);
       canvas.removeEventListener("pointerleave", onLeave);
       canvas.removeEventListener("pointerdown", onPointerDown);
