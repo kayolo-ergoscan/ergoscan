@@ -163,11 +163,13 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function HomePage({
   searchParams,
 }: {
-  searchParams: Promise<{ preview?: string }>;
+  searchParams: Promise<{ preview?: string; stats?: string }>;
 }) {
   const host = ((await headers()).get("host") ?? "").split(":")[0];
   if (host === "api.ergoscan.me") return <ApiSite />;
-  const [{ preview }, home] = await Promise.all([searchParams, cachedHome()]);
+  const [{ preview, stats }, home] = await Promise.all([searchParams, cachedHome()]);
+  // Prototype switch for the «Network» block concepts; any other value keeps the tiles.
+  const statsVariant = stats === "a" || stats === "b" || stats === "c" ? stats : null;
   const market = marketFromHome(home);
   const price = home.priceSeries ?? [];
   const rentTape =
@@ -199,6 +201,7 @@ export default async function HomePage({
       initialRentEpochBoxes={home.rentEpochBoxes ?? null}
       initialLithos={home.lithos ?? null}
       previewShare={process.env.NODE_ENV === "development" && preview === "share"}
+      statsVariant={statsVariant}
     />
     </>
   );

@@ -49,6 +49,7 @@ import { formingAfterSeal, mergeBlockRow, mergeBlockRows, type BlockRow } from "
 import { Tip, TipInfo } from "@/components/Tip";
 import { HomeVersionNodes } from "@/components/HomeVersionNodes";
 import { isSupplyDigit, zipSupplyGlyphs } from "@/lib/supply-flip";
+import { NetStats, type NetVariant } from "@/components/net-stats/NetStats";
 
 function ChartSparkSlot() {
   return <div className="h-9 w-full" />;
@@ -129,6 +130,7 @@ export function HomeExplorer({
   initialRentDanger = null,
   initialLithos = null,
   previewShare = false,
+  statsVariant = null,
 }: {
   initialMempool?: number | null;
   initialBlocks?: BlockRow[];
@@ -151,6 +153,8 @@ export function HomeExplorer({
   initialLithos?: LithosHome | null;
   /** Local `/?preview=share` — keep fixture rows, don't overwrite from stage. */
   previewShare?: boolean;
+  /** Prototype `/?stats=a|b|c`: the eight figures as one «Network» block. */
+  statsVariant?: NetVariant | null;
 }) {
   const t = useT();
   const { locale } = useI18n();
@@ -530,8 +534,45 @@ export function HomeExplorer({
         txUnit={t("home.txUnit")}
       />
 
-      <div className="home-bento grid items-stretch gap-2 lg:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)] lg:grid-rows-[22.5rem_22.5rem]">
-        <div className="home-bento-top contents gap-2 lg:col-span-2 lg:grid lg:h-full lg:min-h-0 lg:grid-cols-subgrid lg:grid-rows-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+      <div
+        className={clsx(
+          "home-bento grid items-stretch gap-2 lg:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]",
+          statsVariant ? "lg:grid-rows-[auto_22.5rem]" : "lg:grid-rows-[22.5rem_22.5rem]"
+        )}
+      >
+        <div
+          className={clsx(
+            "home-bento-top contents gap-2 lg:col-span-2 lg:grid lg:h-full lg:min-h-0 lg:grid-cols-subgrid",
+            statsVariant ? "lg:grid-rows-[auto_auto]" : "lg:grid-rows-[minmax(0,1fr)_minmax(0,1fr)_auto]"
+          )}
+        >
+        {statsVariant ? (
+          <div className="min-w-0 max-lg:order-1 lg:col-span-2 lg:row-start-1">
+            <NetStats
+              variant={statsVariant}
+              price={price}
+              spot={spotPx}
+              change24h={changePct}
+              mcap={mcap}
+              rank={market?.rank ?? null}
+              vol24={vol24}
+              circulating={stats?.circulating ?? null}
+              maxSupply={stats?.maxSupply ?? 97_739_924}
+              holders={holderCount}
+              holdersMonth={stats?.holdersMonth ?? null}
+              scripts={scriptCount}
+              pools={pools}
+              minerCount={minerCount}
+              hashrate={stats?.hashRate ?? null}
+              hashSeries={hashRateSeries}
+              txDay={txDay}
+              feeDay={feeDay}
+              activity={txActivity}
+              enter={2}
+            />
+          </div>
+        ) : (
+        <>
         <div className="home-kpi grid min-h-0 grid-cols-2 gap-2 sm:grid-cols-3 max-lg:order-1 lg:col-start-1 lg:row-span-2 lg:row-start-1 lg:h-full lg:grid-rows-2">
           <article className={TILE} style={enterAt(2)}>
             <div className="flex shrink-0 items-end justify-between gap-2">
@@ -805,17 +846,19 @@ export function HomeExplorer({
             )}
           </HomeActivityTile>
         </div>
+        </>
+        )}
 
         <EpochBar
           height={tipHeight}
           avgBlockMs={avgBlockMs}
           t={t}
           locale={locale}
-          className="home-tile-enter max-lg:order-4 lg:col-start-1 lg:row-start-3"
+          className={clsx("home-tile-enter max-lg:order-4 lg:col-start-1", statsVariant ? "lg:row-start-2" : "lg:row-start-3")}
           style={enterAt(9)}
         />
         <HomeVersionNodes
-          className="home-tile-enter home-meet-right h-full min-h-0 max-lg:order-3 lg:col-start-2 lg:row-start-3"
+          className={clsx("home-tile-enter home-meet-right h-full min-h-0 max-lg:order-3 lg:col-start-2", statsVariant ? "lg:row-start-2" : "lg:row-start-3")}
           style={enterAt(11)}
         />
         </div>

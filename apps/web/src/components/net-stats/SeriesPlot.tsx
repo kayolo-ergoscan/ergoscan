@@ -1,0 +1,185 @@
+"use client";
+
+import { memo, useEffect, useMemo, useRef, useState } from "react";
+import clsx from "clsx";
+import {
+  areaPath,
+  barCeiling,
+  barPaths,
+  binIndex,
+  extent,
+  linePath,
+  nearestIndex,
+  niceTicks,
+  xOf,
+  yOf,
+  type Frame,
+  type NetBin,
+  type NetPt,
+} from "@/lib/net-stats";
+
+/** Width of a box, from one ResizeObserver; `fallback` until it reports (and on the server). */
+export function useBoxWidth<T extends HTMLElement>(fallback: number) {
+  const ref = useRef<T>(null);
+  const [w, setW] = useState(fallback);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver((rows) => {
+      const next = Math.round(rows[0]?.contentRect.width ?? 0);
+      if (next > 0) setW((prev) => (prev === next ? prev : next));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return [ref, w] as const;
+}
+
+export type PlotData = { kind: "line"; pts: readonly NetPt[] } | { kind: "bars"; bins: readonly NetBin[] };
+
+/** The point or column under time t (or null), for a readout. */
+export function valueAt(data: PlotData, t: number | null): { t: number; t1?: number; v: number; open?: boolean } | null {
+  if (t == null) return null;
+  if (data.kind === "bars") {
+    const i = binIndex(data.bins, t);
+    const b = i >= 0 ? data.bins[i]! : null;
+    return b && b.known ? { t: b.t, t1: b.t1, v: b.v, open: b.open } : null;
+  }
+  const i = nearestIndex(data.pts, t);
+  return i >= 0 ? data.pts[i]! : null;
+}
+
+/**
+ * One series over the shared week. A level is a 2 px line on a 10 % wash with a ringed end dot;
+ * a sum is columns from a zero baseline (≤ 24 px, 4 px data end, the open bin as a ghost).
+ * Hover comes from the parent (`hoverT`), so several plots share one crosshair.
+ */
+export const SeriesPlot = memo(function SeriesPlot({
+  data,
+  t0,
+  t1,
+  ink,
+  height,
+  hoverT,
+  yTicks,
+  formatTick,
+  formatValue,
+  className,
+  grid = false,
+}: {
+  data: PlotData;
+  t0: number;
+  t1: number;
+  ink: string;
+  height: number;
+  hoverT: number | null;
+  yTicks?: number;
+  /** Tick text; `step` is the tick spacing, so every tick keeps the same decimals. */
+  formatTick?: (v: number, step: number) => string;
+  /** The true value printed beside a column cut by the ceiling (wide plots only). */
+  formatValue?: (v: number) => string;
+  className?: string;
+  /** Hairline gridlines at the y ticks. */
+  grid?: boolean;
+}) {
+  const [box, w] = useBoxWidth<HTMLDivElement>(600);
+  const geo = useMemo(() => {
+    if (data.kind === "bars") {
+      const ceil = barCeiling(data.bins.filter((b) => b.known && b.t1 > t0).map((b) => b.v));
+      const ticks = yTicks ? niceTicks(0, ceil.hi, yTicks) : [];
+      const hi = ceil.clip ? ceil.hi : Math.max(ceil.hi, ticks[ticks.length - 1] ?? ceil.hi);
+      const f: Frame = { w, h: height, t0, t1, lo: 0, hi, top: 3, bottom: 0 };
+      return { f, ticks: ticks.filter((v) => v <= hi), bars: barPaths(f, data.bins), line: "", area: "" };
+    }
+    const [lo, hi] = extent(data.pts.map((p) => p.v));
+    const f: Frame = { w, h: height, t0, t1, lo, hi, top: 6, bottom: 6 };
+    const ticks = yTicks ? niceTicks(lo, hi, yTicks) : [];
+    return { f, ticks, bars: null, line: linePath(f, data.pts), area: areaPath(f, data.pts) };
+  }, [data, t0, t1, w, height, yTicks]);
+
+  const f = geo.f;
+  const hv = valueAt(data, hoverT);
+  const dim = hv != null && data.kind === "bars";
+  const tickStep = geo.ticks.length > 1 ? geo.ticks[1]! - geo.ticks[0]! : 0;
+
+  // The week itself: built once per data/size, so a hover re-renders only the overlay below
+  // (React skips an element it gets back unchanged).
+  const base = useMemo(
+    () => (
+      <>
+        <svg viewBox={`0 0 ${w} ${height}`} preserveAspectRatio="none" className="absolute inset-0 h-full w-full overflow-visible" aria-hidden>
+          {grid
+            ? geo.ticks.map((v) => (
+                <line key={v} x1={0} x2={w} y1={yOf(f, v)} y2={yOf(f, v)} stroke="var(--wash-mid)" strokeWidth={1} vectorEffect="non-scaling-stroke" />
+              ))
+            : null}
+          {geo.bars ? (
+            <>
+              <line x1={0} x2={w} y1={height - 0.5} y2={height - 0.5} stroke="var(--wash-mid)" strokeWidth={1} vectorEffect="non-scaling-stroke" />
+              <path d={geo.bars.closed} fill={ink} opacity={dim ? 0.38 : 0.62} />
+              <path d={geo.bars.open} fill={ink} opacity={0.24} />
+              {geo.bars.cut ? <path d={geo.bars.cut} fill="var(--module)" /> : null}
+            </>
+          ) : (
+            <>
+              <path d={geo.area} fill={ink} opacity={0.1} />
+              <path d={geo.line} fill="none" stroke={ink} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+            </>
+          )}
+        </svg>
+        {formatValue && geo.bars
+          ? geo.bars.cuts.map((c) => (
+              <span
+                key={c.x}
+                className="pointer-events-none absolute whitespace-nowrap pl-1.5 text-[11px] font-medium leading-none tabular-nums text-[var(--muted)]"
+                style={{ left: `${(c.x / w) * 100}%`, top: c.y }}
+              >
+                {formatValue(c.v)}
+              </span>
+            ))
+          : null}
+        {yTicks && formatTick
+          ? geo.ticks.map((v) => (
+              <span
+                key={v}
+                className="pointer-events-none absolute left-full -translate-y-1/2 whitespace-nowrap pl-2 text-[11px] leading-none tabular-nums text-[var(--muted-2)]"
+                style={{ top: yOf(f, v) }}
+              >
+                {formatTick(v, tickStep)}
+              </span>
+            ))
+          : null}
+      </>
+    ),
+    [geo, f, w, height, ink, grid, dim, formatValue, formatTick, yTicks, tickStep]
+  );
+
+  // The overlay: the newest column (at rest) or the hovered one, the crosshair, the end/hover dot.
+  let mark = "";
+  if (data.kind === "bars") {
+    const one = hv ? data.bins.find((b) => b.t === hv.t) : [...data.bins].reverse().find((b) => !b.open && b.known);
+    if (one) mark = barPaths(f, [{ ...one, open: false }]).closed;
+  }
+  const dot = data.kind === "line" ? (hv ?? data.pts[data.pts.length - 1] ?? null) : null;
+  // The pointer's hour in every plot, so stacked plots share one straight crosshair.
+  const cx = hoverT != null ? xOf(f, data.kind === "line" && hv ? hv.t : hoverT) : null;
+
+  return (
+    <div ref={box} className={clsx("relative w-full", className)} style={{ height }}>
+      {base}
+      {mark || cx != null ? (
+        <svg viewBox={`0 0 ${w} ${height}`} preserveAspectRatio="none" className="pointer-events-none absolute inset-0 h-full w-full overflow-visible" aria-hidden>
+          {mark ? <path d={mark} fill={ink} /> : null}
+          {geo.bars?.cut && mark ? <path d={geo.bars.cut} fill="var(--module)" /> : null}
+          {cx != null ? <line x1={cx} x2={cx} y1={0} y2={height} stroke="var(--hair)" strokeWidth={1} vectorEffect="non-scaling-stroke" /> : null}
+        </svg>
+      ) : null}
+      {dot ? (
+        <span
+          className="pointer-events-none absolute h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full"
+          style={{ left: `${(xOf(f, dot.t) / w) * 100}%`, top: yOf(f, dot.v), background: ink, boxShadow: "0 0 0 2px var(--module)" }}
+        />
+      ) : null}
+    </div>
+  );
+});
