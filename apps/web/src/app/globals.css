@@ -3828,65 +3828,6 @@ html[data-float="ada"] .explorer-dock {
     transform: rotate(-8deg);
   }
 }
-.rent-crate-mark {
-  overflow: visible;
-  display: block;
-  color: inherit;
-}
-.rent-crate.is-soon,
-.rent-crate.is-on {
-  transform-origin: center bottom;
-  animation: rent-crate-pulse 1.8s var(--ease) infinite;
-}
-.rent-crate.is-enter,
-.rent-crate.is-enter.is-soon,
-.rent-crate.is-enter.is-on {
-  transform-origin: center bottom;
-  animation: rent-crate-enter 640ms var(--ease) both;
-}
-.rent-crate.is-taken {
-  transform-origin: center bottom;
-  animation: rent-crate-taken 720ms var(--ease) both;
-  pointer-events: none;
-}
-@keyframes rent-crate-pulse {
-  0%,
-  100% {
-    opacity: 0.5;
-    transform: translateY(0);
-  }
-  50% {
-    opacity: 1;
-    transform: translateY(-1px);
-  }
-}
-@keyframes rent-crate-taken {
-  0% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-  100% {
-    opacity: 0;
-    transform: translateY(10px) scale(0.92);
-  }
-}
-@keyframes rent-crate-enter {
-  0% {
-    opacity: 0;
-    transform: translateY(-36px) scale(0.82) rotate(-5deg);
-  }
-  54% {
-    opacity: 1;
-    transform: translateY(3px) scale(1.08, 0.92) rotate(0deg);
-  }
-  74% {
-    transform: translateY(-6px) scale(0.97, 1.04) rotate(1.5deg);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0) scale(1) rotate(0deg);
-  }
-}
 
 /* AdaStat `uk-animation-scale-up`: fade + scale .9 → 1, 500ms ease-out. Home KPI figures. */
 @keyframes kpi-scale-up {
@@ -4409,10 +4350,6 @@ html[data-look="c"] .holders-mark {
   .rent-miner.is-walking .rm-leg-front,
   .rent-miner.is-walking .rm-pick,
   .rent-miner.is-swinging .rm-pick,
-  .rent-crate.is-soon,
-  .rent-crate.is-on,
-  .rent-crate.is-enter,
-  .rent-crate.is-taken,
   .block-size-waves {
     animation: none !important;
   }

@@ -383,6 +383,7 @@ export function RentView({
               mark={<KpiMark id="due-month" />}
               window={data.next30d}
               covered={windowCovered(data.next30d, data.dueHeight, indexFloor)}
+              approx
               minHeight={indexFloor}
               locale={locale}
               t={t}
@@ -834,6 +835,7 @@ function RentDanger({
 
 function RentWindowCard({
   enter,
+  approx = false,
   label,
   ink,
   mark,
@@ -844,6 +846,8 @@ function RentWindowCard({
   t,
 }: {
   enter?: number;
+  /** «≈»: the 30-day window counts token bytes for its first 7 days only (~2 % low). */
+  approx?: boolean;
   label: string;
   ink: string;
   mark: ReactNode;
@@ -863,7 +867,7 @@ function RentWindowCard({
       */}
       {showValue ? (
         <div className="mt-0.5 leading-[1.15]">
-          <KpiNum className="tabular-nums">{formatErgFixed(w.rentNano, locale)}</KpiNum>
+          <KpiNum className="tabular-nums">{`${approx ? "≈ " : ""}${formatErgFixed(w.rentNano, locale)}`}</KpiNum>
         </div>
       ) : (
         <p className="mt-0.5 text-[17px] font-semibold leading-[1.15] tabular-nums tracking-tight text-[var(--muted)]">

@@ -7,6 +7,8 @@ import {
   parseRentTape,
   parseRentEpochBoxes,
   parseRentEpochNano,
+  parseRentEpochCollected,
+  type RentEpochCollected,
   type AddrFlowKind,
   type LithosHome,
   type CompactMeaning,
@@ -204,6 +206,8 @@ export type HomePageSnapshot = {
   rentEpochBoxes?: number | null;
   /** Additive: estimated rent nano due before this header epoch ends. */
   rentEpochNano?: string | null;
+  /** Additive: rent miners collected since this header epoch began (exact, from the rent snapshot). */
+  rentEpochCollected?: RentEpochCollected | null;
   /** Additive: tokens short on ERG in the next 7 days, from snapshot_kv.rent. */
   rentDanger?: RentDangerRow[] | null;
   /** Additive: home «Lithos» card, a cut of snapshot_kv.lithos_protocol. Null before it has stats. */
@@ -791,6 +795,7 @@ export async function fetchHomeSnapshot(): Promise<HomePageSnapshot> {
     rentTape?: unknown;
     rentEpochBoxes?: unknown;
     rentEpochNano?: unknown;
+    rentEpochCollected?: unknown;
     rentDanger?: unknown;
     lithos?: unknown;
   }>("/v1/page/home");
@@ -838,6 +843,7 @@ export async function fetchHomeSnapshot(): Promise<HomePageSnapshot> {
     rentTape: parseRentTape(j.rentTape),
     rentEpochBoxes: parseRentEpochBoxes(j.rentEpochBoxes),
     rentEpochNano: parseRentEpochNano(j.rentEpochNano),
+    rentEpochCollected: parseRentEpochCollected(j.rentEpochCollected),
     rentDanger: parseRentDanger(j.rentDanger),
     lithos: parseLithosHome(j.lithos),
   };
@@ -1225,7 +1231,11 @@ export type BoxSnapshot = {
     rentDue: boolean;
     periodsElapsed: number;
     sizeBytes: number | null;
+    /** min(value, fee): what the rent spend takes. */
     estimatedRentNano: number | null;
+    storageFeeNano?: number | null;
+    /** value ≤ fee: the whole box goes, tokens too. */
+    takenWhole?: boolean;
     minValueNano: number | null;
     boxValueNano: number | null;
     belowMinValue: boolean | null;
