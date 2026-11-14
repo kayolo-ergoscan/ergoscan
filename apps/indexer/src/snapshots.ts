@@ -4,9 +4,11 @@
 import type pg from "pg";
 import {
   ERGO_HEADER_EPOCH_LEN,
-  boxBytesSql,
   boxRowBytesSql,
   ergoBoxSizeBytes,
+  rentTakeSql,
+  rentTakesWhole,
+  storageFeeNano,
   tokenEntryBytesSql,
   headerEpochStart,
   HOME_RENT_PROBE,
@@ -1036,7 +1038,11 @@ export async function maybeFillRecentTxShapes(pool: Pool): Promise<void> {
   if (ms > 400) console.warn(`[indexer] tx shape fill ${ms}ms`);
 }
 
-/** Same windows as SigmaSpace. Constants match packages/shared rent.ts — indexer has no shared dep. */
+/**
+ * Rent windows of 24h / 7d / 30d. Constants match packages/shared rent.ts. The fee is charged once
+ * per rent spend and a miner takes min(value, fee) a box (storageFeeNano in shared rent-exact.ts):
+ * every ERG sum below is LEAST(value, fee), never the bare fee.
+ */
 const RENT_PERIOD = 1_051_200;
 const RENT_FEE = 1_250_000;
 const RENT_24H = 720;
@@ -1072,7 +1078,6 @@ async function rentExactPlanner(client: pg.PoolClient): Promise<void> {
  */
 async function rentWindowsAgg(
   client: pg.PoolClient,
-  tip: number,
   lo: number,
   windows: ReadonlyArray<{ hi: number; blocks: number }>,
   tokensUpTo: number
@@ -1080,7 +1085,7 @@ async function rentWindowsAgg(
   const maxHi = Math.max(...windows.map((w) => w.hi));
   const cols = windows
     .map((_, i) => {
-      const hi = `$${7 + i}`;
+      const hi = `$${5 + i}`;
       return `COUNT(*) FILTER (WHERE creation_height <= ${hi})::text AS n${i},
               COALESCE(SUM(value_nano) FILTER (WHERE creation_height <= ${hi}), 0)::text AS v${i},
               COALESCE(SUM(rent) FILTER (WHERE creation_height <= ${hi}), 0)::text AS r${i}`;
@@ -1090,17 +1095,15 @@ async function rentWindowsAgg(
     `SELECT ${cols}
      FROM (
        SELECT b.creation_height, b.value_nano,
-              GREATEST(1, FLOOR(($1::numeric - b.creation_height) / $2))
-              * $3
-              * ${boxBytesSql("b", { tokensUpTo: "$6" })} AS rent
+              ${rentTakeSql("b", "$1", { tokensUpTo: "$4" })} AS rent
        FROM packed.boxes b
        WHERE b.spent_tx_id IS NULL
          AND b.creation_height IS NOT NULL
-         AND b.creation_height > $4
-         AND b.creation_height <= $5
+         AND b.creation_height > $2
+         AND b.creation_height <= $3
        OFFSET 0
      ) w`,
-    [tip, RENT_PERIOD, RENT_FEE, lo, maxHi, tokensUpTo, ...windows.map((w) => w.hi)]
+    [RENT_FEE, lo, maxHi, tokensUpTo, ...windows.map((w) => w.hi)]
   );
   const row = r.rows[0];
   return windows.map((w, i) => ({
@@ -1162,20 +1165,16 @@ async function readRentTape(pool: Pool, tip: number, dueHeight: number): Promise
               COUNT(*)::text AS box_count,
               MIN(b.creation_height)::text AS oldest_creation_height,
               COALESCE(SUM(b.value_nano), 0)::text AS value_nano,
-              COALESCE(SUM(
-                GREATEST(1, FLOOR(($1::numeric - b.creation_height) / $2))
-                * $3
-                * ${boxBytesSql("b")}
-              ), 0)::text AS rent_nano
+              COALESCE(SUM(${rentTakeSql("b", "$1")}), 0)::text AS rent_nano
        FROM packed.boxes b
        JOIN packed.addr ad ON ad.id = b.addr_id
        WHERE b.spent_tx_id IS NULL
          AND b.creation_height IS NOT NULL
-         AND b.creation_height > $4
-         AND b.creation_height <= $5
-         AND ad.address = ANY($6::text[])
+         AND b.creation_height > $2
+         AND b.creation_height <= $3
+         AND ad.address = ANY($4::text[])
        GROUP BY ad.address`,
-      [tip, RENT_PERIOD, RENT_FEE, windowLo, windowHi, addrs]
+      [RENT_FEE, windowLo, windowHi, addrs]
     );
     await c.query("COMMIT");
     const byAddr = new Map(agg.rows.map((r) => [r.address, r]));
@@ -1215,13 +1214,12 @@ async function readRentKpis(pool: Pool, tip: number, dueHeight: number): Promise
     // ~260 ms warm. 8 s only so a cold cache (16k box_assets leaf reads after a PG restart) can finish once.
     await c.query("SET LOCAL statement_timeout = 8000");
     await rentExactPlanner(c);
-    const [due] = await rentWindowsAgg(c, tip, -1, [{ hi: dueHeight, blocks: 0 }], dueHeight);
+    const [due] = await rentWindowsAgg(c, -1, [{ hi: dueHeight, blocks: 0 }], dueHeight);
     const epochLeft = ERGO_HEADER_EPOCH_LEN - (tip % ERGO_HEADER_EPOCH_LEN);
     const epochHi = dueHeight + epochLeft;
     // This header epoch only — not the years-overdue pile (lo=-1). One pass for the four windows.
     const [thisEpoch, next24h, next7d, next30d] = await rentWindowsAgg(
       c,
-      tip,
       dueHeight,
       [
         { hi: epochHi, blocks: epochLeft },
@@ -1341,11 +1339,7 @@ async function readRentForecast(
     const r = await c.query<{ t: string; boxes: number; rent_nano: string }>(
       `SELECT ((($1::bigint + (b.creation_height + $2 - $3) * 120000) / 86400000) * 86400000)::bigint::text AS t,
               COUNT(*)::int AS boxes,
-              COALESCE(SUM(
-                GREATEST(1, FLOOR(($3::numeric - b.creation_height) / $2))
-                * $4
-                * ${boxBytesSql("b", { tokensUpTo: "$7" })}
-              ), 0)::text AS rent_nano
+              COALESCE(SUM(${rentTakeSql("b", "$4", { tokensUpTo: "$7" })}), 0)::text AS rent_nano
        FROM packed.boxes b
        WHERE b.spent_tx_id IS NULL
          AND b.creation_height IS NOT NULL
@@ -1507,15 +1501,16 @@ async function readRentDanger(
       const creationHeight = n(row.creation_height);
       const size = n(row.size_bytes);
       if (size <= 0) continue;
-      const periods = Math.max(1, Math.floor(Math.max(0, tip - creationHeight) / RENT_PERIOD));
-      const rent = BigInt(periods) * BigInt(RENT_FEE) * BigInt(size);
+      // The fee itself, not capped: the tip shows it beside the ERG the box holds.
+      const rent = storageFeeNano(size, RENT_FEE);
       let value = 0n;
       try {
         value = BigInt(row.value_nano || "0");
       } catch {
         continue;
       }
-      if (value >= rent) continue;
+      // Listed only when a rent spend may take the whole box, tokens too (value ≤ fee).
+      if (!rentTakesWhole(value, rent)) continue;
       const tokenId = row.token_id.toLowerCase();
       const priceUsd = prices.get(tokenId) ?? 0;
       const pricedOk = priceUsd > 0;
@@ -1737,7 +1732,6 @@ async function readRentBoxPage(
         outputIndex: n(r.output_index),
       });
       const blocksUntilRent = Math.max(0, creationHeight + RENT_PERIOD - tip);
-      const periods = Math.max(1, Math.floor(Math.max(0, tip - creationHeight) / RENT_PERIOD));
       return {
         boxId: r.box_id,
         address: r.address,
@@ -1747,7 +1741,7 @@ async function readRentBoxPage(
         tokenCount: tokens.length,
         tokens,
         sizeBytes,
-        rentNano: (BigInt(periods) * BigInt(RENT_FEE) * BigInt(sizeBytes)).toString(),
+        rentNano: storageFeeNano(sizeBytes, RENT_FEE).toString(),
         blocksUntilRent,
         rentDue: blocksUntilRent === 0,
       };

@@ -1,6 +1,8 @@
 /**
  * Ergo storage rent (~4 years / 1_051_200 blocks).
- * rent ≈ periodsElapsed * storageFeeFactor * boxSizeBytes (nanoERG)
+ * fee = storageFeeFactor * boxSizeBytes (nanoERG), once per rent spend: no age multiplier (the
+ * node's ErgoInterpreter.checkExpiredBox, see storageFeeNano in rent-exact.ts). The miner takes
+ * min(box value, fee); a box worth no more than the fee goes whole, tokens included.
  */
 
 export type RentParams = {
@@ -104,8 +106,8 @@ export function computeBoxRent(input: {
       : rentDue
         ? 0
         : params.storagePeriodBlocks - (ageBlocks % params.storagePeriodBlocks);
-  const estimatedRentNano =
-    rentDue && sizeBytes > 0 ? periodsElapsed * params.storageFeeFactor * sizeBytes : null;
+  // One fee per rent spend, whatever the age (periodsElapsed is shown, never multiplied in).
+  const estimatedRentNano = rentDue && sizeBytes > 0 ? params.storageFeeFactor * sizeBytes : null;
   const ageYears = ageBlocks != null ? ageBlocks / BLOCKS_PER_YEAR : null;
 
   let note = "Rent not due yet; countdown is blocks until storage period elapses.";

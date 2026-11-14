@@ -13,6 +13,7 @@
  */
 
 import { ERGO_HEADER_EPOCH_LEN } from "./rent-tape.js";
+import { DEFAULT_RENT_PARAMS } from "./rent.js";
 
 /** Token count byte + register count byte + transaction id. */
 export const BOX_FIXED_BYTES = 34;
@@ -135,6 +136,46 @@ export function boxBytesSql(alias = "b", opts?: { tokensUpTo?: string }): string
     ? `CASE WHEN ${alias}.creation_height <= ${opts.tokensUpTo} THEN ${tok} ELSE 0 END`
     : tok;
   return `(${boxRowBytesSql(alias)} + ${tokens})`;
+}
+
+/**
+ * The storage fee of one rent spend, nanoERG: storageFeeFactor × the box's serialized bytes.
+ *
+ * Charged once per spend, however many periods the box sat. The node's rent check
+ * (`ErgoInterpreter.checkExpiredBox`, ergo-wallet/src/main/scala/org/ergoplatform/wallet/
+ * interpreter/ErgoInterpreter.scala) is
+ *
+ *   storageFee = params.storageFeeFactor * box.bytes.length
+ *   storageFeeNotCovered = box.value - storageFee <= 0
+ *   ok = storageFeeNotCovered || (output.creationHeight == currentHeight
+ *        && output.value >= box.value - storageFee && registers R1, R2, R4…R9 unchanged)
+ *
+ * It has no age term: age only gates the spend (currentHeight - creationHeight ≥ StoragePeriod).
+ * The recreated box takes the spend height as its creation height, so its next period starts there.
+ * A box holding no more than the fee is taken whole, its tokens included.
+ */
+export function storageFeeNano(bytes: number, factor: number = DEFAULT_RENT_PARAMS.storageFeeFactor): bigint {
+  const b = Math.max(0, Math.floor(bytes) || 0);
+  return BigInt(Math.max(0, Math.floor(factor) || 0)) * BigInt(b);
+}
+
+/** True when a rent spend may take the box whole (value ≤ fee, `storageFeeNotCovered`). */
+export function rentTakesWhole(valueNano: bigint, feeNano: bigint): boolean {
+  return valueNano <= feeNano;
+}
+
+/** SQL: the storage fee of a packed.boxes row (numeric). `fee`: an SQL expression, e.g. a `$n` param. */
+export function rentFeeSql(alias: string, fee: string, opts?: { tokensUpTo?: string }): string {
+  return `(${fee}::numeric * ${boxBytesSql(alias, opts)})`;
+}
+
+/**
+ * SQL: the ERG a miner takes from a packed.boxes row, LEAST(value, fee) (numeric). Every sum shown
+ * as rent a miner can collect uses this, never the bare fee: a 0.001 ERG box with a 0.4 ERG fee
+ * gives 0.001 ERG.
+ */
+export function rentTakeSql(alias: string, fee: string, opts?: { tokensUpTo?: string }): string {
+  return `LEAST(${alias}.value_nano::numeric, ${rentFeeSql(alias, fee, opts)})`;
 }
 
 /** First height of the header epoch that holds `height` (epoch = floor(height / 1024)). */

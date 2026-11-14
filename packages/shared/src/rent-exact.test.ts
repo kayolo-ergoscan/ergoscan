@@ -8,9 +8,14 @@ import {
   headerEpochStart,
   parseRentEpochCollected,
   rentEpochCollectedAt,
+  rentFeeSql,
+  rentTakeSql,
+  rentTakesWhole,
+  storageFeeNano,
   vlqLen,
   vlqLenSql,
 } from "./rent-exact.js";
+import { computeBoxRent, DEFAULT_RENT_PARAMS } from "./rent.js";
 
 /**
  * Real boxes a miner collected rent from (node /blockchain/box/byId), each with the fee it paid
@@ -281,4 +286,30 @@ test("rentEpochCollectedAt drops last epoch's sum", () => {
   assert.equal(rentEpochCollectedAt(snap, 1_872 * 1024), null);
   assert.equal(rentEpochCollectedAt(snap, 1_871 * 1024 - 1), null);
   assert.equal(rentEpochCollectedAt(snap, null), null);
+});
+
+test("storage fee: factor × bytes, once per spend, no age term", () => {
+  assert.equal(storageFeeNano(79), 98_750_000n); // a plain P2PK box
+  assert.equal(storageFeeNano(79, 2_500_000), 197_500_000n);
+  assert.equal(storageFeeNano(0), 0n);
+  assert.equal(storageFeeNano(-5), 0n);
+  // A box three periods old pays the same single fee (the node's checkExpiredBox has no age term).
+  const period = DEFAULT_RENT_PARAMS.storagePeriodBlocks;
+  const r = computeBoxRent({ creationHeight: 1, currentHeight: 1 + 3 * period + 10, valueNano: 5e9, sizeBytes: 79 });
+  assert.equal(r.periodsElapsed, 3);
+  assert.equal(r.estimatedRentNano, 98_750_000);
+});
+
+test("a box worth no more than its fee goes whole", () => {
+  assert.equal(rentTakesWhole(98_750_000n, 98_750_000n), true); // value − fee ≤ 0
+  assert.equal(rentTakesWhole(1_000_000n, 98_750_000n), true);
+  assert.equal(rentTakesWhole(98_750_001n, 98_750_000n), false);
+});
+
+test("collectable rent SQL is LEAST(value, fee) on the exact size", () => {
+  const take = rentTakeSql("b", "$1", { tokensUpTo: "$4" });
+  assert.ok(take.startsWith("LEAST(b.value_nano::numeric, "));
+  assert.ok(take.includes(rentFeeSql("b", "$1", { tokensUpTo: "$4" })));
+  assert.ok(take.includes(boxBytesSql("b", { tokensUpTo: "$4" })));
+  assert.ok(!/FLOOR|GREATEST/.test(take), "no age multiplier");
 });

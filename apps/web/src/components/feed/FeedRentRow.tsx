@@ -81,8 +81,9 @@ function RiskChips({ tokens }: { tokens: { tokenId: string; name: string | null 
   );
 }
 
+/** The node takes the whole box, tokens too, when it holds no more than its fee (value ≤ fee). */
 function cannotPay(row: RentBoxRow): boolean {
-  return bigOf(row.valueNano) < bigOf(row.rentNano);
+  return bigOf(row.valueNano) <= bigOf(row.rentNano);
 }
 
 /**

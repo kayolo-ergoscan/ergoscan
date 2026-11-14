@@ -138,7 +138,7 @@ export function registerMetricsRoutes(app: Express, deps: MetricsDeps): void {
         storageFeeFactor,
         minValuePerByte,
         storagePeriodYearsApprox: STORAGE_PERIOD / BLOCKS_PER_YEAR,
-        formula: "rent ≈ periodsElapsed * storageFeeFactor * boxSizeBytes (nanoERG)",
+        formula: "fee = storageFeeFactor * boxSizeBytes (nanoERG), once per rent spend; a miner takes min(value, fee)",
       },
     });
   });
