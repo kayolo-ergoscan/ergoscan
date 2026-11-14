@@ -21,9 +21,11 @@ export function sealMatch(txIds: readonly string[], yard: readonly YardTx[]): st
 
 /**
  * Each storey of the new tower, bottom up: a tx that rode in from the yard keeps its crate's kind;
- * any other takes the block read's kind at that index when it is there, else stays unlit.
+ * any other takes the block read's kind at that index when it is there, else stays unlit. A partial
+ * seal (no tx list: the gateway could not read the block) takes the block read whole once it lands.
  */
 export function sealStoreys(txIds: readonly string[], yard: readonly YardTx[], read: readonly CityTx[] | null): { txs: CityTx[]; kinds: string[] } {
+  if (!txIds.length && read?.length) return { txs: [...read], kinds: read.map((r) => r.category) };
   const byId = new Map(yard.map((t) => [t.id, t]));
   const txs: CityTx[] = [];
   const kinds: string[] = [];
@@ -80,6 +82,25 @@ export function sealTargets(txIds: readonly string[], ids: readonly string[]): n
 export function momentPlays(o: { reduce: boolean; visible: boolean; height: number; newest: number | null }): boolean {
   if (o.reduce || !o.visible) return false;
   return o.newest == null || o.height > o.newest;
+}
+
+/** Seals that may wait for the moment playing now; an older one past this just stands (no moment). */
+export const SEAL_QUEUE_MAX = 2;
+
+/**
+ * A seal that comes while a moment plays waits its turn (two blocks in one breath: the first is not
+ * cut short, then the second plays). Past `max` waiting, the oldest leave the queue in `dropped`.
+ */
+export function queueSeal<T>(queue: readonly T[], s: T, max = SEAL_QUEUE_MAX): { queue: T[]; dropped: T[] } {
+  const next = [...queue, s];
+  const over = Math.max(0, next.length - max);
+  return { queue: next.slice(over), dropped: next.slice(0, over) };
+}
+
+/** When the newest block came, for «no new block for a while»: its sighting, else its header time. */
+export function arrivedAt(b: { ts: number; seenAt?: number | null } | undefined): number {
+  if (!b) return 0;
+  return typeof b.seenAt === "number" && Number.isFinite(b.seenAt) && b.seenAt > 0 ? b.seenAt : b.ts;
 }
 
 /** How long the moment of a seal with `n` leaving crates lasts, ms. */

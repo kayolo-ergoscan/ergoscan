@@ -107,3 +107,51 @@ export function freshIds(
   }
   return out;
 }
+
+/** Why a shown tx leaves: a block took it, or the node let it go. */
+export type PoolExit = { id: string; reason: "confirmed" | "dropped" };
+
+/**
+ * A full poll's balls against the shown ones. `found`: the poll's rows (`isNew`: not shown before).
+ *
+ * A block can seal while the poll reads the node (the seal does not wait for the pool lock): its
+ * txs stay out of the result (`late`), and a shown one leaves as confirmed at once, not through
+ * the grace. Otherwise as before: a shown tx the poll missed waits its grace in live mode, then
+ * leaves as dropped (as confirmed without the live loop, which has no grace).
+ */
+export function mergePoll<B extends { id: string }>(
+  found: readonly ({ ball: B; isNew: boolean } | null)[],
+  shown: ReadonlyMap<string, B>,
+  o: { sealed: { has(id: string): boolean }; vanish: VanishClock; live: boolean; now: number }
+): { next: Map<string, B>; added: B[]; removed: PoolExit[]; late: Set<string> } {
+  const next = new Map<string, B>();
+  const added: B[] = [];
+  const removed: PoolExit[] = [];
+  const late = new Set<string>();
+  for (const row of found) {
+    if (!row) continue;
+    if (o.sealed.has(row.ball.id)) {
+      late.add(row.ball.id);
+      continue;
+    }
+    next.set(row.ball.id, row.ball);
+    if (row.isNew) added.push(row.ball);
+  }
+  for (const [id, prev] of shown) {
+    if (next.has(id)) {
+      o.vanish.forget([id]);
+      continue;
+    }
+    if (o.sealed.has(id)) {
+      o.vanish.forget([id]);
+      removed.push({ id, reason: "confirmed" });
+      continue;
+    }
+    if (o.live && o.vanish.waiting(id, o.now)) {
+      next.set(id, prev);
+      continue;
+    }
+    removed.push({ id, reason: o.live ? "dropped" : "confirmed" });
+  }
+  return { next, added, removed, late };
+}

@@ -3,9 +3,10 @@
  * txCount; `maxBlockSize` waits for its gateway line), one per height. Э4 adds the rest of the chain:
  *
  * - E4 a catch-up (the height went up by ≥ 2 at once: one act instead of N);
- * - E5–E7 the wait for a block (2× and 3× the average, 8 min), one timer, counted from when this
- *   browser got the block (performance.now), never from the miner's clock (§4.8); right after a
- *   connect the stream's `eta.lastBlockTs` stands in, shifted by the server's clock (snapshot `ts`);
+ * - E5–E7 the wait for a block (2× and 3× the average, 8 min), one timer, counted from when the
+ *   gateway saw the block (the seal's `seenAt`, shifted by the server's clock from snapshot `ts`;
+ *   without it, when this browser got it), never from the miner's header time (§4.8); right after a
+ *   connect the stream's `eta.lastBlockTs` (also `seenAt`) stands in;
  * - E10 a tx of the page's topic; E11 a pool surge; E12 a drain after a seal; E13 a fee spike (p50
  *   against its own hour, never p90); E14 the price (neutral; the shell's poll feeds it); E15 oracle
  *   txs in a seal; E16–E18 the live feed and the browser being offline; E19 the site behind (index
@@ -296,7 +297,16 @@ export function createChainSense(deps: ChainDeps) {
     netSay(offline ? "offline" : "live", { cheer: visible() && !offline, missed: k, downMs: r.downMs, flapping: r.flapping });
   };
 
-  const onHeight = (h: number, sealed: { txCount: number; size: number | null; txIds: readonly string[] | null } | null) => {
+  /** A gateway-clock moment (`seenAt`, `eta.lastBlockTs`) on this tab's clock, never in the future. */
+  const fromGateway = (ts: number) => {
+    const t = deps.now();
+    return offset != null ? t - Math.max(0, wall() + offset - ts) : t;
+  };
+
+  const onHeight = (
+    h: number,
+    sealed: { txCount: number | null; size: number | null; txIds: readonly string[] | null; seenAt: number | null } | null
+  ) => {
     if (!Number.isInteger(h) || h <= 0) return;
     if (top == null) {
       // The first message after connecting: a baseline, unless it is a seal (a real new block).
@@ -304,7 +314,7 @@ export function createChainSense(deps: ChainDeps) {
       if (!sealed) {
         // When did the chain get it? The stream's last block time on the server's clock (§4.8).
         const t = deps.now();
-        const est = lastBlockTs != null && offset != null ? t - Math.max(0, wall() + offset - lastBlockTs) : t;
+        const est = lastBlockTs != null ? fromGateway(lastBlockTs) : t;
         if (now.height == null || h > now.height) {
           now.height = h;
           now.at = Math.min(t, est);
@@ -316,7 +326,7 @@ export function createChainSense(deps: ChainDeps) {
       }
       finishRejoin(h);
     }
-    learn(h, deps.now());
+    learn(h, sealed?.seenAt != null ? fromGateway(sealed.seenAt) : deps.now());
     if (sealed) {
       top = Math.max(top, h);
       if (now.mempool != null && now.mempool >= K.DRAIN_MIN && deps.now() >= quietUntil) {
@@ -476,9 +486,12 @@ export function createChainSense(deps: ChainDeps) {
       if (m.type === "chain.tip") return onHeight(Number(data?.height), null);
       if (m.type === "block.sealed") {
         const ids = Array.isArray(data?.txIds) ? (data.txIds as unknown[]).filter((x): x is string => typeof x === "string") : null;
-        const count = Number.isFinite(Number(data?.txCount)) ? Number(data?.txCount) : (ids?.length ?? 0);
+        // A partial seal (the gateway could not read the block) has no count: not an empty block.
+        const count = data?.partial === true ? null : Number.isFinite(Number(data?.txCount)) ? Number(data?.txCount) : (ids?.length ?? 0);
         const size = Number.isFinite(Number(data?.size)) ? Number(data?.size) : null;
-        return onHeight(Number(data?.height), { txCount: count, size, txIds: ids });
+        // When the gateway saw it (its clock): the waits count from there, not from the header time.
+        const seen = Number(data?.seenAt);
+        return onHeight(Number(data?.height), { txCount: count, size, txIds: ids, seenAt: Number.isFinite(seen) && seen > 1e12 ? seen : null });
       }
       if (m.type === "mempool.snapshot") {
         const ts = Number(data?.ts);

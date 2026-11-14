@@ -351,3 +351,44 @@ test("clock offset: after a connect the wait counts from the stream's last block
   for (const x of [...timers]) if (x.at <= t) x.fn();
   assert.equal(said.at(-1)?.k, "chain:tip-wait");
 });
+
+test("a partial seal (no block read) is a block of unknown size, never an empty one", () => {
+  const r = rig();
+  r.tip(200);
+  r.s.feed({ type: "block.sealed", data: { height: 201, blockId: "z".repeat(64), txIds: [], txCount: 0, timestamp: 0, seenAt: 0, partial: true } });
+  assert.deepEqual(r.said, [{ k: "chain:block", height: 201, txCount: null, size: null, kind: "normal" }]);
+});
+
+test("two seals in one breath: one reaction each, in order", () => {
+  const r = rig();
+  r.tip(300);
+  r.seal(301, 5);
+  r.seal(302, 6);
+  assert.deepEqual(
+    r.said.map((e) => (e.k === "chain:block" ? e.height : null)),
+    [301, 302]
+  );
+});
+
+test("E5–E7 count from the seal's seenAt (the gateway's clock), not from when the tab got it", () => {
+  const said: KayoloEvent[] = [];
+  const t = 1_000_000;
+  const s = createChainSense({
+    say: (e) => said.push(e),
+    now: () => t,
+    visible: () => true,
+    wall: () => 1_700_000_000_000,
+    setTimer: () => 0,
+    clearTimer: () => {},
+  });
+  s.socket(true);
+  // The server clock runs 5 s ahead.
+  s.feed({ type: "mempool.snapshot", data: { count: 3, ts: 1_700_000_005_000 } });
+  s.feed({ type: "chain.tip", data: { height: 500, headerId: "z".repeat(64) } });
+  // The gateway saw 501 20 s ago on its clock; the seal reaches this tab only now.
+  s.feed({ type: "block.sealed", data: { height: 501, blockId: "y".repeat(64), txIds: [], txCount: 4, size: 3000, timestamp: 0, seenAt: 1_700_000_005_000 - 20_000 } });
+  assert.equal(s.state().at, 1_000_000 - 20_000);
+  // A seenAt «from the future» (clock noise) never puts the block after now.
+  s.feed({ type: "block.sealed", data: { height: 502, blockId: "w".repeat(64), txIds: [], txCount: 4, size: 3000, timestamp: 0, seenAt: 1_700_000_005_000 + 3_000 } });
+  assert.equal(s.state().at, 1_000_000);
+});

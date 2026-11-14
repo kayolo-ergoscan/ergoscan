@@ -31,8 +31,8 @@ import { installExactJson } from "./lib/exactJson.js";
 import { stampTemplateHashes } from "./lib/txTemplateHash.js";
 import { mempoolMeaning, mempoolMeaningSlim, warmMempoolMeanings, type CompactMeaning } from "./lib/txMeaning.js";
 import { SubblockEngine } from "./lib/subblocks.js";
-import { SealWatcher } from "./lib/seal.js";
-import { RecentIds, VanishClock, freshIds } from "./lib/live-pool.js";
+import { SealWatcher, lastBlockClock, nextSeenTip, type SeenTip } from "./lib/seal.js";
+import { RecentIds, VanishClock, freshIds, mergePoll } from "./lib/live-pool.js";
 import { nodeVersionCache, type PeerSync } from "./lib/node-versions.js";
 import { registerExplorerRoutes } from "./routes/explorer.js";
 import { registerMediaRoutes } from "./routes/media.js";
@@ -254,6 +254,13 @@ let blockEta: BlockEta = {
   nextEtaSec: 120,
   samples: 0,
 };
+/**
+ * The newest block the gateway sealed and when it saw it (its own clock). The next-block countdown
+ * and the ordering planner run from here, not from the header time (the miner's template start).
+ */
+let seenTip: SeenTip | null = null;
+/** Orders the /info answers of the live loop and the 10 s poll for the seal watcher. */
+let infoSeq = 0;
 let nodeInfo: NodeInfoLite = { network: NETWORK };
 /** Last /info blob from the background poll. User GETs read this, not :9053. */
 let nodeInfoRaw: Record<string, unknown> = {};
@@ -357,30 +364,45 @@ function withEta(h: Omit<FeeHistogram, "ts" | "eta"> | ReturnType<typeof buildFe
 /**
  * Block first, then its txs leave the pool: the page sees `block.sealed` while the balls are
  * still on screen and flies them into the block instead of fading them.
+ *
+ * The block goes out at once; only the pool part waits for the pool lock (a full mempool poll can
+ * hold it for seconds on a busy node). Nothing here before the lock touches `balls`/`rawMempool`;
+ * `sealedRecent` filled early only keeps a poll or a live diff from bringing the txs back.
  */
-function applySeal(seal: SealEvent) {
-  broadcast({ type: "block.sealed", data: seal });
-  sealedRecent.add(seal.txIds, Date.now());
-  vanish.forget(seal.txIds);
-  // The next-block countdown restarts now, not at the next poll.
-  if (seal.timestamp > blockEta.lastBlockTs) {
+function applySeals(list: readonly SealEvent[]): void {
+  if (!list.length) return;
+  let moved = false;
+  for (const seal of list) {
+    broadcast({ type: "block.sealed", data: seal });
+    sealedRecent.add(seal.txIds, Date.now());
+    const seen = nextSeenTip(seenTip, seal);
+    if (!seen) continue;
+    seenTip = seen;
+    moved = true;
+    // The next-block countdown restarts now, not at the next poll.
     blockEta = {
       ...blockEta,
-      lastBlockTs: seal.timestamp,
+      lastBlockTs: seen.seenAt,
       nextEtaMs: blockEta.avgIntervalMs,
       nextEtaSec: Math.floor(blockEta.avgIntervalMs / 1000),
     };
+    // force planner window to new tip
+    subblocks.resync({
+      tipHeight: seen.height,
+      lastBlockTs: seen.seenAt,
+      avgIntervalMs: blockEta.avgIntervalMs,
+    });
   }
-  if (!dropSealedBalls(seal.txIds)) {
+  if (moved) {
     feeHist = withEta(feeHist);
     broadcast({ type: "fees.histogram", data: feeHist });
   }
-  // force planner window to new tip
-  subblocks.resync({
-    tipHeight: seal.height,
-    lastBlockTs: seal.timestamp,
-    avgIntervalMs: blockEta.avgIntervalMs,
-  });
+  void withPool(() => {
+    for (const seal of list) {
+      vanish.forget(seal.txIds);
+      dropSealedBalls(seal.txIds);
+    }
+  }).catch(() => undefined);
 }
 
 /** Removes the sealed balls and re-sends snapshot + fees. False when none of them was shown. */
@@ -438,7 +460,8 @@ async function refreshBlockEta(): Promise<void> {
     }
     if (!intervals.length) return;
     const avg = intervals.reduce((a, b) => a + b, 0) / intervals.length;
-    const lastBlockTs = sorted[0].timestamp;
+    // When the gateway saw the newest block, not its header time (the miner's template start).
+    const lastBlockTs = lastBlockClock(seenTip, sorted[0]);
     const elapsed = Math.max(0, Date.now() - lastBlockTs);
     const nextEtaMs = Math.max(0, avg - elapsed);
     blockEta = {
@@ -450,8 +473,8 @@ async function refreshBlockEta(): Promise<void> {
     };
     feeHist = { ...feeHist, ts: Date.now(), eta: { ...blockEta } };
     broadcast({ type: "fees.histogram", data: feeHist });
-    // keep sub-block planner aligned with tip + interval
-    const tip = nodeInfo.fullHeight ?? nodeInfo.headersHeight;
+    // keep sub-block planner aligned with tip + interval (the 10 s /info may lag the live loop)
+    const tip = Math.max(seenTip?.height ?? 0, nodeInfo.fullHeight ?? nodeInfo.headersHeight ?? 0) || null;
     if (tip != null) {
       subblocks.resync({
         tipHeight: tip,
@@ -519,6 +542,7 @@ async function fetchNodeInfo(): Promise<void> {
   if (infoInFlight) return;
   infoInFlight = true;
   try {
+    const asked = ++infoSeq;
     const j = await nodeGet<Record<string, unknown>>("/info", 5000);
     nodeInfoRaw = j;
     nodeInfo = {
@@ -539,11 +563,13 @@ async function fetchNodeInfo(): Promise<void> {
     broadcast({ type: "node.info", data: nodeInfo });
 
     // seal detection on tip advance (the live loop usually got there first)
-    const seal = await seals.check(
-      nodeInfo.fullHeight,
-      typeof j.bestFullHeaderId === "string" ? j.bestFullHeaderId : null
+    applySeals(
+      await seals.check(
+        nodeInfo.fullHeight,
+        typeof j.bestFullHeaderId === "string" ? j.bestFullHeaderId : null,
+        asked
+      )
     );
-    if (seal) await withPool(() => applySeal(seal));
   } catch (e) {
     lastError = String(e);
   } finally {
@@ -559,13 +585,16 @@ async function liveTick(): Promise<void> {
   if (liveInFlight || FORCE_MOCK || usingMock) return;
   liveInFlight = true;
   try {
+    const asked = ++infoSeq;
     const j = await nodeGet<Record<string, unknown>>("/info", 1500);
     const full = Number(j.fullHeight);
     const best = typeof j.bestFullHeaderId === "string" ? j.bestFullHeaderId : null;
     if (best && best !== liveBest && Number.isFinite(full)) {
       liveBest = best;
-      const seal = await seals.check(full, best);
-      if (seal) await withPool(() => applySeal(seal));
+      applySeals(await seals.check(full, best, asked));
+      // Dropped as stale (a later-asked /info answer was used first, maybe with an older tip):
+      // look at this block again on the next tick, not only at the next 10 s poll.
+      if (seals.stale(asked)) liveBest = null;
     }
     const stamp = String(j.lastMemPoolUpdateTime ?? "");
     const moved = stamp !== "" && stamp !== livePoolStamp;
@@ -630,7 +659,9 @@ async function syncPoolIds(): Promise<boolean> {
   for (const id of gone) {
     balls.delete(id);
     rawMempool.delete(id);
-    broadcast({ type: "mempool.remove", data: { id, reason: "dropped" } });
+    // A seal that came while this sync waited for the node: the block took it.
+    const reason = sealedRecent.has(id) ? "confirmed" : "dropped";
+    broadcast({ type: "mempool.remove", data: { id, reason } });
   }
   return true;
 }
@@ -740,7 +771,6 @@ async function pollMempoolLocked(): Promise<void> {
     // Do not turn on ENRICH_ADDRESSES.
     const filled = txs.map((t) => txWithTreeAddresses(t, NETWORK));
     await stampTemplateHashes(filled.flatMap((t) => [...(t.inputs ?? []), ...(t.outputs ?? [])]));
-    const next = new Map<string, BallProps>();
     const prelim = filled.map((t) => txToBall(t, balls.get(t.id)?.firstSeen ?? Date.now()));
     const hist = buildFeeHistogram(prelim);
 
@@ -780,28 +810,22 @@ async function pollMempoolLocked(): Promise<void> {
         };
       })
     );
-    for (const row of enrich) {
-      if (!row) continue;
-      next.set(row.ball.id, row.ball);
-      if (row.isNew) broadcast({ type: "mempool.add", data: row.ball });
-    }
-    const now = Date.now();
-    for (const [id, prev] of balls) {
-      if (next.has(id)) {
-        vanish.forget([id]);
-        continue;
-      }
-      // Live mode: a missing tx waits a moment for its block seal, then leaves as dropped.
-      if (LIVE_MS > 0 && vanish.waiting(id, now)) {
-        next.set(id, prev);
-        continue;
-      }
-      broadcast({ type: "mempool.remove", data: { id, reason: LIVE_MS > 0 ? "dropped" : "confirmed" } });
-    }
-    balls = next;
+    // A block sealed during the awaits above: its txs stay out of this result (the dump came
+    // before the seal). Live mode: a missing tx waits a moment for its block seal, then leaves.
+    const merged = mergePoll(enrich, balls, {
+      sealed: sealedRecent,
+      vanish,
+      live: LIVE_MS > 0,
+      now: Date.now(),
+    });
+    for (const ball of merged.added) broadcast({ type: "mempool.add", data: ball });
+    for (const exit of merged.removed) broadcast({ type: "mempool.remove", data: exit });
+    for (const id of merged.late) rawMempool.delete(id);
+    balls = merged.next;
     // Meanings for new mempool txs; never blocks or fails the poll.
     void warmMempoolMeanings(filled).catch(() => undefined);
-    feeHist = withEta(hist);
+    // Count and fees from what is left once the late seal took its txs.
+    feeHist = withEta(merged.late.size ? buildFeeHistogram(prelim.filter((b) => !merged.late.has(b.id))) : hist);
     pushMempoolSample({
       ts: Date.now(),
       count: balls.size,
