@@ -7,10 +7,17 @@
 import type pg from "pg";
 import {
   RENT_SERIES_DAY_MS,
+  claimsFromTx,
   fillRentWeekGaps,
   parseRentSeries,
   rollupRentSeries,
+  type RentClaim,
+  type RentNodeTx as NodeTx,
 } from "@ergoscan/shared";
+
+// The claim parser lives in shared: the gateway reads the same rule for the live block moment.
+export { claimsFromTx, claimerAddress, decodeRentOutIndex, splitRentGap } from "@ergoscan/shared";
+export type { RentClaim } from "@ergoscan/shared";
 
 const NODE = (process.env.ERGO_NODE_URL || "http://127.0.0.1:9053").replace(/\/$/, "");
 const VERIFY_KEY = "rent_claim_verify_height";
@@ -29,169 +36,6 @@ const VERIFY_BATCH = envInt("RENT_VERIFY_BATCH", 32, 64);
 const FETCH_CONCURRENCY = envInt("RENT_FETCH_CONCURRENCY", 16, 16);
 
 type Queryable = { query: pg.Pool["query"] };
-
-export type RentClaim = {
-  boxId: string;
-  spentTxId: string;
-  spentHeight: number;
-  outIndex: number;
-  valueNano: string;
-  rentNano: string;
-  collector: string | null;
-};
-
-type NodeOut = { value?: number | string; address?: string; ergoTree?: string };
-type NodeIn = {
-  boxId?: string;
-  value?: number | string;
-  address?: string;
-  spendingProof?: { proofBytes?: string; extension?: Record<string, string> };
-};
-type NodeTx = { id?: string; inputs?: NodeIn[]; outputs?: NodeOut[] };
-
-/** Sigma constant: type byte 0x03/0x04, then unsigned VLQ, then zigzag. */
-export function decodeRentOutIndex(hex: string | null | undefined): number | null {
-  if (!hex) return null;
-  const raw = hex.trim().toLowerCase();
-  if (!/^[0-9a-f]+$/.test(raw) || raw.length < 4 || raw.length % 2 !== 0) return null;
-  const buf = Buffer.from(raw, "hex");
-  if (buf[0] !== 0x03 && buf[0] !== 0x04) return null;
-  let i = 1;
-  let n = 0;
-  let shift = 0;
-  while (i < buf.length && shift <= 28) {
-    const b = buf[i++]!;
-    n |= (b & 0x7f) << shift;
-    if ((b & 0x80) === 0) {
-      const mag = n >>> 1;
-      return (n & 1) === 0 ? mag : -mag - 1;
-    }
-    shift += 7;
-  }
-  return null;
-}
-
-function nano(v: number | string | undefined): bigint | null {
-  if (v == null) return null;
-  const s = String(v).trim();
-  if (!/^\d+$/.test(s)) return null;
-  try {
-    return BigInt(s);
-  } catch {
-    return null;
-  }
-}
-
-const MINERS_FEE =
-  "2iHkR7CWvD1R4j1yZg5bkeDRQavjAaVPeTDFGGLZduHyfWMuYpmhHocX8GJoaieTx78FntzJbCBVL6rf96ocJoZdmWBL2fci7NqWgAirppPQmZ7fN9V6z13Ay6brPriBKYqLp1bT2Fk4FkFLCfdPpe";
-
-function isMinerSide(out: NodeOut): boolean {
-  const addr = out.address ?? "";
-  const tree = out.ergoTree ?? "";
-  if (addr.startsWith("88") || addr === MINERS_FEE) return true;
-  if (tree.startsWith("0008d3")) return true;
-  return false;
-}
-
-/** P2PK that received the rent. Skips the miner reward lock and the fee script. */
-export function claimerAddress(tx: NodeTx): string | null {
-  const outs = tx.outputs ?? [];
-  const selfRenew = new Set<number>();
-  for (const inp of tx.inputs ?? []) {
-    const idx = decodeRentOutIndex(inp.spendingProof?.extension?.["127"]);
-    if (idx == null || idx < 0) continue;
-    const outAddr = outs[idx]?.address;
-    if (outAddr && inp.address && outAddr === inp.address) selfRenew.add(idx);
-  }
-  let best: { addr: string; val: bigint } | null = null;
-  for (const [i, out] of outs.entries()) {
-    if (selfRenew.has(i) || isMinerSide(out)) continue;
-    const addr = out.address ?? "";
-    if (!addr.startsWith("9")) continue;
-    const val = nano(out.value) ?? 0n;
-    if (!best || val > best.val) best = { addr, val };
-  }
-  return best?.addr ?? null;
-}
-
-/**
- * Floor-divide `gap` across `values`. The shares sum to `gap`.
- * Remainder nanos go to the largest fractional parts.
- */
-export function splitRentGap(values: bigint[], gap: bigint): bigint[] {
-  const rents = values.map(() => 0n);
-  if (gap <= 0n) return rents;
-  const sum = values.reduce((acc, v) => acc + (v > 0n ? v : 0n), 0n);
-  if (sum <= 0n) return rents;
-  let assigned = 0n;
-  const rank = values.map((v, i) => {
-    const value = v > 0n ? v : 0n;
-    const rent = (value * gap) / sum;
-    rents[i] = rent;
-    assigned += rent;
-    return { i, rem: (value * gap) % sum };
-  });
-  rank.sort((a, b) => (a.rem === b.rem ? a.i - b.i : a.rem > b.rem ? -1 : 1));
-  let left = gap - assigned;
-  for (const row of rank) {
-    if (left <= 0n) break;
-    rents[row.i] = (rents[row.i] ?? 0n) + 1n;
-    left -= 1n;
-  }
-  return rents;
-}
-
-export function claimsFromTx(tx: NodeTx, spentHeight: number): RentClaim[] {
-  const txId = tx.id?.trim();
-  if (!txId) return [];
-  const collector = claimerAddress(tx);
-  const outs = tx.outputs ?? [];
-  const groups = new Map<number, Array<{ boxId: string; value: bigint }>>();
-  for (const inp of tx.inputs ?? []) {
-    const boxId = inp.boxId?.trim();
-    if (!boxId) continue;
-    const proof = inp.spendingProof;
-    const bytes = proof?.proofBytes ?? "";
-    if (bytes !== "") continue;
-    const outIndex = decodeRentOutIndex(proof?.extension?.["127"]);
-    if (outIndex == null) continue;
-    const inputNano = nano(inp.value);
-    if (inputNano == null || inputNano <= 0n) continue;
-    const list = groups.get(outIndex) ?? [];
-    list.push({ boxId, value: inputNano });
-    groups.set(outIndex, list);
-  }
-
-  const claims: RentClaim[] = [];
-  for (const [outIndex, group] of groups) {
-    let rents: bigint[];
-    if (outIndex < 0) {
-      rents = group.map((row) => row.value);
-    } else {
-      const outNano = nano(outs[outIndex]?.value);
-      if (outNano == null) continue;
-      const sum = group.reduce((acc, row) => acc + row.value, 0n);
-      rents = splitRentGap(
-        group.map((row) => row.value),
-        sum - outNano
-      );
-    }
-    group.forEach((row, i) => {
-      const rent = rents[i] ?? 0n;
-      if (rent <= 0n) return;
-      claims.push({
-        boxId: row.boxId,
-        spentTxId: txId,
-        spentHeight,
-        outIndex,
-        valueNano: row.value.toString(),
-        rentNano: rent.toString(),
-        collector,
-      });
-    });
-  }
-  return claims;
-}
 
 /**
  * Once per process (12 Nov 2026 audit): ALTER TABLE … IF NOT EXISTS still takes an ACCESS EXCLUSIVE

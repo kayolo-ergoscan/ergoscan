@@ -6,8 +6,7 @@ import { exactInt } from "../lib/exactJson.js";
 import type { Express } from "express";
 import {
   computeBoxRent,
-  estimateBoxSizeBytes,
-  registerPayloadBytes,
+  ergoBoxSizeOf,
   estimateFee,
   txToBall,
   DEFAULT_RENT_PARAMS,
@@ -629,11 +628,7 @@ function normalizeBox(
   });
   const sizeBytes =
     rentExtras?.sizeBytes ??
-    estimateBoxSizeBytes({
-      ergoTree: String(box.ergoTree ?? ""),
-      assetsCount: assets.length,
-      registerBytes: registerPayloadBytes(regs),
-    });
+    ergoBoxSizeOf({ ...box, assets: box.assets as { amount?: unknown }[] | undefined, additionalRegisters: regs });
   const currentHeight = rentExtras?.currentHeight ?? null;
   // Rent uses number; clamp huge values (display only)
   let valueNanoRent = 0;
@@ -1011,11 +1006,7 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
 
     const idx = await getBoxById(id);
     if (idx) {
-      extras.sizeBytes = estimateBoxSizeBytes({
-        ergoTree: idx.ergoTree ?? "",
-        assetsCount: idx.assets.length,
-        registerBytes: registerPayloadBytes(idx.additionalRegisters ?? {}),
-      });
+      extras.sizeBytes = ergoBoxSizeOf(idx);
       const [heads, meta, meanings] = await Promise.all([
         getTxHeads([idx.creationTxId ?? "", idx.spentTxId ?? ""]),
         tokenMetaMany(idx.assets.map((a) => a.tokenId)),
@@ -1076,11 +1067,7 @@ export function registerChainRoutes(app: Express, deps: ChainDeps) {
     for (const tx of deps.getRawMempool().values()) {
       for (const o of tx.outputs ?? []) {
         if (o.boxId === id) {
-          extras.sizeBytes = estimateBoxSizeBytes({
-            ergoTree: String(o.ergoTree ?? ""),
-            assetsCount: o.assets?.length ?? 0,
-            registerBytes: registerPayloadBytes(o.additionalRegisters),
-          });
+          extras.sizeBytes = ergoBoxSizeOf(o);
           cacheNoStore(res);
           const card = normalizeBox(
             {
