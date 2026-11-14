@@ -7,6 +7,7 @@ import { Tip } from "@/components/Tip";
 import { useT } from "@/lib/i18n/I18nProvider";
 import type { EvidenceKind } from "@/lib/trust-board";
 import type { PoolShare } from "@/lib/chain-stats";
+import { INK } from "@/lib/palette";
 
 /** The four week series, each in one ink of the look (marks tier; light.css answers the light ink). */
 export type SeriesKey = "price" | "hashrate" | "txs" | "fees";
@@ -19,23 +20,17 @@ export const SERIES_INK: Record<SeriesKey, string> = {
 };
 
 /**
- * Pool inks: the same family the home street paints each pool's roof flag in (DONUT_SLICES through
- * lookInk), as tokens, so the bar follows the ink without a repaint. The last slot is «the rest».
+ * Pool inks: DONUT_SLICES in its order (the home street paints each pool's roof flag the same,
+ * through lookInk), as tokens, so the bar follows the ink without a repaint. DONUT_SLICES' last slot
+ * is «the rest»: that place, and a row with no pool address, is grey, as the flags are.
  */
-const POOL_INK = [
-  "var(--c-token)",
-  "var(--c-box)",
-  "var(--c-block)",
-  "var(--c-tx)",
-  "var(--c-token)",
-  "var(--c-addr)",
-  "var(--c-net)",
-];
+const POOL_INK = [INK.cyan, INK.green, INK.gold, INK.coral, INK.sky, INK.violet, INK.teal];
 const POOL_REST = "var(--lk-grey, #8a8a8a)";
 
 function poolInk(p: PoolShare, i: number): string {
-  if (!p.address) return POOL_REST;
-  return POOL_INK[i % POOL_INK.length]!;
+  const slot = i % (POOL_INK.length + 1);
+  if (!p.address || slot === POOL_INK.length) return POOL_REST;
+  return POOL_INK[slot]!;
 }
 
 /** A fact's name: muted words, and an evidence dot when the figure is not a plain chain fact. */
@@ -124,7 +119,7 @@ export const PoolBar = memo(function PoolBar({
       onPointerLeave={() => onPick?.(null)}
       role="img"
       aria-label={pools
-        .map((p) => `${!p.address && p.name === "other" ? otherLabel : p.name} ${((p.blocks / total) * 100).toFixed(1)}%`)
+        .map((p) => `${!p.address && p.name === "other" ? otherLabel : p.name} ${(p.share * 100).toFixed(1)}%`)
         .join(", ")}
     >
       {pools.map((p, i) => (
@@ -132,9 +127,7 @@ export const PoolBar = memo(function PoolBar({
           key={`${p.address ?? p.name}-${i}`}
           className="h-full min-w-[2px] transition-opacity duration-150 hover:opacity-80"
           style={{ flex: `${p.blocks} 1 0`, background: poolInk(p, i) }}
-          onPointerEnter={() =>
-            onPick?.({ name: !p.address && p.name === "other" ? otherLabel : p.name, share: p.blocks / total })
-          }
+          onPointerEnter={() => onPick?.({ name: !p.address && p.name === "other" ? otherLabel : p.name, share: p.share })}
         />
       ))}
     </span>

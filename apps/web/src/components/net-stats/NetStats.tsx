@@ -8,7 +8,7 @@
  * card, nothing animates at rest. Each series is its own memo: a block that moves only the
  * transactions redraws only their columns.
  */
-import { memo, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { memo, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
 import clsx from "clsx";
 import type { LinePoint } from "@lumen/amm-chart";
@@ -20,7 +20,7 @@ import { countText } from "@/lib/i18n/messages";
 import { ReelText } from "@/components/ReelText";
 import { Tip } from "@/components/Tip";
 import { formatCompact, formatCompactNumber, formatDottedDay, formatH24, formatHashrate, formatUsdPrice } from "@/lib/format";
-import { binActivity, cleanLine, dayTicks, netDomain, type ActivityHour } from "@/lib/net-stats";
+import { binActivity, binHours, cleanLine, dayTicks, netDomain, weekLine, type ActivityHour } from "@/lib/net-stats";
 import { Delta, EvDot, FactLabel, PoolBar, SERIES_INK, SupplyMeter, type SeriesKey } from "./parts";
 import { SeriesPlot, valueAt, type PlotData, type PlotValue } from "./SeriesPlot";
 
@@ -45,6 +45,8 @@ export type NetStatsProps = {
   txDay: number | null;
   feeDay: number | null;
   activity: readonly ActivityHour[];
+  /** The hour the activity's snapshot was made in (asOfHour): a 6 h column that ends after it is still filling. */
+  activityAt: number | null;
   enter?: number;
 };
 
@@ -57,9 +59,8 @@ type Band = {
   height: number;
   /** The hovered point or column. */
   at: (v: number) => string;
-  /** The unit after the figure at rest, and after a hovered column. */
+  /** The unit after the figure at rest (a hovered column names its UTC hours instead). */
   unit?: string;
-  atUnit?: string;
   href?: string;
   ev?: EvidenceKind;
 };
@@ -72,12 +73,12 @@ const CARD_TAG = { "--tag": "var(--f-net)", "--tag-ink": "var(--k-ink)" } as con
 const HOUR_MS = 3_600_000;
 
 function stamp(t: number): string {
-  return `${formatDottedDay(t, "UTC")} · ${formatH24(t, "UTC", false)}`;
+  return `${formatDottedDay(t, "UTC")} · ${formatH24(t, "UTC", false)} UTC`;
 }
 
-function feeFig(v: number): string {
+function feeFig(v: number, locale: string): string {
   if (!Number.isFinite(v)) return "—";
-  if (v >= 100) return formatCompact(v, 1);
+  if (v >= 100) return formatCompact(v, 1, locale);
   if (v >= 10) return v.toFixed(1);
   return v.toFixed(2);
 }
@@ -92,15 +93,15 @@ export const NetStats = memo(function NetStats(p: NetStatsProps) {
   const hashPts = useMemo(() => cleanLine(p.hashSeries), [p.hashSeries]);
   const [t0, t1] = useMemo(() => netDomain(pricePts, hashPts, p.activity), [pricePts, hashPts, p.activity]);
   const data = useMemo(() => {
-    const price: PlotData = { kind: "line", pts: pricePts };
-    const hashrate: PlotData = { kind: "line", pts: hashPts };
+    const price: PlotData = { kind: "line", ...weekLine(pricePts, t0) };
+    const hashrate: PlotData = { kind: "line", ...weekLine(hashPts, t0) };
     return { price, hashrate };
-  }, [pricePts, hashPts]);
+  }, [pricePts, hashPts, t0]);
   const sums = useMemo(() => {
-    const txs: PlotData = { kind: "bars", bins: binActivity(p.activity, "txs") };
-    const fees: PlotData = { kind: "bars", bins: binActivity(p.activity, "feesErg") };
+    const txs: PlotData = { kind: "bars", bins: binActivity(p.activity, "txs", p.activityAt) };
+    const fees: PlotData = { kind: "bars", bins: binActivity(p.activity, "feesErg", p.activityAt) };
     return { txs, fees };
-  }, [p.activity]);
+  }, [p.activity, p.activityAt]);
 
   const bands = useMemo<Band[]>(() => {
     const usd = (v: number) => formatUsdPrice(v, locale);
@@ -113,8 +114,7 @@ export const NetStats = memo(function NetStats(p: NetStatsProps) {
         ink: SERIES_INK.txs,
         height: 38,
         at: (v) => Math.round(v).toLocaleString(loc),
-        unit: t("home.net.perDay"),
-        atUnit: t("home.net.per6h"),
+        unit: t("home.net.per24h"),
         href: "/transactions",
       },
       {
@@ -122,9 +122,8 @@ export const NetStats = memo(function NetStats(p: NetStatsProps) {
         name: t("home.txChartFees"),
         ink: SERIES_INK.fees,
         height: 38,
-        at: (v) => `${feeFig(v)} ERG`,
+        at: (v) => `${feeFig(v, locale)} ERG`,
         unit: t("home.net.per24h"),
-        atUnit: t("home.net.per6h"),
         href: "/fees",
       },
     ];
@@ -134,27 +133,28 @@ export const NetStats = memo(function NetStats(p: NetStatsProps) {
     price: p.spot != null ? formatUsdPrice(p.spot, locale) : null,
     hashrate: p.hashrate != null ? formatHashrate(p.hashrate) : null,
     txs: p.txDay != null ? Math.round(p.txDay).toLocaleString(loc) : null,
-    fees: p.feeDay != null ? `${feeFig(p.feeDay)} ERG` : null,
+    fees: p.feeDay != null ? `${feeFig(p.feeDay, locale)} ERG` : null,
   };
   const plot: Record<SeriesKey, PlotData> = { ...data, ...sums };
   const warm = t("home.chartWarm");
   const note = (k: SeriesKey): string | null =>
     k === "price" ? p.priceNote : k === "hashrate" ? (hashPts.length < 2 ? warm : null) : p.activity.length < 2 ? warm : null;
 
-  const { ref, hoverT, handlers } = useWeekPointer(t0, t1);
+  const { ref, box, hoverT, handlers } = useWeekPointer(t0, t1);
   const style = { ...CARD_TAG, "--enter": p.enter ?? 2 } as CSSProperties;
+  const titleId = useId();
 
   return (
-    <section className={clsx(CARD, "net-card h-full px-4 pb-3.5 pt-3 sm:px-5")} style={style} aria-label={t("home.net.title")}>
+    <section className={clsx(CARD, "net-card h-full px-4 pb-3.5 pt-3 sm:px-5")} style={style} aria-labelledby={titleId}>
       <div className="mb-3 flex h-[22px] shrink-0 items-center justify-between gap-3">
-        <span className="text-[13px] leading-none" style={{ color: HOME.forming }}>
+        <h2 id={titleId} className="text-[13px] leading-none" style={{ color: HOME.forming }}>
           {t("home.net.title")}
-        </span>
+        </h2>
         <span className="text-[12px] leading-none tabular-nums text-[var(--muted)]">
           {hoverT != null ? stamp(hoverT) : t("home.net.week")}
         </span>
       </div>
-      <div className="flex min-w-0 flex-col gap-2.5" {...handlers}>
+      <div ref={box} className="flex min-w-0 flex-col gap-2.5" {...handlers}>
         {bands.map((b, i) => (
           <BandRow
             key={b.key}
@@ -218,8 +218,12 @@ function Arrow() {
   );
 }
 
-/** The series' name in its ink's key; transactions and fees link to their pages. */
+/** The series' name in its ink's key (a heading under the card's); transactions and fees link to their pages. */
 function BandName({ band }: { band: Band }) {
+  return <h3 className="flex min-w-0">{bandName(band)}</h3>;
+}
+
+function bandName(band: Band) {
   const body = (
     <>
       <span className="inline-block h-[3px] w-3 shrink-0 rounded-full" style={{ background: band.ink }} aria-hidden />
@@ -272,7 +276,8 @@ const BandRow = memo(function BandRow({
   const t = useT();
   const hv: PlotValue | null = valueAt(data, hoverT);
   const hero = band.key === "price";
-  const unit = hv ? (band.atUnit ? `${band.atUnit}${hv.open ? ` · ${t("home.net.soFar")}` : ""}` : null) : band.unit;
+  // A hovered column is a 6 h sum: it names its UTC hours (the header names the hour of the lines).
+  const unit = hv ? (hv.t1 != null ? binUnit(hv, t) : null) : band.unit;
   return (
     <div className="net-band">
       {/* A narrow card: name and figure on one line over the plot. A wide one: a column beside it. */}
@@ -286,7 +291,7 @@ const BandRow = memo(function BandRow({
           {unit ? <span className="truncate text-[11px] leading-none text-[var(--muted-2)]">{unit}</span> : null}
         </span>
       </div>
-      <div className="relative cursor-crosshair touch-pan-y" ref={plotRef}>
+      <div className="relative cursor-crosshair touch-pan-y" ref={plotRef} data-net-plot="">
         <SeriesPlot data={data} t0={t0} t1={t1} ink={band.ink} height={band.height} hoverT={hoverT} />
         {note ? (
           <span className="pointer-events-none absolute inset-0 flex items-center text-[12px] text-[var(--muted-2)]">{note}</span>
@@ -295,6 +300,12 @@ const BandRow = memo(function BandRow({
     </div>
   );
 });
+
+/** "12–18 UTC" for a closed column; "since 12 UTC" for the one still filling. */
+function binUnit(v: PlotValue, t: (k: string) => string): string {
+  const [a, b] = binHours(v.t, v.t1!);
+  return v.open ? t("home.net.since").replace("{h}", a) : `${a}–${b} UTC`;
+}
 
 /** UTC midnights under the plots: every day, every other day under a narrow plot. */
 function DayAxis({ t0, t1 }: { t0: number; t1: number }) {
@@ -318,34 +329,82 @@ function DayAxis({ t0, t1 }: { t0: number; t1: number }) {
   );
 }
 
-/** Pointer x over the plots → the hour in the week; one reader for every band on the axis. */
+/**
+ * Pointer x over the plots → the hour in the week; one reader for every band on the axis.
+ * A mouse reads while it hovers. A finger taps a plot to read that hour (or drags along it) and the
+ * readout stays until a tap elsewhere; a vertical swipe still scrolls the page (touch-pan-y), and a
+ * swipe that becomes a scroll clears it.
+ */
 function useWeekPointer(t0: number, t1: number) {
   const ref = useRef<HTMLDivElement>(null);
+  const box = useRef<HTMLDivElement>(null);
   const [hoverT, setHoverT] = useState<number | null>(null);
+  const [pinned, setPinned] = useState(false);
   const rect = useRef<DOMRect | null>(null);
+  const read = () => (rect.current = ref.current?.getBoundingClientRect() ?? null);
+  const pick = (clientX: number) => {
+    const r = rect.current ?? read();
+    if (!r || r.width <= 0) return;
+    const f = (clientX - r.left) / r.width;
+    if (f < 0 || f > 1) {
+      setHoverT(null);
+      return;
+    }
+    // Snap to the hour: the plots and readouts only change on a new hour.
+    const at = Math.floor((t0 + f * (t1 - t0)) / HOUR_MS) * HOUR_MS;
+    setHoverT((prev) => (prev === at ? prev : at));
+  };
+  const clear = () => {
+    setPinned(false);
+    setHoverT(null);
+  };
+  const onPlot = (e: React.PointerEvent) => e.target instanceof Element && e.target.closest("[data-net-plot]") != null;
+  const finger = (e: React.PointerEvent) => e.pointerType === "touch";
+
+  // A pinned readout goes on the next tap outside the plots.
+  useEffect(() => {
+    if (!pinned) return;
+    const away = (e: PointerEvent) => {
+      if (e.target instanceof Node && box.current?.contains(e.target)) return;
+      setPinned(false);
+      setHoverT(null);
+    };
+    document.addEventListener("pointerdown", away, true);
+    return () => document.removeEventListener("pointerdown", away, true);
+  }, [pinned]);
+
   const handlers = {
     // The plot column's box, read once per visit: a move then costs no layout read.
     onPointerEnter: () => {
-      rect.current = ref.current?.getBoundingClientRect() ?? null;
+      read();
+    },
+    onPointerDown: (e: React.PointerEvent) => {
+      // A finger: the page may have scrolled since the last touch.
+      if (finger(e)) read();
     },
     onPointerMove: (e: React.PointerEvent) => {
-      const r = rect.current ?? (rect.current = ref.current?.getBoundingClientRect() ?? null);
-      if (!r || r.width <= 0) return;
-      const f = (e.clientX - r.left) / r.width;
-      if (f < 0 || f > 1) {
-        setHoverT(null);
+      if (finger(e) && !onPlot(e) && hoverT == null) return;
+      pick(e.clientX);
+    },
+    onPointerUp: (e: React.PointerEvent) => {
+      if (!finger(e)) return;
+      if (!onPlot(e)) {
+        clear();
         return;
       }
-      // Snap to the hour: the plots and readouts only change on a new hour.
-      const at = Math.floor((t0 + f * (t1 - t0)) / HOUR_MS) * HOUR_MS;
-      setHoverT((prev) => (prev === at ? prev : at));
+      pick(e.clientX);
+      setPinned(true);
     },
-    onPointerLeave: () => {
+    onPointerCancel: (e: React.PointerEvent) => {
+      if (finger(e)) clear();
+    },
+    onPointerLeave: (e: React.PointerEvent) => {
       rect.current = null;
-      setHoverT(null);
+      // A finger lifts out of the plots after every tap: its readout stays.
+      if (!finger(e)) clear();
     },
   };
-  return { ref, hoverT, handlers };
+  return { ref, box, hoverT, handlers };
 }
 
 /* ───────────────────────────── the facts ───────────────────────────── */
@@ -368,15 +427,13 @@ const Facts = memo(function Facts(p: {
   const loc = locale === "ru" ? "ru-RU" : "en-US";
   const [pool, setPool] = useState<{ name: string; share: number } | null>(null);
   const emitted = p.circulating != null && p.maxSupply > 0 ? Math.min(100, (p.circulating / p.maxSupply) * 100) : null;
-  const total = p.pools.reduce((s, x) => s + x.blocks, 0);
   const lead = p.pools[0] ?? null;
   const other = t("home.shareOther");
-  const leadText =
-    lead && total > 0
-      ? t("home.net.lead")
-          .replace("{name}", !lead.address && lead.name === "other" ? other : lead.name)
-          .replace("{pct}", `${((lead.blocks / total) * 100).toFixed(0)}%`)
-      : t("home.poolsHint");
+  const leadText = lead
+    ? t("home.net.lead")
+        .replace("{name}", !lead.address && lead.name === "other" ? other : lead.name)
+        .replace("{pct}", sharePct(lead.share))
+    : t("home.poolsHint");
   const cell = "flex min-w-0 flex-col gap-1.5";
   const fig = "text-[17px]";
   return (
@@ -394,9 +451,11 @@ const Facts = memo(function Facts(p: {
           ) : null}
         </div>
         {p.vol24 != null ? (
-          <span className="truncate text-[12px] leading-none tabular-nums text-[var(--muted-2)]">
-            {t("home.net.vol").replace("{v}", `$${formatCompact(p.vol24, 1, locale)}`)}
-          </span>
+          <Tip content={`$${Math.round(p.vol24).toLocaleString(loc)}`}>
+            <span className="min-w-0 self-start truncate text-[12px] leading-none tabular-nums text-[var(--muted-2)]">
+              {t("home.net.vol").replace("{v}", `$${formatCompact(p.vol24, 1, locale)}`)}
+            </span>
+          </Tip>
         ) : null}
       </div>
       <div className={cell}>
@@ -415,29 +474,34 @@ const Facts = memo(function Facts(p: {
           </div>
         ) : null}
       </div>
-      <Tip content={t("home.holdersHint")} tap={false}>
-        <Link prefetch={false} href="/addresses" className={clsx(cell, "group/h rounded-[8px]")}>
-          <FactLabel>
-            <span className="group-hover/h:text-[var(--text)]">{t("home.holdersCount")}</span>
-          </FactLabel>
-          <LiveFig live={p.holders != null ? p.holders.toLocaleString(loc) : null} className={fig} />
-          {/* Two short facts, one under the other (side by side they read as one). */}
-          <span className="flex min-w-0 flex-col gap-1 text-[12px] leading-none tabular-nums text-[var(--muted-2)]">
-            {p.holdersMonth != null && p.holdersMonth > 0 ? (
-              <span className="truncate text-up">{t("home.net.month").replace("{n}", p.holdersMonth.toLocaleString(loc))}</span>
-            ) : null}
-            {p.scripts != null ? (
-              <span className="truncate">{countText(t, locale, "home.net.scripts", p.scripts, p.scripts.toLocaleString(loc))}</span>
-            ) : null}
+      <Link prefetch={false} href="/addresses" className={clsx(cell, "group/h rounded-[8px]")}>
+        {/* What counts as a holder, and as a script: each on its own words (a tap opens the list). */}
+        <Tip content={t("home.holdersHint")} tap={false}>
+          <span className="flex min-w-0 flex-col gap-1.5 self-start">
+            <FactLabel>
+              <span className="group-hover/h:text-[var(--text)]">{t("home.holdersCount")}</span>
+            </FactLabel>
+            <LiveFig live={p.holders != null ? p.holders.toLocaleString(loc) : null} className={fig} />
           </span>
-        </Link>
-      </Tip>
+        </Tip>
+        {/* Two short facts, one under the other (side by side they read as one). */}
+        <span className="flex min-w-0 flex-col items-start gap-1 text-[12px] leading-none tabular-nums text-[var(--muted-2)]">
+          {p.holdersMonth != null && p.holdersMonth > 0 ? (
+            <span className="max-w-full truncate text-up">{t("home.net.month").replace("{n}", p.holdersMonth.toLocaleString(loc))}</span>
+          ) : null}
+          {p.scripts != null ? (
+            <Tip content={t("home.scriptHint")} tap={false}>
+              <span className="max-w-full truncate">{countText(t, locale, "home.net.scripts", p.scripts, p.scripts.toLocaleString(loc))}</span>
+            </Tip>
+          ) : null}
+        </span>
+      </Link>
       <div className={cell}>
         <FactLabel ev="decoded">{t("home.poolsActive")}</FactLabel>
         <div className="flex min-w-0 items-baseline gap-2">
           <LiveFig live={p.minerCount != null ? p.minerCount.toLocaleString(loc) : null} className={fig} />
           <span className="min-w-0 truncate text-[12px] leading-none tabular-nums text-[var(--muted-2)]">
-            {pool ? `${pool.name} · ${(pool.share * 100).toFixed(1)}%` : leadText}
+            {pool ? `${pool.name} · ${sharePct(pool.share)}` : leadText}
           </span>
         </div>
         <PoolBar pools={p.pools} onPick={setPool} otherLabel={other} />
@@ -445,3 +509,8 @@ const Facts = memo(function Facts(p: {
     </div>
   );
 });
+
+/** A pool's share of the day's blocks, as prod printed it: one decimal. */
+function sharePct(share: number): string {
+  return `${(share * 100).toFixed(1)}%`;
+}

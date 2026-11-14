@@ -1,16 +1,22 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  asOfHour,
   barCeiling,
   barPaths,
   binActivity,
+  binHours,
+  dayChange,
   dayTicks,
+  linePath,
   nearestIndex,
   netDomain,
   NET_BIN_MS,
   NET_SPAN_MS,
   sameRows,
+  weekLine,
 } from "./net-stats";
+import { patchHomeStats } from "./chain-stats";
 
 const H = 3_600_000;
 const DAY = 24 * H;
@@ -30,6 +36,63 @@ test("binActivity sums 6 h walls; a wall the week cuts at either end is open", (
     ]
   );
   assert.equal(bins[0]!.t1 - bins[0]!.t, NET_BIN_MS);
+});
+
+test("binActivity: a wall whose newest hour is still filling stays open until the snapshot passes its end", () => {
+  // Hours 06:00..11:00; the 11:00 hour is the one now (snapshot at 11:40): 06–12 is not over.
+  const hours = Array.from({ length: 6 }, (_, i) => ({ t: T0 + (6 + i) * H, txs: 5, feesErg: 1 }));
+  const at1140 = asOfHour(new Date(T0 + 11 * H + 40 * 60_000).toISOString());
+  assert.equal(at1140, T0 + 11 * H);
+  assert.equal(binActivity(hours, "txs", at1140)[0]!.open, true);
+  // No snapshot time: the newest hour counts as filling.
+  assert.equal(binActivity(hours, "txs")[0]!.open, true);
+  // At 12:05 the wall is whole.
+  const at1205 = asOfHour(new Date(T0 + 12 * H + 5 * 60_000).toISOString());
+  assert.equal(binActivity(hours, "txs", at1205)[0]!.open, false);
+  assert.equal(asOfHour(null), null);
+  assert.equal(asOfHour("not a date"), null);
+});
+
+test("binHours names a wall by its UTC hours", () => {
+  assert.deepEqual(binHours(T0 + 12 * H, T0 + 18 * H), ["12", "18"]);
+  assert.deepEqual(binHours(T0, T0 + 6 * H), ["00", "06"]);
+  assert.deepEqual(binHours(T0 + 18 * H, T0 + DAY), ["18", "24"]);
+});
+
+test("dayChange compares the newest point with the one a day back", () => {
+  const hourly = Array.from({ length: 49 }, (_, i) => ({ t: T0 + i * H, v: i < 24 ? 1 : 1.1 }));
+  assert.ok(Math.abs(dayChange(hourly)! - 0) < 1e-9);
+  const rising = Array.from({ length: 49 }, (_, i) => ({ t: T0 + i * H, v: 1 + i / 24 }));
+  // 48 h → 3, 24 h → 2: +50 %.
+  assert.ok(Math.abs(dayChange(rising)! - 0.5) < 1e-9);
+  // Twelve hours of line: no point a day back.
+  assert.equal(dayChange(rising.slice(-12)), null);
+  assert.equal(dayChange([]), null);
+});
+
+test("weekLine starts the line on the plot's left edge and keeps only the week's points to read", () => {
+  const pts = [
+    { t: T0 - 2 * H, v: 10 },
+    { t: T0 + 2 * H, v: 20 },
+    { t: T0 + 4 * H, v: 30 },
+  ];
+  const w = weekLine(pts, T0);
+  assert.deepEqual(w.pts.map((p) => p.t), [T0 + 2 * H, T0 + 4 * H]);
+  assert.deepEqual(w.edge, { t: T0, v: 15 });
+  const d = linePath({ w: 100, h: 20, t0: T0, t1: T0 + 4 * H, lo: 0, hi: 40 }, [w.edge!, ...w.pts]);
+  assert.ok(d.startsWith("M0 "), d);
+  // A line that begins inside the week has no edge.
+  assert.equal(weekLine(pts.slice(1), T0).edge, null);
+});
+
+test("patchHomeStats takes the rolling 24 h fees from each snapshot", () => {
+  const a = patchHomeStats(null, { txPerDay: 4600, feesErg: 7.5 });
+  assert.equal(a.stats24h.feesErg, 7.5);
+  const b = patchHomeStats(a, { txPerDay: 4613, feesErg: 8.18 });
+  assert.equal(b.stats24h.feesErg, 8.18);
+  assert.equal(b.stats24h.txs, 4613);
+  // A snapshot without the field keeps the painted figure.
+  assert.equal(patchHomeStats(b, { txPerDay: 4620 }).stats24h.feesErg, 8.18);
 });
 
 test("binActivity leaves out fee hours whose fees are unknown", () => {
@@ -87,4 +150,18 @@ test("sameRows keeps the array a memo knows when a snapshot changed nothing", ()
   assert.equal(sameRows(a, moved, ["t", "v"]), moved);
   const longer = [...a, { t: 3, v: 1 }];
   assert.equal(sameRows(a, longer, ["t", "v"]), longer);
+});
+
+test("barPaths keeps a bin the week holds only part of inside the plot", () => {
+  // The week ends at 13:00; the 12–18 wall is one hour old.
+  const t1 = T0 + 13 * H;
+  const f = { w: 520, h: 40, t0: t1 - 13 * H, t1, lo: 0, hi: 10 };
+  const bins = [
+    { t: T0 + 6 * H, t1: T0 + 12 * H, v: 5, open: false, known: true },
+    { t: T0 + 12 * H, t1: T0 + 18 * H, v: 1, open: true, known: true },
+  ];
+  const p = barPaths(f, bins);
+  const xs = (d: string) => [...d.matchAll(/[MLHQ]([\d.-]+)/g)].map((m) => Number(m[1]));
+  for (const x of xs(p.open)) assert.ok(x >= f.w * 12 / 13 - 0.1 && x <= f.w + 0.1, `open column at ${x}`);
+  for (const x of xs(p.closed)) assert.ok(x >= 0 && x <= f.w * 12 / 13, `closed column at ${x}`);
 });

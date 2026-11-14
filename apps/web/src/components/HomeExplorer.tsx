@@ -9,13 +9,13 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProper
 import clsx from "clsx";
 import { Shell } from "@/components/Shell";
 import { getGateway } from "@/lib/config";
-import { patchHomeStats, type ChainStats, type PoolShare } from "@/lib/chain-stats";
+import { CHAIN_MAX_SUPPLY, patchHomeStats, type ChainStats, type PoolShare } from "@/lib/chain-stats";
 import { ReelText } from "@/components/ReelText";
 import { DONUT_SLICES, HOME } from "@/lib/palette";
 import { lookInk, onScene } from "@/lib/look";
 import { fetchErgChart } from "@/lib/price-history";
 import type { ErgMarket } from "@/lib/list-snapshots";
-import { lineChange, type LinePoint } from "@lumen/amm-chart";
+import type { LinePoint } from "@lumen/amm-chart";
 import { useT, useI18n } from "@/lib/i18n/I18nProvider";
 import { fromGatewayClock, useChainTipRefresh, usePageSync, useStreamMempool } from "@/lib/page-sync";
 import type { SealEvent } from "@ergoscan/shared";
@@ -37,7 +37,7 @@ import { HomeCityPair } from "@/components/HomeCity";
 import { formingAfterSeal, mergeBlockRow, mergeBlockRows, type BlockRow } from "@/lib/home-tape";
 import { HomeVersionNodes } from "@/components/HomeVersionNodes";
 import { NetStats } from "@/components/net-stats/NetStats";
-import { sameRows } from "@/lib/net-stats";
+import { asOfHour, cleanLine, dayChange, sameRows } from "@/lib/net-stats";
 
 /** When the gateway saw the block, on this browser's clock; null from a gateway without `seenAt`. */
 function sealSeenMs(s: SealEvent): number | null {
@@ -151,6 +151,8 @@ function HomeBody({
   const [blocks, setBlocks] = useState<BlockRow[]>(initialBlocks);
   const [hashRateSeries, setHashRateSeries] = useState<LinePoint[]>(initialHashRateSeries);
   const [txActivity, setTxActivity] = useState<TxActivityPoint[]>(initialTxActivity);
+  // The hour the activity's snapshot was made in: the 6 h column that ends after it is still filling.
+  const [activityAt, setActivityAt] = useState<number | null>(() => asOfHour(initialUpdatedAt));
   const [rentTape, setRentTape] = useState<RentTapeRow[]>(initialRentTape);
   const [rentEpochNano, setRentEpochNano] = useState<string | null>(initialRentEpochNano);
   const [rentEpochBoxes, setRentEpochBoxes] = useState<number | null>(initialRentEpochBoxes);
@@ -165,7 +167,7 @@ function HomeBody({
   const loadChart = useCallback(() => {
     if (oracleSpark.current || priceLen.current >= 2) return;
     setChartLoading(true);
-    void fetchErgChart(getGateway(), 1)
+    void fetchErgChart(getGateway(), 7)
       .then((c) => {
         if (oracleSpark.current || priceLen.current >= 2) return;
         if (c.price.length >= 2) {
@@ -200,6 +202,7 @@ function HomeBody({
           mempool?: { count?: number };
           updatedAt?: string | null;
           stale?: boolean;
+          stats24h?: { feesErg?: number | null } | null;
           hashRate?: number | null;
           hashRateSeries?: LinePoint[];
           txPerDay?: number | null;
@@ -262,9 +265,13 @@ function HomeBody({
             feesKnown: p.feesKnown !== false,
           }));
           setTxActivity((prev) => sameRows(prev, next, ["t", "txs", "feesErg", "feesKnown"]));
+          const at = asOfHour(j.updatedAt);
+          if (at != null) setActivityAt(at);
         }
         const hs =
           j.hashRate != null && Number.isFinite(Number(j.hashRate)) ? Number(j.hashRate) : null;
+        const fees24 = j.stats24h?.feesErg;
+        const feesErg = fees24 != null && Number.isFinite(Number(fees24)) && Number(fees24) >= 0 ? Number(fees24) : null;
         const txn =
           j.txPerDay != null && Number.isFinite(Number(j.txPerDay))
             ? Math.round(Number(j.txPerDay))
@@ -362,6 +369,7 @@ function HomeBody({
             avgBlockMs,
             mempool: mempoolN,
             lastBlockSize,
+            feesErg,
           })
         );
         if (!previewShare) {
@@ -436,7 +444,8 @@ function HomeBody({
 
   useChainTipRefresh(true, loadSnapshot);
 
-  const sparkChange = useMemo(() => lineChange(price), [price]);
+  // Without the market's 24 h change: the line's own, from its point a day back (null without one).
+  const sparkChange = useMemo(() => dayChange(cleanLine(price)), [price]);
   const lastPx = price.length ? price[price.length - 1]!.v : null;
   const spotPx =
     ergUsd != null && ergUsd > 0 ? ergUsd : lastPx != null && lastPx > 0 ? lastPx : null;
@@ -490,7 +499,7 @@ function HomeBody({
           rank={market?.rank ?? null}
           vol24={vol24}
           circulating={stats?.circulating ?? null}
-          maxSupply={stats?.maxSupply ?? 97_739_924}
+          maxSupply={stats?.maxSupply ?? CHAIN_MAX_SUPPLY}
           holders={stats?.holderCount ?? null}
           holdersMonth={stats?.holdersMonth ?? null}
           scripts={stats?.scriptCount ?? null}
@@ -501,6 +510,7 @@ function HomeBody({
           txDay={txDay}
           feeDay={feeDay}
           activity={txActivity}
+          activityAt={activityAt}
           enter={ENTER_NET}
         />
 

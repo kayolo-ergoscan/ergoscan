@@ -33,7 +33,10 @@ function useBoxWidth<T extends HTMLElement>(fallback: number) {
   return [ref, w] as const;
 }
 
-export type PlotData = { kind: "line"; pts: readonly NetPt[] } | { kind: "bars"; bins: readonly NetBin[] };
+/** A line's `pts` are the week's own points (hover reads them); `edge` only starts the line on t0. */
+export type PlotData =
+  | { kind: "line"; pts: readonly NetPt[]; edge?: NetPt | null }
+  | { kind: "bars"; bins: readonly NetBin[] };
 
 export type PlotValue = { t: number; t1?: number; v: number; open?: boolean };
 
@@ -76,9 +79,10 @@ export const SeriesPlot = memo(function SeriesPlot({
       const f: Frame = { w, h: height, t0, t1, lo: 0, hi: ceil.hi, top: 3, bottom: 0 };
       return { f, bars: barPaths(f, data.bins), line: "", area: "" };
     }
-    const [lo, hi] = extent(data.pts.map((p) => p.v));
+    const drawn = data.edge ? [data.edge, ...data.pts] : data.pts;
+    const [lo, hi] = extent(drawn.map((p) => p.v));
     const f: Frame = { w, h: height, t0, t1, lo, hi, top: 6, bottom: 6 };
-    return { f, bars: null, line: linePath(f, data.pts), area: areaPath(f, data.pts) };
+    return { f, bars: null, line: linePath(f, drawn), area: areaPath(f, drawn) };
   }, [data, t0, t1, w, height]);
 
   const f = geo.f;
@@ -100,7 +104,7 @@ export const SeriesPlot = memo(function SeriesPlot({
         ) : (
           <>
             <path d={geo.area} fill={ink} opacity={0.1} />
-            <path d={geo.line} fill="none" stroke={ink} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+            <path d={geo.line} fill="none" stroke={ink} strokeWidth={2} strokeLinejoin="round" strokeLinecap="butt" vectorEffect="non-scaling-stroke" />
           </>
         )}
       </svg>
@@ -110,9 +114,12 @@ export const SeriesPlot = memo(function SeriesPlot({
 
   // The overlay: the newest column (at rest) or the hovered one, the crosshair, the end/hover dot.
   let mark = "";
+  let markOpen = false;
   if (data.kind === "bars") {
     const one = hv ? data.bins.find((b) => b.t === hv.t) : [...data.bins].reverse().find((b) => !b.open && b.known);
     if (one) mark = barPaths(f, [{ ...one, open: false }]).closed;
+    // A hovered column still filling stays a lighter step: it is the part so far.
+    markOpen = one?.open ?? false;
   }
   const dot = data.kind === "line" ? (hv ?? data.pts[data.pts.length - 1] ?? null) : null;
   // The pointer's hour in every plot, so stacked plots share one straight crosshair.
@@ -123,7 +130,7 @@ export const SeriesPlot = memo(function SeriesPlot({
       {base}
       {mark || cx != null ? (
         <svg viewBox={`0 0 ${w} ${height}`} preserveAspectRatio="none" className="pointer-events-none absolute inset-0 h-full w-full overflow-visible" aria-hidden>
-          {mark ? <path d={mark} fill={ink} /> : null}
+          {mark ? <path d={mark} fill={ink} opacity={markOpen ? 0.62 : 1} /> : null}
           {geo.bars?.cut && mark ? <path d={geo.bars.cut} fill="var(--module)" /> : null}
           {cx != null ? <line x1={cx} x2={cx} y1={0} y2={height} stroke="var(--hair)" strokeWidth={1} vectorEffect="non-scaling-stroke" /> : null}
         </svg>

@@ -95,6 +95,8 @@ export function patchHomeStats(
     avgBlockMs?: number | null;
     mempool?: number | null;
     maxSupply?: number | null;
+    /** Fees of the rolling 24 h (`stats24h.feesErg`). */
+    feesErg?: number | null;
   }
 ): ChainStats {
   const base = prev ?? emptyChainStats();
@@ -125,6 +127,7 @@ export function patchHomeStats(
       ...base.stats24h,
       ...(patch.avgBlockMs != null ? { avgBlockMs: patch.avgBlockMs } : {}),
       ...(txPerDay != null ? { txs: txPerDay } : {}),
+      ...(patch.feesErg != null ? { feesErg: patch.feesErg } : {}),
     },
     at: Date.now(),
   };
