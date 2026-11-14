@@ -56,6 +56,15 @@ export class SealWatcher {
     return run;
   }
 
+  /**
+   * True when the answer asked as `asked` was (or would now be) dropped: a later-asked one was used
+   * first. The caller looks at that tip again on its next round instead of waiting for the 10 s poll.
+   * Read it right after awaiting `check`.
+   */
+  stale(asked: number): boolean {
+    return asked < this.lastAsked;
+  }
+
   private async step(
     tipHeight: number | null | undefined,
     headerId: string | null | undefined,
@@ -106,17 +115,21 @@ export class SealWatcher {
         out.push(partialSeal(height, null, seenAt));
         break;
       }
-      let full: NodeBlock;
+      let seal: SealEvent;
+      let parentId: string | undefined;
+      let ph: number;
       try {
         // The tip as before; an older block gets a shorter wait (the walk holds the live loop).
-        full = await this.node.get<NodeBlock>(`/blocks/${id}`, out.length ? 5000 : 12000);
+        const full = await this.node.get<NodeBlock>(`/blocks/${id}`, out.length ? 5000 : 12000);
+        // A body without a usable header fails here too: it becomes a partial seal, not a lost one.
+        seal = fullSeal(full, seenAt);
+        parentId = full.header.parentId;
+        ph = full.header.height - 1;
       } catch {
         out.push(partialSeal(height, id, seenAt));
         break;
       }
-      out.push(fullSeal(full, seenAt));
-      const parentId = full.header.parentId;
-      const ph = full.header.height - 1;
+      out.push(seal);
       if (!isId(parentId) || ph < 1) break;
       const sealedThere = this.known.get(ph);
       // The parent is the block sealed at that height: the chain joins what was shown.
@@ -140,8 +153,12 @@ export class SealWatcher {
   }
 }
 
+/** Throws on a body that is not a block (no header, no id or height, a tx list that is not a list). */
 function fullSeal(full: NodeBlock, seenAt: number): SealEvent {
+  const h = full?.header;
+  if (!h || !isId(h.id) || !Number.isInteger(h.height) || h.height < 1) throw new Error("not a block");
   const txs = full.blockTransactions?.transactions ?? [];
+  if (!Array.isArray(txs)) throw new Error("not a block");
   return {
     blockId: full.header.id,
     height: full.header.height,

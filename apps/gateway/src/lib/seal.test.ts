@@ -8,6 +8,8 @@ function fakeNode() {
   const best = new Map<number, string>();
   const calls: string[] = [];
   const failing = new Set<string>();
+  /** Ids the node answers 200 with a body that is not a block. */
+  const malformed = new Map<string, unknown>();
   const id = (fork: string, h: number) => `${fork}${String(h).padStart(8, "0")}`.padEnd(64, "0");
   function add(fork: string, h: number, parentFork = fork) {
     const b = { id: id(fork, h), height: h, parentId: id(parentFork, h - 1), timestamp: h * 1000, txs: [`tx-${fork}-${h}-a`, `tx-${fork}-${h}-b`] };
@@ -23,6 +25,7 @@ function fakeNode() {
       const m = /^\/blocks\/([0-9a-z]+)$/.exec(path);
       if (m) {
         if (failing.has(m[1]!)) throw new Error("node 503");
+        if (malformed.has(m[1]!)) return malformed.get(m[1]!) as T;
         const b = blocks.get(m[1]!);
         if (!b) throw new Error("node 404");
         return {
@@ -34,7 +37,7 @@ function fakeNode() {
       throw new Error(`unexpected ${path}`);
     },
   };
-  return { node, add, id, calls, failing };
+  return { node, add, id, calls, failing, malformed };
 }
 
 function clock(start = 1_000_000) {
@@ -181,6 +184,86 @@ test("seal: a failed block read gives the real id from /info, marked partial", a
     [102, a102, true],
     [103, a103, false],
   ]);
+});
+
+test("seal: a body that is not a block (no header, a bad tx list) gives a partial seal, not none", async () => {
+  const n = fakeNode();
+  const w = new SealWatcher(n.node, () => 5_000);
+  n.add("a", 100);
+  await w.check(100, n.id("a", 100));
+  const a101 = n.add("a", 101);
+  n.malformed.set(a101, {});
+  const out = await w.check(101, a101);
+  assert.deepEqual(
+    out.map((s) => [s.height, s.blockId, s.partial]),
+    [[101, a101, true]]
+  );
+  assert.equal(out[0]!.seenAt, 5_000);
+  // The same tip again: already sealed, nothing more.
+  assert.deepEqual(await w.check(101, a101), []);
+  // A skipped height whose body has a header but no usable tx list: partial, and the walk stops there.
+  const a102 = n.add("a", 102);
+  const a103 = n.add("a", 103);
+  n.malformed.set(a102, {
+    header: { id: a102, height: 102, timestamp: 1, parentId: a101 },
+    blockTransactions: { transactions: "x" },
+  });
+  const two = await w.check(103, a103);
+  assert.deepEqual(two.map((s) => [s.height, s.blockId, s.partial === true]), [
+    [102, a102, true],
+    [103, a103, false],
+  ]);
+});
+
+test("seal: an answer asked earlier but carrying a newer tip is dropped, and stale() says so", async () => {
+  const n = fakeNode();
+  const w = new SealWatcher(n.node);
+  n.add("a", 99);
+  await w.check(99, n.id("a", 99), 1);
+  const a100 = n.add("a", 100);
+  // The 10 s poll (asked #3) answers first with the old tip; the live tick (asked #2) comes later.
+  assert.deepEqual(await w.check(99, n.id("a", 99), 3), []);
+  assert.equal(w.stale(3), false);
+  assert.deepEqual(await w.check(100, a100, 2), []);
+  assert.equal(w.stale(2), true, "the caller looks at this tip again on its next round");
+  // The next live tick asks again (#4): the block is sealed then, not at the next 10 s poll.
+  assert.deepEqual((await w.check(100, a100, 4)).map((s) => s.blockId), [a100]);
+  assert.equal(w.stale(4), false);
+});
+
+test("seal: a reorg 3 deep that also climbs seals the newest 3 of the new branch, oldest first", async () => {
+  const n = fakeNode();
+  const w = new SealWatcher(n.node);
+  for (let h = 96; h <= 100; h++) n.add("a", h);
+  for (let h = 97; h <= 100; h++) await w.check(h, n.id("a", h));
+  n.add("b", 98, "a");
+  n.add("b", 99);
+  n.add("b", 100);
+  const b101 = n.add("b", 101);
+  n.calls.length = 0;
+  const out = await w.check(101, b101);
+  assert.deepEqual(out.map((s) => s.height), [99, 100, 101]);
+  assert.deepEqual(out.map((s) => s.blockId), [n.id("b", 99), n.id("b", 100), b101]);
+  assert.equal(n.calls.length, SEAL_MAX_PER_MOVE, "one read per sealed block");
+});
+
+test("seal: a node catching up a thousand heights reads only the newest few blocks", async () => {
+  const n = fakeNode();
+  const w = new SealWatcher(n.node);
+  n.add("a", 1000);
+  await w.check(1000, n.id("a", 1000));
+  for (let h = 1001; h <= 2000; h++) n.add("a", h);
+  n.calls.length = 0;
+  const out = await w.check(2000, n.id("a", 2000));
+  assert.deepEqual(out.map((s) => s.height), [1998, 1999, 2000]);
+  assert.equal(n.calls.length, SEAL_MAX_PER_MOVE);
+  // Climbing five a check (a resync): still at most SEAL_MAX_PER_MOVE reads each time.
+  for (let h = 2001; h <= 2046; h += 5) {
+    for (let k = h; k < h + 5; k++) n.add("a", k);
+    n.calls.length = 0;
+    assert.equal((await w.check(h + 4, n.id("a", h + 4))).length, SEAL_MAX_PER_MOVE);
+    assert.equal(n.calls.length, SEAL_MAX_PER_MOVE);
+  }
 });
 
 test("seal: no header id and no /blocks/at answer still marks the seal partial", async () => {

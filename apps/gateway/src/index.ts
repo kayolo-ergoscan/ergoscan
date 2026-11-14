@@ -32,7 +32,7 @@ import { stampTemplateHashes } from "./lib/txTemplateHash.js";
 import { mempoolMeaning, mempoolMeaningSlim, warmMempoolMeanings, type CompactMeaning } from "./lib/txMeaning.js";
 import { SubblockEngine } from "./lib/subblocks.js";
 import { SealWatcher, lastBlockClock, nextSeenTip, type SeenTip } from "./lib/seal.js";
-import { RecentIds, VanishClock, freshIds } from "./lib/live-pool.js";
+import { RecentIds, VanishClock, freshIds, mergePoll } from "./lib/live-pool.js";
 import { nodeVersionCache, type PeerSync } from "./lib/node-versions.js";
 import { registerExplorerRoutes } from "./routes/explorer.js";
 import { registerMediaRoutes } from "./routes/media.js";
@@ -592,6 +592,9 @@ async function liveTick(): Promise<void> {
     if (best && best !== liveBest && Number.isFinite(full)) {
       liveBest = best;
       applySeals(await seals.check(full, best, asked));
+      // Dropped as stale (a later-asked /info answer was used first, maybe with an older tip):
+      // look at this block again on the next tick, not only at the next 10 s poll.
+      if (seals.stale(asked)) liveBest = null;
     }
     const stamp = String(j.lastMemPoolUpdateTime ?? "");
     const moved = stamp !== "" && stamp !== livePoolStamp;
@@ -656,7 +659,9 @@ async function syncPoolIds(): Promise<boolean> {
   for (const id of gone) {
     balls.delete(id);
     rawMempool.delete(id);
-    broadcast({ type: "mempool.remove", data: { id, reason: "dropped" } });
+    // A seal that came while this sync waited for the node: the block took it.
+    const reason = sealedRecent.has(id) ? "confirmed" : "dropped";
+    broadcast({ type: "mempool.remove", data: { id, reason } });
   }
   return true;
 }
@@ -766,7 +771,6 @@ async function pollMempoolLocked(): Promise<void> {
     // Do not turn on ENRICH_ADDRESSES.
     const filled = txs.map((t) => txWithTreeAddresses(t, NETWORK));
     await stampTemplateHashes(filled.flatMap((t) => [...(t.inputs ?? []), ...(t.outputs ?? [])]));
-    const next = new Map<string, BallProps>();
     const prelim = filled.map((t) => txToBall(t, balls.get(t.id)?.firstSeen ?? Date.now()));
     const hist = buildFeeHistogram(prelim);
 
@@ -806,28 +810,22 @@ async function pollMempoolLocked(): Promise<void> {
         };
       })
     );
-    for (const row of enrich) {
-      if (!row) continue;
-      next.set(row.ball.id, row.ball);
-      if (row.isNew) broadcast({ type: "mempool.add", data: row.ball });
-    }
-    const now = Date.now();
-    for (const [id, prev] of balls) {
-      if (next.has(id)) {
-        vanish.forget([id]);
-        continue;
-      }
-      // Live mode: a missing tx waits a moment for its block seal, then leaves as dropped.
-      if (LIVE_MS > 0 && vanish.waiting(id, now)) {
-        next.set(id, prev);
-        continue;
-      }
-      broadcast({ type: "mempool.remove", data: { id, reason: LIVE_MS > 0 ? "dropped" : "confirmed" } });
-    }
-    balls = next;
+    // A block sealed during the awaits above: its txs stay out of this result (the dump came
+    // before the seal). Live mode: a missing tx waits a moment for its block seal, then leaves.
+    const merged = mergePoll(enrich, balls, {
+      sealed: sealedRecent,
+      vanish,
+      live: LIVE_MS > 0,
+      now: Date.now(),
+    });
+    for (const ball of merged.added) broadcast({ type: "mempool.add", data: ball });
+    for (const exit of merged.removed) broadcast({ type: "mempool.remove", data: exit });
+    for (const id of merged.late) rawMempool.delete(id);
+    balls = merged.next;
     // Meanings for new mempool txs; never blocks or fails the poll.
     void warmMempoolMeanings(filled).catch(() => undefined);
-    feeHist = withEta(hist);
+    // Count and fees from what is left once the late seal took its txs.
+    feeHist = withEta(merged.late.size ? buildFeeHistogram(prelim.filter((b) => !merged.late.has(b.id))) : hist);
     pushMempoolSample({
       ts: Date.now(),
       count: balls.size,
