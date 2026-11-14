@@ -53,7 +53,7 @@ import type { AddressRegistryName } from "@/lib/list-snapshots";
 import { useFavorite } from "@/lib/favorites";
 import { say } from "@/lib/kayolo/events";
 import { chainAwait, chainListen } from "@/lib/kayolo/chain-sense";
-import { pendingNod, rentNoteParts } from "@/lib/kayolo/page-data";
+import { pendingNod, rentBlocksNow, rentNoteParts } from "@/lib/kayolo/page-data";
 import { ONCE_REREAD_MS, RENT_REREAD_GAP_MS, REREAD_JITTER_MS } from "@/lib/kayolo/thresholds";
 
 /** Ergo: ≈ 720 blocks a day (2 min). The rent line's danger tone starts at 7 days. */
@@ -68,7 +68,7 @@ import { setHashTab } from "@/lib/hash-tab";
 import { useChainTipRefresh, useKeepFresh, usePageSync } from "@/lib/page-sync";
 import { ENTER_MS, enteringIds, useEnterIds } from "@/lib/keyed-enter";
 import { addrTapeHasMore, txKeysetCursor } from "@/lib/rank-window";
-import { cachedScoutRent, lookupScoutRent } from "@/lib/scout-rent";
+import { cachedScoutRentAt, lookupScoutRentAt, type ScoutRent } from "@/lib/scout-rent";
 import { copyText } from "@/lib/copy-text";
 
 interface TokenRow {
@@ -312,7 +312,7 @@ export function AddressView({
 }) {
   const t = useT();
   const { locale } = useI18n();
-  const { markSynced } = usePageSync();
+  const { markSynced, tip } = usePageSync();
   const fav = useFavorite(address);
   const [data, setData] = useState<AddrData | null>(initial);
   const [err, setErr] = useState<string | null>(null);
@@ -348,9 +348,10 @@ export function AddressView({
   const [nftsLoading, setNftsLoading] = useState(false);
   const [nftsFailed, setNftsFailed] = useState(false);
   const [nftsPackKey, setNftsPackKey] = useState<string | null>(null);
-  const [rentBlocks, setRentBlocks] = useState<number | null | undefined>(() =>
-    cachedScoutRent(address)
-  );
+  // E23: the rent answer and the height it counts from; the line follows the tip from there (below).
+  const [rent, setRent] = useState<ScoutRent | undefined>(() => cachedScoutRentAt(address));
+  const tipH = tip?.height ?? null;
+  const rentBlocks = rent === undefined ? undefined : rentBlocksNow(rent.blocks, rent.atHeight, tipH);
   const [tileLanded, setTileLanded] = useState(false);
   const nftIds = useMemo(() => new Set(nfts.map((row) => row.tokenId)), [nfts]);
   const txCursorRef = useRef<string | null>(null);
@@ -683,9 +684,9 @@ export function AddressView({
 
   useEffect(() => {
     let dead = false;
-    setRentBlocks(cachedScoutRent(address));
-    void lookupScoutRent(address).then((n) => {
-      if (!dead) setRentBlocks(n);
+    setRent(cachedScoutRentAt(address));
+    void lookupScoutRentAt(address).then((r) => {
+      if (!dead) setRent(r);
     });
     return () => {
       dead = true;
@@ -1070,10 +1071,15 @@ export function AddressView({
   const rentTone = rentBlocks == null ? null : rentTapeTone(rentBlocks);
   // Kayolo E23 (§6.6): the tile landed with its beacon — once a card a session (the layer keeps
   // the count and waits while the tile is off screen).
+  // An answer that came before the stream named a height counts from the first tip.
+  useEffect(() => {
+    if (rent?.blocks != null && rent.atHeight == null && tipH != null) setRent({ blocks: rent.blocks, atHeight: tipH });
+  }, [rent, tipH]);
+  // Said when the tone changes, not on every block the line counts down (rentBlocks is left out of the deps).
   useEffect(() => {
     if (!tileLanded || rentBlocks == null || !rentTone) return;
     say({ k: "page:rent", address, tone: rentTone, blocks: rentBlocks });
-  }, [tileLanded, rentBlocks, rentTone, address]);
+  }, [tileLanded, rentTone, address]);
   // A pending tx on this address: eyes on it. The list emptied and seals carried every tx that left
   // it: a nod «в блок» (by the page's own list). A tx evicted or double-spent (a miner's own claim
   // took the box) leaves the list too — then he says nothing (§12.23).
@@ -1116,9 +1122,10 @@ export function AddressView({
       off();
     };
   }, [pendingIds, address]);
-  // E23 after a collection: «рента / сейчас» holds until the box is spent. A seal that spent rent
-  // boxes (the gateway counts them, it names no address) re-reads the due line at 3 s and 8 s — only
-  // while «now» shows, ≤ once a minute, never on a hidden tab (showing it then re-reads once).
+  // E23 after a collection: «рента / сейчас» (reached by the answer or by the tip counting the line
+  // down) holds until the box is spent. A seal that spent rent boxes (the gateway counts them, it
+  // names no address) re-reads the due line at 3 s and 8 s — only while «now» shows, ≤ once a
+  // minute, never on a hidden tab (showing it then re-reads once).
   const rentNow = rentBlocks != null && rentBlocks <= 0;
   useEffect(() => {
     if (!rentNow) return;
@@ -1132,8 +1139,8 @@ export function AddressView({
         missed = true;
         return;
       }
-      void lookupScoutRent(address, { fresh: true }).then((n) => {
-        if (!dead) setRentBlocks(n);
+      void lookupScoutRentAt(address, { fresh: true }).then((r) => {
+        if (!dead) setRent(r);
       });
     };
     const off = chainListen((n) => {

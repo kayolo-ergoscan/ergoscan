@@ -218,11 +218,12 @@ export function TxView({
   const sheetReadyRef = useRef(false);
   const idsForTabRef = useRef<(t: TxTab) => string[]>(() => []);
 
+  /** Resolves with what it read (null: not found or failed), for the one re-read after a `gone`. */
   const load = useCallback(
-    (silent = false) => {
+    (silent = false): Promise<TxPageSnapshot | null> | undefined => {
       if (!id) return;
       if (!silent) setErr(null);
-      void fetch(
+      return fetch(
         `${getGateway()}/v1/transactions/${encodeURIComponent(id)}`,
         SNAPSHOT_FETCH
       )
@@ -249,9 +250,11 @@ export function TxView({
           setData(next);
           setErr(null);
           markSynced();
+          return next;
         })
         .catch((e) => {
           if (!silent) setErr(String(e));
+          return null;
         });
     },
     [id, markSynced, enter.mark]
@@ -289,19 +292,30 @@ export function TxView({
   // re-reads, but that block's E1 does not wait. No request on any other block, none on a hidden tab
   // (showing it re-reads once). The test for E1 is pure; the re-reads start from the listener.
   // The tx left the pool without a seal that carried it (evicted, double-spent): one re-read, and
-  // the «думает» face goes — nothing is coming for it.
+  // the «думает» face goes — nothing is coming for it. It comes back when that re-read still finds
+  // the tx unconfirmed, or when the tx enters the pool again.
   const [goneId, setGoneId] = useState<string | null>(null);
   const dropped = goneId === id;
   useEffect(() => {
     if (!unconfirmed || !id) return;
     const r = rereads(() => loadRef.current(true));
+    const back = () => setGoneId((x) => (x === id ? null : x));
+    const g = rereads(() => {
+      void loadRef.current(true)?.then((next) => {
+        if (next && !next.confirmed) back();
+      });
+    });
     let carried = false;
     const offHold = chainAwait((s) => sealCarries(s, id) === "yes");
     const off = chainListen((n) => {
+      if (n.k === "added") {
+        if (n.id === id) back();
+        return;
+      }
       if (n.k === "gone") {
         if (n.id !== id || carried) return;
         setGoneId(id);
-        if (!r.busy()) r.start([GONE_REREAD_MS]);
+        if (!r.busy() && !g.busy()) g.start([GONE_REREAD_MS]);
         return;
       }
       const c = sealCarries(n, id);
@@ -318,6 +332,7 @@ export function TxView({
       offHold();
       off();
       r.stop();
+      g.stop();
     };
   }, [id, unconfirmed]);
 

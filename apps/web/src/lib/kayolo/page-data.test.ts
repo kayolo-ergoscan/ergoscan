@@ -9,6 +9,7 @@ import {
   confirmationsLive,
   oracleReread,
   pendingNod,
+  rentBlocksNow,
   rentNoteParts,
   rereads,
   sealCarries,
@@ -135,6 +136,24 @@ test("E23's line: 1 block is minutes, not «1 д»; hours below a day; days from
   assert.deepEqual(rentNoteParts(719), { unit: "h", n: 23 });
   assert.deepEqual(rentNoteParts(720), { unit: "d", n: 1 });
   assert.deepEqual(rentNoteParts(721), { unit: "d", n: 2 });
+});
+
+test("E23's line follows the tip from the answer's height, down to «сейчас», with no request (review round 2)", () => {
+  assert.equal(rentBlocksNow(4, 100, 100), 4);
+  assert.equal(rentBlocksNow(4, 100, 102), 2);
+  assert.equal(rentBlocksNow(4, 100, 104), 0);
+  assert.equal(rentBlocksNow(4, 100, 110), 0, "never below «сейчас»");
+  assert.equal(rentBlocksNow(4, 100, 99), 4, "a tip behind the answer changes nothing");
+  assert.equal(rentBlocksNow(4, null, 104), 4, "no height yet: the answer as it came");
+  assert.equal(rentBlocksNow(4, 100, null), 4);
+  assert.equal(rentBlocksNow(null, 100, 104), null, "nothing due stays nothing");
+  assert.equal(rentBlocksNow(undefined, 100, 104), undefined, "not read yet stays not read");
+  // Live 14.11: «рента / 4 мин» (2 blocks) stayed for 9+ min while the answer went 2 → 1 → 0.
+  assert.deepEqual(rentNoteParts(rentBlocksNow(2, 1_916_600, 1_916_600)), { unit: "min", n: 4 });
+  assert.deepEqual(rentNoteParts(rentBlocksNow(2, 1_916_600, 1_916_601)), { unit: "min", n: 2 });
+  assert.deepEqual(rentNoteParts(rentBlocksNow(2, 1_916_600, 1_916_602)), { unit: "now", n: 0 });
+  // Days count down too: 721 blocks is «2 д» until one block passes.
+  assert.deepEqual(rentNoteParts(rentBlocksNow(721, 50, 51)), { unit: "d", n: 1 });
 });
 
 test("re-reads: one chain at a time, 0–400 ms jitter per step, a hidden tab ends it with no request", () => {

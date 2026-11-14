@@ -148,30 +148,36 @@ export function OracleFeedView({
   // Kayolo E15 (§6.7, §8.2): a block sealed a refresh of this feed (it spends the pool box: the only
   // oracle tx that moves the quote) — the feed re-reads with pauses 1–2–3–4–5 s (≤ 15 s, each
   // + 0–400 ms) until it shows a new answer or height; then he knocks at the price. Datapoint posts
-  // and other feeds' txs ask nothing; an oracle tx the pool could not name gets one re-read. ≤ once in
-  // 2 min; a hidden tab asks nothing (showing it re-reads once, with no act). That block's E1 waits (§2.8).
+  // and other feeds' txs ask nothing; an oracle tx the pool could not name gets one re-read (outside
+  // the gap, never over a running chain). The refresh chain ≤ once in 2 min; a hidden tab asks nothing
+  // (showing it re-reads once, with no act). That block's E1 waits (§2.8).
   const loadRef = useRef(load);
   loadRef.current = load;
   const oracleWatch = useRef<{ height: number; at: number; from: { height: number | null; quote: unknown } } | null>(null);
   const oracleReads = useRef<ReturnType<typeof rereads> | null>(null);
   useEffect(() => {
     const feed = ORACLE_FEEDS[slug];
-    let lastAt = -Infinity;
-    const wants = (s: Seal) => {
-      if (!s.oracle.length || s.replaced || performance.now() - lastAt < ORACLE_GAP_MS) return null;
-      return oracleReread(s.oracle, feed);
-    };
     const r = rereads(() => {
       if (oracleWatch.current) void loadRef.current(true);
     });
     oracleReads.current = r;
+    /** The 2-min gap is the refresh chain's only: an unnamed tx's single read never holds a refresh back. */
+    let stepsAt = -Infinity;
+    const wants = (s: Seal) => {
+      if (!s.oracle.length || s.replaced) return null;
+      const w = oracleReread(s.oracle, feed);
+      if (w === "steps") return performance.now() - stepsAt < ORACLE_GAP_MS ? null : w;
+      // A single read never cuts a refresh chain short.
+      return w === "once" && r.busy() ? null : w;
+    };
     const offHold = chainAwait((s) => wants(s) != null);
     const off = chainListen((n) => {
       if (n.k !== "seal") return;
       const w = wants(n);
       if (!w || document.visibilityState !== "visible") return;
-      lastAt = performance.now();
-      oracleWatch.current = { height: n.height, at: lastAt, from: { height: packRef.current.height ?? null, quote: packRef.current.quote } };
+      const at = performance.now();
+      if (w === "steps") stepsAt = at;
+      oracleWatch.current = { height: n.height, at, from: { height: packRef.current.height ?? null, quote: packRef.current.quote } };
       r.start(w === "steps" ? REREAD_PAUSES_MS : [ONCE_REREAD_MS]);
     });
     return () => {

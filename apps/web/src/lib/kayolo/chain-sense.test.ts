@@ -395,13 +395,18 @@ test("every page is asked: one page's yes does not hide the block from the next 
   assert.equal((r.said.at(-1) as { hold?: boolean }).hold, true);
 });
 
-test("a tx leaving the pool reaches the pages; a mock stream reaches none", () => {
+test("a tx leaving or entering the pool reaches the pages; a mock stream reaches none", () => {
   const r = rig();
   r.tip(500);
   const notes: ChainNote[] = [];
   r.s.listen((n) => notes.push(n));
   r.s.feed({ type: "mempool.remove", data: { id: "t1" } });
-  assert.deepEqual(notes, [{ k: "gone", id: "t1" }]);
+  r.s.feed({ type: "mempool.add", data: { txId: "t1", category: "transfer" } });
+  assert.deepEqual(notes, [
+    { k: "gone", id: "t1" },
+    { k: "added", id: "t1" },
+  ]);
+  notes.length = 1;
   r.s.feed({ type: "hello", data: { mock: true } });
   r.s.feed({ type: "mempool.remove", data: { id: "t2" } });
   sealIds(r, 501, ["t3"]);

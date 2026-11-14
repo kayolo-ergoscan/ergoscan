@@ -19,7 +19,7 @@
  *
  * Pages hear every seal (`chainListen`): a new block, a late seal (after its tip stood in), a block
  * that replaced the one shown at its height (a fork: no Kayolo reaction, only the pages re-check),
- * and a tx leaving the pool. Their E1 test (`chainAwait`) is a pure question asked of every page.
+ * and a tx leaving or entering the pool. Their E1 test (`chainAwait`) is a pure question asked of every page.
  *
  * It also keeps what his status line needs: the height, when this browser got it, the mempool
  * count, the average, the wait, the feed and whether the site is behind.
@@ -67,8 +67,8 @@ export type Seal = {
   replaces?: string;
 };
 
-/** What a page hears: a seal (see Seal) or a tx that left the pool (sealed, evicted or double-spent). */
-export type ChainNote = ({ k: "seal" } & Seal) | { k: "gone"; id: string };
+/** What a page hears: a seal (see Seal), a tx that left the pool (sealed, evicted or double-spent) or came into it. */
+export type ChainNote = ({ k: "seal" } & Seal) | { k: "gone"; id: string } | { k: "added"; id: string };
 
 /**
  * A page's test for a new block: true when the page will say a page:* about it, so its E1 waits for
@@ -620,6 +620,7 @@ export function createChainSense(deps: ChainDeps) {
         const key = ballTopic(data);
         noteBall(data, id);
         if (seeTx(id, key)) topic(id, key);
+        if (id) notify({ k: "added", id });
         return;
       }
       if (m.type === "mempool.remove") {

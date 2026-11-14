@@ -105,6 +105,15 @@ export function oracleReread(txs: readonly OracleTx[], feed: OracleFeedTokens): 
 
 const DAY_BLOCKS = 720;
 
+/**
+ * E23's blocks now: the answer `blocks` came at height `atHeight`; the line counts down with the
+ * page's tip (no request per block) and stops at 0 («сейчас»). A tip behind the answer changes nothing.
+ */
+export function rentBlocksNow<T extends number | null | undefined>(blocks: T, atHeight: number | null, tip: number | null): T | number {
+  if (blocks == null || atHeight == null || tip == null) return blocks;
+  return Math.max(0, blocks - Math.max(0, tip - atHeight));
+}
+
 /** The /address rent line (E23): due now, or minutes / hours below a day, else whole days (rounded up). */
 export function rentNoteParts(blocks: number): { unit: "now" | "min" | "h" | "d"; n: number } {
   if (blocks <= 0) return { unit: "now", n: 0 };
