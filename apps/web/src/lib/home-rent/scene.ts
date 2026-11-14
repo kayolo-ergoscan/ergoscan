@@ -8,7 +8,7 @@
  * - its lamp: coral when its boxes are due, gold when they come due within a day;
  * - the lights on the horizon are the rest of this epoch's boxes, one light per 10;
  * - the lighthouse is the four-year mark; the tug is the miner who collects;
- * - on the reef card, a boat is a token whose boxes hold less ERG than their rent: it stands as far
+ * - on the reef card, a boat is a token whose boxes hold no more ERG than their rent: it stands as far
  *   from the reef as its first box is from four years (√ scale, 7 days), and sits as low in the
  *   water as that box is short (1 − ERG / rent).
  */
@@ -68,7 +68,10 @@ export const CLAIM_COINS = 48;
 
 export type HarbourHit =
   | { kind: "boat"; id: string; x0: number; y0: number; x1: number; y1: number }
-  | { kind: "lighthouse" | "tug" | "lights"; id: string; x0: number; y0: number; x1: number; y1: number };
+  | { kind: "lighthouse"; id: string; x0: number; y0: number; x1: number; y1: number }
+  | { kind: "tug"; id: string; x0: number; y0: number; x1: number; y1: number }
+  /** `rest`: the boxes the lights stand for (beyond the boats drawn), so the tip says what was drawn. */
+  | { kind: "lights"; id: string; rest: number; x0: number; y0: number; x1: number; y1: number };
 
 /* ---------------- drawing helpers ---------------- */
 
@@ -439,7 +442,7 @@ export function paintHarbour(
     R(ctx, p.x, p.y + 2, 1, 1, alpha(pal.light, 0.16 + near * 0.12));
     ctx.globalAlpha = 1;
   }
-  if (lights) hits.push({ kind: "lights", id: "lights", x0: lx0, y0: H0 - 14, x1: lx1, y1: H0 + band + 4 });
+  if (lights) hits.push({ kind: "lights", id: "lights", rest, x0: lx0, y0: H0 - 14, x1: lx1, y1: H0 + band + 4 });
 
   // The queue: the tape's addresses, the soonest nearest the lighthouse. Far rows first.
   const placed: { b: HarbourBoat; x: number; len: number; wl: number; s: number; mx: number; top: number; ri: number }[] = [];

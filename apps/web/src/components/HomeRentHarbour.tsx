@@ -4,7 +4,7 @@
  * Home «Рента этой эпохи» + «Токены под угрозой» as one harbour (concept A «Маяк», approved by the
  * operator 14.11.2026). Rent: boats (the tape's addresses) sail for the lighthouse (four years),
  * the collector's tug works the berth, the horizon lights are the rest of this epoch's boxes.
- * Danger: the same water at the reef, one boat per token whose boxes hold less ERG than their rent.
+ * Danger: the same water at the reef, one boat per token whose boxes hold no more ERG than their rent.
  * The painters live in lib/home-rent; the engine draws on demand only (no frames at rest).
  */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
@@ -208,7 +208,7 @@ export function HomeRentHarbour({
         setLastClaim(ev);
         engineRef.current?.claim(ev);
         const erg = ev.rentNano ? ` (+${formatErgFixed(ev.rentNano, loc)})` : "";
-        setLive(t("home.harbourLive").replace("{n}", ev.height.toLocaleString(loc)).replace("{boxes}", count("home.harbourSubBoxes", ev.boxes)).replace("{erg}", erg));
+        setLive(t("home.harbourLive").replace("{n}", ev.height.toLocaleString(loc)).replace("{boxes}", count("home.harbourBoxesGen", ev.boxes)).replace("{erg}", erg));
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [loc, t]
@@ -298,8 +298,8 @@ export function HomeRentHarbour({
         </>
       );
     }
-    const carried = rows.reduce((s, r) => s + r.boxCount, 0);
-    const rest = Math.max(0, (epochBoxes ?? 0) - carried);
+    // The same count the canvas drew: the epoch's boxes beyond the boats on the water.
+    const rest = hit.rest;
     return (
       <>
         <TipHead chip={t("home.harbourTipLights")} ink={INK.gold} />
@@ -383,6 +383,7 @@ export function HomeRentHarbour({
             ) : null}
             <canvas
               ref={rentRef}
+              data-scene="rent"
               className={clsx("absolute inset-0 block h-full w-full select-none", rows.length === 0 && "opacity-0")}
               role="img"
               aria-label={t("home.harbourScene")}

@@ -459,6 +459,11 @@ export function BoxView({
                       {t("box.estRent")} {formatErgPrecise(rent.estimatedRentNano, locale)}
                     </p>
                   ) : null}
+                  {rent.takenWhole ? (
+                    <p className="mt-1 text-[12px] leading-snug text-[var(--muted)]">
+                      {t(assets.length ? "box.rentWhole" : "box.rentWholeErg")}
+                    </p>
+                  ) : null}
                 </>
               ) : (
                 <p className="mt-2 text-[13px] text-[var(--muted)]">{t("box.noRent")}</p>

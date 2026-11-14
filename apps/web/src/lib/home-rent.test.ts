@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { HARBOUR_PALETTES, harbourInk } from "./home-rent/palette";
-import { CLAIM_MS, EPOCH_MS, harbourLights, harbourRows, reefBoatX, reefGeo, reefMastTop, type HarbourBoat } from "./home-rent/scene";
+import { CLAIM_MS, EPOCH_MS, harbourLights, harbourRows, paintHarbour, reefBoatX, reefGeo, reefMastTop, type HarbourBoat } from "./home-rent/scene";
 
 /* ---------- a browser that draws nothing ---------- */
 
@@ -115,12 +115,14 @@ async function rig(reduce = false) {
   return e;
 }
 
-test("palettes: the light ink («Сумерки») takes the dusk harbour, the dark inks the night one", () => {
-  assert.equal(harbourInk("light").name, "dusk");
-  assert.equal(harbourInk("day").name, "dusk");
-  assert.equal(harbourInk("oled").name, "night");
-  assert.equal(harbourInk(null).name, "night");
-  assert.equal(HARBOUR_PALETTES.night.sea.length, HARBOUR_PALETTES.dusk.sea.length);
+test("palettes: every ink takes the night harbour; the light one keeps the scene's sky and fades the reef", () => {
+  for (const ink of ["light", "day", "oled", null]) assert.equal(harbourInk(ink).name, "night", String(ink));
+  // The light theme paints the dusk sky behind canvas[data-scene]: the harbour draws none of its own.
+  assert.equal(harbourInk("light").sky, null);
+  assert.equal(harbourInk("light").reefTextFade, true);
+  assert.equal(harbourInk("oled").reefTextFade, false);
+  assert.deepEqual(harbourInk("light").sea, HARBOUR_PALETTES.night.sea);
+  assert.equal(harbourInk("day"), HARBOUR_PALETTES.nightOnLight);
 });
 
 test("boats: the tape in order, each row only as many as fit its width", () => {
@@ -140,6 +142,17 @@ test("horizon lights: the epoch's boxes beyond the boats, one per 10", () => {
   assert.deepEqual(harbourLights(1574, boats.slice(0, 13)), { rest: 1574 - boats.slice(0, 13).reduce((s, b) => s + b.boxCount, 0), lights: 154 });
   assert.deepEqual(harbourLights(null, boats), { rest: 0, lights: 0 });
   assert.deepEqual(harbourLights(5, boats), { rest: 0, lights: 0 });
+});
+
+test("horizon lights: the tip's count is the one drawn (boats on the water, not every address)", () => {
+  const scene = { boats, epochBoxes: 1574, phone: false, hover: null };
+  const hits = paintHarbour(el(470, 300).getContext("2d")!, 470, 300, scene, null, HARBOUR_PALETTES.night, text, { sans: "", mono: "", label: "#fff" });
+  const lights = hits.find((h) => h.kind === "lights");
+  assert.ok(lights && lights.kind === "lights");
+  const drawn = harbourRows(470, 300, boats, false).rows.flatMap((r) => r.items);
+  assert.ok(drawn.length < boats.length);
+  assert.equal(lights.rest, harbourLights(1574, drawn).rest);
+  assert.notEqual(lights.rest, 1574 - boats.reduce((s, b) => s + b.boxCount, 0));
 });
 
 test("reef: boats nearer the reef the sooner they turn four, and lower the shorter they are", () => {
@@ -205,6 +218,35 @@ test("engine: reduced motion shows a moment's final frame only", async () => {
   assert.equal(runTo(3_000), 0);
   assert.ok(e.isPlaying());
   e.destroy();
+});
+
+test("engine: reduced motion keeps one timer, however many moments come", async () => {
+  const e = await rig(true);
+  e.setData({ boats, epochBoxes: 1574, height: 1_916_431, lanes: [], pitch: 26 });
+  runTo(2_000);
+  const live = new Set<number>();
+  let next = 0;
+  const st = g.setTimeout;
+  const ct = g.clearTimeout;
+  g.setTimeout = () => {
+    next += 1;
+    live.add(next);
+    return next;
+  };
+  g.clearTimeout = (id: number) => void live.delete(id);
+  try {
+    for (let i = 0; i < 50; i++) {
+      e.claim({ height: 1_916_440 + i, boxes: 3, rentNano: "100" });
+      runTo(2_100 + i);
+    }
+    assert.equal(next, 50);
+    assert.equal(live.size, 1);
+    e.destroy();
+    assert.equal(live.size, 0);
+  } finally {
+    g.setTimeout = st;
+    g.clearTimeout = ct;
+  }
 });
 
 test("engine: a hidden tab sleeps — no moment, no frames", async () => {

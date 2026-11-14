@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { decodeRentOutIndex, type RentCollectedEvent, type SealEvent } from "@ergoscan/shared";
 import { SealWatcher } from "./seal.js";
-import { announceRent, collectRent, noteRentSpends, resetRentNotes } from "./rentMoment.js";
+import { RENT_TXS_MAX, announceRent, collectRent, noteRentSpends, resetRentNotes } from "./rentMoment.js";
 
 /** Mainnet block 1 916 412: one rent tx, 38 spends under the rule, 36 of them paid 3.825 ERG. */
 const fx = JSON.parse(
@@ -92,4 +92,72 @@ test("no rent spends: no event, no node call", async () => {
   announceRent([{ ...seal(), txIds: [], replaySeed: "s", txCount: 0, timestamp: 1 }], (e) => sent.push(e.data));
   await new Promise((r) => setTimeout(r, 5));
   assert.equal(sent.length, 0);
+});
+
+/** The fixture block with its rent tx repeated `n` times under distinct ids (38 spends each). */
+function manyRentTxs(n: number) {
+  const rent = (fx.block as unknown as { blockTransactions: { transactions: Array<{ id: string }> } }).blockTransactions
+    .transactions.find((t) => t.id === fx.rentTx.id)!;
+  const ids = Array.from({ length: n }, (_, i) => (i + 1).toString(16).padStart(64, "0"));
+  const block = { ...fx.block, blockTransactions: { transactions: ids.map((id) => ({ ...rent, id })) } };
+  return { block, ids };
+}
+
+test("seven rent txs (more than the old cap of six): every one is read, the sum is whole", async () => {
+  resetRentNotes();
+  const { block, ids } = manyRentTxs(7);
+  assert.deepEqual(noteRentSpends(block), { rentBoxes: 7 * 38 });
+  const asked: string[] = [];
+  const ev = await collectRent(seal(7 * 38), async (id) => {
+    asked.push(id);
+    return { ...fx.rentTx, id } as never;
+  }, [0]);
+  assert.deepEqual(asked, ids);
+  assert.equal(ev?.boxes, 7 * 36);
+  assert.equal(ev?.rentNano, String(7n * 3825000000n));
+});
+
+test("more rent txs than RENT_TXS_MAX: the count alone, no reads, never a partial sum", async () => {
+  resetRentNotes();
+  const n = RENT_TXS_MAX + 1;
+  const { block } = manyRentTxs(n);
+  assert.deepEqual(noteRentSpends(block), { rentBoxes: n * 38 });
+  let called = 0;
+  const ev = await collectRent(seal(n * 38), async () => (called++, fx.rentTx as never), [0]);
+  assert.equal(called, 0);
+  assert.deepEqual(ev, { blockId: BLOCK_ID, height: H, boxes: n * 38, rentNano: null, collector: null });
+});
+
+test("rent counting that throws leaves the seal whole (not partial), with one warning", async () => {
+  resetRentNotes();
+  const bad = {
+    id: "ef".repeat(32),
+    get inputs(): never {
+      throw new Error("odd input list");
+    },
+  };
+  const block = { ...fx.block, blockTransactions: { transactions: [bad] } };
+  const warns: unknown[] = [];
+  const warn = console.warn;
+  console.warn = (...a: unknown[]) => void warns.push(a);
+  try {
+    assert.deepEqual(noteRentSpends(block), {});
+    const node = {
+      async get<T>(path: string): Promise<T> {
+        if (path === `/blocks/${BLOCK_ID}`) return block as T;
+        throw new Error(`unexpected ${path}`);
+      },
+    };
+    const w = new SealWatcher(node, () => 5);
+    await w.check(H - 1, fx.block.header.parentId);
+    const out = await w.check(H, BLOCK_ID);
+    assert.equal(out.length, 1);
+    assert.equal(out[0]!.partial, undefined);
+    assert.equal(out[0]!.blockId, BLOCK_ID);
+    assert.deepEqual(out[0]!.txIds, [bad.id]);
+    assert.equal(out[0]!.rentBoxes, undefined);
+  } finally {
+    console.warn = warn;
+  }
+  assert.equal(warns.length, 1);
 });

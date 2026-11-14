@@ -70,7 +70,8 @@ export class HarbourEngine {
   private hits: HarbourHit[] = [];
   private boxes = new Map<Element, { w: number; h: number }>();
   private stops: (() => void)[] = [];
-  private timers: number[] = [];
+  /** Under reduced motion: the one timer that ends the moment's final frame. */
+  private reduceTimer = 0;
   /** Frames asked for, for tests and the perf probe. */
   frames = 0;
 
@@ -128,8 +129,9 @@ export class HarbourEngine {
     this.stops.push(() => window.removeEventListener(INK_EVENT, onInk));
   }
 
+  /** Text and fonts from the canvas itself: under the light ink the scene tokens sit on `canvas[data-scene]`. */
   private readLook(): HarbourLook {
-    const i = readInks(document.documentElement);
+    const i = readInks(this.rent.el);
     return { sans: i.sans, mono: i.mono, label: i.muted2 };
   }
 
@@ -140,15 +142,20 @@ export class HarbourEngine {
     this.raf = 0;
     for (const s of this.stops) s();
     this.stops = [];
-    for (const t of this.timers) window.clearTimeout(t);
-    this.timers = [];
+    this.clearReduceTimer();
     this.playing = null;
+  }
+
+  private clearReduceTimer() {
+    if (this.reduceTimer) window.clearTimeout(this.reduceTimer);
+    this.reduceTimer = 0;
   }
 
   setReduce(reduce: boolean) {
     if (reduce === this.reduce) return;
     this.reduce = reduce;
     this.playing = null;
+    this.clearReduceTimer();
     this.kick();
   }
 
@@ -202,12 +209,14 @@ export class HarbourEngine {
     this.playing = { m, start: performance.now(), total };
     if (this.reduce) {
       // Its final frame for as long as it would run, then the harbour at rest (two paints, no frames between).
+      // A newer moment replaces the older one's timer: one at most, whatever the block rate.
       const shown = this.playing;
-      const t = window.setTimeout(() => {
+      this.clearReduceTimer();
+      this.reduceTimer = window.setTimeout(() => {
+        this.reduceTimer = 0;
         if (this.playing === shown) this.playing = null;
         this.kick();
       }, total);
-      this.timers.push(t);
     }
     this.kick();
   }

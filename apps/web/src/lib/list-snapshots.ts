@@ -1231,7 +1231,11 @@ export type BoxSnapshot = {
     rentDue: boolean;
     periodsElapsed: number;
     sizeBytes: number | null;
+    /** min(value, fee): what the rent spend takes. */
     estimatedRentNano: number | null;
+    storageFeeNano?: number | null;
+    /** value ≤ fee: the whole box goes, tokens too. */
+    takenWhole?: boolean;
     minValueNano: number | null;
     boxValueNano: number | null;
     belowMinValue: boolean | null;

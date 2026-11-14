@@ -1,15 +1,15 @@
 /**
- * The harbour's colours, one place. Two palettes: «Ночь» for the dark inks and «Сумерки» (a dusk
- * harbour) for the light ink. The scene never reads CSS for its own colours; text and fonts come
- * from the site tokens (readInks). To follow the light theme's tokens later, change `harbourInk`
- * or derive a palette from them here: the painters only see `HarbourPalette`.
+ * The harbour's colours, one place: «Ночь» for every ink, like the other home scenes. The scene
+ * never reads CSS for its own colours; text and fonts come from the canvas's tokens (readInks), which
+ * under the light ink are the scene tokens of `canvas[data-scene]`. The painters only see
+ * `HarbourPalette`.
  */
 /** The site's gold and coral as hex: a canvas paints only real colours, never a CSS var(). */
 const GOLD = "#ebcb71";
 const CORAL = "#ff8a65";
 
 export type HarbourPalette = {
-  name: "night" | "dusk";
+  name: "night";
   /** Sky above the horizon, top → horizon; null: the card itself is the sky. */
   sky: readonly string[] | null;
   /** Sea bands, horizon → near shore. */
@@ -73,43 +73,21 @@ const NIGHT: HarbourPalette = {
   reefTextFade: false,
 };
 
-/** «Сумерки»: the same harbour at dusk — lavender water under a peach sky, lamps just lit. */
-const DUSK: HarbourPalette = {
-  name: "dusk",
-  sky: ["#f4dcc8", "#ead2cf", "#d9cbe0", "#c3c3e0"],
-  sea: ["#8e9cc4", "#8190b9", "#7485ad", "#6979a2", "#5f6f97", "#56658c", "#4e5c82"],
-  ripple: "#9daad0",
-  rippleHi: "#e9c9b4",
-  horizon: "#a9b4d6",
-  haze: "rgba(250,226,210,0.35)",
-  rock: ["#4a4250", "#5b5160", "#6d6270", "#837684", "#9b8d98"],
-  foam: "rgba(250,246,242,0.9)",
-  foamDim: "rgba(236,232,240,0.6)",
-  lighthouse: { wall: "#f6efe4", wallSh: "#cfc3b4", wallHi: "#ffffff", band: "#d9694c", bandSh: "#b0533d", roof: "#3c3440", glass: "#ffe7a8", frame: "#4b4250", door: "#3a3240" },
-  hull: { side: "#6b5446", stripe: "#8a6c56", rail: "#ab9076", keel: "#3f3129", cabin: "#efe6d8", cabinSh: "#c4b8a6", roof: "#4b4250", mast: "#5d5560", yard: "#6d6470", port: "#e8c27a", window: "#8d8590" },
-  tug: { hull: "#3a4352", hullHi: "#66718a", hullLo: "#262c37", house: "#efe6d8", houseSh: "#c4b8a6", frame: "#4b4250", fender: "#20242c", crane: "#d9a640", post: "#7a6a48", hook: "#5d5560" },
-  waterline: "#a8b5d8",
-  wake: "#6d7ca3",
-  deep: "rgba(40,50,90,0.4)",
-  light: "#ffd98a",
-  lightHot: "#fff6dc",
-  coin: "#c9962e",
-  coinHi: "#fff2c4",
-  plate: "rgba(44,42,66,0.82)",
-  plateText: "rgba(255,255,255,0.95)",
-  plateMuted: "rgba(255,255,255,0.7)",
-  gold: "#d9a640",
-  coral: "#e0603e",
-  reefTextFade: true,
-};
+/**
+ * The light ink: the home scenes keep their night inks under the theme's dusk sky
+ * (`canvas[data-scene]` paints it and carries light text tokens), so the harbour is the night one
+ * with a transparent sky. Only the reef differs: its text columns sit on the light card, so its
+ * water fades out under them.
+ */
+const NIGHT_ON_LIGHT: HarbourPalette = { ...NIGHT, reefTextFade: true };
 
-/** Which palette an ink takes: the light ink («Сумерки», `light`; `day` on older builds) → dusk. */
+/** Which palette an ink takes: the light ink (`light`; `day` on older builds) → night on the dusk sky. */
 export function harbourInk(ink: string | null | undefined): HarbourPalette {
-  return ink === "light" || ink === "day" ? DUSK : NIGHT;
+  return ink === "light" || ink === "day" ? NIGHT_ON_LIGHT : NIGHT;
 }
 
 export function harbourPalette(el: Element | null = typeof document !== "undefined" ? document.documentElement : null): HarbourPalette {
   return harbourInk((el as HTMLElement | null)?.dataset?.ink ?? null);
 }
 
-export const HARBOUR_PALETTES = { night: NIGHT, dusk: DUSK } as const;
+export const HARBOUR_PALETTES = { night: NIGHT, nightOnLight: NIGHT_ON_LIGHT } as const;

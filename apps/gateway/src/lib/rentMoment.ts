@@ -4,8 +4,8 @@
  * The seal already reads the full block from the node (`/blocks/{id}`); its inputs carry the
  * spending proof, so counting rent spends (empty proof + extension 127) is free: `rentBoxes` on
  * `block.sealed`. The ERG and the collector need the input values, which that JSON does not have:
- * the node's tx index (`/blockchain/transaction/byId`, ~2–8 ms) gives them for the one or two rent
- * txs of the block. Once per block that has rent spends, never per page view, no database.
+ * the node's tx index (`/blockchain/transaction/byId`, ~2–8 ms) gives them for the rent txs of the
+ * block (one or two is usual). Once per block that has rent spends, never per page view, no database.
  *
  * Then one `rent.collected` per such block. The node indexes a fresh block a moment after it
  * applies it, so the read retries for a few seconds; after that the event goes out with the count
@@ -27,33 +27,49 @@ const HEX64 = /^[0-9a-f]{64}$/;
 const NOTED_MAX = 16;
 /** Waits before each read of the node's tx index, ms: about 15 s in all. */
 export const RENT_READ_DELAYS_MS = [400, 1500, 4000, 9000] as const;
-/** Most rent txs read for one block (one is usual; the count stays exact without the rest). */
-const TXS_MAX = 6;
+/**
+ * Most rent txs read for one block. One or two is usual; 7 and 12 happened in the last 30 days.
+ * Above it the event carries the count alone (`rentNano: null`): summing only some of the block's
+ * txs would show less rent than the block had. At most 32 reads of ~2–8 ms, once per such block.
+ */
+export const RENT_TXS_MAX = 32;
 
 type BlockLike = {
   header?: { id?: string };
   blockTransactions?: { transactions?: unknown[] };
 };
 
-const noted = new Map<string, string[]>();
+/** Per block: the rent txs to read, or `over` when there are more than RENT_TXS_MAX. */
+const noted = new Map<string, { txIds: string[]; over: boolean }>();
+let warned = false;
 
 /**
  * Called once from the seal for a full block. Returns the rent count for `block.sealed` and
- * remembers which txs hold the spends, for `collect`.
+ * remembers which txs hold the spends, for `collect`. Never throws: a seal must not depend on rent
+ * counting, so a block it cannot read just carries no count (one warning per process).
  */
 export function noteRentSpends(full: BlockLike): { rentBoxes?: number } {
-  const txs = (full.blockTransactions?.transactions ?? []) as RentNodeTx[];
-  const { boxes, txIds } = rentSpendsInBlock(txs);
-  if (!boxes) return {};
-  const id = full.header?.id;
-  if (typeof id === "string" && id) {
-    if (noted.size >= NOTED_MAX) {
-      const oldest = noted.keys().next().value;
-      if (oldest !== undefined) noted.delete(oldest);
+  try {
+    const txs = (full.blockTransactions?.transactions ?? []) as RentNodeTx[];
+    const { boxes, txIds } = rentSpendsInBlock(txs);
+    if (!boxes) return {};
+    const id = full.header?.id;
+    if (typeof id === "string" && id) {
+      if (noted.size >= NOTED_MAX) {
+        const oldest = noted.keys().next().value;
+        if (oldest !== undefined) noted.delete(oldest);
+      }
+      const over = txIds.length > RENT_TXS_MAX;
+      noted.set(id, { txIds: over ? [] : txIds, over });
     }
-    noted.set(id, txIds.slice(0, TXS_MAX));
+    return { rentBoxes: boxes };
+  } catch (e) {
+    if (!warned) {
+      warned = true;
+      console.warn("[gateway] rent count skipped for a block", String(e));
+    }
+    return {};
   }
-  return { rentBoxes: boxes };
 }
 
 export type RentTxReader = (txId: string) => Promise<RentNodeTx | null>;
@@ -91,10 +107,12 @@ export async function collectRent(
 ): Promise<RentCollectedEvent | null> {
   const boxes = seal.rentBoxes ?? 0;
   if (!boxes) return null;
-  const txIds = noted.get(seal.blockId) ?? [];
+  const note = noted.get(seal.blockId);
   noted.delete(seal.blockId);
   const base = { blockId: seal.blockId, height: seal.height, boxes };
-  if (!txIds.length) return summarizeRentClaims(base, null);
+  // Too many rent txs to read, or none remembered: the count alone, never a partial sum.
+  const txIds = note?.txIds ?? [];
+  if (note?.over || !txIds.length) return summarizeRentClaims(base, null);
   const have = new Map<string, RentClaim[]>();
   for (const wait of delays) {
     await sleep(wait);

@@ -298,6 +298,32 @@ test("storage fee: factor × bytes, once per spend, no age term", () => {
   const r = computeBoxRent({ creationHeight: 1, currentHeight: 1 + 3 * period + 10, valueNano: 5e9, sizeBytes: 79 });
   assert.equal(r.periodsElapsed, 3);
   assert.equal(r.estimatedRentNano, 98_750_000);
+  assert.equal(r.storageFeeNano, 98_750_000);
+  assert.equal(r.takenWhole, false);
+});
+
+test("box rent estimate: min(value, fee); a box worth no more than its fee is taken whole", () => {
+  const period = DEFAULT_RENT_PARAMS.storagePeriodBlocks;
+  const due = { creationHeight: 1, currentHeight: 2 + period, sizeBytes: 79 };
+  const small = computeBoxRent({ ...due, valueNano: 1_000_000 });
+  assert.equal(small.storageFeeNano, 98_750_000);
+  assert.equal(small.estimatedRentNano, 1_000_000);
+  assert.equal(small.takenWhole, true);
+  const exact = computeBoxRent({ ...due, valueNano: 98_750_000 });
+  assert.equal(exact.estimatedRentNano, 98_750_000);
+  assert.equal(exact.takenWhole, true);
+  const above = computeBoxRent({ ...due, valueNano: 98_750_001 });
+  assert.equal(above.estimatedRentNano, 98_750_000);
+  assert.equal(above.takenWhole, false);
+  // Value unknown: the fee stands, nothing said about the whole box.
+  const unknown = computeBoxRent({ ...due, valueNano: 0 });
+  assert.equal(unknown.estimatedRentNano, 98_750_000);
+  assert.equal(unknown.takenWhole, false);
+  // Not due yet: no estimate, no fee.
+  const young = computeBoxRent({ creationHeight: 1, currentHeight: 100, sizeBytes: 79, valueNano: 1_000 });
+  assert.equal(young.estimatedRentNano, null);
+  assert.equal(young.storageFeeNano, null);
+  assert.equal(young.takenWhole, false);
 });
 
 test("a box worth no more than its fee goes whole", () => {
