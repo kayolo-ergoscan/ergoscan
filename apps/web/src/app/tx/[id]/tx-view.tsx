@@ -52,6 +52,17 @@ import { countText } from "@/lib/i18n/messages";
 import { useFavoriteOf } from "@/lib/favorites";
 import { readHashTab, setHashTab } from "@/lib/hash-tab";
 import { useKeepFresh, usePageSync } from "@/lib/page-sync";
+import { say } from "@/lib/kayolo/events";
+import { chainAwait, chainListen } from "@/lib/kayolo/chain-sense";
+import {
+  confirmationsAwait,
+  confirmationsEvent,
+  confirmationsLive,
+  rereads,
+  sealCarries,
+  sealDoubts,
+} from "@/lib/kayolo/page-data";
+import { GONE_REREAD_MS, REREAD_PAUSES_MS } from "@/lib/kayolo/thresholds";
 import { ENTER_MS, SNAPSHOT_FETCH, enteringIds, useEnterIds } from "@/lib/keyed-enter";
 import { paintTxSnapshot } from "@/lib/tx-shape-paint";
 import { parseFullMeaning } from "@/lib/tx-meaning-row";
@@ -191,7 +202,7 @@ export function TxView({
   const light = isLightInk(useInk());
   const txFav = useFavoriteOf("transactions", id);
   const { locale } = useI18n();
-  const { markSynced } = usePageSync();
+  const { markSynced, tip } = usePageSync();
   const ioIdsRef = useRef<string[]>([]);
   const [data, setData] = useState<TxPageSnapshot | null>(() => {
     const snap = asTxData(initial);
@@ -207,11 +218,12 @@ export function TxView({
   const sheetReadyRef = useRef(false);
   const idsForTabRef = useRef<(t: TxTab) => string[]>(() => []);
 
+  /** Resolves with what it read (null: not found or failed), for the one re-read after a `gone`. */
   const load = useCallback(
-    (silent = false) => {
+    (silent = false): Promise<TxPageSnapshot | null> | undefined => {
       if (!id) return;
       if (!silent) setErr(null);
-      void fetch(
+      return fetch(
         `${getGateway()}/v1/transactions/${encodeURIComponent(id)}`,
         SNAPSHOT_FETCH
       )
@@ -238,9 +250,11 @@ export function TxView({
           setData(next);
           setErr(null);
           markSynced();
+          return next;
         })
         .catch((e) => {
           if (!silent) setErr(String(e));
+          return null;
         });
     },
     [id, markSynced, enter.mark]
@@ -271,6 +285,107 @@ export function TxView({
   useKeepFresh((silent) => {
     void loadRef.current(silent);
   });
+
+  // «Твоя tx в блоке» (Kayolo Э4, §6.4): the seal that carries this tx comes before the index knows
+  // the block, so the page re-reads with pauses 1–2–3–4–5 s (≤ 15 s, each + 0–400 ms) until it says
+  // «in a block». A block not read (a partial seal, a tip without its seal) may carry it: the same
+  // re-reads, but that block's E1 does not wait. No request on any other block, none on a hidden tab
+  // (showing it re-reads once). The test for E1 is pure; the re-reads start from the listener.
+  // The tx left the pool without a seal that carried it (evicted, double-spent): one re-read, and
+  // the «думает» face goes — nothing is coming for it. It comes back when that re-read still finds
+  // the tx unconfirmed, or when the tx enters the pool again.
+  const [goneId, setGoneId] = useState<string | null>(null);
+  const dropped = goneId === id;
+  useEffect(() => {
+    if (!unconfirmed || !id) return;
+    const r = rereads(() => loadRef.current(true));
+    const back = () => setGoneId((x) => (x === id ? null : x));
+    const g = rereads(() => {
+      void loadRef.current(true)?.then((next) => {
+        if (next && !next.confirmed) back();
+      });
+    });
+    let carried = false;
+    const offHold = chainAwait((s) => sealCarries(s, id) === "yes");
+    const off = chainListen((n) => {
+      if (n.k === "added") {
+        if (n.id === id) back();
+        return;
+      }
+      if (n.k === "gone") {
+        if (n.id !== id || carried) return;
+        setGoneId(id);
+        if (!r.busy() && !g.busy()) g.start([GONE_REREAD_MS]);
+        return;
+      }
+      const c = sealCarries(n, id);
+      if (c === "no") return;
+      if (c === "yes") {
+        // The seal that names it: the whole chain, even over a shorter one already running.
+        if (!carried) r.start(REREAD_PAUSES_MS);
+        carried = true;
+        return;
+      }
+      if (!r.busy()) r.start(REREAD_PAUSES_MS);
+    });
+    return () => {
+      offHold();
+      off();
+      r.stop();
+      g.stop();
+    };
+  }, [id, unconfirmed]);
+
+  // A fork replaced the block this page shows (§12.23): no «в блоке» and no milestone nods for that
+  // block. The page re-reads as after a seal until the index names the block the chain kept, and
+  // once more on each later seal while it still names the replaced one.
+  const [goneBlocks, setGoneBlocks] = useState<readonly string[]>([]);
+  const shownBlock = data?.confirmed ? (data.blockId ?? null) : null;
+  const shownHeight = data?.confirmed ? (data.inclusionHeight ?? null) : null;
+  const doubt = shownBlock != null && goneBlocks.includes(shownBlock);
+  const doubtRef = useRef(doubt);
+  doubtRef.current = doubt;
+  useEffect(() => {
+    if (!id || shownBlock == null || shownHeight == null) return;
+    const r = rereads(() => loadRef.current(true));
+    const off = chainListen((n) => {
+      if (n.k !== "seal") return;
+      if (sealDoubts(n, shownHeight, shownBlock)) {
+        setGoneBlocks((xs) => (xs.includes(shownBlock) ? xs : [...xs.slice(-7), shownBlock]));
+        r.start(REREAD_PAUSES_MS);
+      } else if (doubtRef.current && !n.replaced && !r.busy()) r.start([GONE_REREAD_MS]);
+    });
+    return () => {
+      off();
+      r.stop();
+    };
+  }, [id, shownBlock, shownHeight]);
+
+  // The page showed «confirmed» while it was open: his act is by the data, not by the event. A
+  // block a fork replaced counts as not confirmed.
+  const wasPending = useRef<boolean | null>(null);
+  const favOn = txFav.on;
+  useEffect(() => {
+    if (!data) return;
+    const was = wasPending.current;
+    const pendingNow = !data.confirmed || doubt;
+    wasPending.current = pendingNow;
+    if (was === true && !pendingNow && data.inclusionHeight != null) {
+      say({ k: "page:tx-confirmed", txId: id, height: data.inclusionHeight, ...(favOn ? { fav: true } : {}) });
+    }
+  }, [data, doubt, id, favOn]);
+
+  // In the mempool: a still think, the eyes on the «mempool» field (§6.4).
+  useEffect(() => {
+    if (!unconfirmed || dropped) return;
+    const el = document.querySelector('[data-kayolo="tx-pending"]');
+    say({ k: "page:think", on: true, el });
+    return () => say({ k: "page:think", on: false });
+  }, [unconfirmed, dropped]);
+
+  useEffect(() => {
+    if (err?.includes("not_found") && !data) say({ k: "page:miss" });
+  }, [err, data]);
 
   useEffect(() => {
     if (initial) {
@@ -397,6 +512,21 @@ export function TxView({
   const isCoinbase = data?.indexInBlock === 0 || data?.category === "coinbase";
   const height = data?.inclusionHeight ?? null;
   const index = data?.indexInBlock ?? null;
+  // Confirmations follow the live tip (no request): tip − inclusion + 1, never below the snapshot.
+  const liveConf = data?.confirmed ? confirmationsLive(data.numConfirmations ?? null, height, tip?.height ?? null) : null;
+  // Kayolo nods for confirmations 2…10, by the number on the page (/tx counts the inclusion block:
+  // tip − h + 1); that block's E1 waits for it. None for a block a fork replaced.
+  const nodConf = doubt ? null : liveConf;
+  const confSeen = useRef<number | null>(null);
+  const tipHeight = tip?.height ?? null;
+  useEffect(() => {
+    const prev = confSeen.current;
+    confSeen.current = nodConf;
+    const ev = confirmationsEvent("tx", prev, nodConf, tipHeight);
+    if (ev) say(ev);
+  }, [nodConf, tipHeight]);
+  const confAwait = confirmationsAwait("tx", nodConf);
+  useEffect(() => (confAwait ? chainAwait(() => true) : undefined), [confAwait]);
   const feeRate =
     feeShown > 0n && data && data.size > 0 ? Number(feeShown) / data.size : 0;
   const declaredIn = data?.inputCount ?? null;
@@ -458,7 +588,7 @@ export function TxView({
               index,
               blockHref,
               timestamp: data.timestamp ?? (data.confirmed ? null : pool?.firstSeen ?? null),
-              confirmations: data.numConfirmations ?? null,
+              confirmations: liveConf,
               size: data.size,
               inputs: declaredIn ?? inputs.length,
               outputs: declaredOut ?? outputs.length,
@@ -576,7 +706,7 @@ export function TxView({
                 {data.confirmed && height != null ? (
                   blockHref ? (
                     <KpiNum>
-                      <Link prefetch={false} href={blockHref} className="text-accent hover:underline">
+                      <Link prefetch={false} href={blockHref} className="text-accent hover:underline" data-kayolo="block-link">
                         {height.toLocaleString(loc(locale))}
                       </Link>
                     </KpiNum>
@@ -584,7 +714,9 @@ export function TxView({
                     <KpiNum>{height.toLocaleString(loc(locale))}</KpiNum>
                   )
                 ) : (
-                  <KpiNum>{t("tx.mempool")}</KpiNum>
+                  <span data-kayolo="tx-pending">
+                    <KpiNum>{t("tx.mempool")}</KpiNum>
+                  </span>
                 )}
               </p>
               {(index != null || !data.confirmed) && (
@@ -609,13 +741,16 @@ export function TxView({
                   {data.timestamp ? formatClockTime(data.timestamp, locale) : dash}
                 </KpiNum>
               </p>
-              <p className="mt-0.5 truncate text-[12px] leading-none text-[var(--muted-2)]">
+              <p
+                className="mt-0.5 truncate text-[12px] leading-none text-[var(--muted-2)]"
+                data-kayolo={data.confirmed ? "confirmations" : undefined}
+              >
                 {[
                   data.timestamp ? formatNumericDate(data.timestamp, locale) : null,
                   data.confirmed
                     ? t("tx.confs").replace(
                         "{n}",
-                        String(data.numConfirmations ?? 0)
+                        String(liveConf ?? 0)
                       )
                     : t("tx.unconfirmed"),
                 ]

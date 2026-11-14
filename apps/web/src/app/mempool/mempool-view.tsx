@@ -121,6 +121,7 @@ export function MempoolView({
       mark: <KpiMark id="mempool" tone={INK.cyan} />,
       ink: INK.cyan,
       enter: 0,
+      kayolo: "pool-count",
     },
     {
       label: t("mempool.kpiLoad"),
@@ -143,6 +144,7 @@ export function MempoolView({
       label: t("mempool.kpiP50"),
       value: p50 != null ? formatFeeRate(p50) : miss,
       unavailable: p50 == null,
+      kayolo: "fee-p50",
       sub: etaDue ? t("mempool.kpiEtaDue") : eta != null ? t("mempool.kpiEta").replace("{n}", eta) : t("fees.kpiEta"),
       mark: <KpiMark id="fee-rate" tone={INK.teal} />,
       ink: INK.teal,

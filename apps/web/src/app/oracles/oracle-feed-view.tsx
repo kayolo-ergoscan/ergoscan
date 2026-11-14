@@ -41,6 +41,10 @@ import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { countText } from "@/lib/i18n/messages";
 import { ENTER_MS, enteringIds, useEnterIds } from "@/lib/keyed-enter";
 import { useKeepFresh, usePageSync } from "@/lib/page-sync";
+import { say } from "@/lib/kayolo/events";
+import { chainAwait, chainListen, type Seal } from "@/lib/kayolo/chain-sense";
+import { oracleReread, rereads } from "@/lib/kayolo/page-data";
+import { ONCE_REREAD_MS, ORACLE_GAP_MS, PAGE_DATA_MS, REREAD_PAUSES_MS } from "@/lib/kayolo/thresholds";
 import {
   ORACLE_PACK,
   applyOracleFeed,
@@ -140,6 +144,60 @@ export function OracleFeedView({
   );
 
   useKeepFresh(() => void load(true));
+
+  // Kayolo E15 (§6.7, §8.2): a block sealed a refresh of this feed (it spends the pool box: the only
+  // oracle tx that moves the quote) — the feed re-reads with pauses 1–2–3–4–5 s (≤ 15 s, each
+  // + 0–400 ms) until it shows a new answer or height; then he knocks at the price. Datapoint posts
+  // and other feeds' txs ask nothing; an oracle tx the pool could not name gets one re-read (outside
+  // the gap, never over a running chain). The refresh chain ≤ once in 2 min; a hidden tab asks nothing
+  // (showing it re-reads once, with no act). That block's E1 waits (§2.8).
+  const loadRef = useRef(load);
+  loadRef.current = load;
+  const oracleWatch = useRef<{ height: number; at: number; from: { height: number | null; quote: unknown } } | null>(null);
+  const oracleReads = useRef<ReturnType<typeof rereads> | null>(null);
+  useEffect(() => {
+    const feed = ORACLE_FEEDS[slug];
+    const r = rereads(() => {
+      if (oracleWatch.current) void loadRef.current(true);
+    });
+    oracleReads.current = r;
+    /** The 2-min gap is the refresh chain's only: an unnamed tx's single read never holds a refresh back. */
+    let stepsAt = -Infinity;
+    const wants = (s: Seal) => {
+      if (!s.oracle.length || s.replaced) return null;
+      const w = oracleReread(s.oracle, feed);
+      if (w === "steps") return performance.now() - stepsAt < ORACLE_GAP_MS ? null : w;
+      // A single read never cuts a refresh chain short.
+      return w === "once" && r.busy() ? null : w;
+    };
+    const offHold = chainAwait((s) => wants(s) != null);
+    const off = chainListen((n) => {
+      if (n.k !== "seal") return;
+      const w = wants(n);
+      if (!w || document.visibilityState !== "visible") return;
+      const at = performance.now();
+      if (w === "steps") stepsAt = at;
+      oracleWatch.current = { height: n.height, at, from: { height: packRef.current.height ?? null, quote: packRef.current.quote } };
+      r.start(w === "steps" ? REREAD_PAUSES_MS : [ONCE_REREAD_MS]);
+    });
+    return () => {
+      offHold();
+      off();
+      r.stop();
+      oracleReads.current = null;
+      oracleWatch.current = null;
+    };
+  }, [slug]);
+  useEffect(() => {
+    const w = oracleWatch.current;
+    if (!w) return;
+    if ((pack.height ?? null) === w.from.height && pack.quote === w.from.quote) return;
+    oracleWatch.current = null;
+    oracleReads.current?.stop();
+    // Late (the tab hid mid-way and showed again): the data is new, the moment is gone.
+    if (performance.now() - w.at > PAGE_DATA_MS + 3_000) return;
+    say({ k: "page:data", what: "oracle", height: w.height });
+  }, [pack.height, pack.quote]);
   useEffect(() => {
     if (skipMount.current) {
       skipMount.current = false;
@@ -252,6 +310,7 @@ export function OracleFeedView({
                 label: t("oracles.kpiAnswer"),
                 value: answer,
                 unavailable: pack.quote == null,
+                kayolo: "oracle-price",
                 sub: t(slug === "xau-erg" ? "oracles.kpiAnswerSubXau" : "oracles.kpiAnswerSub"),
                 mark: <KpiMark id="price" tone={INK.gold} />,
                 ink: INK.gold,

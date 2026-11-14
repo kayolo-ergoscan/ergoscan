@@ -604,6 +604,7 @@ function EpochBar({
     <section
       className={clsx("mod rounded-[20px] border border-[var(--border)] bg-[var(--module)] px-3.5 py-3", className)}
       style={style}
+      data-kayolo="epoch"
     >
       {/* The figures drop under the label when the row does not fit (a 360 px phone in Russian). */}
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">

@@ -58,6 +58,24 @@ test("T2 at most 3 in 2 min, T3 at least 120 s apart", () => {
   assert.equal(run(s3, block("z", 4, [big, hop]), 125_000)?.step.act, "big");
 });
 
+test("T2 spread over the hour: ≤ 10 hops in any 30 min, the 11th block nods", () => {
+  const s = createScheduler(0);
+  const acts: string[] = [];
+  // A fast stream: a block every 45 s for 30 min (the per-2-min cap never bites at 45 s).
+  for (let i = 0; i < 40; i++) {
+    const t = 1000 + i * 45_000;
+    s.input(t);
+    acts.push(run(s, block(`f${i}`), t)?.step.act ?? "-");
+  }
+  assert.equal(acts.filter((a) => a === "hop").length, 10);
+  assert.equal(acts.slice(0, 10).every((a) => a === "hop"), true);
+  assert.equal(acts[10], "nod");
+  // 30 min after the first hop the budget opens again.
+  const t = 1000 + 41 * 45_000;
+  s.input(t);
+  assert.equal(run(s, block("late"), t)?.step.act, "hop");
+});
+
 test("T1 bucket: three gestures 6 s apart, then one per 15 s", () => {
   const s = createScheduler(0);
   const got: string[] = [];
@@ -145,4 +163,78 @@ test("night (§2.3): A2 from 15 s, A3 from 60 s, A4 from 120 s; spontaneous one 
   s.night(false);
   s.input(139_000);
   assert.equal(run(s, block("b"), 140_000)?.step.act, "hop", "by day the hop again");
+});
+
+/* ---- Э4 ---- */
+
+test("Э4 absorb: a page:* takes the block's own offer, waiting or pending", () => {
+  const s = createScheduler(0);
+  s.offer(block("h100"), 1000);
+  assert.equal(s.waiting("h100"), true);
+  assert.equal(s.absorb((k) => k === "h100", 1100), 1);
+  assert.equal(s.waiting("h100"), false);
+  assert.equal(s.next(1500), null, "nothing is left of it");
+  s.offer(block("h101"), 2000);
+  s.offer({ key: "busy-act", prio: 2, ttlMs: 1000, ladder: [S(1, "nod", 2000)] }, 2000);
+  s.next(2000);
+  assert.equal(s.next(2400), null, "the block waits while the act runs");
+  assert.equal(s.absorb((k) => k === "h101", 2500), 0, "a P5 is dropped while an act runs, nothing to absorb");
+});
+
+test("Э4 firm: «твоя tx в блоке» passes the T2 interval and the pause after a person; waiting keeps its tier", () => {
+  const s = createScheduler(0);
+  run(s, block("h1", 4), 1000);
+  s.done();
+  // A person acted 2 s ago: spontaneous T2 waits 10 s, a firm one does not.
+  s.offer({ key: "poke", prio: 1, ttlMs: 1000, ladder: [S(1, "poke", 300)] }, 3000);
+  s.next(3000);
+  s.done();
+  const firm = run(s, { key: "tx:a", prio: 3, ttlMs: 45_000, ladder: [hop, nod], firm: true }, 5000);
+  assert.equal(firm?.step.act, "hop", "past the 20 s T2 gap and the 10 s after-human pause");
+  s.done();
+  // Busy 4 s: a firm offer is not brought a tier lower by waiting.
+  const s2 = createScheduler(0);
+  s2.busy(9000);
+  s2.offer({ key: "tx:b", prio: 3, ttlMs: 45_000, ladder: [hop, nod], firm: true }, 5000);
+  assert.equal(s2.next(5400), null);
+  assert.equal(s2.next(9100)?.step.act, "hop");
+});
+
+test("Э4 waitsOut: a P3 waits for the running act within its TTL; P4 is dropped", () => {
+  const s = createScheduler(0);
+  s.offer({ key: "act", prio: 2, ttlMs: 1000, ladder: [S(1, "nod", 2000)] }, 1000);
+  s.next(1000);
+  s.offer({ key: "pend:x", prio: 3, ttlMs: 20_000, ladder: [nod, glance] }, 1100);
+  assert.equal(s.next(1500), null, "waits out the act");
+  assert.equal(s.nextDue(1500) <= 3000, true, "due when the act ends");
+  assert.equal(s.next(3001)?.key, "pend:x");
+  const s2 = createScheduler(0);
+  s2.offer({ key: "act", prio: 2, ttlMs: 1000, ladder: [S(1, "nod", 2000)] }, 1000);
+  s2.next(1000);
+  s2.offer({ key: "fee", prio: 4, ttlMs: 30_000, ladder: [nod] }, 1100);
+  assert.equal(s2.next(1500), null);
+  assert.equal(s2.next(3001), null, "a P4 is dropped while an act runs");
+});
+
+test("Э4 rank and yieldTo: fees > surge > price inside P4; a price yields to a block", () => {
+  const s = createScheduler(0);
+  s.offer({ key: "price", prio: 4, ttlMs: 20_000, ladder: [glance], rank: 3 }, 1000);
+  s.offer({ key: "pool", prio: 4, ttlMs: 30_000, ladder: [nod], rank: 2 }, 1050);
+  s.offer({ key: "fee", prio: 4, ttlMs: 30_000, ladder: [glance], rank: 1 }, 1100);
+  assert.equal(s.next(1500)?.key, "fee", "rank beats the louder tier");
+  const s2 = createScheduler(0);
+  s2.offer({ key: "price", prio: 4, ttlMs: 20_000, ladder: [glance], rank: 3, yieldTo: /^h\d/ }, 1000);
+  s2.offer(block("h7", 5), 1100);
+  assert.equal(s2.next(1500)?.key, "h7", "the block, the price is dropped (§8.4)");
+});
+
+test("Э4 asleep (A4): what wakes wakes him, a block stirs, a P4 without a wake is not shown", () => {
+  const s = createScheduler(0);
+  const t = 400_000;
+  s.offer({ key: "price", prio: 4, ttlMs: 20_000, ladder: [glance] }, t);
+  assert.equal(s.next(t + 400), null);
+  s.offer({ key: "tx:a", prio: 3, ttlMs: 45_000, ladder: [hop, nod], firm: true, wakes: true }, t + 1000);
+  const p = s.next(t + 1400);
+  assert.equal(p?.key, "tx:a");
+  assert.equal(p?.wake, true);
 });

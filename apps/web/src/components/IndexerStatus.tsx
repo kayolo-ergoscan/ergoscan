@@ -6,6 +6,7 @@ import Link from "next/link";
 import { getGateway } from "@/lib/config";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { formatInt } from "@/lib/format";
+import { chainIndexer } from "@/lib/kayolo/chain-sense";
 
 type St = {
   ok?: boolean;
@@ -28,7 +29,11 @@ export function IndexerStatus() {
       void fetch(`${getGateway()}/v1/indexer/status`)
         .then((r) => (r.ok ? r.json() : null))
         .then((d) => {
-          if (!dead && d) setSt(d as St);
+          if (dead || !d) return;
+          setSt(d as St);
+          // Kayolo E19 reads the same poll (no request of its own).
+          const lag = (d as St).lag;
+          chainIndexer(typeof lag === "number" && Number.isFinite(lag) ? lag : null);
         })
         .catch(() => {
           /* offline */
@@ -75,6 +80,7 @@ export function IndexerStatus() {
     <Link
       prefetch={false}
       href="/status"
+      data-kayolo="indexer"
       className="inline-flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[10px] text-[var(--muted-2)] transition-colors duration-[400ms] hover:text-[var(--text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
     >
       <span

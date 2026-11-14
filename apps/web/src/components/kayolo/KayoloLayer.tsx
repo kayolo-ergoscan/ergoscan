@@ -15,7 +15,7 @@ import {
   type PixelPose,
 } from "@/components/pixel";
 import { INK_EVENT } from "@/lib/skin-ink";
-import { onKayolo, say, type BodyWhere, type KayoloEvent } from "@/lib/kayolo/events";
+import { onKayolo, say, takeEarly, type BodyWhere, type KayoloEvent } from "@/lib/kayolo/events";
 import {
   arrivalOf,
   bodyOwner,
@@ -32,6 +32,8 @@ import {
 import { createScheduler, levelAt, levelEdges, type Level, type Prio } from "@/lib/kayolo/scheduler";
 import { makeAct, pokeAct, step, type Act, type ActName, type PoseDelta, type Vec } from "@/lib/kayolo/acts";
 import { gazeTo, nookPoint, pageKind, parkPoint, tipPoint, titleRect, wideLayout } from "@/lib/kayolo/anchors";
+import { chainNow, type NetState } from "@/lib/kayolo/chain-sense";
+import { react, type Aim as Anchor, type Reaction } from "@/lib/kayolo/reactions";
 import { startNavSense } from "@/lib/kayolo/nav-sense";
 import { locKey } from "@/lib/route-nav";
 import { pageMemory, readHome, welcomeFor, type Mode, type Welcome } from "@/lib/kayolo/memory";
@@ -53,6 +55,12 @@ import * as K from "@/lib/kayolo/thresholds";
  * pushes the door while a page is slow; Back/Forward, the same URL and a link opened aside; the whole
  * poke ladder; night and the morning stretch. None of it takes a click: the layer never takes
  * pointer events, and the edge station is just a picture above the palette's backdrop.
+ *
+ * Э4 «Вся цепь» (§2.4, §8.3, §8.4): every chain sensor and every page:* goes through the reaction
+ * matrix (lib/kayolo/reactions.ts) into the scheduler; a page:* about a height takes that block's
+ * own reaction (held ≤ 5 s when the page said it re-reads). The faces that last — offline, the feed
+ * lost, the site behind, the chain waiting or stalled, a tx still in the mempool — are backgrounds:
+ * a face, not motion (the think sway runs its first 2 s, then holds still), shown in A0–A2.
  */
 
 /** Body canvas: 56×64 CSS px, ground point at (28, 58). */
@@ -72,6 +80,7 @@ const CONTENT_LIFT = -1.8;
 type Hold = { where: BodyWhere; x: number; y: number; face: 1 | -1 };
 type Walk = { fromX: number; toX: number; y: number; fromY?: number; at: number; ms: number; roll0: number; arc?: number };
 type Running = { act: Act; at: number; key: string; prio: Prio; flip: boolean };
+type Bg = { kind: "offline" | "down" | "behind" | "stall" | "wait" | "pool"; at: number };
 
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 const smooth = (u: number) => {
@@ -101,6 +110,79 @@ const MEANINGFUL =
 
 type Aim = Vec | null;
 
+/** Э4 anchors (§9.5): the page's `data-kayolo` names, then the rail row of the section. */
+const ANCHOR_SEL: Partial<Record<Anchor, string>> = {
+  confirmations: '[data-kayolo="confirmations"]',
+  pending: '[data-kayolo="pending"], [data-kayolo="balance"]',
+  balance: '[data-kayolo="balance"]',
+  "rent-beacon": '[data-kayolo="rent-beacon"], .addr-fact-balance .kpi-tile-mark',
+  "pool-count": '[data-kayolo="pool-count"]',
+  fee: '[data-kayolo="fee-p50"], [data-kayolo="fee-tile"]',
+  "oracle-price": '[data-kayolo="oracle-price"]',
+  price: '[data-scout="price"]',
+  next: '[data-kayolo="next"], [data-dir="fwd"]',
+  reward: '[data-kayolo="reward"]',
+  "block-link": '[data-kayolo="block-link"]',
+  indexer: '[data-kayolo="indexer"]',
+  search: '[data-scout="search"]',
+  tail: ".page-tail",
+  row: "main .feed-row",
+};
+/** Tried in order when the anchor itself has no box: on the phone the tile's mark is hidden. */
+const ANCHOR_NEXT: Partial<Record<Anchor, string[]>> = { "rent-beacon": ['[data-kayolo-note="rent"]', ".addr-fact-balance"] };
+const ANCHOR_RAIL: Partial<Record<Anchor, string>> = { confirmations: "/blocks", "pool-count": "/mempool", fee: "/mempool" };
+
+/** Centre of an element even off screen (the eyes then look toward that edge), or null without a box. */
+function rawCenter(el: Element | null | undefined): Vec | null {
+  if (!el || !el.isConnected) return null;
+  const r = el.getBoundingClientRect();
+  if (r.width < 1 && r.height < 1) return null;
+  return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+}
+
+/** The point an Э4 anchor names: on screen first, else off screen, else its rail row (§9.5 fallbacks). */
+function anchorPoint(a: Anchor, el?: Element | null): Vec | null {
+  if (a === "tip") return tipPoint();
+  if (a === "title") {
+    const t = titleRect();
+    return t ? { x: t.left + t.width / 2, y: t.top + t.height / 2 } : null;
+  }
+  if (a === "el") return rawCenter(el);
+  const sel = ANCHOR_SEL[a];
+  if (sel) {
+    let off: Vec | null = null;
+    for (const s of [sel, ...(ANCHOR_NEXT[a] ?? [])]) {
+      for (const node of document.querySelectorAll(s)) {
+        const c = centerOf(node);
+        if (c) return c;
+        off ??= rawCenter(node);
+      }
+    }
+    if (off) return off;
+  }
+  const rail = ANCHOR_RAIL[a];
+  if (rail) {
+    const row = shown(`.nav-rail a[href="${rail}"], nav a[href="${rail}"]`);
+    if (row) return centerOf(row);
+  }
+  return a === "confirmations" ? tipPoint() : null;
+}
+
+const RENT_SEEN_KEY = "kayolo.rent";
+
+/** E23 plays once per address in a tab's session (§8.2). */
+function rentSeen(address: string, mark: boolean): boolean {
+  try {
+    const raw = window.sessionStorage.getItem(RENT_SEEN_KEY);
+    const list: string[] = raw ? (JSON.parse(raw) as string[]) : [];
+    if (list.includes(address)) return true;
+    if (mark) window.sessionStorage.setItem(RENT_SEEN_KEY, JSON.stringify([...list, address].slice(-20)));
+  } catch {
+    /* blocked storage: this load remembers it in the engine */
+  }
+  return false;
+}
+
 /** Centre of an element on screen (read once, when an answer starts), or null if it is not shown. */
 function centerOf(el: Element | null | undefined): Vec | null {
   if (!el || !el.isConnected) return null;
@@ -113,6 +195,15 @@ function centerOf(el: Element | null | undefined): Vec | null {
 /** The first visible element for a selector. */
 function shown(sel: string): Element | null {
   for (const el of document.querySelectorAll(sel)) if (centerOf(el)) return el;
+  return null;
+}
+
+/** E23's beacon on screen: the tile's mark, else the rent line, else the tile (§6.6). */
+function rentBeaconShown(): Element | null {
+  for (const s of [ANCHOR_SEL["rent-beacon"] as string, ...(ANCHOR_NEXT["rent-beacon"] ?? [])]) {
+    const el = shown(s);
+    if (el) return el;
+  }
   return null;
 }
 
@@ -192,8 +283,37 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
   let popNext: { dir: -1 | 1; seen: boolean; at: number; to: string } | null = null;
   /** The answer after a wake-up, with its anchors. */
   let afterAim: [Aim, Aim] | null = null;
-  /** Offers that look at a page anchor when they play (the arrival beat). */
+  /** Offers that look at a page anchor when they play (the arrival beat, Э4 reactions). */
   const offerAim = new Map<string, () => Aim>();
+  /** Э4: the second anchor and count(k) of an offer, read when it plays. */
+  const offerMeta = new Map<string, { aim2?: () => Aim; n?: number }>();
+  let afterN: number | undefined;
+  /* ---- Э4: backgrounds (§2.4) and what waits on the page (§8.4) ---- */
+  const c0 = chainNow();
+  const t0 = performance.now();
+  let net: { state: NetState; at: number; gaze: Aim } = { state: c0.net, at: t0, gaze: null };
+  let waitBg: { level: 0 | 1 | 2 | 3; at: number } = { level: c0.wait, at: t0 };
+  let behind = { on: c0.behind.on, at: t0, knockAt: c0.behind.on ? t0 + K.BEHIND_KNOCK_MIN_MS : Infinity, knocks: 0 };
+  /** /tx in the mempool: a still think face; the eyes on the «mempool» field the first 2 s (≤ 3 a visit). */
+  let poolThink: { at: number; gaze: Aim } | null = null;
+  let poolLooks = 0;
+  /** Blocks whose page re-reads for them: each reaction waits ≤ 5 s for its page:* (§2.8); ≤ 3, oldest out. */
+  let held: { r: Reaction; ev: KayoloEvent; until: number }[] = [];
+  /** page:* that came while the scout had the body: offered once he has it, within their TTL; ≤ 3, one per offer key. */
+  let deferred: { r: Reaction; ev: KayoloEvent; at: number }[] = [];
+  /** E12: this block drained the pool; its act ends with a breath out. */
+  let drainedH: number | null = null;
+  const confirmedTx = new Set<string>();
+  const pendAt = new Map<string, number>();
+  let feeSpikeAt = -1e9;
+  let surgeAt = -1e9;
+  /** E23 waits for the beacon to be on screen (he never scrolls the page). */
+  let rentWait: { r: Reaction; ev: KayoloEvent; at: number } | null = null;
+  let rentCheckAt: number | null = null;
+
+  let hiddenHeight: number | null = null;
+  /** The last block reaction that played (two blocks < 20 s apart: the second is a nod, §8.4). */
+  let blockPlayedAt = -1e9;
   /** Answers by kind: the last gesture, for «a gesture at most every N s, else the eyes». */
   const answeredAt = new Map<string, number>();
   /** Tab or filter: watch the page for its data (think on a skeleton, then a nod; empty → tilt). */
@@ -369,10 +489,52 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
     return { look: 1.2, moving: false, next: (pass + 1) * (SWEEP + SWEEP_GAP) - inLv };
   };
 
+  /**
+   * The background on now (§2.4, by importance), shown in A0–A2: offline, the feed down, the site
+   * behind, the chain stalled or waiting, a tx still in the mempool (/tx).
+   */
+  const bgNow = (): Bg | null => {
+    if (mode !== "live" && mode !== "calm") return null;
+    if (net.state === "offline") return { kind: "offline", at: net.at };
+    if (net.state === "down") return { kind: "down", at: net.at };
+    if (behind.on) return { kind: "behind", at: behind.at };
+    if (waitBg.level >= 3) return { kind: "stall", at: waitBg.at };
+    if (waitBg.level === 2) return { kind: "wait", at: waitBg.at };
+    if (poolThink) return { kind: "pool", at: poolThink.at };
+    return null;
+  };
+  /** Only the think faces sway, and only their first 2 s; then the face is still and blinks (§2.4, §9.7). */
+  const bgSways = (bg: Bg, now: number) =>
+    (bg.kind === "behind" || bg.kind === "wait" || bg.kind === "pool") && !pixelReduce() && now - bg.at < K.BACK_WOBBLE_MS;
+  const bgPose = (bg: Bg, now: number): Partial<PixelPose> => {
+    const sway = bgSways(bg, now) ? 1 : 0;
+    const e = eyesNow(now);
+    switch (bg.kind) {
+      case "offline":
+      case "down": {
+        // «Ждёт»: sits down, eyes apart, looks down (the feed: at the title); after 60 s he dozes.
+        const sit: Partial<PixelPose> = { mood: "idle", eyesApart: 0.18, squash: actReduce() ? 0 : -0.06, glances: false, breath: 0, blinkGap: 1.6 };
+        if (bg.kind === "down" && now - bg.at >= K.DOWN_DOZE_MS) return { ...sit, doze: 0.5 };
+        if (bg.kind === "down") return { ...sit, gaze: e ?? net.gaze ?? { x: 0, y: -0.3 }, eyeLift: CONTENT_LIFT };
+        return { ...sit, gaze: e ?? { x: 0, y: 0.4 } };
+      }
+      case "stall":
+        // Dozes without tears until a block, still, as in A3.
+        return { mood: "sleepy", doze: 0.55, nod: 0, breath: 0, zzz: false, glances: false };
+      case "pool":
+        return { mood: "think", wobble: sway, eyeLift: CONTENT_LIFT, gaze: e ?? (poolThink && now - bg.at < 2000 ? poolThink.gaze : null) };
+      default:
+        // The site behind, the chain waiting: a still think (never sad).
+        return { mood: "think", wobble: sway, eyeLift: CONTENT_LIFT, gaze: e };
+    }
+  };
+
   const restPose = (now: number, face: 1 | -1): Partial<PixelPose> => {
     const wait = waitPose(now, face);
     if (wait) return wait;
     const { lv, inLv } = levelNow(now);
+    const bg = lv <= 2 ? bgNow() : null;
+    if (bg) return bgPose(bg, now);
     if (lv === 0) {
       return {
         mood: "idle",
@@ -411,10 +573,10 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
   };
 
   /** `aim` overrides the act's default anchor (undefined keeps it); `aim2` is its second anchor. */
-  const startAct = (name: ActName, now: number, key: string, prio: Prio, aim?: Aim, aim2?: Aim) => {
+  const startAct = (name: ActName, now: number, key: string, prio: Prio, aim?: Aim, aim2?: Aim, n?: number) => {
     if (!hold) return;
     const target = aim !== undefined ? aim : targetFor(name);
-    const act = makeAct(name, { reduce: actReduce(), target, target2: aim2 ?? null, rest: { x: 0, y: 0 }, face: hold.face, rnd: Math.random });
+    const act = makeAct(name, { reduce: actReduce(), target, target2: aim2 ?? null, rest: { x: 0, y: 0 }, face: hold.face, n, rnd: Math.random });
     running = { act, at: now, key, prio, flip: true };
   };
 
@@ -516,9 +678,11 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
       if (after) {
         const next = after;
         const aims = afterAim;
+        const n = afterN;
         after = null;
         afterAim = null;
-        startAct(next, now, "after", 4, aims ? aims[0] : undefined, aims ? aims[1] : undefined);
+        afterN = undefined;
+        startAct(next, now, "after", 4, aims ? aims[0] : undefined, aims ? aims[1] : undefined, n);
       }
     }
     if (pokeQueued && (!running || (running.key === "poke" && now - running.at >= K.POKE_NEXT_AT * running.act.ms))) {
@@ -529,6 +693,7 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
     // An open palette or sheet keeps him busy (§2.8): spontaneous acts wait, the eyes stay on it.
     if (paletteOpen || sheetOpen) sched.busy(now + 1000);
     pumpE3(now);
+    pumpE4(now);
     const settled = hold && !running && !introRun && bodyOwner() === "kayolo" && sched.sinceInput(now) >= WELCOME_PAUSE_MS;
     // The very first visit has the introduction instead.
     if (morning && introPendingNow()) morning = false;
@@ -550,13 +715,44 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
       const name: ActName = navWait && /^h\d/.test(play.key) ? "glance" : (play.step.act as ActName);
       const aim = offerAim.get(play.key);
       offerAim.delete(play.key);
+      const meta = offerMeta.get(play.key);
+      offerMeta.delete(play.key);
+      const a2 = meta?.aim2 ? meta.aim2() : undefined;
       if (play.wake) {
         wokeAt = now;
         // Awake now for the scheduler too: the next block reads A0, not A4 (no second "wake").
         sched.inputAt(now);
         startAct("wake", now, play.key, play.prio);
         after = name;
-      } else startAct(name, now, play.key, play.prio, aim ? aim() : undefined);
+        afterAim = aim ? [aim(), a2 ?? null] : null;
+        afterN = meta?.n;
+      } else {
+        startAct(name, now, play.key, play.prio, aim ? aim() : undefined, a2, meta?.n);
+        // E12: the block that drained the pool ends with a breath out (§8.4).
+        if (drainedH != null && play.key === `h${drainedH}` && !after) after = "relief";
+      }
+      if (drainedH != null && play.key === `h${drainedH}`) drainedH = null;
+      if (/^h\d/.test(play.key)) blockPlayedAt = now;
+    }
+  };
+
+  /** Э4 follow-ups: a held block that nobody absorbed, the site-behind knocks. */
+  const pumpE4 = (now: number) => {
+    if (held.length && held.some((h) => now >= h.until)) {
+      // The page did not say its page:* in time: the block reacts as usual (§2.8).
+      const due = held.filter((h) => now >= h.until);
+      held = held.filter((h) => now < h.until);
+      if (hold) for (const h of due) offerR(h.r, now);
+    }
+    if (behind.on && behind.knocks < K.BEHIND_KNOCKS && now >= behind.knockAt && hold && !running) {
+      behind.knockAt = now + K.BEHIND_KNOCK_MIN_MS + Math.random() * (K.BEHIND_KNOCK_MAX_MS - K.BEHIND_KNOCK_MIN_MS);
+      const ind = shown('[data-kayolo="indexer"]');
+      if (ind && levelNow(now).lv < 3 && (mode === "live" || mode === "calm")) {
+        // Never sad: two knocks on the indicator, ≤ 3 a visit (§2.4).
+        behind.knocks += 1;
+        offerAim.set("behind", () => aimEl(ind));
+        sched.offer({ key: "behind", prio: 4, ttlMs: 4000, ladder: [step("knock2"), step("glance")] }, now);
+      }
     }
   };
 
@@ -702,6 +898,7 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
     }
     if (gaze) due = Math.min(due, gazeUntil);
     if (eyes) due = Math.min(due, eyes.until);
+    for (const h of held) due = Math.min(due, h.until);
     if (awaitData) due = Math.min(due, awaitData.next);
     if (missDue) due = Math.min(due, missDue.at);
     if (hoverCand) due = Math.min(due, hoverCand.at + K.HOVER_MS);
@@ -712,6 +909,16 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
     // Dense pages start reading at 20 s, before the scheduler's own A2 edge (§2.2).
     if (pageKind(path) === "d" && since(now) < 20_000) due = Math.min(due, now + 20_000 - since(now));
     const { lv, inLv } = levelNow(now);
+    if (behind.on && behind.knocks < K.BEHIND_KNOCKS && lv < 3) due = Math.min(due, behind.knockAt);
+    const bg = lv <= 2 ? bgNow() : null;
+    if (bg) {
+      // A background is a face: it sways its first 2 s at 20 fps, then holds still (blinks only).
+      if (bgSways(bg, now)) return Math.max(now, paintedAt + 1000 / K.GAZE_FPS);
+      if (paintedAt < bg.at + K.BACK_WOBBLE_MS) due = Math.min(due, bg.at + K.BACK_WOBBLE_MS);
+      if (bg.kind === "down" && now < bg.at + K.DOWN_DOZE_MS) due = Math.min(due, bg.at + K.DOWN_DOZE_MS);
+      if (ctx) due = Math.min(due, pixelWake(ctx, "main"));
+      return lv >= 2 ? Math.max(due, paintedAt + 1000 / K.REST_FPS) : due;
+    }
     // Paced frames count from the last painted one, not from now: a timer that wakes early must
     // land on a frame, not push the frame forward again. Reading and dozing (A2–A3) are drawn at
     // 20 fps: ≤ 300 frames a minute (§9.10). The face eases by time, so the sweeps, blinks and the
@@ -867,7 +1074,7 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
       ...calmHop,
       x: pose.x,
       y: GY,
-      blinkGap: night ? K.NIGHT_BLINK_GAP : 1,
+      blinkGap: Math.max(pose.blinkGap ?? 1, night ? K.NIGHT_BLINK_GAP : 1),
       scale: K.BODY_SCALE,
       color,
       now,
@@ -916,6 +1123,7 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
     const now = performance.now();
     // The very first visit: he wakes up in his window and meets the person before the tour (§5).
     if (introPendingNow() && arrivalOf(path)?.intro && mode === "live") startIntro(now);
+    takeDeferred(now);
     paint(now);
   };
 
@@ -942,6 +1150,8 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
           switchTo(layerCanvas);
         }
       }
+      // handoff() sets the owner only after this returns: the deferred reaction is his already.
+      takeDeferred(performance.now(), true);
       paint(performance.now());
       return true;
     },
@@ -1007,29 +1217,216 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
 
   /* ---------------- what he answers ---------------- */
 
-  const onBlock = (height: number, kind: "empty" | "normal" | "big", now: number) => {
-    const page = pageKind(path);
-    let ladder: ActName[];
-    let prio: Prio = 5;
-    let ttl = K.TTL_E1;
-    let wakes = false;
-    if (kind === "empty") {
-      ladder = ["shrug"];
-      ttl = K.TTL_E2;
-    } else if (kind === "big") {
-      prio = 4;
-      ttl = K.TTL_E3;
-      wakes = true;
-      ladder = page === "d" ? ["hopSurprised", "nod", "glance"] : ["bigBlock", "hopSurprised", "nod", "glance"];
-    } else {
-      ladder = page === "b" ? ["hopGlance", "nodGlance", "glance"] : page === "n" ? ["nodGlance", "glance"] : ["glance"];
+  /* ---- Э4: the chain and the page (§8.3, §8.4) ---- */
+
+  /** Where an Э4 anchor is, as a gaze from his body (off screen: toward that edge). */
+  const aimFor = (a: Anchor, id?: string, el?: Element | null): Aim => {
+    if (a === "row" && id) {
+      const row = document.querySelector(`[data-kayolo-id="${CSS.escape(id)}"]`);
+      if (row) return aimAt(rawCenter(row));
     }
-    // At the door (a slow page) a block gets only a glance: no hop, and he stays sitting (13.11 №9).
-    if (navWait) {
-      ladder = ["glance"];
-      wakes = false;
+    return aimAt(anchorPoint(a, el));
+  };
+
+  const ctxNow = (now: number) => ({ path, door: !!navWait, behind: behind.on, quick: now - blockPlayedAt < K.T2_GAP_MS });
+
+  /** A reaction goes to the scheduler; its anchors are read when it plays. */
+  const offerR = (r: Reaction, now: number, el?: Element | null) => {
+    const key = r.offer.key;
+    const a = r.aim;
+    const a2 = r.aim2;
+    if (a) offerAim.set(key, () => aimFor(a, r.id, el));
+    if (a2 || r.n != null) offerMeta.set(key, { aim2: a2 ? () => aimFor(a2, r.id, el) : undefined, n: r.n });
+    sched.offer(r.offer, now);
+  };
+
+  const heightOf = (ev: KayoloEvent): number | null => (ev.k === "chain:block" ? ev.height : ev.k === "chain:catchup" ? ev.to : null);
+
+  /** A page:* about this height takes the block's own reaction (§2.8), held or waiting. */
+  const absorbHeight = (h: number | undefined, now: number) => {
+    if (h == null) return;
+    held = held.filter((x) => heightOf(x.ev) !== h);
+    const key = `h${h}`;
+    if (sched.absorb((k) => k === key, now)) {
+      offerAim.delete(key);
+      offerMeta.delete(key);
     }
-    sched.offer({ key: `h${height}`, prio, ttlMs: ttl, ladder: ladder.map(step), wakes, stir: step("stir") }, now);
+  };
+
+  const onChain = (ev: KayoloEvent, now: number) => {
+    switch (ev.k) {
+      case "chain:block":
+      case "chain:catchup": {
+        if (!K.KAYOLO_CHAIN || !hold) return;
+        const r = react(ev, ctxNow(now));
+        if (!r) return;
+        // The page on screen re-reads for this block: wait ≤ 5 s for its page:* (§2.8, §8.4).
+        if (ev.hold) held = [...held, { r, ev, until: now + K.HOLD_MS }].slice(-K.QUEUE_MAX);
+        else offerR(r, now);
+        return;
+      }
+      case "chain:drain": {
+        // E12 joins the block's own act: a breath out at its end.
+        const key = `h${ev.height}`;
+        if (running?.key === key) {
+          if (!after) after = "relief";
+        } else if (sched.waiting(key) || held.some((h) => heightOf(h.ev) === ev.height)) drainedH = ev.height;
+        return;
+      }
+      case "chain:tip-wait":
+        waitBg = { level: ev.level, at: now };
+        if (hold) {
+          const r = react(ev, ctxNow(now));
+          if (r) offerR(r, now);
+          frame();
+        }
+        return;
+      case "chain:pool": {
+        if (!hold) return;
+        const r = react(ev, ctxNow(now));
+        if (!r) return;
+        surgeAt = now;
+        // Fees + surge: one surge act with a look at the fees; both limits count (§8.4).
+        if (sched.waiting("fee") || now - feeSpikeAt < 3000) {
+          sched.absorb((k) => k === "fee", now);
+          offerAim.delete("fee");
+          r.aim2 = "fee";
+        }
+        offerR(r, now);
+        return;
+      }
+      case "chain:fee": {
+        if (!hold) return;
+        const r = react(ev, ctxNow(now));
+        if (!r) return;
+        if (ev.state === "spike") {
+          feeSpikeAt = now;
+          if (sched.waiting("pool")) {
+            offerMeta.set("pool", { ...offerMeta.get("pool"), aim2: () => aimFor("fee") });
+            return;
+          }
+          if (now - surgeAt < 3000) return;
+        }
+        offerR(r, now);
+        return;
+      }
+      case "chain:tx-topic":
+      case "price:move": {
+        if (!hold) return;
+        const r = react(ev, ctxNow(now));
+        if (r) offerR(r, now);
+        return;
+      }
+      case "net:state": {
+        const gaze = ev.state === "down" ? titleAim() : null;
+        if (ev.state !== net.state) net = { state: ev.state, at: now, gaze };
+        if (hold) {
+          const r = react(ev, ctxNow(now));
+          if (r) offerR(r, now);
+          frame();
+        }
+        return;
+      }
+      case "site:behind":
+        if (ev.on !== behind.on) {
+          behind = { on: ev.on, at: now, knockAt: ev.on ? now + K.BEHIND_KNOCK_MIN_MS : Infinity, knocks: behind.knocks };
+          frame();
+        }
+        return;
+      default:
+        return;
+    }
+  };
+
+  /** What the page on screen learned (page:*): its data, its own reaction (§8.3). */
+  const onPage = (ev: KayoloEvent, now: number) => {
+    switch (ev.k) {
+      case "page:think": {
+        if (!ev.on) {
+          if (poolThink) {
+            poolThink = null;
+            frame();
+          }
+          return;
+        }
+        if (poolThink) return;
+        // In the mempool: a still think; the eyes on the field ≤ 3 a visit and not in A2+ (§6.4).
+        const eyesOn = poolLooks < K.POOL_LOOKS && levelNow(now).lv < 2;
+        if (eyesOn) poolLooks += 1;
+        poolThink = { at: now, gaze: eyesOn ? aimEl(ev.el) : null };
+        frame();
+        return;
+      }
+      case "page:tx-confirmed":
+        if (confirmedTx.has(ev.txId)) return;
+        confirmedTx.add(ev.txId);
+        poolThink = null;
+        break;
+      case "page:addr-pending": {
+        if (ev.count > 0) {
+          // T1 once in 30 s for an address (§6.6); meanwhile only the eyes.
+          const last = pendAt.get(ev.address) ?? -1e9;
+          if (now - last < K.PENDING_GAP_MS) {
+            look(aimFor("pending"), 700, now, "pending");
+            return;
+          }
+          pendAt.set(ev.address, now);
+        }
+        break;
+      }
+      case "page:rent":
+        if (rentSeen(ev.address, false)) return;
+        break;
+      default:
+        break;
+    }
+    const r = react(ev, ctxNow(now));
+    if (!r) return;
+    absorbHeight(r.height, now);
+    placeR(r, ev, now);
+  };
+
+  const placeR = (r: Reaction, ev: KayoloEvent, now: number, taking = false) => {
+    const el = "el" in ev ? ev.el : null;
+    if (!hold || (!taking && bodyOwner() !== "kayolo")) {
+      // The scout has the body (the tour, the door walk): it waits for him within its TTL.
+      deferred = [...deferred.filter((d) => d.r.offer.key !== r.offer.key), { r, ev, at: now }].slice(-K.QUEUE_MAX);
+      return;
+    }
+    if (ev.k === "page:rent") {
+      // E23: once a card a session, and only with the beacon on screen; he never scrolls the page.
+      if (!rentBeaconShown()) {
+        rentWait = { r, ev, at: now };
+        // The tile may still be landing: one more look in 1.2 s; after that only a scroll brings it.
+        window.setTimeout(() => {
+          if (!dead) checkRent(performance.now());
+        }, 1200);
+        return;
+      }
+      rentSeen(ev.address, true);
+    }
+    offerR(r, now, el);
+  };
+
+  /** The reactions that waited for him (the scout had the body), in order, with the TTL each has left. */
+  const takeDeferred = (now: number, taking = false) => {
+    const ds = deferred;
+    deferred = [];
+    for (const d of ds) {
+      const left = d.r.offer.ttlMs - (now - d.at);
+      if (left < 600) continue;
+      placeR({ ...d.r, offer: { ...d.r.offer, ttlMs: left } }, d.ev, now, taking);
+    }
+  };
+
+  /** E23 waited for the beacon: it is on screen now (the person scrolled to it). */
+  const checkRent = (now: number) => {
+    if (!rentWait || !hold || !rentBeaconShown()) return;
+    const w = rentWait;
+    rentWait = null;
+    if (w.ev.k === "page:rent") rentSeen(w.ev.address, true);
+    offerR(w.r, now);
+    kick();
   };
 
   const onPoke = (now: number) => {
@@ -1051,9 +1448,14 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
   const offBus = onKayolo((ev) => {
     if (dead) return;
     const now = performance.now();
-    if (ev.k === "chain:block") {
-      if (!K.KAYOLO_CHAIN || !hold) return;
-      onBlock(ev.height, ev.kind, now);
+    if (ev.k.startsWith("chain:") && ev.k !== "chain:rare") {
+      if (!K.KAYOLO_CHAIN) return;
+      onChain(ev, now);
+    } else if (ev.k === "net:state" || ev.k === "site:behind" || ev.k === "price:move") {
+      onChain(ev, now);
+    } else if (ev.k.startsWith("page:")) {
+      if (!K.KAYOLO_CHAIN) return;
+      onPage(ev, now);
     } else if (ev.k === "chain:rare") {
       if (!hold) return;
       sched.offer({ key: `r${ev.height}`, prio: 4, ttlMs: K.TTL_RARE, ladder: (["rare", "nod", "glance"] as ActName[]).map(step), wakes: true, stir: step("stir") }, now);
@@ -1575,6 +1977,13 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
   };
   const onScroll = (e: Event) => {
     onInput(e);
+    if (rentWait && rentCheckAt == null) {
+      rentCheckAt = performance.now();
+      window.setTimeout(() => {
+        rentCheckAt = null;
+        if (!dead) checkRent(performance.now());
+      }, 400);
+    }
     if (!dockRaf) dockRaf = requestAnimationFrame(checkDock);
     // The phone park rides the sticky pill: follow it while the page scrolls, once per frame
     // (capture also sees inner scrollers; parkPoint reads layout).
@@ -1594,6 +2003,7 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
     if (document.visibilityState === "hidden") {
       hidden = true;
       hiddenAt = now;
+      hiddenHeight = chainNow().height;
       hiddenSince = sched.sinceInput(now);
       if (raf) cancelAnimationFrame(raf);
       raf = 0;
@@ -1606,7 +2016,17 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
     if (now - hiddenAt >= K.AWAY_WAKE_MS) {
       const was = levelAt(hiddenSince + (now - hiddenAt), nightNow(now));
       sched.input(now);
-      if (hold) wakeFrom(Math.max(2, was) as Level, now);
+      if (hold) {
+        wakeFrom(Math.max(2, was) as Level, now);
+        // Blocks came while he was away: he counts them (k ≤ 3) and nods (§2.2); on block pages a hop.
+        const h = chainNow().height;
+        const k = h != null && hiddenHeight != null ? h - hiddenHeight : 0;
+        if (k >= 1 && running?.key === "wake" && K.KAYOLO_CHAIN && !chainNow().mock) {
+          after = pageKind(path) === "b" ? "catchUp" : "countNod";
+          afterAim = [aimAt(tipPoint()), null];
+          afterN = Math.min(K.COUNT_MAX, k);
+        }
+      }
     } else sched.inputAt(now - hiddenSince);
     frame();
   };
@@ -1724,6 +2144,16 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
       navWait = null;
       awaitData = null;
       beatDue = null;
+      // Э4: what waited on the old page goes; the backgrounds of the chain stay (they are the site's).
+      if (prev !== next) {
+        poolThink = null;
+        poolLooks = 0;
+        held = [];
+        deferred = [];
+        rentWait = null;
+        behind.knocks = 0;
+        if (behind.on) behind.knockAt = now + K.BEHIND_KNOCK_MIN_MS;
+      }
       const hop = lastClick?.kind === "go" && now - lastClick.at < 5000 ? lastClick.hop : undefined;
       // One click, one arrival: a later push by the router (a pick in the palette) is not a hop.
       lastClick = null;
@@ -1759,6 +2189,9 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
       }
     },
     start() {
+      // What the page said while he was loading (§9.4) counts from when it was said.
+      const early = takeEarly();
+      if (K.KAYOLO_CHAIN) for (const e of early) onPage(e.ev, e.at);
       requestAnimationFrame(takeHome);
     },
     stop() {
@@ -1800,6 +2233,13 @@ function createEngine(layerBody: HTMLElement, layerCanvas: HTMLCanvasElement) {
         wait: navWait ? Math.round(now - navWait.at) : pageWait ? "page" : null,
         color,
         over: !!layerRoot?.classList.contains("is-over"),
+        bg: bgNow()?.kind ?? null,
+        held: held.length ? held.map((h) => heightOf(h.ev)) : null,
+        deferred: deferred.length ? deferred.map((d) => d.r.offer.key) : null,
+        rentWait: rentWait?.r.offer.key ?? null,
+        net: net.state,
+        behind: behind.on,
+        waitLevel: waitBg.level,
       };
     },
   };

@@ -7,6 +7,7 @@
  * that never ends (glances, breath, the sleepy nod, drifting squares): at rest he asks for no frames.
  */
 import { drawPixel, type PixelMood } from "@/components/pixel";
+import type { CityPx } from "./beats";
 
 export type KayoloPose = {
   x: number;
@@ -17,6 +18,8 @@ export type KayoloPose = {
   gaze: { x: number; y: number } | null;
   /** Fading out on one roof and in on another, when the step is more than a hop. */
   alpha?: number;
+  /** Э4 faces on top of the mood (a sit, lids, wide eyes, circling eyes). */
+  px?: CityPx;
 };
 
 export const KAYOLO_ID = "home-city";
@@ -46,6 +49,7 @@ export function drawKayolo(ctx: CanvasRenderingContext2D, p: KayoloPose, opt: { 
     wobble: 0,
     zzz: "one",
     glances: false,
+    ...p.px,
     id: KAYOLO_ID,
   });
   ctx.restore();

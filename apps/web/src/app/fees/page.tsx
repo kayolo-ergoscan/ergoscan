@@ -46,6 +46,7 @@ export default function FeesPage() {
     value: formatInt(balls.length, locale),
     mark: <KpiMark id="mempool" tone={INK.cyan} />,
     enter: 0,
+    kayolo: "pool-count",
   };
   const etaKpi = {
     label: t("fees.kpiEta"),
@@ -60,6 +61,7 @@ export default function FeesPage() {
       value: fees ? formatFeeRate(fees.p50) : "—",
       mark: <KpiMark id="fee-rate" tone={INK.teal} />,
       enter: 1,
+      kayolo: "fee-p50",
     },
     {
       label: t("fees.kpiP90"),

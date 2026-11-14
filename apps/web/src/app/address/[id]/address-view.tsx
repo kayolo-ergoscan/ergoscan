@@ -38,6 +38,7 @@ import { getGateway, getWsUrl } from "@/lib/config";
 import {
   formatErgPrecise,
   formatGroupedNumber,
+  formatInt,
   formatRelTime,
   formatTs,
   nanoToUsd,
@@ -50,6 +51,14 @@ import { describeParty, isP2pkAddress } from "@/lib/address-labels";
 import { suggestNameUrl } from "@/lib/address-book";
 import type { AddressRegistryName } from "@/lib/list-snapshots";
 import { useFavorite } from "@/lib/favorites";
+import { say } from "@/lib/kayolo/events";
+import { chainAwait, chainListen } from "@/lib/kayolo/chain-sense";
+import { pendingNod, rentBlocksNow, rentNoteParts } from "@/lib/kayolo/page-data";
+import { ONCE_REREAD_MS, RENT_REREAD_GAP_MS, REREAD_JITTER_MS } from "@/lib/kayolo/thresholds";
+
+/** Ergo: ≈ 720 blocks a day (2 min). The rent line's danger tone starts at 7 days. */
+const BLOCKS_PER_DAY = 720;
+const RENT_DANGER_BLOCKS = 7 * BLOCKS_PER_DAY;
 import { NameMarquee } from "@/components/NameMarquee";
 import { partyNameMap, type AddrFlow, type AddrFlowKind } from "@/lib/tx-flow";
 import { asAddrFlowKind, rentTapeTone } from "@ergoscan/shared";
@@ -59,7 +68,7 @@ import { setHashTab } from "@/lib/hash-tab";
 import { useChainTipRefresh, useKeepFresh, usePageSync } from "@/lib/page-sync";
 import { ENTER_MS, enteringIds, useEnterIds } from "@/lib/keyed-enter";
 import { addrTapeHasMore, txKeysetCursor } from "@/lib/rank-window";
-import { cachedScoutRent, lookupScoutRent } from "@/lib/scout-rent";
+import { cachedScoutRentAt, lookupScoutRentAt, type ScoutRent } from "@/lib/scout-rent";
 import { copyText } from "@/lib/copy-text";
 
 interface TokenRow {
@@ -207,6 +216,14 @@ function addrFailCopy(err: string, t: (k: string) => string): string {
   return t("address.err");
 }
 
+/** E23's line: «сейчас», minutes or hours below a day (1 block is not «1 д»), else whole days. */
+function rentNoteText(blocks: number, t: (k: string) => string, locale: string): string {
+  const p = rentNoteParts(blocks);
+  if (p.unit === "now") return t("address.rentNoteNow");
+  const key = p.unit === "min" ? "address.rentNoteMin" : p.unit === "h" ? "address.rentNoteH" : "address.rentNote";
+  return t(key).replace(p.unit === "d" ? "{d}" : "{n}", formatInt(p.n, locale));
+}
+
 /** Tape is paint-ready only when the same GET already has activity (AdaStat one-shot). */
 function tapeComplete(d: AddrData | null): boolean {
   if (!d || isHeaderOnly(d)) return false;
@@ -295,7 +312,7 @@ export function AddressView({
 }) {
   const t = useT();
   const { locale } = useI18n();
-  const { markSynced } = usePageSync();
+  const { markSynced, tip } = usePageSync();
   const fav = useFavorite(address);
   const [data, setData] = useState<AddrData | null>(initial);
   const [err, setErr] = useState<string | null>(null);
@@ -331,9 +348,10 @@ export function AddressView({
   const [nftsLoading, setNftsLoading] = useState(false);
   const [nftsFailed, setNftsFailed] = useState(false);
   const [nftsPackKey, setNftsPackKey] = useState<string | null>(null);
-  const [rentBlocks, setRentBlocks] = useState<number | null | undefined>(() =>
-    cachedScoutRent(address)
-  );
+  // E23: the rent answer and the height it counts from; the line follows the tip from there (below).
+  const [rent, setRent] = useState<ScoutRent | undefined>(() => cachedScoutRentAt(address));
+  const tipH = tip?.height ?? null;
+  const rentBlocks = rent === undefined ? undefined : rentBlocksNow(rent.blocks, rent.atHeight, tipH);
   const [tileLanded, setTileLanded] = useState(false);
   const nftIds = useMemo(() => new Set(nfts.map((row) => row.tokenId)), [nfts]);
   const txCursorRef = useRef<string | null>(null);
@@ -666,9 +684,9 @@ export function AddressView({
 
   useEffect(() => {
     let dead = false;
-    setRentBlocks(cachedScoutRent(address));
-    void lookupScoutRent(address).then((n) => {
-      if (!dead) setRentBlocks(n);
+    setRent(cachedScoutRentAt(address));
+    void lookupScoutRentAt(address).then((r) => {
+      if (!dead) setRent(r);
     });
     return () => {
       dead = true;
@@ -1051,6 +1069,103 @@ export function AddressView({
   const tokenCount =
     (data?.tokenCount ?? 0) > 0 ? (data?.tokenCount ?? 0) : tokenRows.length;
   const rentTone = rentBlocks == null ? null : rentTapeTone(rentBlocks);
+  // Kayolo E23 (§6.6): the tile landed with its beacon — once a card a session (the layer keeps
+  // the count and waits while the tile is off screen).
+  // An answer that came before the stream named a height counts from the first tip.
+  useEffect(() => {
+    if (rent?.blocks != null && rent.atHeight == null && tipH != null) setRent({ blocks: rent.blocks, atHeight: tipH });
+  }, [rent, tipH]);
+  // Said when the tone changes, not on every block the line counts down (rentBlocks is left out of the deps).
+  useEffect(() => {
+    if (!tileLanded || rentBlocks == null || !rentTone) return;
+    say({ k: "page:rent", address, tone: rentTone, blocks: rentBlocks });
+  }, [tileLanded, rentTone, address]);
+  // A pending tx on this address: eyes on it. The list emptied and seals carried every tx that left
+  // it: a nod «в блок» (by the page's own list). A tx evicted or double-spent (a miner's own claim
+  // took the box) leaves the list too — then he says nothing (§12.23).
+  const pendingIds = (data?.mempoolTxs ?? []).map((t) => t.id).join(",");
+  const pendingCount = data ? (data.mempoolTxs?.length ?? 0) : null;
+  const pendSeen = useRef<{ address: string; ids: readonly string[] } | null>(null);
+  /** This address's pending txs that a seal carried → that seal's height. */
+  const sealedPending = useRef<{ address: string; ids: Map<string, number> }>({ address, ids: new Map() });
+  const favOn = fav.on;
+  useEffect(() => {
+    if (pendingCount == null) return;
+    const prev = pendSeen.current?.address === address ? pendSeen.current.ids : null;
+    const ids = pendingIds ? pendingIds.split(",") : [];
+    pendSeen.current = { address, ids };
+    if (ids.length > 0 && (prev == null || ids.length > prev.length)) {
+      say({ k: "page:addr-pending", address, count: ids.length, ...(favOn ? { fav: true } : {}) });
+    } else if (prev != null) {
+      const sealed = sealedPending.current.address === address ? sealedPending.current.ids : new Map<string, number>();
+      const nod = pendingNod(prev, ids, sealed);
+      if (nod) say({ k: "page:addr-pending", address, count: 0, ...(favOn ? { fav: true } : {}), height: nod.height });
+    }
+  }, [pendingIds, pendingCount, address, favOn]);
+  useEffect(() => {
+    if (!pendingIds) return;
+    const ids = new Set(pendingIds.split(","));
+    if (sealedPending.current.address !== address) sealedPending.current = { address, ids: new Map() };
+    const sealed = sealedPending.current.ids;
+    // The seal that takes the last of this address's pending txs: its E1 waits for the nod (§2.8). A
+    // pure test; the listener notes what each seal carried (any tab; a fork takes back what the
+    // replaced block took).
+    const offHold = chainAwait(({ txIds }) => !!txIds?.some((id) => ids.has(id)) && [...ids].every((id) => txIds.includes(id) || sealed.has(id)));
+    const off = chainListen((n) => {
+      if (n.k !== "seal") return;
+      if (n.replaced) for (const [id, h] of sealed) if (h === n.height) sealed.delete(id);
+      for (const id of n.txIds ?? []) if (ids.has(id)) sealed.set(id, n.height);
+      while (sealed.size > 200) sealed.delete(sealed.keys().next().value as string);
+    });
+    return () => {
+      offHold();
+      off();
+    };
+  }, [pendingIds, address]);
+  // E23 after a collection: «рента / сейчас» (reached by the answer or by the tip counting the line
+  // down) holds until the box is spent. A seal that spent rent boxes (the gateway counts them, it
+  // names no address) re-reads the due line at 3 s and 8 s — only while «now» shows, ≤ once a
+  // minute, never on a hidden tab (showing it then re-reads once).
+  const rentNow = rentBlocks != null && rentBlocks <= 0;
+  useEffect(() => {
+    if (!rentNow) return;
+    let dead = false;
+    let at = -Infinity;
+    let missed = false;
+    let timers: number[] = [];
+    const read = () => {
+      if (dead) return;
+      if (document.visibilityState !== "visible") {
+        missed = true;
+        return;
+      }
+      void lookupScoutRentAt(address, { fresh: true }).then((r) => {
+        if (!dead) setRent(r);
+      });
+    };
+    const off = chainListen((n) => {
+      if (n.k !== "seal" || !n.rentBoxes || n.replaced || performance.now() - at < RENT_REREAD_GAP_MS) return;
+      if (document.visibilityState !== "visible") {
+        missed = true;
+        return;
+      }
+      at = performance.now();
+      for (const t of timers) window.clearTimeout(t);
+      timers = [ONCE_REREAD_MS, ONCE_REREAD_MS + 5_000].map((ms) => window.setTimeout(read, ms + Math.random() * REREAD_JITTER_MS));
+    });
+    const onVis = () => {
+      if (!missed || document.visibilityState !== "visible") return;
+      missed = false;
+      read();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      dead = true;
+      off();
+      for (const t of timers) window.clearTimeout(t);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [rentNow, address]);
   const tokenPage = tokenRows.slice(tokenOffset, tokenOffset + TOKEN_PAGE);
   const tokenUsd = useMemo(() => {
     let sum = 0;
@@ -1240,7 +1355,7 @@ export function AddressView({
               }
             >
               <div className="mt-2 min-w-0">
-                <KpiNum className="max-w-none">
+                <KpiNum className="max-w-none" kayolo="balance">
                   <ErgFigure nano={confirmed} locale={locale} size="lg" />
                 </KpiNum>
                 {usd != null && (
@@ -1251,8 +1366,18 @@ export function AddressView({
                     ${formatGroupedNumber(usd, 2, 2, locale)}
                   </p>
                 )}
+                {rentBlocks != null && tileLanded ? (
+                  // E23 (§6.6, §12.8): the rent line under the figures; it shows itself within 1.2 s,
+                  // Kayolo knocks by the beacon as it comes. Danger tone only at ≤ 7 days.
+                  <p
+                    className={clsx("addr-rent-note", rentBlocks <= RENT_DANGER_BLOCKS && "is-danger")}
+                    data-kayolo-note="rent"
+                  >
+                    {rentNoteText(rentBlocks, t, locale)}
+                  </p>
+                ) : null}
                 {unconfirmed !== 0n && (
-                  <p className="addr-pending-blink mt-2 text-[12px] text-[var(--muted-2)]">
+                  <p className="addr-pending-blink mt-2 text-[12px] text-[var(--muted-2)]" data-kayolo="pending">
                     {t("address.unconfirmed")}{" "}
                     <ErgFigure
                       nano={unconfirmed}

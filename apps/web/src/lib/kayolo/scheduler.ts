@@ -12,7 +12,8 @@
  * - P1/P2 (a poke, a hover) go at once, are never cut by the budget, count in the attention window,
  *   and keep spontaneous T2+ away for 10 s. P1 interrupts a running act; anything else offered
  *   during an act is dropped.
- * - Budgets: T1 bucket of 3 (+1 per 15 s, 6 s apart); T2 ≥ 20 s apart, ≤ 3 per 2 min, ≤ 20 per hour;
+ * - Budgets: T1 bucket of 3 (+1 per 15 s, 6 s apart); T2 ≥ 20 s apart, ≤ 3 per 2 min, ≤ 10 per
+ *   30 min, ≤ 20 per hour;
  *   T3 ≥ 120 s apart, ≤ 8 per hour; eye reactions ≥ 1.2 s apart; attention (non-eye) ≤ 18 s per
  *   5 min and ≤ 6 s per 60 s.
  */
@@ -36,6 +37,7 @@ import {
   T1_TOKENS,
   T2_GAP_MS,
   T2_PER_2MIN,
+  T2_PER_HALF_HOUR,
   T2_PER_HOUR,
   T3_GAP_MS,
   T3_PER_HOUR,
@@ -58,6 +60,16 @@ export type Offer = {
   wakes?: boolean;
   /** What A4 does instead of a P5 offer (a stir in his sleep). */
   stir?: Step;
+  /**
+   * Э4: what the person opened the page for (their tx went into a block): it passes the T2/T3
+   * intervals and the pause after a person's action, and waiting does not bring it a tier lower.
+   * The attention window still counts it.
+   */
+  firm?: boolean;
+  /** Order inside one P (lower wins), before the tier (§8.4: fees > surge > price > topic). */
+  rank?: number;
+  /** Loses the merge to any offer whose key matches (§8.4: price + block — the block). */
+  yieldTo?: RegExp;
 };
 
 export type Play = { key: string; prio: Prio; step: Step; wake: boolean };
@@ -131,14 +143,20 @@ export function createScheduler(t0 = 0) {
     return five + ms <= ATTN_5MIN_MS && sixty + ms <= ATTN_60S_MS;
   };
 
-  const fits = (step: Step, t: number) => {
+  const fits = (step: Step, t: number, firm = false) => {
     if (step.tier === 0) return t - lastEye >= EYE_GAP_MS;
     if (!attnFits(t, step.ms)) return false;
     if (step.tier === 1) return tokens >= 1 && t - lastT1 >= T1_GAP_MS;
+    if (firm) return step.tier === 2 ? t2.length < T2_PER_HOUR : t3.length < T3_PER_HOUR;
     if (t - lastHuman < AFTER_HUMAN_MS) return false;
     if (step.tier === 2) {
       const last = t2[t2.length - 1] ?? -Infinity;
-      return t - last >= T2_GAP_MS && t2.filter((x) => t - x < 120_000).length < T2_PER_2MIN && t2.length < T2_PER_HOUR;
+      return (
+        t - last >= T2_GAP_MS &&
+        t2.filter((x) => t - x < 120_000).length < T2_PER_2MIN &&
+        t2.filter((x) => t - x < 1_800_000).length < T2_PER_HALF_HOUR &&
+        t2.length < T2_PER_HOUR
+      );
     }
     const last = t3[t3.length - 1] ?? -Infinity;
     return t - last >= T3_GAP_MS && t3.length < T3_PER_HOUR;
@@ -158,9 +176,20 @@ export function createScheduler(t0 = 0) {
     else t3.push(t);
   };
 
-  /** Lower is better: prio, then a louder first step, then fresher. */
-  const better = (a: Waiting, b: Waiting) =>
-    a.prio !== b.prio ? a.prio < b.prio : (a.ladder[0]?.tier ?? 0) !== (b.ladder[0]?.tier ?? 0) ? (a.ladder[0]?.tier ?? 0) > (b.ladder[0]?.tier ?? 0) : a.at >= b.at;
+  /** Lower is better: prio, then the rank inside it, then a louder first step, then fresher. */
+  const better = (a: Waiting, b: Waiting) => {
+    if (a.yieldTo?.test(b.key)) return false;
+    if (b.yieldTo?.test(a.key)) return true;
+    if (a.prio !== b.prio) return a.prio < b.prio;
+    const ra = a.rank ?? 9;
+    const rb = b.rank ?? 9;
+    if (ra !== rb) return ra < rb;
+    const ta = a.ladder[0]?.tier ?? 0;
+    const tb = b.ladder[0]?.tier ?? 0;
+    return ta !== tb ? ta > tb : a.at >= b.at;
+  };
+  /** P3 (what is on screen) waits out a running act within its TTL; P4/P5 are dropped (§2.8). */
+  const waitsOut = (o: Waiting) => o.prio <= 3;
 
   const level = (t: number) => levelAt(t - lastInput, night);
 
@@ -241,6 +270,7 @@ export function createScheduler(t0 = 0) {
         return null;
       }
       if (playing(t)) {
+        if (waitsOut(o)) return null;
         pending = null;
         note(t, `dropped ${o.key} (act running)`);
         return null;
@@ -249,19 +279,20 @@ export function createScheduler(t0 = 0) {
       // Ladder start: waiting and alertness bring him down.
       let from = 0;
       const lv = level(t);
-      if (t - o.at > PENDING_DEMOTE_MS) from += 1;
+      if (t - o.at > PENDING_DEMOTE_MS && !o.firm) from += 1;
       if (lv === 2 && o.prio >= 4) from += 1;
       if (night) from += 1;
       let ladder = o.ladder;
       let wake = false;
       if (lv === 3 && o.prio === 5) ladder = ladder.filter((s) => s.tier === 0);
       if (lv === 4) {
+        // Asleep (§2.2): what wakes him wakes him; a block is a stir; nothing else is shown.
         if (o.wakes) wake = true;
-        else if (o.prio === 5) ladder = o.stir ? [o.stir] : [];
+        else ladder = o.stir ? [o.stir] : [];
       }
       pending = null;
       for (const step of ladder.slice(Math.min(from, Math.max(0, ladder.length - 1)))) {
-        if (fits(step, t)) return start(o, step, t, wake);
+        if (fits(step, t, o.firm)) return start(o, step, t, wake);
       }
       note(t, `no budget ${o.key}`);
       return null;
@@ -269,6 +300,28 @@ export function createScheduler(t0 = 0) {
     /** The running act ended early (interrupted, or the body went away). */
     done() {
       running = null;
+    },
+    /**
+     * Offers whose key matches leave (a page:* took the block's own reaction, §2.8). Returns how many.
+     */
+    absorb(match: (key: string) => boolean, t: number): number {
+      let n = 0;
+      inbox = inbox.filter((o) => {
+        if (!match(o.key)) return true;
+        n += 1;
+        note(t, `absorbed ${o.key}`);
+        return false;
+      });
+      if (pending && match(pending.key)) {
+        note(t, `absorbed ${pending.key}`);
+        pending = null;
+        n += 1;
+      }
+      return n;
+    },
+    /** An offer with this key is waiting (in the merge window or pending). */
+    waiting(key: string): boolean {
+      return inbox.some((o) => o.key === key) || pending?.key === key;
     },
     /** When something may change on its own: a level edge, the merge window, a waiting offer. */
     nextDue(t: number): number {
@@ -278,7 +331,8 @@ export function createScheduler(t0 = 0) {
       if (inbox.length) due = Math.min(due, Math.max(t, windowEnd));
       if (pending) {
         due = Math.min(due, pending.at + pending.ttlMs);
-        if (t < busyUntil) due = Math.min(due, busyUntil);
+        if (running && t < running.until && waitsOut(pending)) due = Math.min(due, running.until);
+        else if (t < busyUntil) due = Math.min(due, busyUntil);
         else due = Math.min(due, t);
       }
       if (running && t < running.until) due = Math.min(due, running.until);

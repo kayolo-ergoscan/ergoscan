@@ -232,7 +232,7 @@ export function TxMeaningHeader({
           {facts.confirmed && facts.height != null ? (
             <>
               {facts.blockHref ? (
-                <Link prefetch={false} href={facts.blockHref} className="txm-link">
+                <Link prefetch={false} href={facts.blockHref} className="txm-link" data-kayolo="block-link">
                   {facts.height.toLocaleString(nf)}
                 </Link>
               ) : (
@@ -241,7 +241,9 @@ export function TxMeaningHeader({
               {facts.index != null ? <span className="txm-dim">#{facts.index}</span> : null}
             </>
           ) : (
-            <span className="txm-pending">{t("tx.meaning.inMempool")}</span>
+            <span className="txm-pending" data-kayolo="tx-pending">
+              {t("tx.meaning.inMempool")}
+            </span>
           )}
         </Fact>
         <Fact mark="time" label={facts.confirmed ? t("block.card.time") : t("tx.meaning.seen")}>
@@ -253,7 +255,7 @@ export function TxMeaningHeader({
           ) : (
             dash
           )}
-          <span className="txm-dim">
+          <span className="txm-dim" data-kayolo={facts.confirmed ? "confirmations" : undefined}>
             {facts.confirmed
               ? t("tx.confs").replace("{n}", String(facts.confirmations ?? 0))
               : t("tx.unconfirmed")}

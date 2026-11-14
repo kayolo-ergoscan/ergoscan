@@ -52,17 +52,25 @@ export function KpiNum({
   children,
   className,
   compact,
+  kayolo,
 }: {
   children: ReactNode;
   className?: string;
   compact?: string;
+  /** Kayolo's anchor name for this figure (`data-kayolo`, design/brand/kayolo-life.md §9.5). */
+  kayolo?: string;
 }) {
   const [exact, setExact] = useState(false);
   if (!compact) {
-    return <span className={clsx("kpi-scale-up inline-block max-w-full", className)}>{splitUnit(children)}</span>;
+    return (
+      <span className={clsx("kpi-scale-up inline-block max-w-full", className)} data-kayolo={kayolo}>
+        {splitUnit(children)}
+      </span>
+    );
   }
   return (
     <span
+      data-kayolo={kayolo}
       className={clsx("kpi-scale-up kpi-has-compact inline-block max-w-full", exact && "is-exact", className)}
       onClick={(e) => {
         if ((e.currentTarget as HTMLElement).closest("a")) return;
@@ -156,6 +164,8 @@ export type KpiItem = {
   pulse?: boolean;
   /** @deprecated Corner stamp is the default; kept so call sites compile. */
   markTop?: boolean;
+  /** Kayolo's anchor name for the figure (`data-kayolo`). */
+  kayolo?: string;
 };
 
 /**
@@ -225,7 +235,9 @@ export function KpiGrid({
                   k.pulse && "oracle-kpi-short"
                 )}
               >
-                <KpiNum compact={k.compact}>{k.value}</KpiNum>
+                <KpiNum compact={k.compact} kayolo={k.kayolo}>
+                  {k.value}
+                </KpiNum>
               </p>
               {k.sub || dense ? (
                 <p

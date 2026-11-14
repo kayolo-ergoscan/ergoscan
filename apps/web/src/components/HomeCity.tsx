@@ -28,6 +28,10 @@ import { onKayolo } from "@/lib/kayolo/events";
 import type { CityBlock, CityTx, Fees, YardTx } from "@/lib/home-city/common";
 import { feeLevels, feeZone } from "@/lib/home-city/load";
 import { CityEngine } from "@/lib/home-city/engine";
+import { homeBeat, homeBg, type HomeChainState } from "@/lib/home-city/home-chain";
+import { chainNow } from "@/lib/kayolo/chain-sense";
+import { currentMode } from "@/lib/kayolo/body";
+import { DOWN_DOZE_MS, KAYOLO_CHAIN } from "@/lib/kayolo/thresholds";
 
 /** A block on the tape, as the home snapshot and the seal give it. */
 export type CityRow = {
@@ -379,10 +383,54 @@ function HomeCityPairLive({
       cb: { onBuilt: setBuilt, onWaiting: setWaiting, onCommit: setCommitted, onWrap: setWrapN },
     });
     engineRef.current = e;
+    // Kayolo Э4 on home: the city Kayolo is the one body here, so the chain's beats and backgrounds
+    // are his (lib/home-city/home-chain.ts). «Спит», «Спрятан», «Выключен» are stronger than any event.
+    const c0 = chainNow();
+    const st: HomeChainState = { net: c0.net, downAt: null, behind: c0.behind.on, wait: c0.wait };
+    let dozeTimer = 0;
+    const gazeAt = (sel: string | null, el?: Element | null): { x: number; y: number } | null => {
+      const target = el ?? (sel ? document.querySelector(sel) : null);
+      if (!target) return null;
+      const r = target.getBoundingClientRect();
+      const c = city.getBoundingClientRect();
+      if (r.width < 1 || c.width < 1) return null;
+      // He stands near the right end of the street, on the newest roof.
+      const dx = r.left + r.width / 2 - (c.right - 48);
+      const dy = r.top + r.height / 2 - (c.bottom - 24);
+      return { x: Math.max(-1.3, Math.min(1.3, dx / 240)), y: Math.max(-1, Math.min(1, dy / 240)) };
+    };
+    const syncBg = () => {
+      const m = currentMode();
+      e.setBg(m === "live" || m === "calm" ? homeBg(st, performance.now()) : null);
+    };
     const offRare = onKayolo((ev) => {
-      if (ev.k === "chain:rare") e.rareHeight(ev.height);
+      if (ev.k === "chain:rare") {
+        e.rareHeight(ev.height);
+        return;
+      }
+      if (!KAYOLO_CHAIN) return;
+      if (ev.k === "net:state") {
+        if (ev.state !== st.net) st.downAt = ev.state === "down" ? performance.now() : null;
+        st.net = ev.state;
+        window.clearTimeout(dozeTimer);
+        if (ev.state === "down") dozeTimer = window.setTimeout(syncBg, DOWN_DOZE_MS + 20);
+      } else if (ev.k === "site:behind") st.behind = ev.on;
+      else if (ev.k === "chain:tip-wait") st.wait = ev.level;
+      const m = currentMode();
+      if (m === "live" || m === "calm") {
+        const bar = ev.k === "chain:epoch" ? document.querySelector('[data-kayolo="epoch"]')?.getBoundingClientRect() : null;
+        const epochShown = !!bar && bar.width > 0 && bar.bottom > 0 && bar.top < window.innerHeight;
+        const b = homeBeat(ev, { calm: m === "calm", epochShown });
+        if (b) {
+          const g = b.to === "yard" ? gazeAt(null, yard) : b.to === "price" ? gazeAt('[data-scout="price"]') : b.to === "epoch" ? gazeAt('[data-kayolo="epoch"]') : null;
+          e.beatOn(b.kind, g);
+        }
+      }
+      syncBg();
     });
+    syncBg();
     return () => {
+      window.clearTimeout(dozeTimer);
       offRare();
       e.destroy();
       engineRef.current = null;
