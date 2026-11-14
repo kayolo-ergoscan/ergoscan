@@ -8,6 +8,8 @@ export * from "./lifecycle.js";
 export * from "./sealReplay.js";
 export * from "./rent.js";
 export * from "./rent-series.js";
+export * from "./rent-claims.js";
+export * from "./rent-exact.js";
 export {
   HOME_RENT_TAPE,
   HOME_RENT_PROBE,

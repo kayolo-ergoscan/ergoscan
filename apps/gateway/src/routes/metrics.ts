@@ -5,8 +5,7 @@ import type { Express } from "express";
 import {
   computeBoxRent,
   DEFAULT_RENT_PARAMS,
-  estimateBoxSizeBytes,
-  registerPayloadBytes,
+  ergoBoxSizeOf,
   type BallProps,
   type BlockEta,
   type FeeHistogram,
@@ -178,11 +177,7 @@ export function registerMetricsRoutes(app: Express, deps: MetricsDeps): void {
         return res.status(404).json({ error: "not_found" });
       }
       const regs = box.additionalRegisters ?? {};
-      const sizeBytes = estimateBoxSizeBytes({
-        ergoTree: String(box.ergoTree ?? ""),
-        assetsCount: box.assets.length,
-        registerBytes: registerPayloadBytes(regs),
-      });
+      const sizeBytes = ergoBoxSizeOf({ ...box, additionalRegisters: regs });
       let valueNano = 0;
       try {
         const b = BigInt(String(box.value ?? "0"));

@@ -20,6 +20,7 @@ import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { getWsUrl } from "./config";
 import { feedRare } from "./kayolo/rare";
 import { chainSocket, feedChain } from "./kayolo/chain-sense";
+import { feedRent } from "./home-rent/feed";
 
 /** Cap stored pit seeds so home does not hold a full mempool dump in React. */
 const STREAM_BALL_CAP = 80;
@@ -398,6 +399,7 @@ export function PageSyncProvider({ children }: { children: ReactNode }) {
             // Kayolo E1–E3 and E20 from the same messages (no state, no renders).
             feedRare(msg);
             feedChain(msg);
+            feedRent(msg);
             applyStreamMessage(msg, {
               setTip,
               setMempoolCount,

@@ -24,6 +24,12 @@ export type SealEvent = {
    * `timestamp` is `seenAt`. Not full data: read the block later for its txs.
    */
   partial?: true;
+  /**
+   * Boxes in this block spent by the storage-rent rule (empty proof + extension 127): a miner
+   * collected rent from them. Counted from the block the seal already read. Absent when none, or
+   * from gateways before the rent moment.
+   */
+  rentBoxes?: number;
 };
 
 /** Stable string from header id + height (not a cryptographic hash). */

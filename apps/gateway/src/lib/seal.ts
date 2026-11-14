@@ -7,6 +7,7 @@
  */
 import { replaySeed, type SealEvent } from "@ergoscan/shared";
 import type { NodeClient } from "./node.js";
+import { noteRentSpends } from "./rentMoment.js";
 
 /**
  * Most blocks sealed for one move of the tip: a body that stalled for a block or two. A longer jump
@@ -151,6 +152,7 @@ function fullSeal(full: NodeBlock, seenAt: number): SealEvent {
     size: full.size,
     txCount: txs.length,
     seenAt,
+    ...noteRentSpends(full),
   };
 }
 
