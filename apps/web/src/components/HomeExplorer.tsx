@@ -30,7 +30,8 @@ import {
 } from "@/lib/format";
 import { lineChange, type LinePoint } from "@lumen/amm-chart";
 import { useT, useI18n } from "@/lib/i18n/I18nProvider";
-import { useChainTipRefresh, usePageSync, useStreamMempool } from "@/lib/page-sync";
+import { fromGatewayClock, useChainTipRefresh, usePageSync, useStreamMempool } from "@/lib/page-sync";
+import type { SealEvent } from "@ergoscan/shared";
 import { SNAPSHOT_FETCH, snapshotPath } from "@/lib/keyed-enter";
 import {
   parseLithosHome,
@@ -44,6 +45,7 @@ import { HomeLithos } from "@/components/HomeLithos";
 import { HomeRentTape } from "@/components/HomeRentTape";
 import { parseRentDanger, type RentDangerRow } from "@/lib/rent-danger";
 import { HomeCityPair } from "@/components/HomeCity";
+import { formingAfterSeal, mergeBlockRow, mergeBlockRows, type BlockRow } from "@/lib/home-tape";
 import { Tip, TipInfo } from "@/components/Tip";
 import { HomeVersionNodes } from "@/components/HomeVersionNodes";
 import { isSupplyDigit, zipSupplyGlyphs } from "@/lib/supply-flip";
@@ -65,57 +67,21 @@ const DonutChart = dynamic(() => import("@/components/DonutChart"), {
   loading: () => <div className="h-full w-full" />,
 });
 
-type BlockRow = {
-  id: string;
-  height: number;
-  timestamp: number;
-  txCount: number | null;
-  size: number;
-  color?: string | null;
-  /** True when this block was mined with Lithos. Omitted until the snapshot says so. */
-  lithos?: boolean;
-  /** Snapshot extras, read by the tower tip and its flag. A live seal has none. */
-  minerName?: string | null;
-  minerAddress?: string | null;
-  feeNano?: string | number | null;
-};
-
-function mergeBlockRow(prev: BlockRow[], row: BlockRow): BlockRow[] {
-  if (!row.id || !Number.isFinite(row.height)) return prev;
-  const i = prev.findIndex((b) => b.id === row.id || b.height === row.height);
-  const stub = !(row.size > 0) && row.txCount == null;
-  if (i >= 0) {
-    const old = prev[i]!;
-    if (stub) {
-      if (row.id.length >= 16 && row.id !== old.id) {
-        const next = prev.slice();
-        next[i] = { ...old, id: row.id };
-        return next.sort((a, b) => b.height - a.height).slice(0, CADENCE + 1);
-      }
-      return prev;
-    }
-    const next = prev.slice();
-    next[i] = {
-      id: row.id.length >= 16 ? row.id : old.id,
-      height: row.height,
-      timestamp: row.timestamp > 0 ? row.timestamp : old.timestamp,
-      txCount: row.txCount != null ? row.txCount : old.txCount,
-      size: row.size > 0 ? row.size : old.size,
-      color: row.color || old.color,
-      lithos: row.lithos === true || (row.lithos == null && old.lithos === true),
-      minerName: row.minerName || old.minerName,
-      minerAddress: row.minerAddress || old.minerAddress,
-      feeNano: row.feeNano || old.feeNano,
-    };
-    return next.sort((a, b) => b.height - a.height).slice(0, CADENCE + 1);
-  }
-  return [row, ...prev].sort((a, b) => b.height - a.height).slice(0, CADENCE + 1);
+/** When the gateway saw the block, on this browser's clock; null from a gateway without `seenAt`. */
+function sealSeenMs(s: SealEvent): number | null {
+  const at = s.seenAt;
+  return typeof at === "number" && Number.isFinite(at) && at > 1e12 ? fromGatewayClock(at) : null;
 }
 
-function mergeBlockRows(prev: BlockRow[], incoming: readonly BlockRow[]): BlockRow[] {
-  let next = prev;
-  for (const row of incoming) next = mergeBlockRow(next, row);
-  return next;
+/**
+ * «Forming since» before this page saw a seal: the gateway's last sighting (`eta.lastBlockTs`), never
+ * earlier than the newest block's own sighting or header time.
+ */
+function formingFallback(lastBlockMs: number | null, top: BlockRow | null): number | null {
+  const own = top ? (top.seenAt ?? (top.timestamp > 1e12 ? top.timestamp : top.timestamp > 0 ? top.timestamp * 1000 : null)) : null;
+  if (lastBlockMs == null) return own;
+  const last = fromGatewayClock(lastBlockMs);
+  return own == null ? last : Math.max(last, own);
 }
 
 type TxActivityPoint = { t: number; txs: number; feesErg: number; feesKnown?: boolean };
@@ -132,6 +98,10 @@ function formatFeeAxis(v: number): string {
 }
 /** Blocks on the street: all the home snapshot gives (10); the tape keeps one more from a seal. */
 const CADENCE = 10;
+/** Tape rows kept: the cadence and the block before it. */
+const TAPE_KEEP = CADENCE + 1;
+/** No live stream: one empty seal list, so the strip's effects do not run on every render. */
+const NO_SEALS: readonly SealEvent[] = [];
 /** No pools yet: one array, so the city's roof-flag memo does not change on every render. */
 const NO_POOLS: PoolShare[] = [];
 const PRICE_UP = "#3dd68c";
@@ -299,7 +269,7 @@ export function HomeExplorer({
             : null;
         if (mempoolN != null) setMempool(mempoolN);
         if (Array.isArray(j.blocks) && j.blocks.length) {
-          setBlocks((prev) => mergeBlockRows(prev, j.blocks!.slice(0, CADENCE)));
+          setBlocks((prev) => mergeBlockRows(prev, j.blocks!.slice(0, CADENCE), TAPE_KEEP));
         }
         if (Array.isArray(j.hashRateSeries) && j.hashRateSeries.length >= 2) {
           setHashRateSeries(
@@ -489,7 +459,7 @@ export function HomeExplorer({
         timestamp: tip.updatedAt ? Date.parse(tip.updatedAt) || Date.now() : Date.now(),
         txCount: null,
         size: 0,
-      })
+      }, TAPE_KEEP)
     );
   }, [tip]);
 
@@ -1373,8 +1343,9 @@ function useHomeMempool(initialCount: number) {
   const totalSize = (live ? stream.totalSize : null) ?? httpSize;
   const totalFees = (live ? stream.totalFees : null) ?? httpFees;
   const seal = live ? stream.seal : null;
+  const seals = live ? stream.seals : NO_SEALS;
   const fees = live ? stream.fees : null;
-  return { pool, balls, totalSize, totalFees, seal, fees, streamLive: live };
+  return { pool, balls, totalSize, totalFees, seal, seals, fees, streamLive: live };
 }
 
 function HomeLiveStrip({
@@ -1399,38 +1370,57 @@ function HomeLiveStrip({
   const { tip } = usePageSync();
   const mp = useHomeMempool(mempoolCount);
   const [tape, setTape] = useState(blocks);
-  const [formSince, setFormSince] = useState<number | null>(null);
-  const formKey = useRef<string | null>(null);
+  const [formSince, setFormSince] = useState<{ height: number; at: number } | null>(null);
 
   useEffect(() => {
-    setTape((prev) => mergeBlockRows(prev, blocks));
+    setTape((prev) => mergeBlockRows(prev, blocks, TAPE_KEEP));
   }, [blocks]);
 
+  // Every seal joins the tape once (two can come in one breath). Seals the stream held before this
+  // strip mounted are history: only the newest of them joins, as before.
+  const taped = useRef<WeakSet<SealEvent> | null>(null);
   useEffect(() => {
-    const s = mp.seal;
-    if (!s || !Number.isFinite(s.height)) return;
-    const id = typeof s.blockId === "string" && s.blockId.length >= 16 ? s.blockId : `seal-${s.height}`;
-    setTape((prev) =>
-      mergeBlockRow(prev, {
-        id,
-        height: s.height,
-        timestamp: s.timestamp || Date.now(),
-        txCount: s.txCount ?? (Array.isArray(s.txIds) ? s.txIds.length : null),
-        size: s.size ?? 0,
-      })
-    );
-  }, [mp.seal]);
+    const list = mp.seals;
+    if (!taped.current) {
+      taped.current = new WeakSet(list.slice(0, -1));
+    }
+    const done = taped.current;
+    const fresh = list.filter((s) => !done.has(s) && Number.isFinite(s.height));
+    if (!fresh.length) return;
+    for (const s of fresh) done.add(s);
+    setTape((prev) => {
+      let next = prev;
+      for (const s of fresh) {
+        const id = typeof s.blockId === "string" && s.blockId.length >= 16 ? s.blockId : `seal-${s.height}`;
+        // A partial seal (the gateway could not read the block) knows its id and height only.
+        next = mergeBlockRow(next, {
+          id,
+          height: s.height,
+          timestamp: s.timestamp || Date.now(),
+          txCount: s.partial ? null : (s.txCount ?? (Array.isArray(s.txIds) ? s.txIds.length : null)),
+          size: s.partial ? 0 : (s.size ?? 0),
+          seenAt: sealSeenMs(s),
+        }, TAPE_KEEP);
+      }
+      return next;
+    });
+  }, [mp.seals]);
 
+  // «Forming since»: from when the gateway saw the newest block, not its header time (the miner's
+  // template start, a minute or more earlier). A fork's block at the same height does not restart it,
+  // also when it is the first seal this page sees: the tape's top as it was before the seal counts.
+  const lastBlockMs = mp.fees?.lastBlockMs ?? null;
+  const formedAt = useRef(0);
+  const before = useRef({ top: tape[0], lastBlockMs });
+  before.current = { top: tape[0], lastBlockMs };
   useEffect(() => {
     const s = mp.seal;
-    if (!s || !Number.isFinite(s.height)) return;
-    const key = `${s.height}:${s.blockId || ""}`;
-    if (formKey.current === key) return;
-    formKey.current = key;
-    const raw = s.timestamp || 0;
-    const ms = raw > 1e12 ? raw : raw > 1e9 ? raw * 1000 : 0;
-    const fresh = ms > 0 && Math.abs(Date.now() - ms) < 20_000;
-    setFormSince(fresh ? ms : Date.now());
+    if (!s || !Number.isFinite(s.height) || s.height <= formedAt.current) return;
+    const { top, lastBlockMs: last } = before.current;
+    const next = formingAfterSeal(s, top, sealSeenMs(s) ?? Date.now(), formingFallback(last, top ?? null));
+    if (!next) return;
+    formedAt.current = next.height;
+    setFormSince(next);
   }, [mp.seal]);
 
   // A pool's roof flag is its slice ink on the «Mining pools» donut; the last (grey) slice and solo miners stay grey.
@@ -1453,7 +1443,7 @@ function HomeLiveStrip({
       totalFees={mp.totalFees}
       streamFees={mp.fees}
       streamLive={mp.streamLive}
-      seal={mp.seal}
+      seals={mp.seals}
       poolInk={poolInk}
       avgBlockMs={avgBlockMs}
       title={title}
@@ -1461,7 +1451,12 @@ function HomeLiveStrip({
       all={all}
       txUnit={txUnit}
       formingHeight={Math.max(tip?.height ?? 0, mp.seal?.height ?? 0, tape[0]?.height ?? 0) + 1}
-      formingSince={formSince ?? tape[0]?.timestamp ?? null}
+      formingSince={
+        // A seal the stream missed (the tape has a newer block): the fallback, not the old seal.
+        formSince && formSince.height >= (tape[0]?.height ?? 0)
+          ? formSince.at
+          : formingFallback(lastBlockMs, tape[0] ?? null)
+      }
       enter={[enterAt(0), enterAt(1)]}
     />
   );

@@ -112,3 +112,21 @@ test("page kinds for the block matrix", () => {
   assert.equal(pageKind("/favorites"), "n");
   assert.equal(pageKind("/tokens"), "n");
 });
+
+test("a partial seal (no block read) is a block of unknown size, never an empty one", () => {
+  const r = rig();
+  r.tip(200);
+  r.s.feed({ type: "block.sealed", data: { height: 201, blockId: "z".repeat(64), txIds: [], txCount: 0, timestamp: 0, seenAt: 0, partial: true } });
+  assert.deepEqual(r.said, [{ k: "chain:block", height: 201, txCount: null, size: null, kind: "normal" }]);
+});
+
+test("two seals in one breath: one reaction each, in order", () => {
+  const r = rig();
+  r.tip(300);
+  r.seal(301, 5);
+  r.seal(302, 6);
+  assert.deepEqual(
+    r.said.map((e) => (e.k === "chain:block" ? e.height : null)),
+    [301, 302]
+  );
+});

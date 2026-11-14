@@ -67,7 +67,7 @@ export function createChainSense(deps: ChainDeps) {
     say({ k: "chain:block", height, txCount, size, kind: blockKind(txCount) });
   };
 
-  const onHeight = (h: number, sealed: { txCount: number; size: number | null } | null) => {
+  const onHeight = (h: number, sealed: { txCount: number | null; size: number | null } | null) => {
     if (!Number.isInteger(h) || h <= 0) return;
     learn(h);
     if (top == null) {
@@ -107,7 +107,8 @@ export function createChainSense(deps: ChainDeps) {
       if (m.type === "chain.tip") return onHeight(Number(data?.height), null);
       if (m.type === "block.sealed") {
         const txIds = Array.isArray(data?.txIds) ? data.txIds.length : null;
-        const count = Number.isFinite(Number(data?.txCount)) ? Number(data?.txCount) : (txIds ?? 0);
+        // A partial seal (the gateway could not read the block) has no count: not an empty block.
+        const count = data?.partial === true ? null : Number.isFinite(Number(data?.txCount)) ? Number(data?.txCount) : (txIds ?? 0);
         const size = Number.isFinite(Number(data?.size)) ? Number(data?.size) : null;
         return onHeight(Number(data?.height), { txCount: count, size });
       }

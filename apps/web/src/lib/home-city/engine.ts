@@ -10,7 +10,7 @@ import { pixelSettling } from "@/components/pixel";
 import { readInks, sealPlan, type CityBlock, type Fees, type Frame, type Inks, type Scene, type YardTx } from "./common";
 import { cityGeo, cityTarget, citySiteRest, drawCity, type CityHit, type KayoloCue } from "./city";
 import { KAYOLO_ID, drawKayolo, kayoloScale } from "./kayolo";
-import { momentPlays, sealMatch, sealStoreys, sealTargets, sealYard, waitingShown } from "./moment";
+import { arrivedAt, momentPlays, queueSeal, sealMatch, sealStoreys, sealTargets, sealYard, waitingShown } from "./moment";
 import { cableAt, drawCrateFlight, drawYard, drawYardCable, flightSize, yardCable, yardRest, type YardHit, type YardText } from "./yard";
 
 /** No new block for this long: the chain or the node is behind, he dozes. Ergo aims at 2 min. */
@@ -101,6 +101,10 @@ export class CityEngine {
   private scene: Scene | null = null;
   private committed: number | null = null;
   private moment: Moment | null = null;
+  /** Seals that came while a moment played, in arrival order: each plays (or just stands) in turn. */
+  private queue: SealIn[] = [];
+  /** The newest seal that came past the queue during a moment: it stands (no moment) once that one ends. */
+  private skipped: number | null = null;
   private sealKeys = new Set<string>();
   private adds = new Map<string, number>();
   private seenTx = new Set<string>();
@@ -202,6 +206,8 @@ export class CityEngine {
     window.clearTimeout(this.blinkTail);
     if (this.mark) this.mark.onload = null;
     this.moment = null;
+    this.queue = [];
+    this.skipped = null;
   }
 
   setReduce(reduce: boolean) {
@@ -233,7 +239,7 @@ export class CityEngine {
       const x = a.blocks[i]!;
       const y = d.blocks[i]!;
       if (x === y) continue;
-      if (x.id !== y.id || x.height !== y.height || x.ts !== y.ts || x.txCount !== y.txCount || x.size !== y.size) return false;
+      if (x.id !== y.id || x.height !== y.height || x.ts !== y.ts || x.txCount !== y.txCount || x.size !== y.size || x.seenAt !== y.seenAt) return false;
       if (x.flag !== y.flag || x.lithos !== y.lithos || x.txs !== y.txs) return false;
     }
     for (let i = 0; i < d.mem.txs.length; i++) {
@@ -281,7 +287,7 @@ export class CityEngine {
   private holdNewer() {
     const top = this.data.blocks[0]?.height ?? null;
     if (top == null || this.committed == null || top <= this.committed || this.moment) return;
-    const recent = Date.now() - (this.data.blocks[0]?.ts ?? 0) < SEAL_LIST_WAIT_MS * 4;
+    const recent = Date.now() - arrivedAt(this.data.blocks[0]) < SEAL_LIST_WAIT_MS * 4;
     if (!this.data.streamLive || this.reduce || !this.on || !recent) {
       this.commit(top);
       return;
@@ -293,7 +299,10 @@ export class CityEngine {
     }, SEAL_LIST_WAIT_MS);
   }
 
-  /** `block.sealed`: play the moment if it can be seen, else just show the new street. */
+  /**
+   * `block.sealed`: play the moment if it can be seen, else just show the new street. A seal that
+   * comes while a moment plays waits for it to end (two blocks in one breath both play, in order).
+   */
   seal(s: SealIn) {
     if (this.dead) return;
     const key = `${s.height}:${s.blockId}`;
@@ -301,7 +310,36 @@ export class CityEngine {
     this.sealKeys.add(key);
     if (this.sealKeys.size > 32) this.sealKeys = new Set([...this.sealKeys].slice(-16));
     window.clearTimeout(this.holdTimer);
-    if (this.moment) this.finishMoment();
+    if (this.moment) {
+      const q = queueSeal(this.queue, s);
+      this.queue = q.queue;
+      // Not now: the street must not pass the block whose tower is still going up.
+      for (const d of q.dropped) this.skipped = Math.max(this.skipped ?? d.height, d.height);
+      this.lendYard(this.moment, s);
+      return;
+    }
+    this.play(s);
+  }
+
+  /**
+   * The waiting block's txs that already left the stream stay in the yard while the moment before it
+   * plays: its crates must not blink out and come back when its own moment starts. Only before the
+   * first crate leaves: a yard laid out again under a crate in the air would move its start.
+   */
+  private lendYard(m: Moment, s: SealIn) {
+    const now = performance.now();
+    if (now - m.t0 >= sealPlan(m.ids.length).depart(0)) return;
+    const gone = new Map<string, YardTx>();
+    for (const [id, g] of this.gone) if (now - g.at <= GONE_MS) gone.set(id, g.tx);
+    const mem = sealYard(m.memBefore, gone, s.txIds);
+    if (mem.txs.length === m.memBefore.txs.length) return;
+    m.memBefore = mem;
+    for (const t of mem.txs) if (!m.byId.has(t.id)) m.byId.set(t.id, t);
+    m.memScene = undefined;
+    this.kick(true);
+  }
+
+  private play(s: SealIn) {
     const visible = this.on && document.visibilityState === "visible";
     const newest = this.committed;
     if (s.quiet || !momentPlays({ reduce: this.reduce, visible, height: s.height, newest })) {
@@ -315,7 +353,7 @@ export class CityEngine {
     const ids = sealMatch(s.txIds, memBefore.txs);
     const street = this.data.blocks.filter((b) => b.height < s.height && (this.committed == null || b.height <= this.committed));
     this.moment = {
-      key,
+      key: `${s.height}:${s.blockId}`,
       t0: performance.now(),
       seal: s,
       ids,
@@ -363,6 +401,9 @@ export class CityEngine {
     if (!m) return;
     this.moment = null;
     this.commit(Math.max(m.seal.height, this.committed ?? m.seal.height));
+    // Blocks that came past the queue during the moment stand now, after its own.
+    if (this.skipped != null) this.commit(this.skipped);
+    this.skipped = null;
     this.cb.onBuilt(null);
     this.cb.onWaiting(null);
     this.lastBuilt = -2;
@@ -375,14 +416,16 @@ export class CityEngine {
       this.rects = null;
       this.fly.h = 0;
     }
+    // The next waiting seal plays now (or, out of sight or under reduced motion, just stands).
+    while (!this.moment && this.queue.length) this.play(this.queue.shift()!);
     // A newer block that came during the moment without its own seal: its hold starts now.
-    this.holdNewer();
+    if (!this.moment) this.holdNewer();
   }
 
   /** Sleepy once the newest block is 8 min old: one frame then, no clock running. */
   private armStale() {
     window.clearTimeout(this.staleTimer);
-    const ts = this.data.blocks[0]?.ts;
+    const ts = arrivedAt(this.data.blocks[0]);
     if (!ts) return;
     const due = ts + STALE_MS - Date.now();
     if (due > 0 && due < 24 * 3600_000) this.staleTimer = window.setTimeout(() => this.kick(true), due + 50);
@@ -450,13 +493,17 @@ export class CityEngine {
   /** After a failed frame: no moment, no crates in the air, the street as the data has it. */
   private abandon() {
     const m = this.moment;
+    const waiting = this.queue;
     this.moment = null;
+    this.queue = [];
+    const skipped = this.skipped;
+    this.skipped = null;
     this.adds.clear();
     this.rare = null;
     this.settleUntil = 0;
     try {
       if (m) {
-        const h = Math.max(m.seal.height, this.committed ?? m.seal.height);
+        const h = Math.max(m.seal.height, ...waiting.map((q) => q.height), skipped ?? m.seal.height, this.committed ?? m.seal.height);
         if (this.committed == null || h > this.committed) {
           this.committed = h;
           this.scene = null;
@@ -499,7 +546,8 @@ export class CityEngine {
           id: m.seal.blockId,
           height: m.seal.height,
           ts: m.seal.timestamp > 1e12 ? m.seal.timestamp : m.seal.timestamp * 1000,
-          txCount: m.seal.txCount || m.seal.txIds.length,
+          // A partial seal has no tx list: the read (when it lands) gives the count and the storeys.
+          txCount: m.seal.txCount || m.seal.txIds.length || read?.txCount || st.txs.length,
           size: m.seal.size || read?.size || 0,
           flag: read?.flag ?? null,
           lithos: read?.lithos === true,
@@ -642,7 +690,7 @@ export class CityEngine {
       }
     }
     if (this.hover.city) return { cue: { mood: "look", at: this.hover.city, hop: 0 }, rare: false };
-    const ts = scene.blocks[0]?.ts ?? 0;
+    const ts = arrivedAt(scene.blocks[0]);
     if (ts && Date.now() - ts > STALE_MS) return { cue: { mood: "sleepy", at: null, hop: 0 }, rare: false };
     return { cue: { mood: "idle", at: null, hop: 0 }, rare: false };
   }

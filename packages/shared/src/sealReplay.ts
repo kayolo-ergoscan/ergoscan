@@ -5,11 +5,25 @@
 export type SealEvent = {
   blockId: string;
   height: number;
+  /**
+   * Header time, ms: when the miner started this block's template, not when the block was found
+   * (median about a minute before the block reaches us, up to ten). Block pages show this time.
+   */
   timestamp: number;
   txIds: string[];
   replaySeed: string;
   size?: number;
   txCount: number;
+  /**
+   * ms, gateway clock: when the gateway saw the node's best full block become this one. «Since the
+   * last block» and «next block in» count from here. Absent from gateways before 14 Nov 2026.
+   */
+  seenAt?: number;
+  /**
+   * The node did not give the block's body: `blockId` and `height` only, no `txIds`, `txCount` 0,
+   * `timestamp` is `seenAt`. Not full data: read the block later for its txs.
+   */
+  partial?: true;
 };
 
 /** Stable string from header id + height (not a cryptographic hash). */

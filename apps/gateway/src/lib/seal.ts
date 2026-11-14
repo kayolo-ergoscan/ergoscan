@@ -1,69 +1,210 @@
 /**
- * Detect ordering-block seals via tip height advance.
+ * Ordering-block seals from the node's best full block.
+ *
+ * `seenAt` is the gateway's own clock when it saw the best full block move. The header `timestamp`
+ * is when the miner started the block's template: a median minute (up to ten) before the block
+ * reaches us. «Since the last block» counts from `seenAt`; block pages keep the header time.
  */
 import { replaySeed, type SealEvent } from "@ergoscan/shared";
 import type { NodeClient } from "./node.js";
 
+/**
+ * Most blocks sealed for one move of the tip: a body that stalled for a block or two. A longer jump
+ * (a node catching up) seals only its newest few; the tape shows the rest from the index.
+ */
+export const SEAL_MAX_PER_MOVE = 3;
+/** Heights whose block id is remembered: to tell a new block from a sealed one and see a fork switch. */
+const KNOWN_DEPTH = 16;
+
+type NodeBlock = {
+  header: { id: string; height: number; timestamp: number; parentId?: string };
+  blockTransactions?: { transactions?: { id: string }[] };
+  size?: number;
+};
+
+function isId(v: unknown): v is string {
+  return typeof v === "string" && v.length >= 16;
+}
+
 export class SealWatcher {
   private lastHeight: number | null = null;
+  private known = new Map<number, string>();
+  private lastAsked = -Infinity;
+  /** One check at a time: the live loop and the 10 s /info poll never emit out of order. */
+  private chain: Promise<unknown> = Promise.resolve();
 
-  constructor(private node: NodeClient) {}
+  constructor(
+    private node: Pick<NodeClient, "get">,
+    private now: () => number = Date.now
+  ) {}
 
   /**
-   * Returns seal event when height advances, else null.
-   * `headerId` (the node's bestFullHeaderId) saves the /blocks/at lookup for the newest block.
+   * Seals for a move of the best full block, oldest first; [] when nothing moved.
+   * - One block up: that block.
+   * - Several up at once (a stalled body): each skipped height in order, the newest SEAL_MAX_PER_MOVE.
+   * - A new id at the same height, or a tip whose parent is not the block sealed there (a fork
+   *   switch): the replacing block(s) as well, again within SEAL_MAX_PER_MOVE.
+   * Older blocks come from walking `parentId` back from the tip: one `/blocks/{id}` per sealed block.
+   * `headerId` is the node's bestFullHeaderId (no /blocks/at lookup). `asked` orders the /info
+   * answers of the two pollers: an answer asked before the last one used is stale and ignored.
    */
-  async check(tipHeight: number | null | undefined, headerId?: string | null): Promise<SealEvent | null> {
-    if (tipHeight == null || !Number.isFinite(tipHeight)) return null;
-    if (this.lastHeight == null) {
-      this.lastHeight = tipHeight;
-      return null;
+  check(tipHeight: number | null | undefined, headerId?: string | null, asked?: number): Promise<SealEvent[]> {
+    // Seen now, when the caller hands the /info answer in, not when an earlier check lets this one run.
+    const seenAt = this.now();
+    const run = this.chain.then(() => this.step(tipHeight, headerId, asked, seenAt));
+    this.chain = run.catch(() => undefined);
+    return run;
+  }
+
+  /**
+   * True when the answer asked as `asked` was (or would now be) dropped: a later-asked one was used
+   * first. The caller looks at that tip again on its next round instead of waiting for the 10 s poll.
+   * Read it right after awaiting `check`.
+   */
+  stale(asked: number): boolean {
+    return asked < this.lastAsked;
+  }
+
+  private async step(
+    tipHeight: number | null | undefined,
+    headerId: string | null | undefined,
+    asked: number | undefined,
+    seenAt: number
+  ): Promise<SealEvent[]> {
+    if (tipHeight == null || !Number.isFinite(tipHeight)) return [];
+    if (asked != null) {
+      if (asked < this.lastAsked) return [];
+      this.lastAsked = asked;
     }
-    if (tipHeight <= this.lastHeight) return null;
-
-    const height = tipHeight;
+    const best = isId(headerId) ? headerId : null;
     const prev = this.lastHeight;
+    if (prev == null) {
+      this.lastHeight = tipHeight;
+      if (best) this.known.set(tipHeight, best);
+      return [];
+    }
+    if (tipHeight < prev) {
+      // The node stepped back (a fork switch under way): the seal comes when it climbs again.
+      this.lastHeight = tipHeight;
+      return [];
+    }
+    const had = this.known.get(tipHeight);
+    if (best && had === best) {
+      this.lastHeight = tipHeight;
+      return [];
+    }
+    if (tipHeight === prev && (!best || had == null)) {
+      // Same height and nothing to compare with: remember the id, seal nothing.
+      if (best) this.known.set(tipHeight, best);
+      return [];
+    }
+    // A new tip.
     this.lastHeight = tipHeight;
+    if (best) this.known.set(tipHeight, best);
 
-    try {
-      const id =
-        typeof headerId === "string" && headerId.length >= 16
-          ? headerId
-          : (await this.node.get<string[]>(`/blocks/at/${height}`, 5000))?.[0];
+    let id = best;
+    if (!id) {
+      const at = await this.node.get<string[]>(`/blocks/at/${tipHeight}`, 5000).catch(() => null);
+      id = isId(at?.[0]) ? at[0] : null;
+      if (id) this.known.set(tipHeight, id);
+    }
+    const out: SealEvent[] = [];
+    let height = tipHeight;
+    while (out.length < SEAL_MAX_PER_MOVE) {
       if (!id) {
-        return {
-          blockId: `height-${height}`,
-          height,
-          timestamp: Date.now(),
-          txIds: [],
-          replaySeed: replaySeed(`h${height}`, height),
-          txCount: 0,
-        };
+        out.push(partialSeal(height, null, seenAt));
+        break;
       }
-      const full = await this.node.get<{
-        header: { id: string; height: number; timestamp: number };
-        blockTransactions?: { transactions?: { id: string }[] };
-        size?: number;
-      }>(`/blocks/${id}`, 12000);
-      const txs = full.blockTransactions?.transactions ?? [];
-      return {
-        blockId: full.header.id,
-        height: full.header.height,
-        timestamp: full.header.timestamp,
-        txIds: txs.map((t) => t.id),
-        replaySeed: replaySeed(full.header.id, full.header.height),
-        size: full.size,
-        txCount: txs.length,
-      };
-    } catch {
-      return {
-        blockId: `height-${height}`,
-        height,
-        timestamp: Date.now(),
-        txIds: [],
-        replaySeed: replaySeed(`h${height}-${prev}`, height),
-        txCount: 0,
-      };
+      let seal: SealEvent;
+      let parentId: string | undefined;
+      let ph: number;
+      try {
+        // The tip as before; an older block gets a shorter wait (the walk holds the live loop).
+        const full = await this.node.get<NodeBlock>(`/blocks/${id}`, out.length ? 5000 : 12000);
+        // A body without a usable header fails here too: it becomes a partial seal, not a lost one.
+        seal = fullSeal(full, seenAt);
+        parentId = full.header.parentId;
+        ph = full.header.height - 1;
+      } catch {
+        out.push(partialSeal(height, id, seenAt));
+        break;
+      }
+      out.push(seal);
+      if (!isId(parentId) || ph < 1) break;
+      const sealedThere = this.known.get(ph);
+      // The parent is the block sealed at that height: the chain joins what was shown.
+      if (sealedThere === parentId) break;
+      // Below the watched height and never seen: nothing to say about it.
+      if (ph <= prev && sealedThere == null) break;
+      if (out.length >= SEAL_MAX_PER_MOVE) break;
+      // A height the jump skipped, or a block the fork switch replaced.
+      this.known.set(ph, parentId);
+      id = parentId;
+      height = ph;
+    }
+    this.prune(tipHeight);
+    return out.reverse();
+  }
+
+  private prune(tip: number) {
+    for (const h of this.known.keys()) {
+      if (h < tip - KNOWN_DEPTH || h > tip + KNOWN_DEPTH) this.known.delete(h);
     }
   }
+}
+
+/** Throws on a body that is not a block (no header, no id or height, a tx list that is not a list). */
+function fullSeal(full: NodeBlock, seenAt: number): SealEvent {
+  const h = full?.header;
+  if (!h || !isId(h.id) || !Number.isInteger(h.height) || h.height < 1) throw new Error("not a block");
+  const txs = full.blockTransactions?.transactions ?? [];
+  if (!Array.isArray(txs)) throw new Error("not a block");
+  return {
+    blockId: full.header.id,
+    height: full.header.height,
+    timestamp: full.header.timestamp,
+    txIds: txs.map((t) => t.id),
+    replaySeed: replaySeed(full.header.id, full.header.height),
+    size: full.size,
+    txCount: txs.length,
+    seenAt,
+  };
+}
+
+/** The block read failed: its real id (from /info) and height, no txs, and marked as such. */
+function partialSeal(height: number, id: string | null, seenAt: number): SealEvent {
+  return {
+    blockId: id ?? `height-${height}`,
+    height,
+    timestamp: seenAt,
+    txIds: [],
+    replaySeed: replaySeed(id ?? `h${height}`, height),
+    txCount: 0,
+    seenAt,
+    partial: true,
+  };
+}
+
+/** The newest block the gateway sealed and when it saw it (gateway clock). */
+export type SeenTip = { height: number; seenAt: number };
+
+/**
+ * The tip after a seal, or null when the seal does not move it: only a higher block restarts the
+ * countdown and the planner (a fork's block at the same height does not).
+ */
+export function nextSeenTip(prev: SeenTip | null, seal: Pick<SealEvent, "height" | "seenAt">): SeenTip | null {
+  const at = seal.seenAt;
+  if (typeof at !== "number" || !Number.isFinite(at) || !Number.isFinite(seal.height)) return null;
+  if (prev && seal.height <= prev.height) return null;
+  return { height: seal.height, seenAt: at };
+}
+
+/**
+ * When the newest block came, for «next block in»: the gateway's sighting while that block is the
+ * newest (or the headers are one block ahead, its body on the way). The header time only when the
+ * gateway has not seen a block move yet (just started) or the headers ran further ahead.
+ */
+export function lastBlockClock(seen: SeenTip | null, newest: { height: number; timestamp: number }): number {
+  if (seen && seen.height >= newest.height - 1) return seen.seenAt;
+  return newest.timestamp;
 }
