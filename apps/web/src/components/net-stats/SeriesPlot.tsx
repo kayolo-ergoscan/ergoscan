@@ -1,7 +1,6 @@
 "use client";
 
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import clsx from "clsx";
 import {
   areaPath,
   barCeiling,
@@ -10,7 +9,6 @@ import {
   extent,
   linePath,
   nearestIndex,
-  niceTicks,
   xOf,
   yOf,
   type Frame,
@@ -19,7 +17,7 @@ import {
 } from "@/lib/net-stats";
 
 /** Width of a box, from one ResizeObserver; `fallback` until it reports (and on the server). */
-export function useBoxWidth<T extends HTMLElement>(fallback: number) {
+function useBoxWidth<T extends HTMLElement>(fallback: number) {
   const ref = useRef<T>(null);
   const [w, setW] = useState(fallback);
   useEffect(() => {
@@ -37,8 +35,10 @@ export function useBoxWidth<T extends HTMLElement>(fallback: number) {
 
 export type PlotData = { kind: "line"; pts: readonly NetPt[] } | { kind: "bars"; bins: readonly NetBin[] };
 
+export type PlotValue = { t: number; t1?: number; v: number; open?: boolean };
+
 /** The point or column under time t (or null), for a readout. */
-export function valueAt(data: PlotData, t: number | null): { t: number; t1?: number; v: number; open?: boolean } | null {
+export function valueAt(data: PlotData, t: number | null): PlotValue | null {
   if (t == null) return null;
   if (data.kind === "bars") {
     const i = binIndex(data.bins, t);
@@ -52,7 +52,7 @@ export function valueAt(data: PlotData, t: number | null): { t: number; t1?: num
 /**
  * One series over the shared week. A level is a 2 px line on a 10 % wash with a ringed end dot;
  * a sum is columns from a zero baseline (≤ 24 px, 4 px data end, the open bin as a ghost).
- * Hover comes from the parent (`hoverT`), so several plots share one crosshair.
+ * Hover comes from the parent (`hoverT`), so the stacked plots share one crosshair.
  */
 export const SeriesPlot = memo(function SeriesPlot({
   data,
@@ -61,11 +61,6 @@ export const SeriesPlot = memo(function SeriesPlot({
   ink,
   height,
   hoverT,
-  yTicks,
-  formatTick,
-  formatValue,
-  className,
-  grid = false,
 }: {
   data: PlotData;
   t0: number;
@@ -73,85 +68,44 @@ export const SeriesPlot = memo(function SeriesPlot({
   ink: string;
   height: number;
   hoverT: number | null;
-  yTicks?: number;
-  /** Tick text; `step` is the tick spacing, so every tick keeps the same decimals. */
-  formatTick?: (v: number, step: number) => string;
-  /** The true value printed beside a column cut by the ceiling (wide plots only). */
-  formatValue?: (v: number) => string;
-  className?: string;
-  /** Hairline gridlines at the y ticks. */
-  grid?: boolean;
 }) {
   const [box, w] = useBoxWidth<HTMLDivElement>(600);
   const geo = useMemo(() => {
     if (data.kind === "bars") {
       const ceil = barCeiling(data.bins.filter((b) => b.known && b.t1 > t0).map((b) => b.v));
-      const ticks = yTicks ? niceTicks(0, ceil.hi, yTicks) : [];
-      const hi = ceil.clip ? ceil.hi : Math.max(ceil.hi, ticks[ticks.length - 1] ?? ceil.hi);
-      const f: Frame = { w, h: height, t0, t1, lo: 0, hi, top: 3, bottom: 0 };
-      return { f, ticks: ticks.filter((v) => v <= hi), bars: barPaths(f, data.bins), line: "", area: "" };
+      const f: Frame = { w, h: height, t0, t1, lo: 0, hi: ceil.hi, top: 3, bottom: 0 };
+      return { f, bars: barPaths(f, data.bins), line: "", area: "" };
     }
     const [lo, hi] = extent(data.pts.map((p) => p.v));
     const f: Frame = { w, h: height, t0, t1, lo, hi, top: 6, bottom: 6 };
-    const ticks = yTicks ? niceTicks(lo, hi, yTicks) : [];
-    return { f, ticks, bars: null, line: linePath(f, data.pts), area: areaPath(f, data.pts) };
-  }, [data, t0, t1, w, height, yTicks]);
+    return { f, bars: null, line: linePath(f, data.pts), area: areaPath(f, data.pts) };
+  }, [data, t0, t1, w, height]);
 
   const f = geo.f;
   const hv = valueAt(data, hoverT);
   const dim = hv != null && data.kind === "bars";
-  const tickStep = geo.ticks.length > 1 ? geo.ticks[1]! - geo.ticks[0]! : 0;
 
   // The week itself: built once per data/size, so a hover re-renders only the overlay below
   // (React skips an element it gets back unchanged).
   const base = useMemo(
     () => (
-      <>
-        <svg viewBox={`0 0 ${w} ${height}`} preserveAspectRatio="none" className="absolute inset-0 h-full w-full overflow-visible" aria-hidden>
-          {grid
-            ? geo.ticks.map((v) => (
-                <line key={v} x1={0} x2={w} y1={yOf(f, v)} y2={yOf(f, v)} stroke="var(--wash-mid)" strokeWidth={1} vectorEffect="non-scaling-stroke" />
-              ))
-            : null}
-          {geo.bars ? (
-            <>
-              <line x1={0} x2={w} y1={height - 0.5} y2={height - 0.5} stroke="var(--wash-mid)" strokeWidth={1} vectorEffect="non-scaling-stroke" />
-              <path d={geo.bars.closed} fill={ink} opacity={dim ? 0.38 : 0.62} />
-              <path d={geo.bars.open} fill={ink} opacity={0.24} />
-              {geo.bars.cut ? <path d={geo.bars.cut} fill="var(--module)" /> : null}
-            </>
-          ) : (
-            <>
-              <path d={geo.area} fill={ink} opacity={0.1} />
-              <path d={geo.line} fill="none" stroke={ink} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-            </>
-          )}
-        </svg>
-        {formatValue && geo.bars
-          ? geo.bars.cuts.map((c) => (
-              <span
-                key={c.x}
-                className="pointer-events-none absolute whitespace-nowrap pl-1.5 text-[11px] font-medium leading-none tabular-nums text-[var(--muted)]"
-                style={{ left: `${(c.x / w) * 100}%`, top: c.y }}
-              >
-                {formatValue(c.v)}
-              </span>
-            ))
-          : null}
-        {yTicks && formatTick
-          ? geo.ticks.map((v) => (
-              <span
-                key={v}
-                className="pointer-events-none absolute left-full -translate-y-1/2 whitespace-nowrap pl-2 text-[11px] leading-none tabular-nums text-[var(--muted-2)]"
-                style={{ top: yOf(f, v) }}
-              >
-                {formatTick(v, tickStep)}
-              </span>
-            ))
-          : null}
-      </>
+      <svg viewBox={`0 0 ${w} ${height}`} preserveAspectRatio="none" className="absolute inset-0 h-full w-full overflow-visible" aria-hidden>
+        {geo.bars ? (
+          <>
+            <line x1={0} x2={w} y1={height - 0.5} y2={height - 0.5} stroke="var(--wash-mid)" strokeWidth={1} vectorEffect="non-scaling-stroke" />
+            <path d={geo.bars.closed} fill={ink} opacity={dim ? 0.38 : 0.62} />
+            <path d={geo.bars.open} fill={ink} opacity={0.24} />
+            {geo.bars.cut ? <path d={geo.bars.cut} fill="var(--module)" /> : null}
+          </>
+        ) : (
+          <>
+            <path d={geo.area} fill={ink} opacity={0.1} />
+            <path d={geo.line} fill="none" stroke={ink} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+          </>
+        )}
+      </svg>
     ),
-    [geo, f, w, height, ink, grid, dim, formatValue, formatTick, yTicks, tickStep]
+    [geo, w, height, ink, dim]
   );
 
   // The overlay: the newest column (at rest) or the hovered one, the crosshair, the end/hover dot.
@@ -165,7 +119,7 @@ export const SeriesPlot = memo(function SeriesPlot({
   const cx = hoverT != null ? xOf(f, data.kind === "line" && hv ? hv.t : hoverT) : null;
 
   return (
-    <div ref={box} className={clsx("relative w-full", className)} style={{ height }}>
+    <div ref={box} className="relative w-full" style={{ height }}>
       {base}
       {mark || cx != null ? (
         <svg viewBox={`0 0 ${w} ${height}`} preserveAspectRatio="none" className="pointer-events-none absolute inset-0 h-full w-full overflow-visible" aria-hidden>

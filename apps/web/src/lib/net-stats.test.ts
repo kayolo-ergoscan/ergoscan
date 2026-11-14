@@ -7,9 +7,9 @@ import {
   dayTicks,
   nearestIndex,
   netDomain,
-  niceTicks,
   NET_BIN_MS,
   NET_SPAN_MS,
+  sameRows,
 } from "./net-stats";
 
 const H = 3_600_000;
@@ -63,16 +63,12 @@ test("barPaths marks the columns over the ceiling", () => {
     { t: T0 + NET_BIN_MS, t1: T0 + 2 * NET_BIN_MS, v: 50, open: false, known: true },
   ];
   const p = barPaths({ w: 200, h: 40, t0: T0, t1: T0 + 2 * NET_BIN_MS, lo: 0, hi: 4 }, bins);
-  assert.equal(p.cuts.length, 1);
-  assert.equal(p.cuts[0]!.v, 50);
-  assert.ok(p.cut.length > 0);
+  // One notch: the 50 is cut, the 1 is whole.
+  assert.equal(p.cut.split("M").length - 1, 1);
   assert.ok(p.closed.split("M").length - 1 === 2);
 });
 
-test("niceTicks and dayTicks land on clean values", () => {
-  assert.deepEqual(niceTicks(0.148, 0.212, 3), [0.16, 0.18, 0.2]);
-  assert.deepEqual(niceTicks(0, 5.5, 3), [0, 2, 4]);
-  assert.deepEqual(niceTicks(0, 8, 3), [0, 2.5, 5, 7.5]);
+test("dayTicks land on UTC midnights", () => {
   assert.deepEqual(dayTicks(T0 - 3 * H, T0 + 2 * DAY + H), [T0, T0 + DAY, T0 + 2 * DAY]);
   assert.deepEqual(dayTicks(T0 - 3 * H, T0 + 4 * DAY, 2), [T0, T0 + 2 * DAY]);
 });
@@ -82,4 +78,13 @@ test("nearestIndex picks the closest point", () => {
   assert.equal(nearestIndex(pts, 4), 0);
   assert.equal(nearestIndex(pts, 16), 2);
   assert.equal(nearestIndex([], 5), -1);
+});
+
+test("sameRows keeps the array a memo knows when a snapshot changed nothing", () => {
+  const a = [{ t: 1, v: 2 }, { t: 2, v: 3 }];
+  assert.equal(sameRows(a, [{ t: 1, v: 2 }, { t: 2, v: 3 }], ["t", "v"]), a);
+  const moved = [{ t: 1, v: 2 }, { t: 2, v: 4 }];
+  assert.equal(sameRows(a, moved, ["t", "v"]), moved);
+  const longer = [...a, { t: 3, v: 1 }];
+  assert.equal(sameRows(a, longer, ["t", "v"]), longer);
 });

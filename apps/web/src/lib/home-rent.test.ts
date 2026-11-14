@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { HARBOUR_PALETTES, harbourInk } from "./home-rent/palette";
-import { CLAIM_MS, EPOCH_MS, harbourLights, harbourRows, paintHarbour, reefBoatX, reefGeo, reefMastTop, type HarbourBoat } from "./home-rent/scene";
+import { CLAIM_MS, EPOCH_MS, harbourLights, harbourRows, harbourScale, paintHarbour, reefBoatX, reefGeo, reefMastTop, type HarbourBoat } from "./home-rent/scene";
 
 /* ---------- a browser that draws nothing ---------- */
 
@@ -136,6 +136,27 @@ test("boats: the tape in order, each row only as many as fit its width", () => {
     const used = r.lens.reduce((a, b) => a + b, 0) + 4 * r.items.length;
     assert.ok(r.row.x0 + used <= 160 - 8);
   }
+});
+
+test("boats: the home's wide column sails the whole tape, bigger, inside the water", () => {
+  assert.equal(harbourScale(470, false), 1);
+  assert.equal(harbourScale(870, false), 1.4);
+  assert.equal(harbourScale(870, true), 1);
+  const wide = harbourRows(870, 285, boats, false);
+  assert.equal(wide.shown, 15);
+  assert.deepEqual(wide.rows.map((r) => r.items.length), [4, 5, 6]);
+  const scene = { boats, epochBoxes: 1574, phone: false, hover: null };
+  const hits = paintHarbour(el(870, 285).getContext("2d")!, 870, 285, scene, null, HARBOUR_PALETTES.night, text, { sans: "", mono: "", label: "#fff" });
+  const hulls = hits.filter((h) => h.kind === "boat");
+  assert.equal(hulls.length, 15);
+  for (const b of hulls) assert.ok(b.x0 >= 0 && b.x1 <= 870 && b.y0 >= 0 && b.y1 <= 285, `${b.id} ${b.x0}..${b.x1} ${b.y0}..${b.y1}`);
+  // No two boats share a hit box: a hover names one address.
+  for (let i = 0; i < hulls.length; i++)
+    for (let j = i + 1; j < hulls.length; j++) {
+      const a = hulls[i]!;
+      const b = hulls[j]!;
+      assert.ok(a.x1 <= b.x0 || b.x1 <= a.x0 || a.y1 <= b.y0 || b.y1 <= a.y0, `${a.id} overlaps ${b.id}`);
+    }
 });
 
 test("horizon lights: the epoch's boxes beyond the boats, one per 10", () => {

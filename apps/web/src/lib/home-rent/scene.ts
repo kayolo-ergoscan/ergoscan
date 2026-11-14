@@ -339,19 +339,31 @@ function tug(ctx: CanvasRenderingContext2D, x: number, wl: number, s: number, re
 
 type Row = { n: number; wl: number; s: number; x0: number };
 
-function rowsFor(h: number, H0: number, phone: boolean): Row[] {
+/**
+ * The boats' size on a desktop harbour: 1 on the card it was drawn for (≈ 470 px), up to 1.4 on the
+ * home's wide column (≈ 870 px), so the wider water holds the same crowd instead of wider gaps.
+ */
+export function harbourScale(w: number, phone: boolean): number {
+  return phone ? 1 : clamp(1 + ((w - 470) / 400) * 0.4, 1, 1.4);
+}
+
+function rowsFor(w: number, h: number, H0: number, phone: boolean): Row[] {
   const span = h - H0;
-  return phone
-    ? [
-        { n: 3, wl: h - 18, s: 1.15, x0: 104 },
-        { n: 4, wl: Math.round(H0 + span * 0.55), s: 0.8, x0: 78 },
-        { n: 6, wl: Math.round(H0 + span * 0.27), s: 0.52, x0: 70 },
-      ]
-    : [
-        { n: 3, wl: h - 16, s: 1.1, x0: 98 },
-        { n: 4, wl: Math.round(H0 + span * 0.54), s: 0.78, x0: 72 },
-        { n: 6, wl: Math.round(H0 + span * 0.25), s: 0.5, x0: 64 },
-      ];
+  if (phone) {
+    return [
+      { n: 3, wl: h - 18, s: 1.15, x0: 104 },
+      { n: 4, wl: Math.round(H0 + span * 0.55), s: 0.8, x0: 78 },
+      { n: 6, wl: Math.round(H0 + span * 0.27), s: 0.52, x0: 70 },
+    ];
+  }
+  // Wide: every address of the tape (15) sails, one more in each of the two near rows.
+  const k = harbourScale(w, phone);
+  const more = k >= 1.2 ? 1 : 0;
+  return [
+    { n: 3 + more, wl: h - 16, s: 1.1 * k, x0: 98 },
+    { n: 4 + more, wl: Math.round(H0 + span * 0.54), s: 0.78 * k, x0: 72 },
+    { n: 6, wl: Math.round(H0 + span * 0.25), s: 0.5 * k, x0: 64 },
+  ];
 }
 
 function boatLen(boxes: number, s: number): number {
@@ -361,7 +373,7 @@ function boatLen(boxes: number, s: number): number {
 /** Boats per row, nearest row first: the tape in order, as many as fit the row's width. */
 export function harbourRows(w: number, h: number, boats: readonly HarbourBoat[], phone: boolean) {
   const H0 = horizonY(phone);
-  const rows = rowsFor(h, H0, phone);
+  const rows = rowsFor(w, h, H0, phone);
   const out: { row: Row; items: HarbourBoat[]; lens: number[] }[] = [];
   let k = 0;
   for (const row of rows) {
@@ -413,6 +425,7 @@ export function paintHarbour(
 
   // Lights on the horizon: the rest of this epoch's boxes. On a new epoch they come on left to right.
   const { rows: plan } = harbourRows(w, h, scene.boats, phone);
+  const wide = harbourScale(w, phone) >= 1.2;
   const onBoats = plan.flatMap((p) => p.items);
   const { rest, lights } = harbourLights(scene.epochBoxes, onBoats);
   const lx0 = phone ? 70 : 64;
@@ -452,15 +465,19 @@ export function paintHarbour(
     const span = w - 8 - row.x0;
     const tot = lens.reduce((a, b) => a + b, 0);
     const gap = Math.max(4, (span - tot) / Math.max(1, items.length - (ri === 0 ? 0.6 : 0.2)));
-    let x = row.x0 + (ri === 2 ? gap * 0.4 : 0);
+    let x = row.x0 + (ri === 2 ? gap * 0.4 : ri === 1 && wide ? gap * 0.3 : 0);
     items.forEach((b, i) => {
       const t = toneOf(b.blocksUntilRent);
       const lamp = t === "due" ? pal.coral : t === "soon" ? pal.gold : null;
       const hot = scene.hover === b.address;
       const len = lens[i]!;
-      const at = boat(ctx, Math.round(x), row.wl, len, row.s, { boxes: b.boxCount, more: b.boxCount > 13, lamp: hot && !lamp ? pal.light : lamp, lit: t !== "later" || hot, hot }, pal);
-      placed.push({ b, x: Math.round(x), len, wl: row.wl, s: row.s, mx: at.mx, top: at.top, ri });
-      hits.push({ kind: "boat", id: b.address, x0: Math.round(x) - 2, y0: at.top - 2, x1: Math.round(x) + len + 2, y1: row.wl + 3 });
+      // Wide water: the back rows drift a little off their even spacing, so the boats do not stand in columns.
+      const drift = wide && ri > 0 ? (noise(i, ri * 7 + 3) - 0.5) * Math.min(gap, 64) * 0.8 : 0;
+      const bx = Math.round(clamp(x + drift, row.x0, w - 8 - len));
+      const wl = row.wl + (wide && ri > 0 ? Math.round((noise(i, ri * 11 + 5) - 0.5) * 8 * row.s) : 0);
+      const at = boat(ctx, bx, wl, len, row.s, { boxes: b.boxCount, more: b.boxCount > 13, lamp: hot && !lamp ? pal.light : lamp, lit: t !== "later" || hot, hot }, pal);
+      placed.push({ b, x: bx, len, wl, s: row.s, mx: at.mx, top: at.top, ri });
+      hits.push({ kind: "boat", id: b.address, x0: bx - 2, y0: at.top - 2, x1: bx + len + 2, y1: wl + 3 });
       x += len + gap;
     });
   }

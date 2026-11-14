@@ -5,29 +5,16 @@
  * KPI + ERG/USD from the indexer snapshot. `/chain-stats` is not on this path.
  * Block and tx lists live on /blocks and /transactions.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import Link from "next/link";
-import dynamic from "next/dynamic";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import clsx from "clsx";
 import { Shell } from "@/components/Shell";
 import { getGateway } from "@/lib/config";
 import { patchHomeStats, type ChainStats, type PoolShare } from "@/lib/chain-stats";
-import { KpiNum } from "@/components/KpiGrid";
-import { KpiMark } from "@/components/kpi-marks";
 import { ReelText } from "@/components/ReelText";
 import { DONUT_SLICES, HOME } from "@/lib/palette";
 import { lookInk, onScene } from "@/lib/look";
 import { fetchErgChart } from "@/lib/price-history";
 import type { ErgMarket } from "@/lib/list-snapshots";
-import {
-  formatCompact,
-  formatGroupedNumber,
-  formatDottedDay,
-  formatH24,
-  formatHashrate,
-  formatInt,
-  formatUsdPrice,
-} from "@/lib/format";
 import { lineChange, type LinePoint } from "@lumen/amm-chart";
 import { useT, useI18n } from "@/lib/i18n/I18nProvider";
 import { fromGatewayClock, useChainTipRefresh, usePageSync, useStreamMempool } from "@/lib/page-sync";
@@ -48,27 +35,9 @@ import { HomeRentHarbour } from "@/components/HomeRentHarbour";
 import { parseRentDanger, type RentDangerRow } from "@/lib/rent-danger";
 import { HomeCityPair } from "@/components/HomeCity";
 import { formingAfterSeal, mergeBlockRow, mergeBlockRows, type BlockRow } from "@/lib/home-tape";
-import { Tip, TipInfo } from "@/components/Tip";
 import { HomeVersionNodes } from "@/components/HomeVersionNodes";
-import { isSupplyDigit, zipSupplyGlyphs } from "@/lib/supply-flip";
-import { NetStats, type NetVariant } from "@/components/net-stats/NetStats";
-
-function ChartSparkSlot() {
-  return <div className="h-9 w-full" />;
-}
-
-const AreaChart = dynamic(() => import("@/components/AreaChart"), {
-  ssr: false,
-  loading: ChartSparkSlot,
-});
-const DualLineChart = dynamic(() => import("@/components/DualLineChart"), {
-  ssr: false,
-  loading: () => <div className="h-full min-h-0 w-full" />,
-});
-const DonutChart = dynamic(() => import("@/components/DonutChart"), {
-  ssr: false,
-  loading: () => <div className="h-full w-full" />,
-});
+import { NetStats } from "@/components/net-stats/NetStats";
+import { sameRows } from "@/lib/net-stats";
 
 /** When the gateway saw the block, on this browser's clock; null from a gateway without `seenAt`. */
 function sealSeenMs(s: SealEvent): number | null {
@@ -89,16 +58,6 @@ function formingFallback(lastBlockMs: number | null, top: BlockRow | null): numb
 
 type TxActivityPoint = { t: number; txs: number; feesErg: number; feesKnown?: boolean };
 
-const TX_LINE = "#86a6f0";
-const FEE_LINE = "#e799b7";
-
-function formatFeeAxis(v: number): string {
-  if (!Number.isFinite(v) || v === 0) return "0";
-  if (Math.abs(v) >= 1000) return `${(v / 1000).toFixed(1)}k`;
-  if (Math.abs(v) >= 10) return v.toFixed(1);
-  if (Math.abs(v) >= 1) return v.toFixed(1);
-  return v.toFixed(2);
-}
 /** Blocks on the street: all the home snapshot gives (10); the tape keeps one more from a seal. */
 const CADENCE = 10;
 /** Tape rows kept: the cadence and the block before it. */
@@ -107,14 +66,27 @@ const TAPE_KEEP = CADENCE + 1;
 const NO_SEALS: readonly SealEvent[] = [];
 /** No pools yet: one array, so the city's roof-flag memo does not change on every render. */
 const NO_POOLS: PoolShare[] = [];
-const PRICE_UP = "#3dd68c";
-const PRICE_DOWN = "#ff5a6a";
+/** The cards under the street; each re-renders only when its own props change (a block moves a few). */
+const Lithos = memo(HomeLithos);
+const RentHarbour = memo(HomeRentHarbour);
+const VersionNodes = memo(HomeVersionNodes);
+const ENTER_NET = 2;
+const ENTER_EPOCH = enterAt(5);
+const ENTER_VERSIONS = enterAt(6);
 
-function pctLabel(n: number): string {
-  return `${(n * 100).toFixed(1)}%`;
+/**
+ * The page's state lives under the Shell: a snapshot (one per block) re-renders the home cards,
+ * not the header and the rail around them.
+ */
+export function HomeExplorer(props: Parameters<typeof HomeBody>[0]) {
+  return (
+    <Shell>
+      <HomeBody {...props} />
+    </Shell>
+  );
 }
 
-export function HomeExplorer({
+function HomeBody({
   initialMempool = null,
   initialBlocks = [],
   initialErgUsd = null,
@@ -133,7 +105,6 @@ export function HomeExplorer({
   initialRentDanger = null,
   initialLithos = null,
   previewShare = false,
-  statsVariant = null,
 }: {
   initialMempool?: number | null;
   initialBlocks?: BlockRow[];
@@ -158,8 +129,6 @@ export function HomeExplorer({
   initialLithos?: LithosHome | null;
   /** Local `/?preview=share` — keep fixture rows, don't overwrite from stage. */
   previewShare?: boolean;
-  /** Prototype `/?stats=a|b|c`: the eight figures as one «Network» block. */
-  statsVariant?: NetVariant | null;
 }) {
   const t = useT();
   const { locale } = useI18n();
@@ -175,20 +144,13 @@ export function HomeExplorer({
   });
   const [chartLoading, setChartLoading] = useState(false);
   const [chartError, setChartError] = useState(initialChartError || initialPrice.length < 2);
-  const [priceHover, setPriceHover] = useState<number | null>(null);
-  const [priceAt, setPriceAt] = useState<number | null>(null);
   const [ergUsd, setErgUsd] = useState<number | null>(initialErgUsd);
   const [market, setMarket] = useState<ErgMarket | null>(initialMarket);
   const [stats, setStats] = useState<ChainStats | null>(initialStats);
   const [mempool, setMempool] = useState<number | null>(initialMempool);
   const [blocks, setBlocks] = useState<BlockRow[]>(initialBlocks);
   const [hashRateSeries, setHashRateSeries] = useState<LinePoint[]>(initialHashRateSeries);
-  const [hrHover, setHrHover] = useState<number | null>(null);
-  const [hrAt, setHrAt] = useState<number | null>(null);
-  const [txScrub, setTxScrub] = useState<TxActivityPoint | null>(null);
-  const [feeScrub, setFeeScrub] = useState<TxActivityPoint | null>(null);
   const [txActivity, setTxActivity] = useState<TxActivityPoint[]>(initialTxActivity);
-  const [poolHover, setPoolHover] = useState<{ label: string; pct: number } | null>(null);
   const [rentTape, setRentTape] = useState<RentTapeRow[]>(initialRentTape);
   const [rentEpochNano, setRentEpochNano] = useState<string | null>(initialRentEpochNano);
   const [rentEpochBoxes, setRentEpochBoxes] = useState<number | null>(initialRentEpochBoxes);
@@ -202,8 +164,6 @@ export function HomeExplorer({
 
   const loadChart = useCallback(() => {
     if (oracleSpark.current || priceLen.current >= 2) return;
-    setPriceHover(null);
-    setPriceAt(null);
     setChartLoading(true);
     void fetchErgChart(getGateway(), 1)
       .then((c) => {
@@ -283,27 +243,25 @@ export function HomeExplorer({
           setBlocks((prev) => mergeBlockRows(prev, j.blocks!.slice(0, CADENCE), TAPE_KEEP));
         }
         if (Array.isArray(j.hashRateSeries) && j.hashRateSeries.length >= 2) {
-          setHashRateSeries(
-            j.hashRateSeries.filter((p) => p && Number.isFinite(p.t) && Number.isFinite(p.v) && p.v > 0)
-          );
+          const next = j.hashRateSeries.filter((p) => p && Number.isFinite(p.t) && Number.isFinite(p.v) && p.v > 0);
+          setHashRateSeries((prev) => sameRows(prev, next, ["t", "v"]));
         }
         if (Array.isArray(j.txActivity) && j.txActivity.length >= 2) {
-          setTxActivity(
-            j.txActivity.filter(
-              (p) =>
-                p &&
-                Number.isFinite(p.t) &&
-                Number.isFinite(p.txs) &&
-                p.txs >= 0 &&
-                Number.isFinite(p.feesErg) &&
-                p.feesErg >= 0
-            ).map((p) => ({
-              t: p.t,
-              txs: p.txs,
-              feesErg: p.feesErg,
-              feesKnown: p.feesKnown !== false,
-            }))
-          );
+          const next = j.txActivity.filter(
+            (p) =>
+              p &&
+              Number.isFinite(p.t) &&
+              Number.isFinite(p.txs) &&
+              p.txs >= 0 &&
+              Number.isFinite(p.feesErg) &&
+              p.feesErg >= 0
+          ).map((p) => ({
+            t: p.t,
+            txs: p.txs,
+            feesErg: p.feesErg,
+            feesKnown: p.feesKnown !== false,
+          }));
+          setTxActivity((prev) => sameRows(prev, next, ["t", "txs", "feesErg", "feesKnown"]));
         }
         const hs =
           j.hashRate != null && Number.isFinite(Number(j.hashRate)) ? Number(j.hashRate) : null;
@@ -386,7 +344,7 @@ export function HomeExplorer({
           if (pts.length >= 2) {
             oracleSpark.current = true;
             priceLen.current = pts.length;
-            setPrice(pts);
+            setPrice((prev) => sameRows(prev, pts, ["t", "v"]));
             setChartError(false);
           }
         }
@@ -394,7 +352,7 @@ export function HomeExplorer({
           patchHomeStats(prev, {
             hashRate: hs,
             txPerDay: txn,
-            pools,
+            pools: pools && prev ? sameRows(prev.pools, pools, ["name", "blocks", "share", "address"]) : pools,
             holderCount,
             scriptCount,
             holdersMonth,
@@ -482,8 +440,8 @@ export function HomeExplorer({
   const lastPx = price.length ? price[price.length - 1]!.v : null;
   const spotPx =
     ergUsd != null && ergUsd > 0 ? ergUsd : lastPx != null && lastPx > 0 ? lastPx : null;
-  const spotPrice = priceHover != null && priceHover > 0 ? priceHover : spotPx;
-  const chartBusy = chartLoading && price.length < 2;
+  const priceNote =
+    price.length >= 2 ? null : chartLoading ? t("home.chartWarm") : chartError ? t("home.chartError") : t("home.chartWarm");
   const changePct =
     market?.change24h != null && Number.isFinite(market.change24h)
       ? market.change24h
@@ -491,47 +449,24 @@ export function HomeExplorer({
         ? sparkChange * 100
         : null;
 
-  const emitted =
-    stats?.circulating != null && stats.maxSupply > 0
-      ? Math.min(100, (stats.circulating / stats.maxSupply) * 100)
-      : null;
   const mcap =
-    stats?.circulating != null && spotPrice != null && spotPrice > 0
-      ? stats.circulating * spotPrice
+    stats?.circulating != null && spotPx != null && spotPx > 0
+      ? stats.circulating * spotPx
       : null;
-  const mcapMiss =
-    spotPx == null && stats?.circulating == null
-      ? `${t("home.mcapNeedPrice")} · ${t("home.mcapNeedCirc")}`
-      : spotPx == null
-        ? t("home.mcapNeedPrice")
-        : t("home.mcapNeedCirc");
   const vol24 = market?.volume24h ?? chartVol;
 
   const pools = stats?.pools ?? NO_POOLS;
-  const lead = pools[0] ?? null;
-  const shareSlices = pools.map((p) => ({
-    label: !p.address && p.name === "other" ? t("home.shareOther") : p.name,
-    value: p.blocks,
-  }));
-  const miss = t("home.unavailable");
-  const spotHash = hrHover != null && hrHover > 0 ? hrHover : stats?.hashRate;
-  const hashrateSpark = hashRateSeries.length >= 2;
   const txDay = stats?.stats24h?.txs ?? stats?.txPerDay ?? null;
   const feeDay = stats?.stats24h?.feesErg ?? null;
-  const showTxChart = txActivity.length >= 2;
-  const showFeeLine = txActivity.some((p) => p.feesKnown !== false && p.feesErg > 0);
-  const holderCount = stats?.holderCount ?? null;
-  const scriptCount = stats?.scriptCount ?? null;
   const minerCount =
     stats?.minerCount != null && stats.minerCount > 0
       ? stats.minerCount
       : pools.filter((p) => p.name !== "other").length || null;
   const tipHeight = stats?.height ?? blocks[0]?.height ?? null;
   const avgBlockMs = stats?.stats24h?.avgBlockMs ?? null;
-  const loc = locale === "ru" ? "ru-RU" : "en-US";
 
   return (
-    <Shell>
+    <>
       <HomeLiveStrip
         blocks={blocks}
         mempoolCount={mempool ?? 0}
@@ -543,336 +478,35 @@ export function HomeExplorer({
         txUnit={t("home.txUnit")}
       />
 
-      <div
-        className={clsx(
-          "home-bento grid items-stretch gap-2 lg:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]",
-          statsVariant ? "lg:grid-rows-[auto_22.5rem]" : "lg:grid-rows-[22.5rem_22.5rem]"
-        )}
-      >
-        <div
-          className={clsx(
-            "home-bento-top contents gap-2 lg:col-span-2 lg:grid lg:h-full lg:min-h-0 lg:grid-cols-subgrid",
-            statsVariant ? "lg:grid-rows-[auto_auto]" : "lg:grid-rows-[minmax(0,1fr)_minmax(0,1fr)_auto]"
-          )}
-        >
-        {statsVariant ? (
-          <div className="min-w-0 max-lg:order-1 lg:col-span-2 lg:row-start-1">
-            <NetStats
-              variant={statsVariant}
-              price={price}
-              spot={spotPx}
-              change24h={changePct}
-              mcap={mcap}
-              rank={market?.rank ?? null}
-              vol24={vol24}
-              circulating={stats?.circulating ?? null}
-              maxSupply={stats?.maxSupply ?? 97_739_924}
-              holders={holderCount}
-              holdersMonth={stats?.holdersMonth ?? null}
-              scripts={scriptCount}
-              pools={pools}
-              minerCount={minerCount}
-              hashrate={stats?.hashRate ?? null}
-              hashSeries={hashRateSeries}
-              txDay={txDay}
-              feeDay={feeDay}
-              activity={txActivity}
-              enter={2}
-            />
-          </div>
-        ) : (
-        <>
-        <div className="home-kpi grid min-h-0 grid-cols-2 gap-2 sm:grid-cols-3 max-lg:order-1 lg:col-start-1 lg:row-span-2 lg:row-start-1 lg:h-full lg:grid-rows-2">
-          <article className={TILE} style={enterAt(2)}>
-            <div className="flex shrink-0 items-end justify-between gap-2">
-              <TileName>{t("home.price")}</TileName>
-              {changePct != null ? <PriceChangeChip pct={changePct} /> : null}
-            </div>
-            <div className="flex shrink-0 items-baseline justify-between gap-2">
-              <KpiValue flush>
-                <ReelText text={formatUsdPrice(spotPrice, locale)} />
-              </KpiValue>
-              {priceAt != null ? (
-                <span key={priceAt} className="hover-stamp shrink-0 text-[12px] font-medium leading-none tabular-nums text-[var(--muted)]">
-                  {formatHoverWhen(priceAt, locale)}
-                </span>
-              ) : null}
-            </div>
-            <div className="min-h-0 flex-1">
-              {chartBusy ? (
-                <div className="h-full rounded-[8px] bg-[var(--wash-faint)] motion-safe:animate-pulse" />
-              ) : price.length >= 2 ? (
-                <AreaChart
-                  points={price}
-                  fill
-                  compact
-                  glow
-                  activity
-                  showTip={false}
-                  color={changePct != null && changePct < 0 ? PRICE_DOWN : PRICE_UP}
-                  lineWidth={2}
-                  formatValue={(v) => formatUsdPrice(v, locale)}
-                  onHover={(v, t) => {
-                    const on = v != null && v > 0;
-                    setPriceHover(on ? v : null);
-                    setPriceAt(on && t != null ? t : null);
-                  }}
-                />
-              ) : (
-                <p className="pt-2 text-[12px] text-[var(--muted-2)]">
-                  {chartError ? t("home.chartError") : t("home.chartWarm")}
-                </p>
-              )}
-            </div>
-          </article>
-
-          <article className={TILE} style={enterAt(3)}>
-            <div className="flex items-center justify-between gap-2">
-              <TileName>{t("home.mcap")}</TileName>
-              {market?.rank != null ? (
-                <span className="mcap-rank shrink-0 rounded-[8px] px-1.5 py-0.5 text-[12px] font-semibold tabular-nums leading-none">
-                  #{market.rank}
-                </span>
-              ) : null}
-            </div>
-            <KpiValue flush full muted={mcap == null}>
-              {mcap != null ? (
-                <ReelText text={`$${formatGroupedNumber(Math.round(mcap), 0, 0, locale)}`} />
-              ) : (
-                mcapMiss
-              )}
-            </KpiValue>
-            <div className="mt-auto">
-              <TileName>{t("home.volume24h")}</TileName>
-              <KpiValue flush full muted={vol24 == null}>
-                {vol24 != null ? (
-                  <ReelText text={`$${formatGroupedNumber(Math.round(vol24), 0, 0, locale)}`} />
-                ) : (
-                  "—"
-                )}
-              </KpiValue>
-            </div>
-          </article>
-
-          <Link prefetch={false} href="/addresses" className={clsx(TILE, "kpi-tile--press relative")} style={enterAt(4)}>
-            <HoldersMark />
-            <TileFact hint={t("home.holdersHint")}>
-              <TileName className="pr-14">
-                {t("home.holdersCount")} <TipInfo content={t("home.holdersHint")} label={t("home.holdersHint")} side="bottom" />
-              </TileName>
-              <KpiValue flush muted={holderCount == null}>
-                <ReelText text={holderCount != null ? holderCount.toLocaleString(loc) : miss} />
-              </KpiValue>
-            </TileFact>
-            <TileFact className="mt-auto" place="above" hint={t("home.scriptHint")}>
-              <TileName className="pr-14">
-                {t("home.script")} <TipInfo content={t("home.scriptHint")} label={t("home.scriptHint")} />
-              </TileName>
-              <KpiValue flush full muted={scriptCount == null}>
-                <ReelText
-                  text={scriptCount != null ? scriptCount.toLocaleString(loc) : miss}
-                />
-              </KpiValue>
-            </TileFact>
-          </Link>
-
-          <article className={clsx(TILE, "group relative max-lg:hidden")} style={enterAt(6)}>
-            <TileName>
-              <SwapLine idle={t("home.circulating")} hover={t("home.maxSupply")} />
-            </TileName>
-            <p
-              className={clsx(
-                "whitespace-nowrap text-[22px] font-semibold leading-none tabular-nums tracking-tight",
-                stats?.circulating == null && "text-[var(--muted)]"
-              )}
-            >
-              <KpiNum>
-                {stats?.circulating != null ? (
-                  <SupplyFlip from={stats.circulating} to={stats.maxSupply} locale={locale} />
-                ) : (
-                  miss
-                )}
-              </KpiNum>
-            </p>
-            <div className="mt-auto flex h-9 items-end justify-between gap-2 pb-1">
-              <p className="min-w-0 truncate text-[12px] tabular-nums text-[var(--muted-2)]">
-                <SwapLine
-                  idle={
-                    emitted != null
-                      ? `${emitted.toFixed(1)}% ${t("home.circOf")}`
-                      : t("home.circOf")
-                  }
-                  hover={t("home.maxSupplyHint")}
-                />
-              </p>
-              {emitted != null ? <SupplyCapsule pct={emitted} /> : null}
-            </div>
-          </article>
-
-          <article className={clsx(TILE, "relative max-lg:hidden")} style={enterAt(7)}>
-            <div className={clsx("min-w-0", shareSlices.length >= 1 && "pr-[6.75rem]")}>
-              <TileName>{t("home.poolsActive")}</TileName>
-              <KpiValue flush muted={minerCount == null}>
-                <ReelText text={minerCount != null ? minerCount.toLocaleString(loc) : miss} />
-              </KpiValue>
-            </div>
-            {shareSlices.length >= 1 ? (
-              <div
-                className="absolute right-3 top-1/2 aspect-square h-[calc(100%-10px)] -translate-y-1/2"
-                role="img"
-                aria-label={t("home.miners")}
-              >
-                <DonutChart
-                  data={shareSlices}
-                  compact
-                  fill
-                  caption={false}
-                  formatValue={(v, pct) => `${formatInt(v, locale)} · ${pctLabel(pct)}`}
-                  onHover={(s) => setPoolHover(s ? { label: s.label, pct: s.pct } : null)}
-                />
-              </div>
-            ) : null}
-            <p className={clsx("mt-auto flex h-9 items-end pb-1 truncate text-[12px] text-[var(--muted-2)]", shareSlices.length >= 1 && "pr-[6.75rem]")}>
-              {poolHover
-                ? `${poolHover.label} · ${pctLabel(poolHover.pct)}`
-                : lead
-                  ? `${!lead.address && lead.name === "other" ? t("home.shareOther") : lead.name} · ${pctLabel(lead.share)}`
-                  : t("home.poolsHint")}
-            </p>
-          </article>
-
-          <article className={TILE} style={enterAt(8)}>
-            <TileName className="shrink-0">{t("home.hashrate")}</TileName>
-            <div className="flex shrink-0 items-baseline justify-between gap-2">
-              <KpiValue flush muted={spotHash == null}>
-                <ReelText text={spotHash != null ? formatHashrate(spotHash) : miss} />
-              </KpiValue>
-              {hrAt != null ? (
-                <span key={hrAt} className="hover-stamp shrink-0 text-[12px] font-medium leading-none tabular-nums text-[var(--muted)]">
-                  {formatHoverWhen(hrAt, locale)}
-                </span>
-              ) : null}
-            </div>
-            {hashrateSpark ? (
-              <div className="min-h-0 flex-1">
-                <AreaChart
-                  points={hashRateSeries}
-                  fill
-                  compact
-                  glow
-                  showTip={false}
-                  color={HOME.hashrate}
-                  lineWidth={1.75}
-                  formatValue={formatHashrate}
-                  onHover={(v, t) => {
-                    const on = v != null && v > 0;
-                    setHrHover(on ? v : null);
-                    setHrAt(on && t != null ? t : null);
-                  }}
-                  locale={loc}
-                />
-              </div>
-            ) : (
-              <p className="mt-auto flex h-9 items-end pb-1 text-[12px] text-[var(--muted-2)]">
-                {t("home.share24h")}
-              </p>
-            )}
-          </article>
-        </div>
-        <div className="flex max-lg:order-2 max-lg:min-h-[22.5rem] flex-col gap-2 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:grid lg:h-full lg:min-h-0 lg:grid-rows-subgrid">
-          <HomeActivityTile
-            enter={5}
-            title={t("home.txs")}
-            href="/transactions"
-            viewAll={t("home.viewAll")}
-            kpiLabel={t("home.txDay")}
-            kpi={
-              txScrub
-                ? Math.round(txScrub.txs).toLocaleString(loc)
-                : txDay != null
-                  ? Math.round(txDay).toLocaleString(loc)
-                  : null
-            }
-            when={txScrub ? formatHoverWhen(txScrub.t, locale) : null}
-          >
-            {showTxChart ? (
-              <DualLineChart
-                points={txActivity}
-                compact
-                glow
-                showTip={false}
-                onHover={setTxScrub}
-                series="txs"
-                colorTxs={TX_LINE}
-                colorFees={FEE_LINE}
-                nameTxs={t("home.txs")}
-                nameFees={t("home.txChartFees")}
-                locale={loc}
-                formatTxs={(v) => formatCompact(v, 1, locale)}
-                formatFees={formatFeeAxis}
-              />
-            ) : (
-              <p className="flex h-full items-center justify-center text-[13px] text-[var(--muted)]">
-                {t("home.chartWarm")}
-              </p>
-            )}
-          </HomeActivityTile>
-          <HomeActivityTile
-            enter={10}
-            title={t("home.txChartFees")}
-            href="/fees"
-            viewAll={t("home.viewAll")}
-            kpiLabel={t("home.fees24h")}
-            kpi={
-              feeScrub && feeScrub.feesKnown !== false
-                ? `${formatFeeKpi(feeScrub.feesErg)} ERG`
-                : feeDay != null
-                  ? `${formatFeeKpi(feeDay)} ERG`
-                  : null
-            }
-            when={feeScrub ? formatHoverWhen(feeScrub.t, locale) : null}
-          >
-            {showTxChart && showFeeLine ? (
-              <DualLineChart
-                points={txActivity}
-                compact
-                glow
-                showTip={false}
-                onHover={setFeeScrub}
-                series="fees"
-                colorTxs={TX_LINE}
-                colorFees={FEE_LINE}
-                nameTxs={t("home.txs")}
-                nameFees={t("home.txChartFees")}
-                locale={loc}
-                formatTxs={(v) => formatCompact(v, 1, locale)}
-                formatFees={formatFeeAxis}
-              />
-            ) : (
-              <p className="flex h-full items-center justify-center text-[13px] text-[var(--muted)]">
-                {t("home.chartWarm")}
-              </p>
-            )}
-          </HomeActivityTile>
-        </div>
-        </>
-        )}
-
-        <EpochBar
-          height={tipHeight}
-          avgBlockMs={avgBlockMs}
-          t={t}
-          locale={locale}
-          className={clsx("home-tile-enter max-lg:order-4 lg:col-start-1", statsVariant ? "lg:row-start-2" : "lg:row-start-3")}
-          style={enterAt(9)}
+      {/* The street's two columns, row by row: the week | Lithos, the harbour | the reef, epoch | nodes.
+          A phone reads them in this order, one under the other. */}
+      <div className="home-bento grid items-stretch gap-2 lg:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)] lg:grid-rows-[auto_22.5rem_auto]">
+        <NetStats
+          price={price}
+          priceNote={priceNote}
+          spot={spotPx}
+          change24h={changePct}
+          mcap={mcap}
+          rank={market?.rank ?? null}
+          vol24={vol24}
+          circulating={stats?.circulating ?? null}
+          maxSupply={stats?.maxSupply ?? 97_739_924}
+          holders={stats?.holderCount ?? null}
+          holdersMonth={stats?.holdersMonth ?? null}
+          scripts={stats?.scriptCount ?? null}
+          pools={pools}
+          minerCount={minerCount}
+          hashrate={stats?.hashRate ?? null}
+          hashSeries={hashRateSeries}
+          txDay={txDay}
+          feeDay={feeDay}
+          activity={txActivity}
+          enter={ENTER_NET}
         />
-        <HomeVersionNodes
-          className={clsx("home-tile-enter home-meet-right h-full min-h-0 max-lg:order-3 lg:col-start-2", statsVariant ? "lg:row-start-2" : "lg:row-start-3")}
-          style={enterAt(11)}
-        />
-        </div>
 
-        <HomeRentHarbour
+        <Lithos data={lithos} tipHeight={blocks[0]?.height ?? lithos?.tip.height ?? null} enter={3} />
+
+        <RentHarbour
           rows={rentTape}
           epochRentNano={rentEpochNano}
           epochBoxes={rentEpochBoxes}
@@ -882,42 +516,20 @@ export function HomeExplorer({
           danger={rentDanger}
           dangerReady={rentDangerReady}
           previewShare={previewShare}
-          enter={12}
+          enter={4}
         />
 
-        <HomeLithos data={lithos} tipHeight={blocks[0]?.height ?? lithos?.tip.height ?? null} enter={13} />
+        <EpochBar
+          height={tipHeight}
+          avgBlockMs={avgBlockMs}
+          t={t}
+          locale={locale}
+          className="home-tile-enter"
+          style={ENTER_EPOCH}
+        />
+        <VersionNodes className="home-tile-enter home-meet-right h-full min-h-0" style={ENTER_VERSIONS} />
       </div>
-    </Shell>
-  );
-}
-
-const TILE =
-  "home-tile-enter mod flex h-full min-w-0 flex-col rounded-[20px] border border-[var(--border)] bg-[var(--module)] px-3.5 py-3";
-
-function TileName({ className, children }: { className?: string; children: ReactNode }) {
-  return (
-    <p className={clsx("text-[13px]", className)} style={{ color: HOME.forming }}>
-      {children}
-    </p>
-  );
-}
-
-function TileFact({
-  hint,
-  className,
-  place = "below",
-  children,
-}: {
-  hint: string;
-  className?: string;
-  place?: "above" | "below";
-  children: ReactNode;
-}) {
-  // Inside a link tile: a tap opens the page, so the tip is for hover and keyboard.
-  return (
-    <Tip content={hint} side={place === "above" ? "top" : "bottom"} tap={false}>
-      <div className={clsx("relative", className)}>{children}</div>
-    </Tip>
+    </>
   );
 }
 
@@ -925,227 +537,6 @@ function enterAt(i: number): CSSProperties {
   return { "--enter": i } as CSSProperties;
 }
 
-function HomeActivityTile({
-  enter,
-  title,
-  href,
-  viewAll,
-  kpiLabel,
-  kpi,
-  when,
-  children,
-}: {
-  enter: number;
-  title: string;
-  href: string;
-  viewAll: string;
-  kpiLabel: string;
-  kpi: string | null;
-  when?: string | null;
-  children: ReactNode;
-}) {
-  return (
-    <section
-      className="home-tile-enter home-meet-right mod flex h-full min-h-0 flex-1 flex-col rounded-[20px] border border-[var(--border)] bg-[var(--module)]"
-      style={enterAt(enter)}
-    >
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[20px] px-4 py-2.5 sm:px-5">
-        <div className="relative mb-1 flex h-[22px] shrink-0 items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-3">
-            <h2 className="m-0 text-[13px] leading-none" style={{ color: HOME.forming }}>{title}</h2>
-            <Link prefetch={false} href={href} className="tap-44 text-[13px] leading-none text-[var(--muted)] hover:text-[var(--text)]">
-              {viewAll}
-            </Link>
-          </div>
-          <span
-            className={clsx("activity-when", when && "is-on")}
-            aria-hidden={!when}
-          >
-            {when ?? ""}
-          </span>
-          {kpi != null ? (
-            <p className="m-0 flex h-[22px] shrink-0 flex-nowrap items-center justify-end gap-1.5 whitespace-nowrap">
-              {when ? null : (
-                <span className="text-[12px] leading-none text-[var(--muted)]">{kpiLabel}</span>
-              )}
-              <KpiNum className="max-w-none shrink-0 tabular-nums text-[22px] font-semibold leading-none tracking-tight text-[var(--text)]">
-                <ReelText text={kpi} />
-              </KpiNum>
-            </p>
-          ) : null}
-        </div>
-        <div className="min-h-0 flex-1">{children}</div>
-      </div>
-    </section>
-  );
-}
-
-function formatHoverWhen(t: number, _locale: string): string {
-  return `${formatDottedDay(t, "UTC")} · ${formatH24(t, "UTC", false)}`;
-}
-
-function formatFeeKpi(v: number): string {
-  if (!Number.isFinite(v)) return "—";
-  if (Math.abs(v) >= 10_000) return formatCompact(v);
-  const rounded = Math.round(v * 10) / 10;
-  return Number.isInteger(rounded) ? String(Math.round(rounded)) : rounded.toFixed(1);
-}
-
-/** The holders tile wears the same field and glyph as every KPI tile. */
-function HoldersMark() {
-  return (
-    <span className="holders-mark" aria-hidden>
-      <KpiMark id="holders" />
-    </span>
-  );
-}
-
-function PriceChangeChip({ pct }: { pct: number }) {
-  return (
-    <span
-      className={clsx(
-        "shrink-0 rounded-[8px] px-1.5 py-0.5 text-[12px] font-medium leading-none tabular-nums",
-        pct >= 0 ? "bg-up/15 text-up" : "bg-down/15 text-down"
-      )}
-    >
-      {pct >= 0 ? "+" : ""}
-      {pct.toFixed(1)}%
-    </span>
-  );
-}
-
-function KpiValue({
-  children,
-  muted,
-  flush,
-  full,
-}: {
-  children: ReactNode;
-  muted?: boolean;
-  flush?: boolean;
-  full?: boolean;
-}) {
-  return (
-    <p
-      className={clsx(
-        "text-[22px] font-semibold tabular-nums tracking-tight",
-        full ? "whitespace-nowrap" : "truncate",
-        flush ? "leading-none" : "mt-1",
-        muted && "text-[var(--muted)]"
-      )}
-    >
-      <KpiNum>{children}</KpiNum>
-    </p>
-  );
-}
-
-const SWAP =
-  "transition-opacity duration-[350ms] ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:duration-0";
-
-function SupplyFlip({ from, to, locale }: { from: number; to: number; locale: string }) {
-  const glyphs = zipSupplyGlyphs(from, to, locale);
-  const idle = glyphs.map((g) => g.idle).join("");
-  return (
-    <span className="inline-flex items-baseline">
-      <span className="sr-only">{idle} ERG</span>
-      <span aria-hidden className="inline-flex items-baseline">
-        {glyphs.map((g, i) => (
-          <SupplyGlyph key={i} idle={g.idle} hover={g.hover} delay={glyphs.length - 1 - i} />
-        ))}
-      </span>
-      <span aria-hidden className="ml-[0.32em]">
-        ERG
-      </span>
-    </span>
-  );
-}
-
-function SupplyGlyph({ idle, hover, delay }: { idle: string; hover: string; delay: number }) {
-  if (!isSupplyDigit(idle) && !isSupplyDigit(hover)) {
-    return <span className="inline-block">{idle}</span>;
-  }
-  const from = isSupplyDigit(idle) ? Number(idle) : 0;
-  const to = isSupplyDigit(hover) ? Number(hover) : 0;
-  return (
-    <span className="supply-reel relative inline-block h-[1em] w-[1ch] overflow-hidden align-[-0.12em]">
-      <span
-        className="supply-reel-strip flex flex-col"
-        style={
-          {
-            ["--from" as string]: from,
-            ["--to" as string]: to,
-            ["--i" as string]: delay,
-          } as CSSProperties
-        }
-      >
-        {Array.from({ length: 10 }, (_, n) => (
-          <span key={n} className="block h-[1em] leading-none">
-            {n}
-          </span>
-        ))}
-      </span>
-    </span>
-  );
-}
-
-/** Stadium track — share of max supply, sits under the figure on the right. */
-function SupplyCapsule({ pct }: { pct: number }) {
-  const p = Math.max(0, Math.min(100, pct));
-  const w = 62;
-  const h = 26;
-  const sw = 2.35;
-  const x = sw / 2;
-  const y = sw / 2;
-  const r = (h - sw) / 2;
-  const path = `M ${w / 2} ${y} H ${w - x - r} A ${r} ${r} 0 0 1 ${w - x} ${h / 2} A ${r} ${r} 0 0 1 ${w - x - r} ${h - y} H ${x + r} A ${r} ${r} 0 0 1 ${x} ${h / 2} A ${r} ${r} 0 0 1 ${x + r} ${y} H ${w / 2}`;
-  return (
-    <div
-      className="relative h-[26px] w-[62px] shrink-0"
-      role="img"
-      aria-label={`${p.toFixed(0)}%`}
-    >
-      <svg viewBox={`0 0 ${w} ${h}`} className="absolute inset-0" aria-hidden>
-        <path d={path} fill="none" stroke="var(--border)" strokeWidth={sw} />
-        <path
-          d={path}
-          fill="none"
-          strokeWidth={sw}
-          strokeLinecap="round"
-          pathLength={100}
-          strokeDasharray="100 100"
-          className="circ-ring-arc"
-          style={{
-            ["--circ-off" as string]: 100 - p,
-            ["--circ-from" as string]: HOME.erg,
-          }}
-        />
-      </svg>
-      <span className="absolute inset-0 flex items-center justify-center text-[10px] font-semibold tabular-nums leading-none">
-        <span className={clsx(SWAP, "group-hover:opacity-0")}>{p.toFixed(0)}%</span>
-        <span className={clsx("absolute opacity-0", SWAP, "group-hover:opacity-100")}>100%</span>
-      </span>
-    </div>
-  );
-}
-
-function SwapLine({ idle, hover }: { idle: string; hover: string }) {
-  return (
-    <span className="relative block">
-      <span className={clsx("block truncate", SWAP, "group-hover:opacity-0")}>{idle}</span>
-      <span
-        className={clsx(
-          "absolute inset-0 block truncate opacity-0",
-          SWAP,
-          "group-hover:opacity-100"
-        )}
-      >
-        {hover}
-      </span>
-    </span>
-  );
-}
-
-/** Ergo header epoch = floor(height / 1024). ~2 min × 1024 ≈ 34h. */
 const ERGO_EPOCH_LEN = 1024;
 const ERGO_BLOCK_MS = 120_000;
 

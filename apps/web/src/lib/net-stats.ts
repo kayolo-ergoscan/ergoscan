@@ -1,6 +1,6 @@
 /**
  * Home «network» block: the week of price, hashrate, transactions and fees on one time axis.
- * Pure helpers (no React): series from the home snapshot, 6 h sums, scales, SVG paths, ticks.
+ * Pure helpers (no React): series from the home snapshot, 6 h sums, scales, SVG paths, day ticks.
  * Everything here comes from data the page already has; nothing is fetched.
  */
 
@@ -64,13 +64,12 @@ export function netDomain(...series: ReadonlyArray<readonly { t: number }[]>): [
   return [t1 - NET_SPAN_MS, t1];
 }
 
-/** Value range with a little air; bars start at zero. */
-export function extent(vals: readonly number[], zero = false): [number, number] {
+/** Value range of a line, with a little air. */
+export function extent(vals: readonly number[]): [number, number] {
   const xs = vals.filter((v) => Number.isFinite(v));
   if (!xs.length) return [0, 1];
   let lo = Math.min(...xs);
   let hi = Math.max(...xs);
-  if (zero) return [0, hi > 0 ? hi : 1];
   if (hi === lo) {
     const d = Math.abs(hi) * 0.05 || 1;
     return [lo - d, hi + d];
@@ -133,8 +132,6 @@ export type BarPaths = {
   open: string;
   /** Notches across the columns cut by the ceiling, painted in the surface colour. */
   cut: string;
-  /** Where each cut column's true value can be printed. */
-  cuts: { x: number; y: number; v: number }[];
 };
 
 /**
@@ -145,8 +142,7 @@ export function barPaths(f: Frame, bins: readonly NetBin[], maxW = 24): BarPaths
   let closed = "";
   let open = "";
   let cut = "";
-  const cuts: BarPaths["cuts"] = [];
-  if (!bins.length) return { closed, open, cut, cuts };
+  if (!bins.length) return { closed, open, cut };
   const pitch = xOf(f, bins[0]!.t1) - xOf(f, bins[0]!.t);
   const bw = Math.max(1, Math.min(maxW, pitch - Math.max(2, pitch * 0.32)));
   const base = f.h - (f.bottom ?? 0);
@@ -167,22 +163,9 @@ export function barPaths(f: Frame, bins: readonly NetBin[], maxW = 24): BarPaths
     if (over) {
       const ny = y + Math.min(6, hgt / 3);
       cut += `M${r1(x - 0.5)} ${r1(ny)}h${r1(bw + 1)}v2h${r1(-bw - 1)}Z`;
-      cuts.push({ x: x + bw, y, v: b.v });
     }
   }
-  return { closed, open, cut, cuts };
-}
-
-/** 2–4 clean ticks inside [lo, hi]. */
-export function niceTicks(lo: number, hi: number, count = 3): number[] {
-  const span = hi - lo;
-  if (!(span > 0)) return [lo];
-  const raw = span / count;
-  const mag = 10 ** Math.floor(Math.log10(raw));
-  const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => span / s <= count + 0.5) ?? 10 * mag;
-  const out: number[] = [];
-  for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-12; v += step) out.push(Number(v.toPrecision(12)));
-  return out;
+  return { closed, open, cut };
 }
 
 /** UTC midnights inside the week, every `every` days. */
@@ -212,10 +195,17 @@ export function binIndex(bins: readonly NetBin[], t: number): number {
   return -1;
 }
 
-/** Change over the week, first to last point; null under two points. */
-export function weekChange(pts: readonly NetPt[]): number | null {
-  if (pts.length < 2) return null;
-  const a = pts[0]!.v;
-  const b = pts[pts.length - 1]!.v;
-  return a > 0 ? (b - a) / a : null;
+/**
+ * `next` unless it holds the same rows as `prev` (same length, same values under `keys`): then `prev`,
+ * so a snapshot that changed nothing keeps the array a memo already knows.
+ */
+export function sameRows<A extends readonly object[]>(prev: A, next: A, keys: readonly (keyof A[number])[]): A {
+  if (prev === next) return prev;
+  if (prev.length !== next.length) return next;
+  for (let i = 0; i < next.length; i++) {
+    const a: A[number] = prev[i]!;
+    const b: A[number] = next[i]!;
+    for (const k of keys) if (a[k] !== b[k]) return next;
+  }
+  return prev;
 }

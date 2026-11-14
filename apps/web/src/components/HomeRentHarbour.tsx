@@ -349,11 +349,11 @@ export function HomeRentHarbour({
     <section
       ref={hostRef}
       data-home-rent=""
-      className="home-tile-enter grid h-full min-h-0 min-w-0 grid-cols-1 gap-2 max-lg:order-4 sm:grid-cols-2 lg:h-full"
+      className="grid h-full min-h-0 min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:col-span-2 lg:grid-cols-subgrid"
       style={{ "--enter": enter } as CSSProperties}
     >
-      {/* ---------- «Рента этой эпохи»: the harbour ---------- */}
-      <article className="mod flex h-full min-h-0 min-w-0 flex-col rounded-[20px] border border-[var(--border)] bg-[var(--module)]">
+      {/* ---------- «Рента этой эпохи»: the harbour (the home's wide column) ---------- */}
+      <article className="home-tile-enter mod flex h-full min-h-0 min-w-0 flex-col rounded-[20px] border border-[var(--border)] bg-[var(--module)]">
         <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[20px] px-4 py-3">
           <div className="flex min-h-[22px] shrink-0 items-center justify-between gap-3">
             <h2 className="m-0 shrink-0 whitespace-nowrap text-[13px] leading-none" style={{ color: HOME.forming }}>
@@ -442,9 +442,9 @@ export function HomeRentHarbour({
         </div>
       </article>
 
-      {/* ---------- «Токены под угрозой»: the reef ---------- */}
+      {/* ---------- «Токены под угрозой»: the reef (the narrow column) ---------- */}
       <article
-        className="mod flex h-full min-h-0 min-w-0 flex-col rounded-[20px] border border-[var(--border)] bg-[var(--module)]"
+        className="home-tile-enter home-meet-right mod flex h-full min-h-0 min-w-0 flex-col rounded-[20px] border border-[var(--border)] bg-[var(--module)]"
         style={{ "--tag": "var(--f-token, var(--c-token))" } as CSSProperties}
       >
         <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[20px] px-4 py-3">

@@ -1232,7 +1232,7 @@ export function HomeLithos({ data, tipHeight, enter = 0 }: { data: LithosHome | 
 
   return (
     <section
-      className="home-tile-enter home-meet-right min-w-0 max-lg:order-5 lg:h-full"
+      className="home-tile-enter home-meet-right min-w-0 lg:h-full"
       style={{ "--enter": enter } as CSSProperties}
     >
       <Link

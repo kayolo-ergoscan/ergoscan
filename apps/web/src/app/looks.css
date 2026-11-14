@@ -399,10 +399,6 @@ html[data-look="c"] .epoch-slot {
 html[data-look="c"] .epoch-left {
   color: var(--c-net-text);
 }
-html[data-look="c"] .circ-ring-arc {
-  stroke: var(--c-box);
-}
-
 html[data-look="c"] .sheet-spin {
   display: none;
 }
@@ -479,11 +475,6 @@ html[data-look="c"][data-figs="mono"] .font-semibold .tabular-nums,
 html[data-look="c"][data-figs="mono"] .font-semibold.tabular-nums .kpi-scale-up,
 html[data-look="c"][data-figs="mono"] .kpi-tile .font-semibold.tabular-nums {
   letter-spacing: -0.065em;
-}
-@media (max-width: 639px) {
-  html[data-look="c"][data-figs="mono"] .home-kpi .kpi-scale-up {
-    font-size: 0.86em;
-  }
 }
 
 /* Address title: a bare address is printed whole on two lines, not scrolled under a fade. */
