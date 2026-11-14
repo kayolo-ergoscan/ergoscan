@@ -97,6 +97,18 @@ const MempoolCtx = createContext<StreamMempool>({
 
 /** Gateway clock minus this browser's, from the stream's `mempool.snapshot` stamps; null until one came. */
 let gatewaySkew: number | null = null;
+/**
+ * The last few stamp gaps. Each is the true gap less that message's trip, so the largest is the
+ * closest; a few, not all, so a clock that was set since then catches up.
+ */
+const SKEW_SAMPLES = 5;
+const skewSamples: number[] = [];
+
+function noteGatewayStamp(gap: number): void {
+  skewSamples.push(gap);
+  if (skewSamples.length > SKEW_SAMPLES) skewSamples.shift();
+  gatewaySkew = Math.max(...skewSamples);
+}
 
 /** A gateway-clock moment (`seenAt`, `eta.lastBlockTs`) on this browser's clock. */
 export function fromGatewayClock(ms: number): number {
@@ -256,7 +268,7 @@ function applyStreamMessage(msg: unknown, s: StreamSetters) {
     };
     // Stamped when sent (unlike a resent fees.histogram): the clock gap, give or take the latency.
     const stamp = Number(data.ts);
-    if (Number.isFinite(stamp) && stamp > 1e12) gatewaySkew = stamp - Date.now();
+    if (Number.isFinite(stamp) && stamp > 1e12) noteGatewayStamp(stamp - Date.now());
     const blocked = sealedIds(s);
     const parsed = capStreamBalls(
       (Array.isArray(data.balls) ? data.balls : [])

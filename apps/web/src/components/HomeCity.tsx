@@ -83,10 +83,15 @@ function finite(v: unknown): number {
   return typeof v === "number" && Number.isFinite(v) ? v : 0;
 }
 
+/** Block reads: the first txs of each block, and its whole tx count as the database has it. */
+export type BlockReads = { txs: Record<string, CityTx[]>; total: Record<string, number> };
+const NO_READS: BlockReads = { txs: {}, total: {} };
+
 /** Blocks just sealed (the newest few seals): their first read waits for the database. */
-export function useBlockReads(blocks: readonly CityRow[], sealIds: ReadonlySet<string>): Record<string, CityTx[]> {
-  const [reads, setReads] = useState<Record<string, CityTx[]>>({});
+export function useBlockReads(blocks: readonly CityRow[], sealIds: ReadonlySet<string>): BlockReads {
+  const [reads, setReads] = useState<BlockReads>(NO_READS);
   const cache = useRef<Record<string, CityTx[]>>({});
+  const totals = useRef<Record<string, number>>({});
   const asked = useRef(new Set<string>());
   const tries = useRef(new Map<string, number>());
   const timers = useRef(new Map<string, number>());
@@ -119,14 +124,19 @@ export function useBlockReads(blocks: readonly CityRow[], sealIds: ReadonlySet<s
     const paint = () => {
       if (!alive.current) return;
       const next: Record<string, CityTx[]> = {};
+      const total: Record<string, number> = {};
       for (const id of want.current) {
         const c = cache.current[id];
-        if (c) next[id] = c;
+        if (!c) continue;
+        next[id] = c;
+        const n = totals.current[id];
+        if (n != null) total[id] = n;
       }
       setReads((prev) => {
-        const a = Object.keys(prev);
+        // A total is written with its txs: the same txs mean the same totals.
+        const a = Object.keys(prev.txs);
         const b = Object.keys(next);
-        return a.length === b.length && b.every((k) => prev[k] === next[k]) ? prev : next;
+        return a.length === b.length && b.every((k) => prev.txs[k] === next[k]) ? prev : { txs: next, total };
       });
     };
     const fresh = (id: string) => sealRef.current.has(id) || Date.now() - tsMs(rows.current.find((b) => b.id === id)?.timestamp ?? 0) < READ_FRESH_MS;
@@ -144,14 +154,19 @@ export function useBlockReads(blocks: readonly CityRow[], sealIds: ReadonlySet<s
       void fetch(`${getGateway()}/v1/blocks/${encodeURIComponent(id)}?limit=${READ_LIMIT}&offset=0`, { ...SNAPSHOT_FETCH, signal: abort.current?.signal })
         .then(async (r) => {
           if (!r.ok) throw new Error(String(r.status));
-          const j = (await r.json()) as { txs?: Array<{ category?: string; color?: string }> };
+          const j = (await r.json()) as { txs?: Array<{ category?: string; color?: string }>; txCount?: unknown };
           const txs = Array.isArray(j.txs) ? j.txs : [];
-          // Every block has its coinbase: no txs yet means the database has not written them.
-          if (!txs.length && (rows.current.find((b) => b.id === id)?.txCount ?? 0) > 0) throw new Error("short");
+          // Every block has its coinbase: no txs yet means the database has not written them (a
+          // partial seal's row has no count yet: the same).
+          if (!txs.length && rows.current.find((b) => b.id === id)?.txCount !== 0) throw new Error("short");
           cache.current[id] = txs.map((t) => ({
             color: typeof t.color === "string" ? t.color : "",
             category: typeof t.category === "string" ? t.category : "",
           }));
+          // The read pages its txs; the block's own count is the whole of it.
+          const n = typeof j.txCount === "number" && Number.isFinite(j.txCount) ? Math.max(j.txCount, txs.length) : null;
+          if (n != null) totals.current[id] = n;
+          else delete totals.current[id];
           asked.current.delete(id);
           tries.current.delete(id);
           paint();
@@ -167,6 +182,7 @@ export function useBlockReads(blocks: readonly CityRow[], sealIds: ReadonlySet<s
     };
     const keep = new Set(ids);
     for (const id of Object.keys(cache.current)) if (!keep.has(id)) delete cache.current[id];
+    for (const id of Object.keys(totals.current)) if (!keep.has(id)) delete totals.current[id];
     for (const id of [...tries.current.keys()]) if (!keep.has(id)) tries.current.delete(id);
     for (const [id, h] of [...timers.current]) {
       if (keep.has(id)) continue;
@@ -294,7 +310,9 @@ function HomeCityPairLive({
     () => new Set(seals.slice(-3).flatMap((s) => (typeof s.blockId === "string" && s.blockId.length >= 16 ? [s.blockId] : []))),
     [seals]
   );
-  const reads = useBlockReads(blocks, sealIds);
+  const { txs: reads, total: readTotals } = useBlockReads(blocks, sealIds);
+  /** A row's tx count: the tape's, else the block read's (a partial seal), else unknown («—»). */
+  const txsOf = (row: CityRow): number | null => (row.txCount != null && Number.isFinite(row.txCount) ? row.txCount : (readTotals[row.id] ?? null));
 
   const fees: Fees | null = useMemo(() => {
     if (streamLive && streamFees) return { normal: streamFees.normal, turbo: streamFees.turbo };
@@ -312,13 +330,13 @@ function HomeCityPairLive({
           height: b.height,
           ts: tsMs(b.timestamp),
           seenAt: b.seenAt ?? null,
-          txCount: Number.isFinite(b.txCount) ? Math.max(0, b.txCount!) : (reads[b.id]?.length ?? 0),
+          txCount: Number.isFinite(b.txCount) ? Math.max(0, b.txCount!) : (readTotals[b.id] ?? reads[b.id]?.length ?? 0),
           size: Math.max(0, finite(b.size)),
           flag: b.minerAddress ? (poolInk[b.minerAddress] ?? null) : null,
           lithos: b.lithos === true,
           txs: reads[b.id] ?? null,
         })),
-    [blocks, poolInk, reads]
+    [blocks, poolInk, readTotals, reads]
   );
   const yardTxs: YardTx[] = useMemo(
     () =>
@@ -407,7 +425,7 @@ function HomeCityPairLive({
   const hovered = rowOf(hoverBlock);
   const sealing = built ? (rowOf(built.id) ?? { id: built.id, height: built.height, timestamp: built.ts, txCount: null, size: 0 }) : null;
   const active = hovered ?? sealing ?? street[0] ?? null;
-  const activeTxs = !hovered && built && active?.id === built.id ? built.built : (active?.txCount ?? 0);
+  const activeTxs = !hovered && built && active?.id === built.id ? built.built : active ? txsOf(active) : null;
 
   const cityTip = useFloatTip({ within: () => cityRef.current });
   const yardTip = useFloatTip({ within: () => yardRef.current });
@@ -417,7 +435,7 @@ function HomeCityPairLive({
   const blockTip = (id: string): ReactNode => {
     const row = rowOf(id);
     if (!row) return null;
-    const txs = built && id === built.id ? built.built : row.txCount;
+    const txs = built && id === built.id ? built.built : txsOf(row);
     const feeRaw = row.feeNano != null ? String(row.feeNano) : "";
     const fee = /^\d+$/.test(feeRaw) && feeRaw !== "0" ? feeRaw : null;
     return (
@@ -550,8 +568,8 @@ function HomeCityPairLive({
     if (!top) return title;
     return t("home.cityLabel")
       .replace("{h}", top.height.toLocaleString(loc))
-      .replace("{tx}", (top.txCount ?? 0).toLocaleString(loc));
-  }, [loc, street, t, title]);
+      .replace("{tx}", top.txCount != null && Number.isFinite(top.txCount) ? top.txCount.toLocaleString(loc) : (readTotals[top.id]?.toLocaleString(loc) ?? "—"));
+  }, [loc, readTotals, street, t, title]);
   const yardLabel = useMemo(() => {
     let turbo = 0;
     let normal = 0;
@@ -590,7 +608,7 @@ function HomeCityPairLive({
                     <ReelText text={active.height.toLocaleString(loc)} />
                   </span>
                   <span className="shrink-0 text-[12px] font-medium leading-none text-[var(--muted-2)]">
-                    <ReelText text={(activeTxs ?? 0).toLocaleString(loc)} />
+                    <ReelText text={activeTxs != null ? activeTxs.toLocaleString(loc) : "—"} />
                     <span className="ml-0.5">{txUnit}</span>
                   </span>
                   <span key={active.timestamp} className="hover-stamp min-w-0 truncate text-[12px] font-medium leading-none tabular-nums text-[var(--muted)]">

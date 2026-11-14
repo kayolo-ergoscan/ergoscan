@@ -18,12 +18,17 @@ g.removeEventListener = () => {};
 g.devicePixelRatio = 1;
 g.matchMedia = () => ({ matches: false });
 g.getComputedStyle = () => ({ getPropertyValue: () => "" });
-g.document = {
+/** The newest engine's tab-visibility listener (the tests flip the tab by calling it). */
+let onVisibility: (() => void) | null = null;
+const doc = {
   visibilityState: "visible",
   documentElement: { dataset: {} },
-  addEventListener() {},
+  addEventListener(kind: string, fn: () => void) {
+    if (kind === "visibilitychange") onVisibility = fn;
+  },
   removeEventListener() {},
 };
+g.document = doc;
 g.requestAnimationFrame = (fn: (t: number) => void) => {
   frames.push(fn);
   return frames.length;
@@ -76,6 +81,8 @@ async function rig() {
   const built: ({ id: string; height: number } | null)[] = [];
   const storeys: number[] = [];
   const commits: (number | null)[] = [];
+  /** Moments and commits in the order they happened: `built 101`, `built -`, `commit 101`. */
+  const log: string[] = [];
   const host = el(1200, 160) as unknown as HTMLElement;
   const e = new CityEngine({
     city: el(760, 116),
@@ -86,14 +93,20 @@ async function rig() {
     text: { turbo: "Turbo", normal: "Normal", more: (n: number) => `+${n}`, tag: (n: number) => `${n} tx` },
     cb: {
       onBuilt: (b) => {
-        if ((built.at(-1)?.id ?? null) !== (b?.id ?? null)) built.push(b ? { id: b.id, height: b.height } : null);
+        if ((built.at(-1)?.id ?? null) !== (b?.id ?? null)) {
+          built.push(b ? { id: b.id, height: b.height } : null);
+          log.push(`built ${b ? b.height : "-"}`);
+        }
         if (b) storeys.push(b.built);
       },
       onWaiting: () => {},
-      onCommit: (h) => commits.push(h),
+      onCommit: (h) => {
+        commits.push(h);
+        log.push(`commit ${h}`);
+      },
     },
   });
-  return { e, built, commits, storeys };
+  return { e, built, commits, storeys, log };
 }
 
 function blk(height: number, o: Partial<CityBlock> = {}): CityBlock {
@@ -185,6 +198,85 @@ test("engine: a partial seal (no tx list) still plays its moment; the read fills
   assert.equal(storeys.at(-1), 2, "the read's txs stand as storeys");
   runTo(2_000 + sealPlan(0).end + 5);
   assert.deepEqual(commits, [100, 101]);
+  e.destroy();
+});
+
+function city(blocks: CityBlock[], txs: YardTx[]) {
+  return { blocks, mem: { count: txs.length, txs }, fees: null, avgBlockMs: 120_000, streamLive: true };
+}
+
+test("engine: four seals during one moment: the street never passes the tower going up, all stand in order", async () => {
+  frames = [];
+  const { e, built, commits, log } = await rig();
+  e.setData(city(STREET, ["t1", "t2", "t3", "t4", "x"].map(ytx)));
+  runTo(2_000);
+  e.seal(seal(101, ["cb101", "t1"]));
+  runTo(2_050);
+  // Three more while 101 builds: one past the queue (102) stands without a moment.
+  e.seal(seal(102, ["cb102", "t2"]));
+  e.seal(seal(103, ["cb103", "t3"]));
+  e.seal(seal(104, ["cb104", "t4"]));
+  e.setData(city([blk(104), blk(103), blk(102), blk(101), ...STREET], [ytx("x")]));
+  runTo(2_300);
+  assert.deepEqual(commits, [100], "nothing past 101 stands while 101 builds");
+  for (let t = 2_300; t <= 40_000; t += 250) runTo(t);
+  assert.deepEqual(commits, [100, 101, 102, 103, 104], "every height stands, in order");
+  assert.ok(log.indexOf("commit 102") > log.indexOf("commit 101"), "102 after 101's tower");
+  assert.deepEqual(built.filter(Boolean).map((b) => b!.height), [101, 103, 104], "the skipped one plays no moment");
+  assert.equal(built.at(-1), null);
+  assert.equal(frames.length, 0, "no frame keeps running");
+  e.destroy();
+});
+
+test("engine: destroyed while a seal waits: no frame, no commit afterwards", async () => {
+  frames = [];
+  const { e, commits } = await rig();
+  e.setData(city(STREET, ["t1", "t2"].map(ytx)));
+  runTo(2_000);
+  e.seal(seal(101, ["cb101", "t1"]));
+  runTo(2_050);
+  e.seal(seal(102, ["cb102", "t2"]));
+  const before = commits.length;
+  e.destroy();
+  runTo(30_000);
+  e.seal(seal(103, []));
+  runTo(31_000);
+  assert.deepEqual(commits.slice(before), []);
+  assert.equal(frames.length, 0);
+});
+
+test("engine: the tab hidden mid-moment with a seal waiting: both stand, the waiting one never plays later", async () => {
+  frames = [];
+  const { e, built, commits } = await rig();
+  e.setData(city(STREET, ["t1", "t2"].map(ytx)));
+  runTo(2_000);
+  e.seal(seal(101, ["cb101", "t1"]));
+  runTo(2_050);
+  e.seal(seal(102, ["cb102", "t2"]));
+  doc.visibilityState = "hidden";
+  onVisibility?.();
+  assert.deepEqual(commits, [100, 101, 102]);
+  const seen = built.length;
+  doc.visibilityState = "visible";
+  onVisibility?.();
+  for (let t = 2_100; t <= 20_000; t += 250) runTo(t);
+  assert.deepEqual(commits, [100, 101, 102]);
+  assert.ok(!built.slice(seen).some((b) => b?.height === 102), "102 does not play when the tab returns");
+  e.destroy();
+});
+
+test("engine: reduced motion turned on mid-moment: the waiting seal just stands", async () => {
+  frames = [];
+  const { e, built, commits } = await rig();
+  e.setData(city(STREET, ["t1", "t2"].map(ytx)));
+  runTo(2_000);
+  e.seal(seal(101, ["cb101", "t1"]));
+  runTo(2_050);
+  e.seal(seal(102, ["cb102", "t2"]));
+  e.setReduce(true);
+  assert.deepEqual(commits, [100, 101, 102]);
+  runTo(10_000);
+  assert.ok(!built.some((b) => b?.height === 102));
   e.destroy();
 });
 
