@@ -444,7 +444,7 @@ export function HomeRentHarbour({
       {/* ---------- «Токены под угрозой»: the reef ---------- */}
       <article
         className="mod flex h-full min-h-0 min-w-0 flex-col rounded-[20px] border border-[var(--border)] bg-[var(--module)]"
-        style={{ "--tag": "var(--c-token)" } as CSSProperties}
+        style={{ "--tag": "var(--f-token, var(--c-token))" } as CSSProperties}
       >
         <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[20px] px-4 py-3">
           <div className="flex min-h-[22px] shrink-0 items-center justify-between gap-3">
