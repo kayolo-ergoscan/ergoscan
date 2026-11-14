@@ -189,8 +189,9 @@ export function createChainSense(deps: ChainDeps) {
       now.wait = lv;
       speak({ k: "chain:tip-wait", level: lv, sinceMs: Math.round(elapsed) });
     }
+    // A hidden tab keeps no timer (§9.10); visibility(true) catches the level up when it shows.
     const edge = nextWaitEdge(elapsed, now.avgMs);
-    if (Number.isFinite(edge)) waitTimer = setTimer(() => {
+    if (Number.isFinite(edge) && visible()) waitTimer = setTimer(() => {
       waitTimer = null;
       armWait();
     }, Math.max(0, edge - elapsed + 5));
@@ -628,6 +629,15 @@ export function createChainSense(deps: ChainDeps) {
       const down = now.live || now.downSince == null ? 0 : t - now.downSince;
       netSay(down >= K.LOST_MS ? "lost" : down >= K.DOWN_MS ? "down" : "live");
     },
+    /** document visibilitychange: hidden drops the wait timer, visible re-reads the wait level once. */
+    visibility(shown: boolean) {
+      if (shown) {
+        armWait();
+        return;
+      }
+      if (waitTimer != null) clearTimer(waitTimer);
+      waitTimer = null;
+    },
     /** /v1/indexer/status lag, every 30 s (IndexerStatus already polls it). */
     indexer(l: number | null) {
       if (l == null || !Number.isFinite(l)) return;
@@ -688,6 +698,7 @@ function pageSense() {
     const s = page;
     window.addEventListener("online", () => s.online(true));
     window.addEventListener("offline", () => s.online(false));
+    document.addEventListener("visibilitychange", () => s.visibility(document.visibilityState === "visible"));
     if (navigator.onLine === false) s.online(false);
   }
   return page;

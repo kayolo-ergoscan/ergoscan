@@ -35,7 +35,7 @@ function rig() {
   const tip = (height: number) => s.feed({ type: "chain.tip", data: { height, headerId: "x".repeat(64) } });
   const seal = (height: number, txCount: number, size = 4000) =>
     s.feed({ type: "block.sealed", data: { height, blockId: "y".repeat(64), txIds: [], txCount, size, timestamp: 0 } });
-  return { s, said, advance, tip, seal, setVisible: (v: boolean) => (visible = v), now: () => t };
+  return { s, said, advance, tip, seal, setVisible: (v: boolean) => (visible = v), now: () => t, pending: () => timers.length };
 }
 
 test("kinds by txCount: ≤ 1 empty, ≥ 39 big", () => {
@@ -159,6 +159,30 @@ test("E5–E7: one timer per edge — 2×, 3× the average, 8 min; a block ends 
   r.s.socket(false);
   r.advance(600_000);
   assert.equal(r.said.filter((e) => e.k === "chain:tip-wait").length, 0);
+});
+
+test("E5–E7: a hidden tab keeps no wait timer; showing it again catches the level up once", () => {
+  const r = rig();
+  r.s.socket(true);
+  r.tip(100);
+  r.seal(101, 4);
+  r.advance(4_000);
+  assert.equal(r.pending(), 1, "a visible tab arms the next edge");
+  r.setVisible(false);
+  r.s.visibility(false);
+  assert.equal(r.pending(), 0, "hidden: the timer is dropped");
+  r.seal(102, 4);
+  assert.equal(r.pending(), 0, "a block while hidden arms nothing");
+  r.said.length = 0;
+  r.advance(250_000);
+  assert.equal(r.said.length, 0, "nothing is said while hidden");
+  r.setVisible(true);
+  r.s.visibility(true);
+  assert.deepEqual(
+    r.said.map((e) => [e.k, (e as { level?: number }).level]),
+    [["chain:tip-wait", 1]],
+  );
+  assert.equal(r.pending(), 1, "visible again: one timer to the next edge");
 });
 
 test("E12: the pool drained right after a seal (≥ 100 before, ≤ 0.4 within 3 s)", () => {
