@@ -1,229 +1,17 @@
 /*
- * Neutral light inks under the site look «Сигнал» — PROTOTYPE (branch light-theme).
- * Three variants, picked with `?ink=light-a|light-b|light-c` in a build made with
- * NEXT_PUBLIC_INK_PREVIEW=1 (lib/skin-ink.ts). The live site never sets these inks.
+ * «Сумерки»: the light ink of the site look (`data-ink="light"`, lib/skin-ink.ts). Same fonts,
+ * shapes, flat cards and one colour per chain entity as the dark look (looks.css); this file only
+ * answers its tokens. Values are solved in OKLCH; skin-ink.test.ts holds every pair to AA.
  *
- *   A «Бумага»   warm paper grey; pixel scenes by day.
- *   B «Камень»   cool stone grey; pixel scenes stay dark, a window onto the night.
- *   C «Сумерки»  soft neutral mid-light; pixel scenes under a dusk sky.
- *
- * Same fonts, shapes, flat cards and one colour per chain entity as the dark look. Three tiers
- * of each entity colour on light ground (values solved in OKLCH, contrast listed in the report):
- *   --c-*       mark tier: glyphs, chart lines, canvas inks — ≥ 3:1 on the card;
- *   --c-*-text  text tier: links and names — ≥ 4.5:1 on the card and on a hovered row;
- *   --f-*       fill tier: solid tags and feed tiles, with the text ink on them — ≥ 8:1.
- * The «inverse» plate (open nav row, chosen tab, «Today») is the text ink with the card ink on it,
- * the light twin of the white plate on black.
+ * Three tiers of each entity colour on the light card:
+ *   --c-*       mark: glyphs, chart lines, canvas inks — ≥ 3:1 on the card and a hovered row;
+ *   --c-*-text  text: links and names — ≥ 4.5:1 on the card and a hovered row;
+ *   --f-*       fill: solid tags and feed tiles under the text ink — ≥ 7:1.
+ * The inverse plate (open nav row, chosen tab) is the text ink with the card ink on it, the light
+ * twin of the white plate on black. Pixel scenes stay the night town, under a dusk sky.
  */
 
-/* ───────────────────────── tokens (generated) ───────────────────────── */
-
-/* А · Бумага */
-html[data-look="c"][data-ink="light-a"] {
-  --bg: #e3dfda;
-  --module: #f2efe9;
-  --panel: #f2efe9;
-  --bg-elevated: #f8f5ef;
-  --panel-hover: #ebe7e2;
-  --row-hover: #ebe7e2;
-  --row-open: #e8e5df;
-  --detail-bg: #e9e6e1;
-  --chip-bg: #e3e0da;
-  --chip-hover: #dbd8d2;
-  --tag: #dcd8d3;
-  --skel: #e2ded9;
-  --track: #d6d3cd;
-  --text: #25221f;
-  --muted: #534f4a;
-  --muted-2: #66635d;
-  --link: #25221f;
-  --invert: #25221f;
-  --invert-fg: #f2efe9;
-  --plate-now: #25221f;
-  --plate-now-ink: #f2efe9;
-  --tag-ink: #25221f;
-  --f-ink: #25221f;
-  --mark: #534f4a;
-  --tile-label: #25221f;
-  --c-block: #a07c07;
-  --c-block-text: #795d02;
-  --f-block: #efcf80;
-  --c-tx: #c46833;
-  --c-tx-text: #994b1b;
-  --f-tx: #fdb793;
-  --c-addr: #c3608a;
-  --c-addr-text: #984469;
-  --f-addr: #fbafcc;
-  --c-token: #5c7ed3;
-  --c-token-text: #425ea6;
-  --f-token: #b0c8ff;
-  --c-box: #08935c;
-  --c-box-text: #056f44;
-  --f-box: #93dcb1;
-  --c-net: #0b8da0;
-  --c-net-text: #006a7a;
-  --f-net: #79daed;
-  --accent: #a07c07;
-  --brand: #a07c07;
-  --soft: #a07c07;
-  --warning: #795d02;
-  --up: #047037;
-  --down: #ab3939;
-  --brand-new: #dc4d04;
-  --k-transfer: #fdb793;
-  --k-token: #b0c8ff;
-  --k-nft: #d7bafb;
-  --k-defi: #79daed;
-  --k-oracle: #bfcede;
-  --k-bridge: #d1cec9;
-  --k-reward: #efcf80;
-  --k-rent: #feb4a1;
-  --k-box: #93dcb1;
-  --k-contract: #fbafcc;
-  --k-mixer: #aba8a3;
-  --k-quiet: #dcd8d3;
-  --k-ink: #25221f;
-  --k-quiet-ink: #25221f;
-  --ev-chain: #a07c07;
-  --ev-decoded: #996dc8;
-  --ev-telemetry: #0b8da0;
-  --ev-live: #047037;
-  --ev-heuristic: #cf5e42;
-  --ev-external: #66635d;
-  --lk-red: #d15b58;
-  --lk-orange: #c46833;
-  --lk-yellow: #a07c07;
-  --lk-green: #08935c;
-  --lk-teal: #0b8da0;
-  --lk-blue: #5c7ed3;
-  --lk-violet: #c3608a;
-  --lk-grey: #66635d;
-  --lk-edge: #f2efe9;
-  --accent-rgb: 160 124 7;
-  --soft-rgb: 160 124 7;
-  --up-rgb: 4 112 55;
-  --down-rgb: 171 57 57;
-  --module-rgb: 242 239 233;
-  --panel-rgb: 242 239 233;
-  --border-rgb: 37 34 31;
-  --accent-soft: rgb(160 124 7 / 0.16);
-  --brand-soft: rgb(160 124 7 / 0.12);
-  --border: transparent;
-  --border-soft: transparent;
-  --wash-faint: rgb(37 34 31 / 0.035);
-  --wash: rgb(37 34 31 / 0.06);
-  --wash-mid: rgb(37 34 31 / 0.1);
-  --wash-strong: rgb(37 34 31 / 0.16);
-  --hair: rgb(37 34 31 / 0.22);
-  --scrim: rgb(37 34 31 / 0.32);
-  --scene: day;
-  color-scheme: light;
-}
-
-/* Б · Камень */
-html[data-look="c"][data-ink="light-b"] {
-  --bg: #d3d8dd;
-  --module: #e4e9ee;
-  --panel: #e4e9ee;
-  --bg-elevated: #eaeff4;
-  --panel-hover: #dde2e7;
-  --row-hover: #dde2e7;
-  --row-open: #dadfe4;
-  --detail-bg: #dbe1e6;
-  --chip-bg: #d5dadf;
-  --chip-hover: #cdd2d7;
-  --tag: #ced3d8;
-  --skel: #d4d9de;
-  --track: #c8cdd2;
-  --text: #1f2327;
-  --muted: #474c51;
-  --muted-2: #595e64;
-  --link: #1f2327;
-  --invert: #1f2327;
-  --invert-fg: #e4e9ee;
-  --plate-now: #1f2327;
-  --plate-now-ink: #e4e9ee;
-  --tag-ink: #1f2327;
-  --f-ink: #1f2327;
-  --mark: #474c51;
-  --tile-label: #1f2327;
-  --c-block: #9a7700;
-  --c-block-text: #735904;
-  --f-block: #ebcc81;
-  --c-tx: #bf632e;
-  --c-tx-text: #944616;
-  --f-tx: #f7b493;
-  --c-addr: #be5b86;
-  --c-addr-text: #944065;
-  --f-addr: #f5aec9;
-  --c-token: #5779cd;
-  --c-token-text: #3d59a1;
-  --f-token: #acc5ff;
-  --c-box: #018e58;
-  --c-box-text: #026b41;
-  --f-box: #93d8b0;
-  --c-net: #07889b;
-  --c-net-text: #076675;
-  --f-net: #7bd6e8;
-  --accent: #9a7700;
-  --brand: #9a7700;
-  --soft: #9a7700;
-  --warning: #735904;
-  --up: #046b35;
-  --down: #a63435;
-  --brand-new: #d24903;
-  --k-transfer: #f7b493;
-  --k-token: #acc5ff;
-  --k-nft: #d3b7f5;
-  --k-defi: #7bd6e8;
-  --k-oracle: #bccbdb;
-  --k-bridge: #c3c9ce;
-  --k-reward: #ebcc81;
-  --k-rent: #fab19e;
-  --k-box: #93d8b0;
-  --k-contract: #f5aec9;
-  --k-mixer: #9ea3a8;
-  --k-quiet: #ced3d8;
-  --k-ink: #1f2327;
-  --k-quiet-ink: #1f2327;
-  --ev-chain: #9a7700;
-  --ev-decoded: #9468c2;
-  --ev-telemetry: #07889b;
-  --ev-live: #046b35;
-  --ev-heuristic: #ca593e;
-  --ev-external: #595e64;
-  --lk-red: #cb5653;
-  --lk-orange: #bf632e;
-  --lk-yellow: #9a7700;
-  --lk-green: #018e58;
-  --lk-teal: #07889b;
-  --lk-blue: #5779cd;
-  --lk-violet: #be5b86;
-  --lk-grey: #595e64;
-  --lk-edge: #e4e9ee;
-  --accent-rgb: 154 119 0;
-  --soft-rgb: 154 119 0;
-  --up-rgb: 4 107 53;
-  --down-rgb: 166 52 53;
-  --module-rgb: 228 233 238;
-  --panel-rgb: 228 233 238;
-  --border-rgb: 31 35 39;
-  --accent-soft: rgb(154 119 0 / 0.16);
-  --brand-soft: rgb(154 119 0 / 0.12);
-  --border: transparent;
-  --border-soft: transparent;
-  --wash-faint: rgb(31 35 39 / 0.035);
-  --wash: rgb(31 35 39 / 0.06);
-  --wash-mid: rgb(31 35 39 / 0.1);
-  --wash-strong: rgb(31 35 39 / 0.16);
-  --hair: rgb(31 35 39 / 0.22);
-  --scrim: rgb(31 35 39 / 0.32);
-  --scene: window;
-  color-scheme: light;
-}
-
-/* В · Сумерки */
-html[data-look="c"][data-ink="light-c"] {
+html[data-look="c"][data-ink="light"] {
   --bg: #c3c2c0;
   --module: #d4d3d1;
   --panel: #d4d3d1;
@@ -234,9 +22,27 @@ html[data-look="c"][data-ink="light-c"] {
   --detail-bg: #cccbc9;
   --chip-bg: #c6c5c3;
   --chip-hover: #bebdbb;
-  --tag: #bebdbb;
   --skel: #c4c3c1;
   --track: #b9b8b6;
+  --border: transparent;
+  --border-soft: transparent;
+  --module-rgb: 212 211 209;
+  --panel-rgb: 212 211 209;
+  --border-rgb: 21 21 19;
+  --wash-faint: rgb(21 21 19 / 0.035);
+  --wash: rgb(21 21 19 / 0.06);
+  --wash-mid: rgb(21 21 19 / 0.1);
+  --wash-strong: rgb(21 21 19 / 0.16);
+  --hair: rgb(21 21 19 / 0.22);
+  --scrim: rgb(21 21 19 / 0.32);
+  --backdrop: rgb(21 21 19 / 0.32);
+  --ghost: rgb(21 21 19 / 0.3);
+  --tape-hover: rgb(21 21 19 / 0.05);
+  --stick-shadow: 8px 0 12px -8px rgb(21 21 19 / 0.22);
+  --pop-shadow: 0 16px 32px rgb(21 21 19 / 0.2);
+  --foot-shadow: 0 -12px 28px rgb(21 21 19 / 0.12);
+  --float-shadow-press: inset 0 0 0 2px var(--text);
+
   --text: #151513;
   --muted: #403f3d;
   --muted-2: #51504e;
@@ -245,35 +51,51 @@ html[data-look="c"][data-ink="light-c"] {
   --invert-fg: #d4d3d1;
   --plate-now: #151513;
   --plate-now-ink: #d4d3d1;
+  --tag: #bebdbb;
   --tag-ink: #151513;
-  --f-ink: #151513;
   --mark: #403f3d;
   --tile-label: #151513;
-  --c-block: #8e6e05;
-  --c-block-text: #6a5100;
+  --pct-halo: none;
+
+  --c-block: #836503;
+  --c-tx: #a84e13;
+  --c-addr: #a84771;
+  --c-token: #4666b8;
+  --c-box: #027749;
+  --c-net: #007384;
+  --c-block-text: #624b02;
+  --c-tx-text: #823700;
+  --c-addr-text: #812f54;
+  --c-token-text: #304a90;
+  --c-box-text: #025b37;
+  --c-net-text: #025663;
   --f-block: #d6b973;
-  --c-tx: #b35821;
-  --c-tx-text: #8b3e09;
   --f-tx: #e0a383;
-  --c-addr: #b3517b;
-  --c-addr-text: #8a375c;
   --f-addr: #df9cb5;
-  --c-token: #4e6fc2;
-  --c-token-text: #365198;
   --f-token: #99b2ea;
-  --c-box: #038351;
-  --c-box-text: #04613b;
   --f-box: #83c39e;
-  --c-net: #087d8f;
-  --c-net-text: #025d6b;
   --f-net: #6dc1d2;
-  --accent: #8e6e05;
-  --brand: #8e6e05;
-  --soft: #8e6e05;
-  --warning: #6a5100;
+  /* Page tags: a stronger tint, the pale fills need it to read as a tag. */
+  --tint: 55%;
+  --selection: var(--f-block);
+
+  /* The accent is printed as words (links, carets): the block's text tier. */
+  --accent: #624b02;
+  --accent-rgb: 98 75 2;
+  --accent-soft: rgb(131 101 3 / 0.16);
+  --brand: #624b02;
+  --brand-soft: rgb(131 101 3 / 0.12);
+  --brand-new: #bb4003;
+  --soft: #624b02;
+  --soft-rgb: 98 75 2;
+  --warning: #624b02;
   --up: #045c2d;
+  --up-rgb: 4 92 45;
   --down: #962428;
-  --brand-new: #b93f00;
+  --down-rgb: 150 36 40;
+  --party: #88614b;
+
+  /* Feed tiles: the fill tier under the text ink. The kind word leans further to the ink. */
   --k-transfer: #e0a383;
   --k-token: #99b2ea;
   --k-nft: #bfa5df;
@@ -288,245 +110,77 @@ html[data-look="c"][data-ink="light-c"] {
   --k-quiet: #bebdbb;
   --k-ink: #151513;
   --k-quiet-ink: #151513;
-  --ev-chain: #8e6e05;
-  --ev-decoded: #8a5eb8;
-  --ev-telemetry: #087d8f;
+  --k-nft-text: #614082;
+  --k-rent-text: #833724;
+  --k-reward-text: var(--c-block-text);
+  --kind-mix: 30%;
+  --bar-rest: #6a6968;
+
+  --ev-chain: #836503;
+  --ev-decoded: #8155ae;
+  --ev-telemetry: #007384;
   --ev-live: #045c2d;
-  --ev-heuristic: #bf4f34;
+  --ev-heuristic: #b4452a;
   --ev-external: #51504e;
-  --lk-red: #c04c4a;
-  --lk-orange: #b35821;
-  --lk-yellow: #8e6e05;
-  --lk-green: #038351;
-  --lk-teal: #087d8f;
-  --lk-blue: #4e6fc2;
-  --lk-violet: #b3517b;
+
+  /* lib/palette.ts inks: marks, and their *-text tier for words. */
+  --ink-cyan: #286cab;
+  --ink-green: #0f784e;
+  --ink-gold: var(--c-block);
+  --ink-coral: #b44723;
+  --ink-sky: #456b9c;
+  --ink-violet: #6f5fa1;
+  --ink-teal: #00776d;
+  --ink-gix: #964ba1;
+  --ink-cyan-text: #01518d;
+  --ink-green-text: #015b3a;
+  --ink-gold-text: var(--c-block-text);
+  --ink-coral-text: #8b3111;
+  --ink-sky-text: #2b507f;
+  --ink-violet-text: #554483;
+  --ink-teal-text: #045951;
+  --ink-gix-text: #73367d;
+  --kind-protocol: #975570;
+  --kind-exchange: #806632;
+  --kind-pool: #5d7100;
+  --kind-contract: #5c669c;
+  --heart: #b5414d;
+  --mint: var(--c-block);
+  --econ-round: #915f05;
+  --econ-finder: #007954;
+  --econ-founders: #695cbc;
+  /* Washes under a word: a pale fill, so the word keeps the text tier. */
+  --twin-ink: #4f3a8a;
+  --twin-bg: rgb(191 165 223 / 0.45);
+  --lithos-chip: #bfa5df;
+  --lithos-chip-ink: #694293;
+  --lithos-chip-hover: #55327a;
+  --gix-wash: rgb(217 163 223 / 0.3);
+  --gix-wash-hover: rgb(217 163 223 / 0.45);
+  --api-get: #6dc1d2;
+  --api-post: #d6b973;
+
+  /* Canvas inks by hue family (lib/look.ts lookInk): the mark tier. */
+  --lk-red: #b64241;
+  --lk-orange: #a84e13;
+  --lk-yellow: #836503;
+  --lk-green: #027749;
+  --lk-teal: #007384;
+  --lk-blue: #4666b8;
+  --lk-violet: #a84771;
   --lk-grey: #51504e;
   --lk-edge: #d4d3d1;
-  --accent-rgb: 142 110 5;
-  --soft-rgb: 142 110 5;
-  --up-rgb: 4 92 45;
-  --down-rgb: 150 36 40;
-  --module-rgb: 212 211 209;
-  --panel-rgb: 212 211 209;
-  --border-rgb: 21 21 19;
-  --accent-soft: rgb(142 110 5 / 0.16);
-  --brand-soft: rgb(142 110 5 / 0.12);
-  --border: transparent;
-  --border-soft: transparent;
-  --wash-faint: rgb(21 21 19 / 0.035);
-  --wash: rgb(21 21 19 / 0.06);
-  --wash-mid: rgb(21 21 19 / 0.1);
-  --wash-strong: rgb(21 21 19 / 0.16);
-  --hair: rgb(21 21 19 / 0.22);
-  --scrim: rgb(21 21 19 / 0.32);
-  --scene: dusk;
+
   color-scheme: light;
 }
 
-
-/* ───────────────────────── shared light rules ───────────────────────── */
-
-html[data-look="c"][data-ink^="light-"] {
-  --float-shadow-press: inset 0 0 0 2px var(--text);
-}
-
-html[data-look="c"][data-ink^="light-"] body {
-  background: var(--bg);
-}
-
-html[data-look="c"][data-ink^="light-"] ::selection {
-  background: var(--f-block);
-  color: var(--text);
-}
-
-/* Home tiles: a solid signal tag in the fill tier, the text ink on it. */
-html[data-look="c"][data-ink^="light-"] .mod:has(a[href="/blocks"]) {
-  --tag: var(--f-block);
-  --tag-ink: var(--f-ink);
-  --mark: var(--c-block);
-}
-html[data-look="c"][data-ink^="light-"] .mod:has(a[href="/mempool"]),
-html[data-look="c"][data-ink^="light-"] .mod:has(a[href="/transactions"]),
-html[data-look="c"][data-ink^="light-"] .mod:has(a[href="/fees"]) {
-  --tag: var(--f-tx);
-  --tag-ink: var(--f-ink);
-  --mark: var(--c-tx);
-}
-html[data-look="c"][data-ink^="light-"] .mod:has(a[href^="/rent"]) {
-  --tag: var(--f-box);
-  --tag-ink: var(--f-ink);
-  --mark: var(--c-box);
-}
-
-/* Page context: a tint of the page's entity under its text-tier ink. */
-html[data-look="c"][data-ink^="light-"]:has(.nav-row[aria-current="page"][href="/blocks"]),
-html[data-look="c"][data-ink^="light-"]:has(.nav-row[aria-current="page"][href="/lithos"]) {
-  --tag: color-mix(in srgb, var(--f-block) 55%, var(--module));
-  --tag-ink: var(--c-block-text);
-  --mark: var(--c-block);
-}
-html[data-look="c"][data-ink^="light-"]:has(.nav-row[aria-current="page"][href="/transactions"]),
-html[data-look="c"][data-ink^="light-"]:has(.nav-row[aria-current="page"][href="/mempool"]) {
-  --tag: color-mix(in srgb, var(--f-tx) 55%, var(--module));
-  --tag-ink: var(--c-tx-text);
-  --mark: var(--c-tx);
-}
-html[data-look="c"][data-ink^="light-"]:has(.nav-row[aria-current="page"][href="/addresses"]),
-html[data-look="c"][data-ink^="light-"]:has(.nav-row[aria-current="page"][href="/names"]) {
-  --tag: color-mix(in srgb, var(--f-addr) 55%, var(--module));
-  --tag-ink: var(--c-addr-text);
-  --mark: var(--c-addr);
-}
-html[data-look="c"][data-ink^="light-"]:has(.nav-row[aria-current="page"][href="/tokens"]),
-html[data-look="c"][data-ink^="light-"]:has(.nav-row[aria-current="page"][href="/nfts"]) {
-  --tag: color-mix(in srgb, var(--f-token) 55%, var(--module));
-  --tag-ink: var(--c-token-text);
-  --mark: var(--c-token);
-}
-html[data-look="c"][data-ink^="light-"]:has(.nav-row[aria-current="page"][href^="/rent"]) {
-  --tag: color-mix(in srgb, var(--f-box) 55%, var(--module));
-  --tag-ink: var(--c-box-text);
-  --mark: var(--c-box);
-}
-
-/* A row's kind word: the tile's hue pulled well toward the text ink (the tiles are pale here). */
-html[data-look="c"][data-ink^="light-"] .feed-kind {
-  color: color-mix(in oklab, var(--k) 30%, var(--text));
-}
-
-/* The inverse plate: open nav row, chosen tab, phone tab, rank chip. */
-html[data-look="c"][data-ink^="light-"] .nav-row.is-pressed,
-html[data-look="c"][data-ink^="light-"] .nav-row[aria-current="page"],
-html[data-look="c"][data-ink^="light-"] .seg-on,
-html[data-look="c"][data-ink^="light-"][data-float] .seg-on,
-html[data-look="c"][data-ink^="light-"] .phone-tabbar a[aria-current="page"] {
-  background: var(--invert) !important;
-  color: var(--invert-fg) !important;
-}
-html[data-look="c"][data-ink^="light-"] .nav-row[aria-current="page"] .nav-glyph svg,
-html[data-look="c"][data-ink^="light-"] .phone-tabbar a[aria-current="page"] svg {
-  color: var(--invert-fg) !important;
-}
-html[data-look="c"][data-ink^="light-"] .nav-row .nav-glyph svg,
-html[data-look="c"][data-ink^="light-"] .phone-tabbar svg {
-  color: var(--text);
-}
-html[data-look="c"][data-ink^="light-"] .nav-row[href="/blocks"]:not([aria-current="page"]) .nav-glyph svg,
-html[data-look="c"][data-ink^="light-"] .nav-row[href="/lithos"]:not([aria-current="page"]) .nav-glyph svg,
-html[data-look="c"][data-ink^="light-"] .phone-tabbar a[href="/blocks"]:not([aria-current="page"]) svg { color: var(--c-block); }
-html[data-look="c"][data-ink^="light-"] .nav-row[href="/mempool"]:not([aria-current="page"]) .nav-glyph svg,
-html[data-look="c"][data-ink^="light-"] .nav-row[href="/transactions"]:not([aria-current="page"]) .nav-glyph svg,
-html[data-look="c"][data-ink^="light-"] .phone-tabbar a[href="/mempool"]:not([aria-current="page"]) svg,
-html[data-look="c"][data-ink^="light-"] .phone-tabbar a[href="/transactions"]:not([aria-current="page"]) svg { color: var(--c-tx); }
-html[data-look="c"][data-ink^="light-"] .nav-row[href="/addresses"]:not([aria-current="page"]) .nav-glyph svg,
-html[data-look="c"][data-ink^="light-"] .nav-row[href="/names"]:not([aria-current="page"]) .nav-glyph svg,
-html[data-look="c"][data-ink^="light-"] .nav-row[href="/favorites"]:not([aria-current="page"]) .nav-glyph svg { color: var(--c-addr); }
-html[data-look="c"][data-ink^="light-"] .nav-row[href="/tokens"]:not([aria-current="page"]) .nav-glyph svg,
-html[data-look="c"][data-ink^="light-"] .nav-row[href="/nfts"]:not([aria-current="page"]) .nav-glyph svg { color: var(--c-token); }
-html[data-look="c"][data-ink^="light-"] .nav-row[href^="/rent"]:not([aria-current="page"]) .nav-glyph svg,
-html[data-look="c"][data-ink^="light-"] .nav-row[href^="/defi"]:not([aria-current="page"]) .nav-glyph svg { color: var(--c-box); }
-html[data-look="c"][data-ink^="light-"] .nav-row[href^="/oracles"]:not([aria-current="page"]) .nav-glyph svg,
-html[data-look="c"][data-ink^="light-"] .nav-row[href^="/rosen"]:not([aria-current="page"]) .nav-glyph svg { color: var(--c-net); }
-
-html[data-look="c"][data-ink^="light-"] .nav-scan-corner path {
-  stroke: var(--text);
-}
-html[data-look="c"][data-ink^="light-"] .nav-scan-word .nav-line > .nav-line:nth-child(3),
-html[data-look="c"][data-ink^="light-"] .page-tail span[style]:nth-child(3) {
-  color: var(--text) !important;
-}
-html[data-look="c"][data-ink^="light-"] [data-scout="price"],
-html[data-look="c"][data-ink^="light-"] [data-scout="mcap"],
-html[data-look="c"][data-ink^="light-"] .price-tape-sym {
-  color: var(--text) !important;
-}
-
-html[data-look="c"][data-ink^="light-"] .mcap-rank {
-  color: var(--invert-fg);
-  background: var(--invert);
-}
-html[data-look="c"][data-ink^="light-"] .mcap-vol {
-  color: var(--c-token-text);
-}
-
-html[data-look="c"][data-ink^="light-"] .epoch-tape,
-html[data-look="c"][data-ink^="light-"] .block-size-track {
-  background: var(--track) !important;
-}
-html[data-look="c"][data-ink^="light-"] .epoch-slot {
-  color: var(--c-block-text);
-}
-html[data-look="c"][data-ink^="light-"] .epoch-left {
-  color: var(--c-net-text);
-}
-html[data-look="c"][data-ink^="light-"] .block-size-pct {
-  color: var(--text);
-  text-shadow: none;
-}
-
-html[data-look="c"][data-ink^="light-"] .price-tape-chg.is-up {
-  color: var(--up);
-}
-
-/* ─────────────── scenes: B keeps the card dark (a window onto the night) ─────────────── */
-
-html[data-look="c"][data-ink="light-b"] .mod:has(canvas[data-scene]) {
-  --bg: #0e0e0e;
-  --module: #1a1a1a;
-  --bg-elevated: #1f1f1f;
-  --panel: #1a1a1a;
-  --panel-hover: #232323;
-  --row-hover: #1f1f1f;
-  --text: #ffffff;
-  --muted: #c6c6c6;
-  --muted-2: #a3a3a3;
-  --module-rgb: 26 26 26;
-  --wash-faint: rgba(255, 255, 255, 0.035);
-  --wash: rgba(255, 255, 255, 0.06);
-  --wash-mid: rgba(255, 255, 255, 0.1);
-  --wash-strong: rgba(255, 255, 255, 0.16);
-  --hair: rgba(255, 255, 255, 0.24);
-  --up: #88d9a5;
-  --down: #f4918e;
-  --c-block: #ebcb71;
-  --c-tx: #ef945f;
-  --c-addr: #e799b7;
-  --c-token: #86a6f0;
-  --c-box: #71d29d;
-  --c-net: #63ccde;
-  --c-block-text: #ead79b;
-  --c-tx-text: #f5c19f;
-  --c-addr-text: #f3bed1;
-  --c-token-text: #b6caf9;
-  --c-box-text: #a9e4c3;
-  --c-net-text: #a6e0e9;
-  --ent-block: #ebcb71;
-  --f-block: #ebcb71;
-  --f-tx: #ef945f;
-  --f-box: #71d29d;
-  --f-ink: #0e0e0e;
-  --k-nft: #c19fe9;
-  --k-rent: #ee9781;
-  --ev-chain: #eed286;
-  --ev-decoded: #c19fe9;
-  --ev-telemetry: #63ccde;
-  --ev-live: #88d9a5;
-  --ev-heuristic: #ee9781;
-  --ev-external: #c6c6c6;
-  --f-token: #86a6f0;
-  --k-ink: #0e0e0e;
-  color-scheme: dark;
-  color: var(--text);
-}
-
-/* ─────────────── scenes: C puts the night town under a dusk sky ─────────────── */
-
-html[data-look="c"][data-ink="light-c"] canvas[data-scene] {
+/*
+ * Pixel scenes (the home city and yard, the Lithos and rent cards) keep the night town under a
+ * dusk sky. Their painters run in onScene (lib/look.ts) and read these inks off the canvas.
+ */
+html[data-look="c"][data-ink="light"] canvas[data-scene] {
   border-radius: 6px;
-  background:
-    linear-gradient(180deg, #3d4260 0%, #4f5272 45%, #6a5d74 75%, #5d5062 100%);
-  /* What the painters read off the canvas: the dark-ground inks, so lit windows glow. */
+  background: linear-gradient(180deg, #3d4260 0%, #4f5272 45%, #62566e 75%, #5d5062 100%);
   --text: #ffffff;
   --muted: #f1eef5;
   --muted-2: #e4e0ea;
@@ -535,81 +189,49 @@ html[data-look="c"][data-ink="light-c"] canvas[data-scene] {
   --wash-strong: rgba(255, 255, 255, 0.2);
   --module: #3d4260;
   --c-block: #ebcb71;
-  --ent-block: #ebcb71;
   --k-nft: #c19fe9;
   --k-rent: #ee9781;
   --up: #88d9a5;
+  --brand-new: #ff9560;
+  --ent-block: #ebcb71;
+  --ent-tx: #ef945f;
+  --ent-addr: #e799b7;
+  --ent-token: #86a6f0;
+  --ent-box: #71d29d;
 }
 
-/* ─────────────── inline palette inks (lib/palette.ts INK.*) on light ground ───────────────
- * Pages print some figures and marks with the dark look's pastel inks inline. On light they take
- * the matching tier: text runs the text tier, swatches and bars the mark tier. (A full build moves
- * these constants to tokens instead.) React writes the hex on the server and rgb() on the client. */
-html[data-look="c"][data-ink^="light-"] main [style*="#ebcb71" i]:not([style*="background"]):not([style*="--"]),
-html[data-look="c"][data-ink^="light-"] main [style*="235, 203, 113"]:not([style*="background"]):not([style*="--"]) {
-  color: var(--c-block-text) !important;
-}
-html[data-look="c"][data-ink^="light-"] main [style*="#6db0f4" i]:not([style*="background"]):not([style*="--"]),
-html[data-look="c"][data-ink^="light-"] main [style*="109, 176, 244"]:not([style*="background"]):not([style*="--"]),
-html[data-look="c"][data-ink^="light-"] main [style*="#97c1f7" i]:not([style*="background"]):not([style*="--"]),
-html[data-look="c"][data-ink^="light-"] main [style*="151, 193, 247"]:not([style*="background"]):not([style*="--"]),
-html[data-look="c"][data-ink^="light-"] main [style*="#82a0ff" i]:not([style*="background"]):not([style*="--"]),
-html[data-look="c"][data-ink^="light-"] main [style*="130, 160, 255"]:not([style*="background"]):not([style*="--"]) {
-  color: var(--c-token-text) !important;
-}
-html[data-look="c"][data-ink^="light-"] main [style*="#69d3c6" i]:not([style*="background"]):not([style*="--"]),
-html[data-look="c"][data-ink^="light-"] main [style*="105, 211, 198"]:not([style*="background"]):not([style*="--"]) {
-  color: var(--c-net-text) !important;
-}
-html[data-look="c"][data-ink^="light-"] main [style*="#84deaf" i]:not([style*="background"]):not([style*="--"]),
-html[data-look="c"][data-ink^="light-"] main [style*="132, 222, 175"]:not([style*="background"]):not([style*="--"]) {
-  color: var(--c-box-text) !important;
-}
-html[data-look="c"][data-ink^="light-"] main [style*="#c4b5fd" i]:not([style*="background"]):not([style*="--"]),
-html[data-look="c"][data-ink^="light-"] main [style*="196, 181, 253"]:not([style*="background"]):not([style*="--"]) {
-  color: var(--ev-decoded) !important;
-}
-html[data-look="c"][data-ink^="light-"] main [style*="background"][style*="#ebcb71" i]:not([style*="--"]),
-html[data-look="c"][data-ink^="light-"] main [style*="background"][style*="235, 203, 113"]:not([style*="--"]) {
-  background: var(--c-block) !important;
-}
-html[data-look="c"][data-ink^="light-"] main [style*="background"][style*="#6db0f4" i]:not([style*="--"]),
-html[data-look="c"][data-ink^="light-"] main [style*="background"][style*="109, 176, 244"]:not([style*="--"]) {
-  background: var(--c-token) !important;
-}
-html[data-look="c"][data-ink^="light-"] main [style*="background"][style*="#69d3c6" i]:not([style*="--"]),
-html[data-look="c"][data-ink^="light-"] main [style*="background"][style*="105, 211, 198"]:not([style*="--"]) {
-  background: var(--c-net) !important;
-}
-html[data-look="c"][data-ink^="light-"] main [style*="background"][style*="#c4b5fd" i]:not([style*="--"]),
-html[data-look="c"][data-ink^="light-"] main [style*="background"][style*="196, 181, 253"]:not([style*="--"]) {
-  background: var(--ev-decoded) !important;
-}
-html[data-look="c"][data-ink^="light-"] main [style*="background"][style*="#84deaf" i]:not([style*="--"]),
-html[data-look="c"][data-ink^="light-"] main [style*="background"][style*="132, 222, 175"]:not([style*="--"]) {
-  background: var(--c-box) !important;
-}
-
-/* A tag keyed to the token entity inline (home «Tokens at risk»): the fill tier. */
-html[data-look="c"][data-ink^="light-"] [style*="--tag:var(--c-token)"],
-html[data-look="c"][data-ink^="light-"] [style*="--tag: var(--c-token)"] {
-  --tag: var(--f-token) !important;
-}
-
-/* Tags painted with an entity mark inline (/lithos «No-operator pool»): the fill tier. */
-html[data-look="c"][data-ink^="light-"] main [style*="background:var(--c-block"],
-html[data-look="c"][data-ink^="light-"] main [style*="background: var(--c-block"] {
-  background: var(--f-block) !important;
-}
-
-/* Hollow kind tiles (pending / quiet rows): the pale fill would vanish as a line, so the ring and
-   the glyph take the kind pulled toward the text ink. */
-html[data-look="c"][data-ink^="light-"] .feed-tile.is-hollow {
-  box-shadow: inset 0 0 0 2px color-mix(in oklab, var(--k) 50%, var(--text));
+/* Hollow kind tiles (pending, quiet): a pale fill would vanish as a ring, so ring and glyph lean
+   toward the text ink; the hovered and open rows keep their outer ring. */
+html[data-look="c"][data-ink="light"] .feed-tile.is-hollow {
+  --k-line: color-mix(in oklab, var(--k) 50%, var(--text));
+  box-shadow: inset 0 0 0 2px var(--k-line);
   color: color-mix(in oklab, var(--k) 40%, var(--text));
 }
+@media (hover: hover) {
+  html[data-look="c"][data-ink="light"] .feed-row:hover .feed-tile.is-hollow {
+    box-shadow: inset 0 0 0 2px var(--k-line), 0 0 0 2px var(--row-hover), 0 0 0 4px var(--k);
+  }
+}
+html[data-look="c"][data-ink="light"] .feed-row.is-open .feed-tile.is-hollow {
+  box-shadow: inset 0 0 0 2px var(--k-line), 0 0 0 2px var(--row-open), 0 0 0 4px var(--k);
+}
 
-/* «Other» share in a bar (home version nodes): a calm mid grey, not the faint text ink. */
-html[data-look="c"][data-ink^="light-"] main [style*="width"][style*="background"][style*="var(--muted-2)"] {
-  background: var(--k-mixer) !important;
+html[data-look="c"][data-ink="light"] .mcap-vol {
+  color: var(--c-token-text);
+}
+
+/* Sheets and the phone menu: a lighter shade on the light ground. */
+html[data-ink="light"] .sheet-scrim {
+  background: var(--scrim);
+}
+html[data-ink="light"] .bottom-sheet {
+  box-shadow: 0 -12px 40px rgb(21 21 19 / 0.18);
+}
+html[data-ink="light"] .kayolo-panel.is-phone {
+  box-shadow: 0 14px 34px -14px rgb(21 21 19 / 0.3);
+}
+
+/* The Basis mark is a white picture: on the light card it is printed in the text ink. */
+html[data-ink="light"] .basis-mark-bob {
+  filter: brightness(0) opacity(0.88);
 }

@@ -6,7 +6,6 @@
  * intervals. The painters are pure `(ctx, w, h, scene, frame)` functions, so any moment of a seal can
  * be drawn and tested; the component only decides when to draw.
  */
-import { sceneMode } from "@/lib/look";
 
 /** One storey: the kind of one transaction of the block. */
 export type CityTx = { color: string; category: string };
@@ -80,9 +79,7 @@ export function readInks(el: Element): Inks {
   const v = (name: string, fallback: string) => cs.getPropertyValue(name).trim() || fallback;
   const sans = v("--font-sans", "");
   const mono = v("--font-mono", "");
-  // Daylight: the old day ink, or a light ink whose scenes are painted by day (light.css --scene).
-  const mode = sceneMode();
-  const day = (el as HTMLElement).dataset?.ink === "day" || mode === "day";
+  const day = (el as HTMLElement).dataset?.ink === "day";
   return {
     day,
     text: v("--text", day ? "#14131a" : "#ffffff"),

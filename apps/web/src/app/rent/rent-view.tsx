@@ -1,5 +1,8 @@
 "use client";
 
+import { pageInk } from "@/lib/look";
+import { isLightInk } from "@/lib/skin-ink";
+import { useInk } from "@/lib/use-ink";
 import { Tip } from "@/components/Tip";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
@@ -583,6 +586,7 @@ function RentCollectedChart({
   locale: string;
   t: (k: string) => string;
 }) {
+  const light = isLightInk(useInk());
   const sourceKey = daily && daily.length >= 2 ? rentSeriesSig(daily) : rentSeriesSig(series);
   const past = useMemo(() => {
     const source = daily && daily.length >= 2 ? daily : series ?? [];
@@ -624,14 +628,14 @@ function RentCollectedChart({
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-3 text-[12px] text-[var(--muted)]">
               <span className="inline-flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full" style={{ background: ERG_LINE }} />
+                <span className="h-2 w-2 rounded-full" style={{ background: pageInk(ERG_LINE, light) }} />
                 {t("rent.chartErg")}
               </span>
               {NO_AHEAD.length > 0 && (
                 <span className="inline-flex items-center gap-1.5">
                   <span
                     className="h-0 w-3 border-t-[1.5px] border-dashed"
-                    style={{ borderColor: ERG_LINE }}
+                    style={{ borderColor: pageInk(ERG_LINE, light) }}
                   />
                   {t("rent.chartAhead")}
                 </span>

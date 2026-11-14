@@ -19,7 +19,7 @@ type Versions = { total: number; versions: Row[]; modes: Mode[] };
 const REFRESH_MS = 120_000;
 const SHOWN = 4;
 const TONES = [INK.teal, INK.cyan, INK.violet, INK.gold];
-const OTHER = "var(--muted-2)";
+const OTHER = "var(--bar-rest)";
 
 function parse(raw: unknown): Versions | null {
   if (!raw || typeof raw !== "object") return null;

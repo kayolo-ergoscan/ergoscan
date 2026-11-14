@@ -1,91 +1,95 @@
-/** Explorer inks: Paper / Epoch / Lykos. Same hue family as OLED A — not a white/black invert. */
-
-import { LOOK_BG, currentLook } from "./look";
-
-export const SKIN_INKS = ["day", "dim", "oled"] as const;
-
 /**
- * Neutral light inks under the site look (prototype, `?ink=light-a|light-b|light-c`): A «Бумага»,
- * B «Камень», C «Сумерки». Only a build with NEXT_PUBLIC_INK_PREVIEW=1 takes them; the live site
- * stays on the look's OLED until the operator picks one.
+ * Site theme: the dark «Сигнал» ink (`data-ink="oled"`, the default) or its light twin «Сумерки»
+ * (`data-ink="light"`, light.css). The reader picks Dark, Light or «as the system» in Settings; the
+ * choice lives in localStorage and a head script paints it before the first frame.
  */
-export const LIGHT_INKS = ["light-a", "light-b", "light-c"] as const;
-export type LightInk = (typeof LIGHT_INKS)[number];
-export type SkinInk = (typeof SKIN_INKS)[number] | LightInk;
 
-export const INK_PREVIEW = process.env.NEXT_PUBLIC_INK_PREVIEW === "1";
+import { LOOK_BG } from "./look";
 
-export function isLightInk(v: string | null | undefined): boolean {
-  return v === "day" || (typeof v === "string" && (LIGHT_INKS as readonly string[]).includes(v));
-}
+export const SKIN_INKS = ["oled", "light"] as const;
+export type SkinInk = (typeof SKIN_INKS)[number];
+
+/** What the reader chose. «system» follows the OS and changes with it. */
+export const INK_CHOICES = ["oled", "light", "system"] as const;
+export type InkChoice = (typeof INK_CHOICES)[number];
 
 export const INK_STORAGE = "ergoscan.ink";
 export const INK_EVENT = "ergoscan-ink";
+/** A choice was made (also in another tab): Settings re-reads it. */
+export const INK_CHOICE_EVENT = "ergoscan-ink-choice";
+export const LIGHT_QUERY = "(prefers-color-scheme: light)";
 
-/** Canvas (`--bg`) + theme-color. */
+/** Page ground of each ink: theme-color and the first frame. */
 export const INK_BG: Record<SkinInk, string> = {
-  day: "#eceaf0",
-  dim: "#2e2d35",
-  oled: "#1c1b22",
-  "light-a": "#e3dfda",
-  "light-b": "#d3d8dd",
-  "light-c": "#c3c2c0",
+  oled: LOOK_BG,
+  light: "#c3c2c0",
 };
 
-/** Paper module — swatch chip on the picker. */
-export const INK_MODULE: Record<SkinInk, string> = {
-  day: "#ffffff",
-  dim: "#35343d",
-  oled: "#26252d",
-  "light-a": "#f2efe9",
-  "light-b": "#e4e9ee",
-  "light-c": "#d4d3d1",
-};
+export function isLightInk(v: string | null | undefined): boolean {
+  return v === "light";
+}
 
 export function parseSkinInk(v: string | null | undefined): SkinInk {
-  if (INK_PREVIEW && (LIGHT_INKS as readonly string[]).includes(v ?? "")) return v as LightInk;
-  return v === "day" || v === "dim" || v === "oled" ? v : "oled";
+  return v === "light" ? "light" : "oled";
+}
+
+/** Old stored values (day, dim) came from inks the site no longer has: they read as the default. */
+export function parseInkChoice(v: string | null | undefined): InkChoice {
+  return v === "light" || v === "system" ? v : "oled";
 }
 
 export function colorSchemeFor(ink: SkinInk): "light" | "dark" {
-  return isLightInk(ink) ? "light" : "dark";
+  return ink === "light" ? "light" : "dark";
+}
+
+function systemLight(): boolean {
+  try {
+    return window.matchMedia(LIGHT_QUERY).matches;
+  } catch {
+    return false;
+  }
+}
+
+export function resolveInk(choice: InkChoice): SkinInk {
+  if (choice === "system") return systemLight() ? "light" : "oled";
+  return choice;
 }
 
 /**
- * Inline head script — paint the chosen ink before React. Keep in lockstep with applyInk.
- * Under the site look (`data-look`) the ink is always OLED and the bar takes the look's black.
+ * Inline head script: paint the chosen ink before the first frame. Keep in lockstep with paintInk.
+ * The metas may come later in the document, so they are set again once it is parsed.
+ * `?ink=` (oled, light, system) is taken and kept, so a link can open the site in a theme.
  */
-export const INK_BOOT = INK_PREVIEW
-  ? `(function(){try{var r=document.documentElement;var look=r.hasAttribute("data-look");var L=${JSON.stringify(LIGHT_INKS)};var q=new URLSearchParams(location.search).get("ink");var s=localStorage.getItem("${INK_STORAGE}");var v=q||s||"oled";var lt=L.indexOf(v)>=0;if(look&&!lt)v="oled";if(!lt&&v!=="day"&&v!=="dim"&&v!=="oled")v="oled";var light=v==="day"||lt;r.setAttribute("data-ink",v);r.classList.toggle("dark",!light);r.style.colorScheme=light?"light":"dark";var bg=${JSON.stringify(INK_BG)}[v];if(look&&!lt)bg="${LOOK_BG}";var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute("content",bg);}catch(e){}})();`
-  : `(function(){try{var r=document.documentElement;var look=r.hasAttribute("data-look");var q=new URLSearchParams(location.search).get("ink");var v=look?"oled":q||localStorage.getItem("${INK_STORAGE}")||"oled";if(v!=="day"&&v!=="dim"&&v!=="oled")v="oled";r.setAttribute("data-ink",v);r.classList.toggle("dark",v!=="day");r.style.colorScheme=v==="day"?"light":"dark";var bg=look?"${LOOK_BG}":{day:"${INK_BG.day}",dim:"${INK_BG.dim}",oled:"${INK_BG.oled}"}[v];var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute("content",bg);}catch(e){}})();`;
+export const INK_BOOT = `(function(){try{var r=document.documentElement;var q=new URLSearchParams(location.search).get("ink");var c=q||localStorage.getItem("${INK_STORAGE}")||"oled";if(c!=="light"&&c!=="system")c="oled";if(q)localStorage.setItem("${INK_STORAGE}",c);var v=c==="system"?(matchMedia("${LIGHT_QUERY}").matches?"light":"oled"):c;var l=v==="light";r.setAttribute("data-ink",v);r.classList.toggle("dark",!l);r.style.colorScheme=l?"light":"dark";var bg=l?"${INK_BG.light}":"${INK_BG.oled}";var m=function(){document.querySelectorAll('meta[name="theme-color"]').forEach(function(t){t.setAttribute("content",bg)});var s=document.querySelector('meta[name="color-scheme"]');if(s)s.setAttribute("content",l?"light":"dark")};m();document.addEventListener("DOMContentLoaded",m);}catch(e){}})();`;
 
-export function applyInk(ink: SkinInk, persist = true): void {
-  if (typeof document === "undefined") return;
+/** Paint an ink. The event goes out on every call (SkinSwitch calls on each page): listeners re-read. */
+function paintInk(ink: SkinInk): void {
   const root = document.documentElement;
-  const look = currentLook();
-  const lightPreview = INK_PREVIEW && (LIGHT_INKS as readonly string[]).includes(ink);
-  if (look && !lightPreview) {
-    ink = "oled";
-    persist = false;
-  }
   root.dataset.ink = ink;
-  root.classList.toggle("dark", !isLightInk(ink));
+  root.classList.toggle("dark", ink !== "light");
   root.style.colorScheme = colorSchemeFor(ink);
-  const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute("content", look && !lightPreview ? LOOK_BG : INK_BG[ink]);
+  document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute("content", INK_BG[ink]));
+  document.querySelector('meta[name="color-scheme"]')?.setAttribute("content", colorSchemeFor(ink));
+  window.dispatchEvent(new Event(INK_EVENT));
+}
+
+/** Apply a choice now (and keep it). */
+export function applyInk(choice: InkChoice, persist = true): void {
+  if (typeof document === "undefined") return;
   if (persist) {
     try {
-      localStorage.setItem(INK_STORAGE, ink);
+      localStorage.setItem(INK_STORAGE, choice);
     } catch {
       /* */
     }
   }
-  window.dispatchEvent(new Event(INK_EVENT));
+  paintInk(resolveInk(choice));
+  window.dispatchEvent(new Event(INK_CHOICE_EVENT));
 }
 
-export function readStoredInk(): SkinInk {
+export function readInkChoice(): InkChoice {
   try {
-    return parseSkinInk(localStorage.getItem(INK_STORAGE));
+    return parseInkChoice(localStorage.getItem(INK_STORAGE));
   } catch {
     return "oled";
   }
@@ -94,4 +98,26 @@ export function readStoredInk(): SkinInk {
 export function readDocumentInk(): SkinInk {
   if (typeof document === "undefined") return "oled";
   return parseSkinInk(document.documentElement.dataset.ink);
+}
+
+/**
+ * Keep the page on the stored choice: the OS turning light or dark («system»), and a choice made in
+ * another tab. Returns the unsubscribe.
+ */
+export function followInk(): () => void {
+  const mq = window.matchMedia(LIGHT_QUERY);
+  const onOs = () => {
+    if (readInkChoice() === "system") paintInk(resolveInk("system"));
+  };
+  const onStorage = (e: StorageEvent) => {
+    if (e.key !== INK_STORAGE) return;
+    paintInk(resolveInk(readInkChoice()));
+    window.dispatchEvent(new Event(INK_CHOICE_EVENT));
+  };
+  mq.addEventListener("change", onOs);
+  window.addEventListener("storage", onStorage);
+  return () => {
+    mq.removeEventListener("change", onOs);
+    window.removeEventListener("storage", onStorage);
+  };
 }

@@ -10,14 +10,14 @@ import clsx from "clsx";
 import { getGateway } from "@/lib/config";
 import { loadGlobeMap, makePlaceholderMap } from "@/lib/earth-texture";
 import { enteringIds, useEnterIds } from "@/lib/keyed-enter";
-import { HOME, INK } from "@/lib/palette";
+import { HOME, INK_HEX } from "@/lib/palette";
 import { canvasDpr, watchOnScreen } from "@/lib/canvas-run";
 import { ReelText } from "@/components/ReelText";
 import { TipHead, TipRow, TipRows, useFloatTip } from "@/components/Tip";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { pointRect } from "@/lib/tip-place";
 
-const REGION_INK = [INK.cyan, INK.green, INK.gold, INK.coral, INK.sky, INK.violet, INK.teal];
+const REGION_INK = [INK_HEX.cyan, INK_HEX.green, INK_HEX.gold, INK_HEX.coral, INK_HEX.sky, INK_HEX.violet, INK_HEX.teal];
 
 type OrbitPeer = { id: string; t: number; c?: number; ip?: string; name?: string };
 type OrbitRegion = { id: string; n: number };

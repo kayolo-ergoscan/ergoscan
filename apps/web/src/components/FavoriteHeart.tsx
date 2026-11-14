@@ -6,7 +6,7 @@ import { useFloatTip, useTip } from "@/components/Tip";
 import { useT } from "@/lib/i18n/I18nProvider";
 import { say } from "@/lib/kayolo/events";
 
-const HEART = "#e25563";
+const HEART = "var(--heart)";
 const POP_MS = 480;
 /** How long «Saved to Favorites» stays after a press. */
 const SAID_MS = 1600;
@@ -71,7 +71,7 @@ export function FavoriteHeart({
         "fav-heart chip-press relative inline-flex shrink-0 items-center justify-center transition-colors duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[var(--wash)]",
         size === "sm" ? "h-[18px] w-[18px] rounded-[5px]" : "h-8 w-8 rounded-[8px]",
         ready ? "" : "invisible",
-        on ? "" : "text-[var(--muted)] hover:text-[#e25563]"
+        on ? "" : "text-[var(--muted)] hover:text-[var(--heart)]"
       )}
       style={on ? { color: HEART } : undefined}
     >

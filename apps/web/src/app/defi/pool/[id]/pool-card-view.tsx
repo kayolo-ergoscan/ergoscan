@@ -12,7 +12,7 @@ import { KpiMark } from "@/components/kpi-marks";
 import { TokenAvatar } from "@/components/TokenBadge";
 import { PrettyPrice } from "@/components/PrettyNum";
 import { RankWindow } from "@/components/RankWindow";
-import { HOME, INK } from "@/lib/palette";
+import { HOME, INK, INK_TEXT } from "@/lib/palette";
 import {
   formatGroupedNumber,
   formatRelTime,
@@ -285,7 +285,7 @@ export function PoolCardView({
           </p>
           <p className="mt-0.5 truncate text-[12px] leading-[1.15]">
             <span style={{ color: HOME.forming }}>{t("defi.price")}</span>{" "}
-            <span className="font-semibold tabular-nums" style={{ color: INK.violet }}>
+            <span className="font-semibold tabular-nums" style={{ color: INK_TEXT.violet }}>
               {pool?.priceErg != null && pool.priceErg > 0 ? (
                 <>
                   <PrettyPrice n={pool.priceErg} locale={locale} /> ERG

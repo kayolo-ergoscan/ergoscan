@@ -18,7 +18,7 @@ import { TokenLogo } from "@/components/TokenBadge";
 import { listPip } from "@/lib/address-pips";
 import { formatErgFixed, formatScaledGlance, formatUsd, shortId } from "@/lib/format";
 import { rentYardDemoPack, RENT_DEMO_MS } from "@/lib/rent-miner-patrol";
-import { HOME, INK } from "@/lib/palette";
+import { HOME, INK_TEXT } from "@/lib/palette";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { countText } from "@/lib/i18n/messages";
 import { groupRentDanger, type RentDangerGroup, type RentDangerRow } from "@/lib/rent-danger";
@@ -54,8 +54,8 @@ function whenText(blocks: number, t: T): string {
 
 function toneColor(blocksUntilRent: number): string | undefined {
   const tone = rentTapeTone(blocksUntilRent);
-  if (tone === "due") return INK.coral;
-  if (tone === "soon") return INK.gold;
+  if (tone === "due") return INK_TEXT.coral;
+  if (tone === "soon") return INK_TEXT.gold;
   return undefined;
 }
 
@@ -183,7 +183,7 @@ function RentEpochTile({
                 "whitespace-nowrap text-[26px] font-semibold tabular-nums tracking-tight lg:max-xl:text-[20px]",
                 !rentLabel && "text-[var(--muted)]"
               )}
-              style={rentLabel ? { color: INK.coral } : undefined}
+              style={rentLabel ? { color: INK_TEXT.coral } : undefined}
             >
               <ReelText text={rentLabel ?? "—"} />
             </span>
@@ -260,7 +260,7 @@ function DangerTile({ rows, ready }: { rows: RentDangerRow[]; ready: boolean }) 
   return (
     <article
       className="mod flex h-full min-h-0 min-w-0 flex-col rounded-[20px] border border-[var(--border)] bg-[var(--module)]"
-      style={{ "--tag": "var(--c-token)" } as CSSProperties}
+      style={{ "--tag": "var(--f-token)" } as CSSProperties}
     >
       <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[20px] px-4 py-3">
         <div className="flex min-h-[22px] shrink-0 items-center justify-between gap-3">
@@ -419,7 +419,7 @@ function QueueLine({ address, row, reduce }: { address: string; row: RentTapeRow
           <span className="text-[var(--muted-2)]">·</span>
           <span>
             {feePre}
-            <span style={{ color: INK.coral }}>{formatErgFixed(row.rentNano, loc)}</span>
+            <span style={{ color: INK_TEXT.coral }}>{formatErgFixed(row.rentNano, loc)}</span>
             {feePost}
           </span>
         </span>

@@ -547,10 +547,10 @@ export function pixelInkForPath(path: string): PixelInk {
   return "brand";
 }
 
-/** Resolves the ink from the theme variables (day ink has darker ones). */
-export function pixelColor(ink: PixelInk): string {
+/** Resolves the ink from the theme variables; a scene canvas (`el`) answers with its own. */
+export function pixelColor(ink: PixelInk, el?: Element): string {
   if (typeof document === "undefined") return PIXEL_ORANGE;
   const name = ink === "brand" ? "--brand-new" : `--ent-${ink}`;
-  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const v = getComputedStyle(el ?? document.documentElement).getPropertyValue(name).trim();
   return v || PIXEL_ORANGE;
 }

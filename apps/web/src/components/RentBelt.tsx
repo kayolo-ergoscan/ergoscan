@@ -4,7 +4,7 @@ import { useEffect, useRef, type MouseEvent as ReactMouseEvent, type PointerEven
 import { useRouter } from "next/navigation";
 import { rentToneInk } from "@/lib/rent-miner-patrol";
 import { drawPixel, pixelColor, type PixelMood } from "./pixel";
-import { lookEdge, lookInk, onGround, sceneGround } from "@/lib/look";
+import { lookEdge, lookInk, onScene } from "@/lib/look";
 import { watchOnScreen } from "@/lib/canvas-run";
 import { INK_EVENT } from "@/lib/skin-ink";
 import type { RentTapeRow } from "@ergoscan/shared";
@@ -158,7 +158,7 @@ export function RentBelt({
     let ink = "";
     let inkAt = -1e9;
 
-    const paint = (now: number) => onGround(sceneGround(), () => paintScene(now));
+    const paint = (now: number) => onScene(() => paintScene(now));
     const paintScene = (now: number) => {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
@@ -260,7 +260,7 @@ export function RentBelt({
       }
       if (cur) {
         if (now - inkAt > 1000) {
-          ink = pixelColor("box");
+          ink = pixelColor("box", canvas);
           inkAt = now;
         }
         const open = mode === "check" ? lidOpen(hopT) : 0;

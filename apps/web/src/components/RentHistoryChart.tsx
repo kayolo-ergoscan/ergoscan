@@ -25,6 +25,7 @@ import { pickRentChartTip } from "@/lib/rent-chart-tip";
 import { TX_ACTIVITY_TZ } from "@/lib/tx-activity-bin";
 import { useInk } from "@/lib/use-ink";
 import { isLightInk } from "@/lib/skin-ink";
+import { pageInk } from "@/lib/look";
 import { usePhoneChart } from "@/lib/use-phone-chart";
 import { PHONE_X_LABELS, insideTicks, labelGutter, thinTicks, tickStep, tickText } from "@/lib/chart-axis";
 import { TipHead, TipRow, TipRows, useFloatTip } from "@/components/Tip";
@@ -43,6 +44,8 @@ echarts.use([
 ]);
 
 const ERG = "#5ee0a0";
+/** The line ink on the page now (the tip reads it on hover). */
+const ergNow = () => pageInk(ERG, isLightInk(document.documentElement.dataset.ink));
 /** Phone plot: y labels inside on the right, so the line keeps the full width. */
 const PHONE_GRID = { top: 6, right: 4, bottom: 18, left: 4 };
 const DAY_MS = RENT_SERIES_DAY_MS;
@@ -311,11 +314,11 @@ export function RentHistoryChart({
       dayTip.show(
         pointRect(rect.left + px[0]!, rect.top + px[1]!, 6),
         <>
-          <TipHead chip={picked.due ? nA : undefined} ink={picked.due ? ERG : undefined} mono quiet>
+          <TipHead chip={picked.due ? nA : undefined} ink={picked.due ? ergNow() : undefined} mono quiet>
             {formatWindow(picked.src.t, loc.current)}
           </TipHead>
           <TipRows>
-            <TipRow label={nE} dot={ERG}>
+            <TipRow label={nE} dot={ergNow()}>
               {fmtErg.current(picked.src.rentErg)}
             </TipRow>
             <TipRow label={nB}>{fmtBoxes.current(picked.src.boxes)}</TipRow>
@@ -412,6 +415,7 @@ export function RentHistoryChart({
     const c = chart.current;
     if (!c) return;
     const chrome = chartChrome();
+    const erg = pageInk(ERG, isLightInk(ink));
     if (past.length < 2) {
       c.clear();
       paintedSig.current = "";
@@ -550,8 +554,8 @@ export function RentHistoryChart({
             symbol: "circle",
             symbolSize: 8,
             smooth: 0.65,
-            lineStyle: { width: 2.6, color: ERG, cap: "round", join: "round" },
-            itemStyle: { color: ERG },
+            lineStyle: { width: 2.6, color: erg, cap: "round", join: "round" },
+            itemStyle: { color: erg },
             emphasis: { scale: true, lineStyle: { width: 2.8 } },
           },
           ...(peek.length > 0
@@ -567,18 +571,18 @@ export function RentHistoryChart({
                   z: 3,
                   lineStyle: {
                     width: 2.2,
-                    color: ERG,
+                    color: erg,
                     type: [6, 5],
                     cap: "round" as const,
                     join: "round" as const,
                     opacity: 0.88,
                   },
-                  itemStyle: { color: ERG },
+                  itemStyle: { color: erg },
                   emphasis: { scale: true, lineStyle: { width: 2.4 } },
                 },
               ]
             : []),
-          ...rippleSeries(tips, ERG, reduced),
+          ...rippleSeries(tips, erg, reduced),
         ],
       },
       { notMerge: true }

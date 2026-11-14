@@ -16,7 +16,7 @@ import { KpiNum } from "@/components/KpiGrid";
 import { KpiMark } from "@/components/kpi-marks";
 import { ReelText } from "@/components/ReelText";
 import { DONUT_SLICES, HOME } from "@/lib/palette";
-import { lookInk } from "@/lib/look";
+import { lookInk, onScene } from "@/lib/look";
 import { fetchErgChart } from "@/lib/price-history";
 import type { ErgMarket } from "@/lib/list-snapshots";
 import {
@@ -1439,7 +1439,7 @@ function HomeLiveStrip({
     pools.forEach((p, i) => {
       if (!p.address) return;
       const raw = DONUT_SLICES[i % DONUT_SLICES.length]!;
-      if (!raw.startsWith("rgba(255")) out[p.address] = lookInk(raw);
+      if (!raw.startsWith("rgba(255")) out[p.address] = onScene(() => lookInk(raw));
     });
     return out;
   }, [pools]);

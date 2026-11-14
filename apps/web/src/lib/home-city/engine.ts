@@ -5,7 +5,7 @@
  * drawn and no frame is asked for. Under reduced motion every change is drawn once, as its final frame.
  */
 import { canvasDpr, watchOnScreen } from "@/lib/canvas-run";
-import { onGround, sceneGround } from "@/lib/look";
+import { onScene } from "@/lib/look";
 import { pixelSettling } from "@/components/pixel";
 import { readInks, sealPlan, type CityBlock, type Fees, type Frame, type Inks, type Scene, type YardTx } from "./common";
 import { cityGeo, cityTarget, citySiteRest, drawCity, type CityHit, type KayoloCue } from "./city";
@@ -424,8 +424,8 @@ export class CityEngine {
   }
 
   private paint(now: number): void {
-    // The scene's own ground: a light ink may keep it dark (a window) or paint it by day.
-    onGround(sceneGround(), () => this.paintScene(now));
+    // A night town on either ink (look.ts onScene).
+    onScene(() => this.paintScene(now));
   }
 
   private paintScene(now: number): void {

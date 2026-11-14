@@ -3,7 +3,7 @@
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { parseSkinFloat, type SkinFloat } from "@/lib/skin-float";
-import { applyInk, parseSkinInk, readStoredInk, type SkinInk } from "@/lib/skin-ink";
+import { applyInk, followInk, parseInkChoice, readInkChoice, type InkChoice } from "@/lib/skin-ink";
 
 export const SKIN_FACES = ["t0", "t1", "t2"] as const;
 export const SKIN_STAMPS = ["corner", "old", "rail"] as const;
@@ -19,19 +19,20 @@ export function parseSkinStamp(v: string | null | undefined): SkinStamp {
   return v === "old" || v === "corner" || v === "rail" ? v : "rail";
 }
 
-function applySkin(face: SkinFace, stamp: SkinStamp, float: SkinFloat, ink: SkinInk) {
+function applySkin(face: SkinFace, stamp: SkinStamp, float: SkinFloat, ink: InkChoice, keepInk: boolean) {
   const root = document.documentElement;
   root.dataset.face = face;
   root.dataset.stamp = stamp;
   root.dataset.float = float;
-  applyInk(ink, true);
+  applyInk(ink, keepInk);
 }
 
 function readSkin(search: { get: (k: string) => string | null }): {
   face: SkinFace;
   stamp: SkinStamp;
   float: SkinFloat;
-  ink: SkinInk;
+  ink: InkChoice;
+  keepInk: boolean;
 } {
   const faceQ = search.get("face");
   const stampQ = search.get("stamp");
@@ -40,7 +41,7 @@ function readSkin(search: { get: (k: string) => string | null }): {
   let face = parseSkinFace(faceQ);
   let stamp = parseSkinStamp(stampQ);
   let float = parseSkinFloat(floatQ);
-  let ink = inkQ ? parseSkinInk(inkQ) : readStoredInk();
+  const ink = inkQ ? parseInkChoice(inkQ) : readInkChoice();
   try {
     if (!faceQ) face = parseSkinFace(sessionStorage.getItem("lumen.face"));
     else sessionStorage.setItem("lumen.face", face);
@@ -53,22 +54,23 @@ function readSkin(search: { get: (k: string) => string | null }): {
       const stored = sessionStorage.getItem("lumen.float");
       if (stored === "off" || stored === "ada") float = stored;
     }
-    if (inkQ === "day" || inkQ === "dim" || inkQ === "oled") ink = inkQ;
   } catch {
     /* */
   }
-  return { face, stamp, float, ink };
+  return { face, stamp, float, ink, keepInk: Boolean(inkQ) };
 }
 
-/** Optional `?face=` / `?stamp=` / `?float=` / `?ink=`. Default T1 + rail + AdaStat + OLED. */
+/** Optional `?face=` / `?stamp=` / `?float=` / `?ink=`. Default T1 + rail + AdaStat + the dark ink. */
 export function SkinSwitch() {
   const path = usePathname();
   const search = useSearchParams();
 
   useEffect(() => {
     const next = readSkin(search);
-    applySkin(next.face, next.stamp, next.float, next.ink);
+    applySkin(next.face, next.stamp, next.float, next.ink, next.keepInk);
   }, [path, search]);
+
+  useEffect(() => followInk(), []);
 
   return null;
 }

@@ -51,7 +51,7 @@ export function NftThumb({
     return (
       <span
         className={clsx(
-          "flex h-full w-full items-center justify-center text-white/25",
+          "flex h-full w-full items-center justify-center text-[var(--ghost)]",
           className
         )}
       >

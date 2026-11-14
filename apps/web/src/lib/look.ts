@@ -65,57 +65,38 @@ function familyOf(rgb: [number, number, number]): Family {
 }
 
 /**
- * How a pixel scene sits on a light ink (`--scene` of the ink, light.css): «day» paints it in
- * daylight on the card, «window» keeps the card dark (a window onto the night), «dusk» keeps the
- * night town under a dusk sky. On the dark inks it is «night».
+ * Pixel scenes (the home city and yard, the Lithos and rent cards) stay a night town on either
+ * ink: on the light one they sit under a dusk sky (light.css), so they paint with the dark inks.
+ * Wrap a synchronous paint in `onScene` and every lookInk/lookEdge inside it answers for the night.
  */
-export type SceneMode = "night" | "day" | "window" | "dusk";
+let scene = 0;
 
-export function sceneMode(): SceneMode {
-  if (typeof document === "undefined") return "night";
-  const root = document.documentElement;
-  const ink = root.dataset.ink ?? "";
-  if (!ink.startsWith("light-")) return ink === "day" ? "day" : "night";
-  const v = getComputedStyle(root).getPropertyValue("--scene").trim();
-  return v === "day" || v === "window" || v === "dusk" ? v : "day";
-}
-
-/** The ground a scene paints on: its inks come from the dark family unless the scene is in daylight. */
-export function sceneGround(): "light" | "dark" {
-  return sceneMode() === "day" ? "light" : "dark";
-}
-
-let ground: "light" | "dark" | null = null;
-
-/** Paint `fn` on a given ground (a scene card), whatever the page ink is. Synchronous draws only. */
-export function onGround<T>(g: "light" | "dark", fn: () => T): T {
-  const prev = ground;
-  ground = g;
+export function onScene<T>(fn: () => T): T {
+  scene++;
   try {
     return fn();
   } finally {
-    ground = prev;
+    scene--;
   }
 }
 
 function lightGround(): boolean {
-  if (ground) return ground === "light";
-  if (typeof document === "undefined") return false;
-  return (document.documentElement.dataset.ink ?? "").startsWith("light-");
+  if (scene > 0 || typeof document === "undefined") return false;
+  return document.documentElement.dataset.ink === "light";
 }
 
 const memo = new Map<string, string>();
 const memoLight = new Map<string, string>();
 let lightFamily: { ink: string; fam: Record<Family, string>; edge: string } | null = null;
 
-/** The light ink's canvas families (`--lk-*` in light.css, the mark tier on the card). */
+/** The light ink's canvas families (`--lk-*` in light.css: the mark tier on the light card). */
 function lightInks(): { fam: Record<Family, string>; edge: string } {
   const ink = document.documentElement.dataset.ink ?? "";
   if (lightFamily?.ink === ink) return lightFamily;
   const cs = getComputedStyle(document.documentElement);
   const fam = {} as Record<Family, string>;
   for (const k of Object.keys(FAMILY) as Family[]) fam[k] = cs.getPropertyValue(`--lk-${k}`).trim() || FAMILY[k];
-  lightFamily = { ink, fam, edge: cs.getPropertyValue("--lk-edge").trim() || "#f2efe9" };
+  lightFamily = { ink, fam, edge: cs.getPropertyValue("--lk-edge").trim() || "#d4d3d1" };
   memoLight.clear();
   return lightFamily;
 }
@@ -138,6 +119,14 @@ export function lookInk(color: string): string {
   const out = rgb ? FAMILY[familyOf(rgb)] : color;
   memo.set(color, out);
   return out;
+}
+
+/**
+ * A chart's own raw colour on the page: as given on the dark ink (the chart picked it), its
+ * family's mark on the light one. `light` comes from useInk, so the first render matches the server.
+ */
+export function pageInk(color: string, light: boolean): string {
+  return light ? lookInk(color) : color;
 }
 
 /** Edge stroke for drawn crates and balls. Null keeps the component's own. */

@@ -11,7 +11,7 @@ import { drawPixel, pixelColor } from "@/components/pixel";
 import { canvasDpr, watchOnScreen } from "@/lib/canvas-run";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { REDUCE_QUERY, useMediaTick } from "@/lib/kayolo/motion";
-import { lookEdge, onGround, sceneGround } from "@/lib/look";
+import { lookEdge, onScene } from "@/lib/look";
 import { HOME } from "@/lib/palette";
 import { INK_EVENT } from "@/lib/skin-ink";
 import { formatInt } from "@/lib/format";
@@ -105,12 +105,12 @@ function readInks(el: Element): Inks {
     green: v("--up", "#88d9a5"),
     text: v("--text", "#ffffff"),
     muted: v("--muted-2", "#a3a3a3"),
-    miner: pixelColor("brand"),
+    miner: pixelColor("brand", el),
     wash: v("--wash", "rgba(255,255,255,0.06)"),
     washMid: v("--wash-mid", "rgba(255,255,255,0.1)"),
     washStrong: v("--wash-strong", "rgba(255,255,255,0.16)"),
     module: v("--module", "#1a1a1a"),
-    edge: lookEdge() ?? "rgba(255,255,255,0.55)",
+    edge: onScene(lookEdge) ?? "rgba(255,255,255,0.55)",
     heur: v("--k-rent", "#d99b2b"),
     sans: `${v("--font-sans", "")}${v("--font-sans", "") ? ", " : ""}ui-sans-serif, system-ui, sans-serif`,
     mono: `${v("--font-mono", "")}${v("--font-mono", "") ? ", " : ""}ui-monospace, monospace`,
@@ -626,7 +626,7 @@ function LithosScene({ data, tip, text, label, tipFor }: SceneInput & { label: s
     };
     mark.src = "/lithos-mark.png";
 
-    const paint = (now: number) => onGround(sceneGround(), () => paintScene(now));
+    const paint = (now: number) => onScene(() => paintScene(now));
     const paintScene = (now: number) => {
       raf = 0;
       if (dead) return;
@@ -1112,7 +1112,7 @@ function Fact({ children, ev, hint, className }: { children: ReactNode; ev: "dec
 }
 
 /** The tile's tag in the Lithos mark's violet, black ink (≈ 8.6 : 1), like the other home tiles. */
-const LITHOS_TAG = { "--tag": "var(--k-nft, #c19fe9)", "--tag-ink": "#0e0e0e", "--mark": "var(--k-nft, #c19fe9)" } as CSSProperties;
+const LITHOS_TAG = { "--tag": "var(--k-nft)", "--tag-ink": "var(--k-ink)", "--mark": "var(--ev-decoded)" } as CSSProperties;
 
 export function HomeLithos({ data, tipHeight, enter = 0 }: { data: LithosHome | null; tipHeight: number | null; enter?: number }) {
   const { t, tn, locale } = useI18n();

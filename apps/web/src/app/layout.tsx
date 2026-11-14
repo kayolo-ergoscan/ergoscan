@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import Script from "next/script";
 import { Commissioner, Fira_Code, Fira_Sans, IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import { Providers } from "@/components/Providers";
 import { RegistryBook } from "@/components/RegistryBook";
@@ -148,9 +147,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       className={`dark ${sans.variable} ${faceT0.variable} ${faceT2.variable} ${mono.variable} ${faceT2Mono.variable}`}
     >
       <head>
-        <Script id="ergoscan-ink" strategy="beforeInteractive">
-          {INK_BOOT}
-        </Script>
+        {/* Inline and first in <head>: the chosen ink is painted before the first frame. */}
+        <script id="ergoscan-ink" dangerouslySetInnerHTML={{ __html: INK_BOOT }} />
       </head>
       <body className="antialiased">
         <Providers>

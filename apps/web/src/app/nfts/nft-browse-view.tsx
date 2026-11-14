@@ -10,7 +10,7 @@ import { Shell } from "@/components/Shell";
 import { getGateway } from "@/lib/config";
 import { shortId } from "@/lib/format";
 import { describeParty } from "@/lib/address-labels";
-import { INK } from "@/lib/palette";
+import { INK_TEXT } from "@/lib/palette";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { SNAPSHOT_FETCH, enteringIds, useEnterIds } from "@/lib/keyed-enter";
 import { useKeepFresh, usePageSync } from "@/lib/page-sync";
@@ -155,7 +155,7 @@ export function NftBrowseView({
           </p>
           <h1
             className="truncate text-[22px] font-semibold tracking-tight"
-            style={{ color: INK.coral }}
+            style={{ color: INK_TEXT.coral }}
           >
             {shownName}
           </h1>

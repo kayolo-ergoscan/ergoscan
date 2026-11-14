@@ -10,6 +10,7 @@ import {
   tokenTickerInk,
 } from "./token-meta";
 import { INK } from "./palette";
+import { INK_TEXT } from "@/lib/palette";
 
 const USE = "a55b8735ed1a99e46c2c89f8994aacdf4b1109bdcf682f1e5b34479c6e392669";
 const SIGUSD = "03faf2cb329f2e90d6d23b58d91bbb6c046aa143261cc21f52fbe2824bfcbf04";
@@ -83,6 +84,6 @@ test("Flux and Faku keep their names instead of a short hash", () => {
 });
 
 test("SigRSV uses the same ticker ink as every other token", () => {
-  assert.equal(tokenTickerInk(SIGRSV_ID), INK.coral);
-  assert.equal(tokenTickerInk(SIGUSD), INK.coral);
+  assert.equal(tokenTickerInk(SIGRSV_ID), INK_TEXT.coral);
+  assert.equal(tokenTickerInk(SIGUSD), INK_TEXT.coral);
 });

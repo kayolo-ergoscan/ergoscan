@@ -294,11 +294,11 @@ export function BuybackView({ kind, initial }: { kind: BuybackKind; initial?: Bu
                   </div>
                   <div className="mt-2 flex items-center gap-3 text-[12px] text-[var(--muted)]">
                     <span className="inline-flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full" style={{ background: "#86a6f0" }} />
+                      <span className="h-2 w-2 rounded-full" style={{ background: "var(--c-token)" }} />
                       {t("buyback.chartErg")}
                     </span>
                     <span className="inline-flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full" style={{ background: "#e799b7" }} />
+                      <span className="h-2 w-2 rounded-full" style={{ background: "var(--c-addr)" }} />
                       {fill(t("buyback.chartToken"), { sym })}
                     </span>
                   </div>

@@ -58,13 +58,12 @@ export function drawZoneMarks(ctx: CanvasRenderingContext2D, spans: readonly Zon
   let free = -Infinity;
   for (const s of spans) {
     if (s.zone === 0) continue;
-    // By day the words sit on pale earth: deeper inks so they still read.
-    const ink = s.zone === 2 ? (inks.day ? "#7a5a0e" : "#ebcb71") : inks.day ? "#4a463f" : "#cfc8ba";
+    const ink = s.zone === 2 ? (inks.day ? "#a77f1f" : "#ebcb71") : inks.day ? "#5f5a50" : "#cfc8ba";
     R(ctx, s.x0, y, Math.max(1, s.x1 - s.x0), 1, alpha(ink, s.zone === 2 ? 0.85 : 0.5));
     R(ctx, s.x0, y - 2, 1, 3, alpha(ink, 0.9));
     const label = s.zone === 2 ? words.turbo : words.normal;
     const x = Math.max(s.x0 + 2, free + 6);
-    ctx.fillStyle = alpha(ink, s.zone === 2 ? 0.95 : inks.day ? 0.9 : 0.75);
+    ctx.fillStyle = alpha(ink, s.zone === 2 ? 0.95 : 0.75);
     ctx.fillText(label, x, y + 2);
     free = x + ctx.measureText(label).width;
   }

@@ -1134,7 +1134,7 @@ button.feed-caret:hover {
   color: var(--down);
 }
 .feed-facts > .feed-gold {
-  color: var(--k-reward);
+  color: var(--k-reward-text);
 }
 
 /* NFT card caption: the feed's name and facts line under the picture. */

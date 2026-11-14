@@ -9,6 +9,7 @@ import { CanvasRenderer } from "echarts/renderers";
 import { chartChrome } from "@/lib/chart-chrome";
 import { formatDottedDate, formatH24 } from "@/lib/format";
 import { neonLine } from "@/lib/chart-neon";
+import { pageInk } from "@/lib/look";
 import { TipHead, TipRow, TipRows, useFloatTip } from "@/components/Tip";
 import { pointRect } from "@/lib/tip-place";
 import { useInk } from "@/lib/use-ink";
@@ -212,6 +213,8 @@ export function DualLineChart({
   labels.current = { nameTxs, nameFees };
   loc.current = locale;
   const ink = useInk();
+  const cTxs = pageInk(colorTxs, isLightInk(ink));
+  const cFees = pageInk(colorFees, isLightInk(ink));
   const incoming = useRef(points);
   incoming.current = points;
   const [shown, setShown] = useState(points);
@@ -432,7 +435,7 @@ export function DualLineChart({
           axisPointer: {
             type: "line",
             lineStyle: {
-              color: showTip ? chrome.hair : showFees && !showTxs ? colorFees : colorTxs,
+              color: showTip ? chrome.hair : showFees && !showTxs ? cFees : cTxs,
               width: 1,
               type: showTip ? ("dashed" as const) : ("solid" as const),
               opacity: showTip ? 1 : 0.55,
@@ -525,12 +528,12 @@ export function DualLineChart({
                     smooth: 0.65,
                     lineStyle: {
                       width: 2.5,
-                      color: colorTxs,
+                      color: cTxs,
                       cap: "round" as const,
                       join: "round" as const,
                       opacity: dimTx ? 0.45 : 1,
                     },
-                    itemStyle: { color: colorTxs },
+                    itemStyle: { color: cTxs },
                     emphasis: { scale: true, lineStyle: { width: 2.6 } },
                   },
                 ]
@@ -561,19 +564,19 @@ export function DualLineChart({
                     connectNulls: false,
                     lineStyle: {
                       width: 2.4,
-                      color: colorFees,
+                      color: cFees,
                       cap: "round" as const,
                       join: "round" as const,
                       type: "solid" as const,
                       opacity: dimFee ? 0.45 : 1,
                     },
-                    itemStyle: { color: colorFees },
+                    itemStyle: { color: cFees },
                     emphasis: { scale: true, lineStyle: { width: 2.6 } },
                   },
                 ]
             : []),
-          ...tipRipple(txTip, colorTxs, 0, reduced),
-          ...tipRipple(feeTip, colorFees, showTxs ? 1 : 0, reduced),
+          ...tipRipple(txTip, cTxs, 0, reduced),
+          ...tipRipple(feeTip, cFees, showTxs ? 1 : 0, reduced),
         ],
       },
       { notMerge: true }
@@ -655,12 +658,12 @@ export function DualLineChart({
             <TipHead mono quiet>{when}</TipHead>
             <TipRows>
               {showTxs ? (
-                <TipRow label={nT} dot={colorTxs}>
+                <TipRow label={nT} dot={cTxs}>
                   {fmtTxs.current(best.txs)}
                 </TipRow>
               ) : null}
               {showFees ? (
-                <TipRow label={nF} dot={colorFees}>
+                <TipRow label={nF} dot={cFees}>
                   {feeOk ? fmtFees.current(best.feesErg) : "—"}
                 </TipRow>
               ) : null}
@@ -687,7 +690,7 @@ export function DualLineChart({
         node.removeEventListener("pointercancel", onEnd);
       };
     }
-  }, [view, compact, colorTxs, colorFees, locale, yRight, fillPlot, tipPulse, series, glow, showTip, ink, phone, readout, lead]);
+  }, [view, compact, colorTxs, colorFees, cTxs, cFees, locale, yRight, fillPlot, tipPulse, series, glow, showTip, ink, phone, readout, lead]);
 
   const latest = view.seriesPts.length ? view.seriesPts[view.seriesPts.length - 1]! : null;
   const reading = pick ?? latest;
@@ -718,7 +721,7 @@ export function DualLineChart({
           <span className="flex shrink-0 items-center gap-1">
             {view.showTxs ? (
               <ReadoutValue
-                color={colorTxs}
+                color={cTxs}
                 label={nameTxs}
                 on={lead === "txs"}
                 onPick={both ? () => setFocus("txs") : undefined}
@@ -728,7 +731,7 @@ export function DualLineChart({
             ) : null}
             {view.showFees ? (
               <ReadoutValue
-                color={colorFees}
+                color={cFees}
                 label={nameFees}
                 on={lead === "fees"}
                 onPick={both ? () => setFocus("fees") : undefined}

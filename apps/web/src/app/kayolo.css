@@ -148,7 +148,7 @@
   transform: translateX(-50%);
   animation: kayolo-panel-in 120ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
-html[data-ink="day"] .kayolo-panel {
+html[data-ink="light"] .kayolo-panel {
   box-shadow:
     0 0 0 1px var(--wash-mid),
     0 12px 30px -12px rgb(28 27 34 / 0.3),

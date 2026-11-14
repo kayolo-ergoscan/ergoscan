@@ -1,5 +1,8 @@
 "use client";
 
+import { pageInk } from "@/lib/look";
+import { isLightInk } from "@/lib/skin-ink";
+import { useInk } from "@/lib/use-ink";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
@@ -43,7 +46,7 @@ import {
   type Party,
   type TxIo,
 } from "@/lib/tx-flow";
-import { INK, DONUT_SLICES } from "@/lib/palette";
+import { INK, DONUT_SLICES, INK_HEX, INK_TEXT } from "@/lib/palette";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { countText } from "@/lib/i18n/messages";
 import { useFavoriteOf } from "@/lib/favorites";
@@ -185,6 +188,7 @@ export function TxView({
   initial: TxPageSnapshot | null;
 }) {
   const t = useT();
+  const light = isLightInk(useInk());
   const txFav = useFavoriteOf("transactions", id);
   const { locale } = useI18n();
   const { markSynced } = usePageSync();
@@ -344,7 +348,7 @@ export function TxView({
       {
         id: "erg",
         size: mixWeight(amountNano, 420, 2200),
-        color: INK.cyan,
+        color: INK_HEX.cyan,
         href: null,
         title: "ERG",
         kind: "circle",
@@ -354,7 +358,7 @@ export function TxView({
       seeds.push({
         id: "fee",
         size: mixWeight(feeShown, 140, 480),
-        color: INK.gold,
+        color: INK_HEX.gold,
         href: null,
         title: t("tx.fee"),
         kind: "circle",
@@ -365,7 +369,7 @@ export function TxView({
       seeds.push({
         id: tok.tokenId,
         size: mixWeight(w, 200, 900),
-        color: TOKEN_INK[i % TOKEN_INK.length] ?? INK.violet,
+        color: TOKEN_INK[i % TOKEN_INK.length] ?? INK_HEX.violet,
         href: `/token/${tok.tokenId}`,
         title: tokenSymbol(tok.tokenId, tokens.get(tok.tokenId)?.name) || shortId(tok.tokenId, 4),
         kind: "hex",
@@ -493,7 +497,7 @@ export function TxView({
                 <p className="mt-1 flex min-w-0 items-start gap-1.5 text-[12px] leading-snug text-[var(--muted)]">
                   <span
                     className="mt-[4px] inline-block h-1.5 w-1.5 shrink-0 rounded-full"
-                    style={{ background: catColor }}
+                    style={{ background: pageInk(catColor, light) }}
                   />
                   <span>{chip}</span>
                 </p>
@@ -907,7 +911,7 @@ function ErgFigure({
               ? null
               : "text-[var(--text)]"
       )}
-      style={tone === "gold" ? { color: INK.gold } : undefined}
+      style={tone === "gold" ? { color: INK_TEXT.gold } : undefined}
     >
       {sign}
       <span className={size === "lg" ? "text-[28px] font-semibold leading-none" : "text-[15px] font-medium"}>
