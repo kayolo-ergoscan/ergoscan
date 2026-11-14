@@ -147,7 +147,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       className={`dark ${sans.variable} ${faceT0.variable} ${faceT2.variable} ${mono.variable} ${faceT2Mono.variable}`}
     >
       <head>
-        {/* Inline and first in <head>: the chosen ink is painted before the first frame. */}
+        {/* Inline in <head>, so it runs before <body> is parsed: the chosen ink is painted before the first frame. */}
         <script id="ergoscan-ink" dangerouslySetInnerHTML={{ __html: INK_BOOT }} />
       </head>
       <body className="antialiased">

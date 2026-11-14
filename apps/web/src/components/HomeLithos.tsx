@@ -1272,7 +1272,7 @@ export function HomeLithos({ data, tipHeight, enter = 0 }: { data: LithosHome | 
             </span>
             <span className="inline-flex shrink-0 items-center gap-2">
               <Tip content={seamHint ?? undefined}>
-                <span className="inline-flex items-center gap-1.5 text-[var(--c-block,#ebcb71)]">
+                <span className="inline-flex items-center gap-1.5 text-[var(--c-block-word,var(--c-block,#ebcb71))]">
                   {t("homeLithos.seamLithos").replace("{n}", formatInt(hash.n, locale)).replace("{share}", share ?? "—")}
                   <EvidenceDot kind="decoded" />
                 </span>

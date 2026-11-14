@@ -1213,7 +1213,7 @@ function EpochBar({
           <span className="epoch-slot inline-flex shrink-0 items-baseline gap-1 whitespace-nowrap font-semibold">
             <ReelText text={slot.toLocaleString(loc)} />
             {/* A phone keeps the slot and the %; the epoch length is the same every time. */}
-            <span className="font-medium opacity-70 max-sm:hidden">/ {ERGO_EPOCH_LEN.toLocaleString(loc)}</span>
+            <span className="word-dim font-medium opacity-70 max-sm:hidden">/ {ERGO_EPOCH_LEN.toLocaleString(loc)}</span>
           </span>
           <span className="epoch-slot inline-flex shrink-0 items-center gap-1 font-semibold">
             <EpochClock />
@@ -1222,7 +1222,7 @@ function EpochBar({
           <span className="epoch-left inline-flex shrink-0 items-center gap-1 whitespace-nowrap font-medium">
             <EpochFlag />
             <ReelText text={formatRemain(leftMs, locale)} />
-            <span className="font-normal opacity-80">{t("home.epochLeft")}</span>
+            <span className="word-dim font-normal opacity-80">{t("home.epochLeft")}</span>
           </span>
         </div>
       </div>

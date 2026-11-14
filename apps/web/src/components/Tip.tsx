@@ -539,7 +539,7 @@ export function TipHead({
   quiet = false,
 }: {
   chip?: ReactNode;
-  /** Chip colour (an entity colour); the chip ink stays black. */
+  /** Chip colour (an entity colour); the chip ink stays black. On the light ink, light.css lifts it to a fill. */
   ink?: string;
   children?: ReactNode;
   mono?: boolean;

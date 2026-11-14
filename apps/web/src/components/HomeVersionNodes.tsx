@@ -101,14 +101,14 @@ export function HomeVersionNodes({ className, style }: { className?: string; sty
             >
               <span className="inline-flex shrink-0 items-baseline gap-1 font-semibold">
                 {data.total.toLocaleString(loc)}
-                <span className="font-medium opacity-70">{tn("home.versionPeers", data.total)}</span>
+                <span className="word-dim font-medium opacity-70">{tn("home.versionPeers", data.total)}</span>
               </span>
             </Tip>
             <span className="inline-flex min-w-0 items-center gap-1.5 truncate font-semibold">
               <span aria-hidden className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ background: newestTone }} />
-              <span className="font-medium opacity-70">{t("home.versionNewest")}</span>
+              <span className="word-dim font-medium opacity-70">{t("home.versionNewest")}</span>
               {newest.version}
-              <span className="font-medium opacity-70">{share(newest.n)}%</span>
+              <span className="word-dim font-medium opacity-70">{share(newest.n)}%</span>
             </span>
           </div>
         ) : null}
