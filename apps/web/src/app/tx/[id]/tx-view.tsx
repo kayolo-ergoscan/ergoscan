@@ -922,7 +922,7 @@ function ErgFigure({
         className={clsx(
           "ml-1 font-medium",
           size === "lg" ? "text-[13px]" : "text-[12px]",
-          tone === "gold" ? "opacity-90" : tone ? "opacity-70" : "text-[var(--muted)]"
+          tone === "gold" ? "word-dim opacity-90" : tone ? "word-dim opacity-70" : "text-[var(--muted)]"
         )}
       >
         ERG

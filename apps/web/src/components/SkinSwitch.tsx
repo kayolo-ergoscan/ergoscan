@@ -3,7 +3,7 @@
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { parseSkinFloat, type SkinFloat } from "@/lib/skin-float";
-import { applyInk, followInk, parseInkChoice, readInkChoice, type InkChoice } from "@/lib/skin-ink";
+import { applyInk, followInk, isInkChoice, readInkChoice, type InkChoice } from "@/lib/skin-ink";
 
 export const SKIN_FACES = ["t0", "t1", "t2"] as const;
 export const SKIN_STAMPS = ["corner", "old", "rail"] as const;
@@ -41,7 +41,10 @@ function readSkin(search: { get: (k: string) => string | null }): {
   let face = parseSkinFace(faceQ);
   let stamp = parseSkinStamp(stampQ);
   let float = parseSkinFloat(floatQ);
-  const ink = inkQ ? parseInkChoice(inkQ) : readInkChoice();
+  // `?ink=` paints this page; only a choice the site knows is kept (an old `?ink=day` link stays dark
+  // and leaves the reader's own choice alone).
+  const asked = isInkChoice(inkQ);
+  const ink: InkChoice = asked ? inkQ : inkQ ? "oled" : readInkChoice();
   try {
     if (!faceQ) face = parseSkinFace(sessionStorage.getItem("lumen.face"));
     else sessionStorage.setItem("lumen.face", face);
@@ -57,7 +60,7 @@ function readSkin(search: { get: (k: string) => string | null }): {
   } catch {
     /* */
   }
-  return { face, stamp, float, ink, keepInk: Boolean(inkQ) };
+  return { face, stamp, float, ink, keepInk: asked };
 }
 
 /** Optional `?face=` / `?stamp=` / `?float=` / `?ink=`. Default T1 + rail + AdaStat + the dark ink. */

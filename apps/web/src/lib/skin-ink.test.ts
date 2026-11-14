@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { test } from "node:test";
+import { runInNewContext } from "node:vm";
+import { FAMILY } from "./look";
 import {
   INK_BG,
   INK_BOOT,
   INK_CHOICES,
   colorSchemeFor,
+  isInkChoice,
   isLightInk,
   parseInkChoice,
   parseSkinInk,
@@ -31,6 +35,106 @@ test("the choice: dark, light or the system; old stored inks read as dark", () =
   assert.equal(parseInkChoice("day"), "oled");
   assert.equal(parseInkChoice("dim"), "oled");
   assert.equal(parseInkChoice(undefined), "oled");
+});
+
+test("a `?ink=` is kept only when the site knows it", () => {
+  for (const v of ["oled", "light", "system"]) assert.equal(isInkChoice(v), true);
+  for (const v of ["day", "dim", "", null, undefined, "LIGHT"]) assert.equal(isInkChoice(v), false);
+});
+
+/** Run the head script against a stub document: what it paints and what it stores. */
+function boot(o: { search?: string; stored?: string | null; storage?: "ok" | "throws"; osLight?: boolean }) {
+  const attrs = new Map<string, string>();
+  const classes = new Set<string>(["dark"]);
+  const style: Record<string, string> = {};
+  const metas = [
+    { name: "theme-color", content: "#0e0e0e" },
+    { name: "theme-color", content: "#0e0e0e" },
+    { name: "color-scheme", content: "dark" },
+    { name: "color-scheme", content: "dark" },
+  ];
+  const store = new Map<string, string>(o.stored == null ? [] : [["ergoscan.ink", o.stored]]);
+  const writes: string[] = [];
+  const throws = o.storage === "throws";
+  const localStorage = {
+    getItem(k: string) {
+      if (throws) throw new Error("SecurityError");
+      return store.get(k) ?? null;
+    },
+    setItem(k: string, v: string) {
+      if (throws) throw new Error("SecurityError");
+      writes.push(v);
+      store.set(k, v);
+    },
+  };
+  const document = {
+    documentElement: {
+      setAttribute: (k: string, v: string) => attrs.set(k, v),
+      classList: { toggle: (c: string, on: boolean) => (on ? classes.add(c) : classes.delete(c)) },
+      style,
+    },
+    querySelectorAll(sel: string) {
+      const name = /name="([^"]+)"/.exec(sel)?.[1];
+      return metas
+        .filter((m) => m.name === name)
+        .map((m) => ({ setAttribute: (_k: string, v: string) => void (m.content = v) }));
+    },
+    addEventListener() {},
+  };
+  runInNewContext(INK_BOOT, {
+    document,
+    localStorage,
+    location: { search: o.search ?? "" },
+    URLSearchParams,
+    matchMedia: () => ({ matches: Boolean(o.osLight) }),
+  });
+  return {
+    ink: attrs.get("data-ink"),
+    dark: classes.has("dark"),
+    scheme: style.colorScheme,
+    metas: metas.map((m) => `${m.name}=${m.content}`),
+    stored: store.get("ergoscan.ink") ?? null,
+    writes,
+  };
+}
+
+test("boot script: paints the stored choice, a known `?ink=` wins and is kept", () => {
+  assert.equal(boot({}).ink, "oled");
+  assert.equal(boot({ stored: "light" }).ink, "light");
+  assert.equal(boot({ stored: "system", osLight: true }).ink, "light");
+  assert.equal(boot({ stored: "system", osLight: false }).ink, "oled");
+  const linked = boot({ search: "?ink=light", stored: "oled" });
+  assert.equal(linked.ink, "light");
+  assert.equal(linked.stored, "light");
+  assert.equal(linked.dark, false);
+  assert.equal(linked.scheme, "light");
+});
+
+test("boot script: every theme-color and color-scheme meta follows the ink", () => {
+  const light = boot({ stored: "light" });
+  assert.deepEqual(light.metas, [
+    `theme-color=${INK_BG.light}`,
+    `theme-color=${INK_BG.light}`,
+    "color-scheme=light",
+    "color-scheme=light",
+  ]);
+  assert.deepEqual(boot({}).metas, [`theme-color=${INK_BG.oled}`, `theme-color=${INK_BG.oled}`, "color-scheme=dark", "color-scheme=dark"]);
+});
+
+test("boot script: a storage that throws still gets the linked ink painted", () => {
+  const r = boot({ search: "?ink=light", storage: "throws" });
+  assert.equal(r.ink, "light");
+  assert.equal(r.scheme, "light");
+  assert.equal(boot({ storage: "throws" }).ink, "oled");
+});
+
+test("boot script: an unknown `?ink=` paints dark and leaves the saved choice alone", () => {
+  for (const stored of ["light", "system", null]) {
+    const r = boot({ search: "?ink=day", stored, osLight: true });
+    assert.equal(r.ink, "oled");
+    assert.equal(r.stored, stored);
+    assert.deepEqual(r.writes, []);
+  }
 });
 
 test("boot script paints both grounds and follows the system", () => {
@@ -64,9 +168,28 @@ function block(src: string, selector: string): Tokens {
   return out;
 }
 
+/**
+ * Declarations of the rule whose selector is exactly `selector`, at any depth (a rule inside
+ * @media counts). Empty when the sheet has no such rule.
+ */
+function rule(src: string, selector: string): Tokens {
+  const out: Tokens = new Map();
+  const at = new RegExp(`(^|\\n)[ \\t]*${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\{`).exec(src);
+  if (!at) return out;
+  const open = src.indexOf("{", at.index + at[0].length - 1);
+  const body = src.slice(open + 1, src.indexOf("}", open)).replace(/\/\*[\s\S]*?\*\//g, "");
+  for (const m of body.matchAll(/([a-z-]+)\s*:\s*([^;]+);/g)) out.set(m[1], m[2].replace(/\s+/g, " ").trim());
+  return out;
+}
+
 const globals = css("globals.css");
 const looks = css("looks.css");
 const light = css("light.css");
+const feed = css("feed.css");
+const tip = css("tip.css");
+const phone = css("detail-phone.css");
+/** A rule of the light ink in light.css. */
+const LIGHT_AT = 'html[data-look="c"][data-ink="light"]';
 const BASE: Tokens = new Map([...block(globals, ":root"), ...block(globals, ':root,\nhtml[data-ink="oled"]')]);
 const DARK: Tokens = new Map([...BASE, ...block(looks, 'html[data-look="c"][data-ink]')]);
 const LIGHT: Tokens = new Map([...DARK, ...block(light, 'html[data-look="c"][data-ink="light"]')]);
@@ -200,9 +323,20 @@ const TEXT = 4.5;
 const MARK = 3;
 
 type Pair = [fg: string, bg: string, min: number, ground?: string];
+type Ink = "dark" | "light";
+
+/** `expr` printed at `opacity` (an opacity on the element is an alpha on its ink). */
+const faded = (expr: string, opacity: string | number) =>
+  Number(opacity) >= 1 ? expr : `color-mix(in srgb, ${expr} ${Math.round(Number(opacity) * 1000) / 10}%, transparent)`;
+
+/** A property of `selector` as the page has it on `theme`: the light.css rule wins on the light ink. */
+function prop(theme: Ink, base: string, selector: string, name: string, lightSelector?: string): string | undefined {
+  const own = theme === "light" ? rule(light, lightSelector ?? `${LIGHT_AT} ${selector}`).get(name) : undefined;
+  return own ?? rule(base, selector).get(name);
+}
 
 /** Every foreground the pages print on every ground it sits on. */
-function pairs(): Pair[] {
+function pairs(theme: Ink): Pair[] {
   const out: Pair[] = [];
   for (const card of CARDS) {
     for (const ink of ["text", "muted", "muted-2", "link", "up", "down", "warning", "accent", "soft"]) out.push([v(ink), v(card), TEXT]);
@@ -247,6 +381,87 @@ function pairs(): Pair[] {
     [v("muted"), v("wash-mid"), TEXT],
     [v("accent"), v("accent-soft"), TEXT],
   );
+  out.push(...pagePairs(theme));
+  return out;
+}
+
+/**
+ * What the pages do with the tokens, read off their rules: a word dimmed by opacity, a mark printed
+ * as words, a pressed tile over the page ground, a tip chip on whatever ink its caller passes, a gain
+ * on its own wash. The old rules (opacity on the light card, marks as words, a wash on the page
+ * ground, the tile ink on a light mark) fail here.
+ */
+function pagePairs(theme: Ink): Pair[] {
+  const out: Pair[] = [];
+  const grounds = ["module", "row-hover", "row-open"];
+  const dim = `${LIGHT_AT} :is(.word-dim, .feed-unit)`;
+  // Dimmed words: the feed's units (feed.css) and `word-dim` spans (opacity-70/80/90 in the TSX).
+  const words: [string, string | undefined, string | undefined, string[]][] = [
+    [".feed-unit", prop(theme, feed, ".feed-unit", "opacity", dim), prop(theme, feed, ".feed-unit", "color", dim), ["text", "up", "down", "muted"]],
+    ...[0.7, 0.8, 0.9].map((op): [string, string | undefined, string | undefined, string[]] => [
+      `.word-dim ${op}`,
+      prop(theme, "", ".word-dim", "opacity", dim) ?? String(op),
+      prop(theme, "", ".word-dim", "color", dim),
+      ["text", "up", "down", "c-block-text", "c-net-text", "ink-gold-text"],
+    ]),
+  ];
+  for (const [, opacity, color, parents] of words)
+    for (const parent of parents)
+      for (const card of grounds) {
+        const fg = (color ?? "currentColor").replace(/currentColor/gi, v(parent));
+        out.push([faded(fg, opacity ?? 1), v(card), TEXT]);
+      }
+  // The count on the chosen phone tab (the inverse plate), dimmed.
+  const tab = ".detail-tab.seg-on .detail-tab-n";
+  const tabFg = (prop(theme, phone, tab, "color") ?? "inherit").replace(/inherit|currentColor/gi, v("invert-fg"));
+  out.push([faded(tabFg, prop(theme, phone, tab, "opacity") ?? 1), v("invert"), TEXT, v("invert")]);
+  // A mark as words: a block's header facts (on their tint) and stat rows.
+  for (const tone of ["violet", "sky", "gold", "teal"]) {
+    const fg = rule(globals, `.hdr-fact.is-${tone} dt`).get("color");
+    const bg = rule(globals, `.hdr-fact.is-${tone}`).get("background");
+    assert.ok(fg && bg, `.hdr-fact.is-${tone}`);
+    out.push([fg, bg, TEXT]);
+  }
+  for (const tone of ["violet", "sky", "cyan", "teal", "green", "gold", "coral"]) {
+    const fg = rule(globals, `.hdr-row.is-${tone} .hdr-k`).get("color");
+    assert.ok(fg, `.hdr-row.is-${tone}`);
+    for (const card of ["module", "row-hover"]) out.push([fg, v(card), TEXT]);
+  }
+  // A press-tile, pressed or hovered: its fill is replaced, so it lies on the page ground.
+  const pressed = rule(globals, ".kpi-tile--press.is-pressed").get("background-color");
+  const hovered = rule(globals, ".kpi-tile--press:hover:not(.is-pressed):not(:active):not(.is-armed)").get("background-color");
+  assert.ok(pressed && hovered, "press-tile rules");
+  for (const bg of [pressed, hovered])
+    for (const word of ["text", "muted", "muted-2", "tile-label", "k-nft-text", "k-rent-text", ...ENT.map((e) => `c-${e}-text`)])
+      out.push([v(word), bg, TEXT, v("bg")]);
+  // A box's life nodes lie on the page ground.
+  const node = rule(globals, ".box-life-node").get("background");
+  assert.ok(node, ".box-life-node");
+  for (const word of ["text", "muted", "muted-2", "accent", ...ENT.map((e) => `c-${e}-text`)]) out.push([v(word), node, TEXT, v("bg")]);
+  // Numbered steps: the ink's text tier on a wash of its mark (oracle buyback).
+  for (const i of INKS) out.push([v(`ink-${i}-text`), `color-mix(in srgb, var(--ink-${i}) 14%, transparent)`, TEXT]);
+  // Tip chips: every ink a caller passes (entity marks, fills, --up, canvas families of lookInk).
+  const chipBg = prop(theme, tip, ".tip-chip.is-ink", "background");
+  const chipFg = prop(theme, tip, ".tip-chip.is-ink", "color");
+  assert.ok(chipBg && chipFg, ".tip-chip.is-ink");
+  const callers = [
+    ...ENT.map((e) => v(`c-${e}`)),
+    ...["up", "down", "warning", "brand-new", "k-rent", "k-nft", "accent"].map(v),
+    ...INKS.map((i) => v(`ink-${i}`)),
+    ...(theme === "light" ? Object.keys(FAMILY).map((f) => v(`lk-${f}`)) : Object.values(FAMILY)),
+  ];
+  for (const c of callers) out.push([chipFg.replace(/var\(--tip-ink\)/g, c), chipBg.replace(/var\(--tip-ink\)/g, c), TEXT, v("chip-bg")]);
+  // Gains, losses and a box's «out» on their own wash (a price chip, the holders month, box io).
+  for (const card of ["module", "row-hover"])
+    for (const [fg, rgb] of [["up", "up-rgb"], ["down", "down-rgb"]]) {
+      out.push([v(fg), `rgb(var(--${rgb}) / 0.15)`, TEXT, v(card)]);
+      out.push([v(fg), `rgb(var(--${rgb}) / 0.16)`, TEXT, v(card)]);
+    }
+  for (const io of ["in", "out"]) {
+    const r = rule(globals, `.box-io.is-${io}`);
+    assert.ok(r.get("color") && r.get("background"), `.box-io.is-${io}`);
+    out.push([r.get("color")!, r.get("background")!, TEXT]);
+  }
   return out;
 }
 
@@ -258,7 +473,7 @@ function failures(t: Tokens, list: Pair[]): string[] {
 }
 
 test("«Сумерки»: every pair holds AA (text 4.5:1, marks 3:1)", () => {
-  assert.deepEqual(failures(LIGHT, pairs()), []);
+  assert.deepEqual(failures(LIGHT, pairs("light")), []);
 });
 
 test("«Сумерки»: hollow tiles keep their ring and glyph", () => {
@@ -268,8 +483,22 @@ test("«Сумерки»: hollow tiles keep their ring and glyph", () => {
   assert.deepEqual(failures(LIGHT, list), []);
 });
 
+/**
+ * Dark stays prod's pixels: a loss dimmed by opacity sits a hair under AA on these grounds (the
+ * feed's unit on a hovered or open row, a tx/address amount's «ERG»), and so does the dimmed count
+ * on the chosen phone tab. Known, not the light theme's; any other dark miss fails.
+ */
+const DARK_KNOWN = [
+  "color-mix(in srgb, var(--invert-fg) 55%, transparent) on var(--invert): 4.27 < 4.5",
+  "color-mix(in srgb, var(--down) 72%, transparent) on var(--row-hover): 4.43 < 4.5",
+  "color-mix(in srgb, var(--down) 72%, transparent) on var(--row-open): 4.39 < 4.5",
+  "color-mix(in srgb, var(--down) 70%, transparent) on var(--module): 4.41 < 4.5",
+  "color-mix(in srgb, var(--down) 70%, transparent) on var(--row-hover): 4.26 < 4.5",
+  "color-mix(in srgb, var(--down) 70%, transparent) on var(--row-open): 4.23 < 4.5",
+];
+
 test("dark ink: every pair holds AA", () => {
-  assert.deepEqual(failures(DARK, pairs()), []);
+  assert.deepEqual(failures(DARK, pairs("dark")).filter((f) => !DARK_KNOWN.includes(f)), []);
 });
 
 test("dusk scenes: the night inks read on every stop of the sky", () => {
@@ -283,6 +512,34 @@ test("dusk scenes: the night inks read on every stop of the sky", () => {
     for (const ink of ["c-block", "k-nft", "k-rent", "up", "brand-new", "ent-box"]) list.push([v(ink), stop, MARK]);
   }
   assert.deepEqual(failures(DUSK, list), []);
+});
+
+/** Every .tsx under src (the pages' own class strings). */
+function sources(dir = new URL("..", import.meta.url).pathname, out: [string, string][] = []): [string, string][] {
+  for (const name of readdirSync(dir)) {
+    const f = join(dir, name);
+    if (statSync(f).isDirectory()) sources(f, out);
+    else if (f.endsWith(".tsx")) out.push([f.slice(f.indexOf("/src/") + 5), readFileSync(f, "utf8")]);
+  }
+  return out;
+}
+
+test("pages hook their dimmed words and print no mark as words", () => {
+  // States, not words: a pending list, a disabled step.
+  const states = new Set(["app/status/status-view.tsx", "components/CommandPalette.tsx", "components/HopNav.tsx"]);
+  const bare: string[] = [];
+  const marks: string[] = [];
+  for (const [file, src] of sources()) {
+    for (const m of src.matchAll(/"([^"\n]*)"|`([^`]*)`/g)) {
+      const cls = m[1] ?? m[2] ?? "";
+      // An opacity on a word drops it under AA on the light card: `word-dim` lets light.css swap it for a solid ink.
+      if (/(^|\s)opacity-[1-9]0(\s|$)/.test(cls) && !/(^|\s)word-dim(\s|$)/.test(cls) && !states.has(file)) bare.push(`${file}: ${cls}`);
+      // A mark as a text colour: words take the -word (or -text) tier.
+      if (/(^|\s)text-\[var\(--c-(block|tx|addr|token|box|net)[,)]/.test(cls)) marks.push(`${file}: ${cls}`);
+    }
+  }
+  assert.deepEqual(bare, []);
+  assert.deepEqual(marks, []);
 });
 
 test("light ink answers every colour token the dark look sets", () => {
