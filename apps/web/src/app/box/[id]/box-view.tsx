@@ -32,7 +32,7 @@ import {
 } from "@/lib/format";
 import { describeParty } from "@/lib/address-labels";
 import { lockCaption } from "@/lib/tx-lock";
-import { INK } from "@/lib/palette";
+import { INK, INK_TEXT } from "@/lib/palette";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { countText } from "@/lib/i18n/messages";
 import { readHashTab, setHashTab } from "@/lib/hash-tab";
@@ -347,7 +347,7 @@ export function BoxView({
                       prefetch={false}
                       href={`/block/${creation}`}
                       className="hover:underline"
-                      style={{ color: heightSplit ? INK.gold : aligned ? INK.teal : INK.sky }}
+                      style={{ color: heightSplit ? INK_TEXT.gold : aligned ? INK_TEXT.teal : INK_TEXT.sky }}
                     >
                       {creation.toLocaleString(loc(locale))}
                     </Link>
@@ -457,6 +457,11 @@ export function BoxView({
                   {rent.estimatedRentNano != null ? (
                     <p className="mt-2 text-[12px] tabular-nums text-[var(--muted)]">
                       {t("box.estRent")} {formatErgPrecise(rent.estimatedRentNano, locale)}
+                    </p>
+                  ) : null}
+                  {rent.takenWhole ? (
+                    <p className="mt-1 text-[12px] leading-snug text-[var(--muted)]">
+                      {t(assets.length ? "box.rentWhole" : "box.rentWholeErg")}
                     </p>
                   ) : null}
                 </>
@@ -736,7 +741,7 @@ function Fact({
       <p className="box-fact-k">{k}</p>
       <p className="box-fact-v">{v}</p>
       {note ? (
-        <p className="mt-1 text-[12px] leading-none" style={{ color: INK.gold }}>
+        <p className="mt-1 text-[12px] leading-none" style={{ color: INK_TEXT.gold }}>
           {note}
         </p>
       ) : null}

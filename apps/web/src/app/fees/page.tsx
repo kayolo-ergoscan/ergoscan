@@ -149,8 +149,8 @@ type Level = (typeof LEVELS)[number];
 /** Dot per level: the same calm grey, miner gold and rent orange as the level tiles. */
 const LEVEL_DOT: Record<Level, string> = {
   economy: "var(--muted)",
-  normal: "var(--k-reward, var(--warning))",
-  turbo: "var(--k-rent, var(--down))",
+  normal: "var(--ink-gold, var(--warning))",
+  turbo: "var(--k-rent-text, var(--down))",
 };
 
 /**

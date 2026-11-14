@@ -10,6 +10,7 @@ import { chooseHome, chooseKey, chooseMode, currentMode, onChoice } from "@/lib/
 import { readHome, readKeyOn, type Home, type Mode } from "@/lib/kayolo/memory";
 import { REDUCE_QUERY } from "@/lib/kayolo/motion";
 import { KAYOLO_LAYER } from "@/lib/kayolo/thresholds";
+import { INK_CHOICES, INK_CHOICE_EVENT, applyInk, readInkChoice, type InkChoice } from "@/lib/skin-ink";
 
 export function SettingsView() {
   const t = useT();
@@ -29,6 +30,7 @@ export function SettingsView() {
           className="home-tile-enter mod rounded-[20px] border border-[var(--border)] bg-[var(--module)] px-4 py-2 sm:px-5"
           style={{ "--enter": 0 } as CSSProperties}
         >
+          <ThemeRow />
           <TumblerRow label={t("locale.switch")}>
             <Tumbler
               label={t("locale.switch")}
@@ -50,6 +52,30 @@ function local() {
   } catch {
     return null;
   }
+}
+
+/** Dark (the default), light, or whatever the device uses — it follows the device live. */
+function ThemeRow() {
+  const t = useT();
+  const [choice, setChoice] = useState<InkChoice>("oled");
+  useEffect(() => {
+    const read = () => setChoice(readInkChoice());
+    read();
+    window.addEventListener(INK_CHOICE_EVENT, read);
+    return () => window.removeEventListener(INK_CHOICE_EVENT, read);
+  }, []);
+  return (
+    <TumblerRow label={t("settings.theme")} note={choice === "system" ? t("settings.themeSystem") : null}>
+      <Tumbler
+        label={t("settings.theme")}
+        value={choice}
+        options={INK_CHOICES.map((id) => ({ id, label: t(`settings.theme.${id}`) }))}
+        onChange={(id) => applyInk(id)}
+        wide
+        columns="repeat(3, minmax(max-content, 1fr))"
+      />
+    </TumblerRow>
+  );
 }
 
 const MODES: Mode[] = ["live", "calm", "asleep", "hidden", "off"];
@@ -155,6 +181,7 @@ function Tumbler<T extends string>({
   options,
   onChange,
   wide = false,
+  columns,
   className,
 }: {
   label: string;
@@ -163,12 +190,14 @@ function Tumbler<T extends string>({
   onChange: (id: T) => void;
   /** Longer labels («Справа от заголовка»): the chips size to them. */
   wide?: boolean;
+  /** Phone grid columns, when a label («Как в системе») needs more than an equal share. */
+  columns?: string;
   className?: string;
 }) {
   return (
     <div
       className={clsx("flex flex-wrap justify-end gap-1 max-lg:grid max-lg:w-full", className)}
-      style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}
+      style={{ gridTemplateColumns: columns ?? `repeat(${options.length}, minmax(0, 1fr))` }}
       role="radiogroup"
       aria-label={label}
     >
@@ -182,7 +211,7 @@ function Tumbler<T extends string>({
             aria-checked={on}
             className={clsx(
               "chip-press inline-flex h-8 items-center justify-center gap-1.5 rounded-[9px] px-2.5 text-[13px] font-medium",
-              wide ? "min-w-[6.75rem] whitespace-nowrap px-3" : "w-[6.75rem]",
+              wide ? "min-w-[6.75rem] whitespace-nowrap px-3 max-lg:min-w-0" : "w-[6.75rem]",
               // Phone: full-width switch, 44 px rows.
               "max-lg:h-11 max-lg:w-full max-lg:rounded-[12px] max-lg:text-[15px]",
               "transition-colors duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)]",

@@ -4,6 +4,7 @@
 import type { BallProps, FeeHistogram, MempoolSnapshot, NodeInfoLite } from "./types.js";
 import type { SealEvent } from "./sealReplay.js";
 import type { SubblockPulse } from "./subblocks.js";
+import type { RentCollectedEvent } from "./rent-claims.js";
 
 export type WsHello = {
   type: "hello";
@@ -45,6 +46,11 @@ export type WsBlockSealed = {
   data: SealEvent;
 };
 
+export type WsRentCollected = {
+  type: "rent.collected";
+  data: RentCollectedEvent;
+};
+
 export type WsSubblockPulse = {
   type: "subblock.pulse";
   data: SubblockPulse;
@@ -59,4 +65,5 @@ export type WsServerEvent =
   | WsNodeInfo
   | WsChainTip
   | WsBlockSealed
+  | WsRentCollected
   | WsSubblockPulse;

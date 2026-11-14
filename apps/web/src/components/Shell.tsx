@@ -17,7 +17,7 @@ import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { fetchChainStats } from "@/lib/chain-stats";
 import { formatCompact, formatUsdPrice } from "@/lib/format";
 import { IndexerStatus } from "./IndexerStatus";
-import { INK } from "@/lib/palette";
+import { INK_TEXT } from "@/lib/palette";
 import { BrandMark, BrandWord } from "./BrandMark";
 import { HeaderScout } from "./HeaderScout";
 import { KayoloBoot, KayoloSlot } from "./kayolo/KayoloSlot";
@@ -394,7 +394,7 @@ function ErgPrice({ compact = false, onOpen }: { compact?: boolean; onOpen?: () 
         <span
           data-scout="price"
           className="inline-block min-w-[3.25rem] text-[13px] font-medium tabular-nums"
-          style={{ color: INK.violet }}
+          style={{ color: INK_TEXT.violet }}
         >
           {priceText}
         </span>
@@ -433,7 +433,7 @@ function ErgPrice({ compact = false, onOpen }: { compact?: boolean; onOpen?: () 
       <span
         data-scout="price"
         className="inline-block min-w-[3.25rem] text-[13px] font-medium tabular-nums"
-        style={{ color: INK.violet }}
+        style={{ color: INK_TEXT.violet }}
       >
         {priceText}
       </span>
@@ -445,7 +445,7 @@ function ErgPrice({ compact = false, onOpen }: { compact?: boolean; onOpen?: () 
           <span
             data-scout="mcap"
             className="inline-block min-w-[4.25rem] text-[12px] font-medium tabular-nums"
-            style={{ color: INK.violet }}
+            style={{ color: INK_TEXT.violet }}
           >
             {mcapText}
           </span>

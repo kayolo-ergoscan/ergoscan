@@ -1,5 +1,8 @@
 "use client";
 
+import { pageInk } from "@/lib/look";
+import { isLightInk } from "@/lib/skin-ink";
+import { useInk } from "@/lib/use-ink";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
@@ -75,6 +78,7 @@ export function SpectrumView({
   initialVolume?: DefiVolPoint[];
 }) {
   const t = useT();
+  const light = isLightInk(useInk());
   const { locale } = useI18n();
   const { markSynced } = usePageSync();
   const router = useRouter();
@@ -360,11 +364,11 @@ export function SpectrumView({
               </h2>
               <div className="mt-2 flex items-center gap-3 text-[12px] text-[var(--muted)]">
                 <span className="inline-flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full" style={{ background: VOL_LINE }} />
+                  <span className="h-2 w-2 rounded-full" style={{ background: pageInk(VOL_LINE, light) }} />
                   {t("defi.chartVol")}
                 </span>
                 <span className="inline-flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full" style={{ background: SWAP_LINE }} />
+                  <span className="h-2 w-2 rounded-full" style={{ background: pageInk(SWAP_LINE, light) }} />
                   {t("defi.chartSwaps")}
                 </span>
               </div>

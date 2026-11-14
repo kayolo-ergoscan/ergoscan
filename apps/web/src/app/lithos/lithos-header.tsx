@@ -185,7 +185,7 @@ function Pipeline({ stats }: { stats: LithosProtocolStats }) {
     <div className="lithos-pipe rounded-[8px] bg-[var(--wash-faint)] px-3 pb-2 pt-2.5">
       <div className="flex min-w-0 items-center gap-2 text-[12px] text-[var(--muted)]">
         <span className="inline-flex shrink-0 items-center gap-1.5 font-semibold text-[var(--up)]">
-          <i className="inline-block h-2 w-2 rounded-full bg-[var(--up)] shadow-[0_0_0_3px_rgba(136,217,165,0.18)]" />
+          <i className="inline-block h-2 w-2 rounded-full bg-[var(--up)] shadow-[0_0_0_3px_rgb(var(--up-rgb)/0.18)]" />
           {t("lithosH.now")}
         </span>
         <Tip content={t("lithosH.pipeHint")}>
@@ -500,7 +500,7 @@ export function LithosHeader({
               <h2 className="text-[16px] font-semibold leading-none">{t("nav.lithosProtocol")}</h2>
               <span
                 className="whitespace-nowrap rounded-[4px] px-[7px] py-[3px] text-[12px] font-semibold leading-[1.1] tracking-[0.01em]"
-                style={{ background: "var(--c-block, #ebcb71)", color: "#0e0e0e" }}
+                style={{ background: "var(--f-block)", color: "var(--k-ink)" }}
               >
                 {t("lithosH.badge")}
               </span>
@@ -702,18 +702,18 @@ export function LithosHeader({
               </span>
             </div>
             <div className="mt-2 flex h-2.5 gap-[2px]" aria-hidden>
-              <span className="rounded-[3px]" style={{ flex: `${round} 1 0`, background: "#c98500", minWidth: 4 }} />
-              <span className="rounded-[3px]" style={{ flex: `${finder} 1 0`, background: "#199e70", minWidth: 4 }} />
-              <span className="rounded-[3px]" style={{ flex: `${founders} 1 0`, background: "#9085e9", minWidth: 4 }} />
+              <span className="rounded-[3px]" style={{ flex: `${round} 1 0`, background: "var(--econ-round)", minWidth: 4 }} />
+              <span className="rounded-[3px]" style={{ flex: `${finder} 1 0`, background: "var(--econ-finder)", minWidth: 4 }} />
+              <span className="rounded-[3px]" style={{ flex: `${founders} 1 0`, background: "var(--econ-founders)", minWidth: 4 }} />
             </div>
             <div className="mt-1.5 flex flex-wrap gap-x-3.5 gap-y-1 text-[11.5px] text-[var(--muted)]">
               {(
                 [
-                  [round, "#c98500", t("lithosH.econRound"), null],
-                  [finder, "#199e70", t("lithosH.econFinder"), null],
+                  [round, "var(--econ-round)", t("lithosH.econRound"), null],
+                  [finder, "var(--econ-finder)", t("lithosH.econFinder"), null],
                   [
                     founders,
-                    "#9085e9",
+                    "var(--econ-founders)",
                     t("lithosH.econFounders"),
                     `${t("lithosP.team")} ${formatInt(team, locale)} · ${t("lithosP.investors")} ${formatInt(inv, locale)} · ${t("lithosP.auditor")} ${formatInt(aud, locale)} LIT`,
                   ],

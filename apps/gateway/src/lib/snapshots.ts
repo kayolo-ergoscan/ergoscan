@@ -33,7 +33,7 @@ import {
   type RentTab,
   type RentWindow,
 } from "./rentIndex.js";
-import { classifyTxShape, pickTxAction, txTapeFields, rentTapePaint, MINERS_FEE_ADDRESS, MINERS_FEE_TREE, fillRentWeekGaps, parseRentSeries, parseRentTape, parseRentEpochBoxes, parseRentEpochNano, pickTxLock, LITHOS_COLLAT_ADDRESS, LITHOS_COLLAT_TOKEN_ID, LITHOS_MINED_HEIGHTS_SQL, type RentTapeCategory, type RentTapeRow } from "@ergoscan/shared";
+import { classifyTxShape, pickTxAction, txTapeFields, rentTapePaint, MINERS_FEE_ADDRESS, MINERS_FEE_TREE, fillRentWeekGaps, parseRentSeries, parseRentTape, parseRentEpochBoxes, parseRentEpochNano, rentEpochCollectedAt, type RentEpochCollected, pickTxLock, LITHOS_COLLAT_ADDRESS, LITHOS_COLLAT_TOKEN_ID, LITHOS_MINED_HEIGHTS_SQL, type RentTapeCategory, type RentTapeRow } from "@ergoscan/shared";
 import { blockHeaderFromRow, type BlockHeaderView } from "./blockHeader.js";
 import { LITHOS_HOME_SQL, lithosHomeCache } from "./lithosHome.js";
 import type { LithosHome } from "@ergoscan/shared";
@@ -1203,6 +1203,11 @@ export type HomePage = {
   rentEpochBoxes?: number | null;
   /** Additive: estimated rent nano due before this header epoch ends. Snapshot GET only. */
   rentEpochNano?: string | null;
+  /**
+   * Additive: protocol rent collected since this header epoch began (exact, rent_collected).
+   * Present only when snapshot_kv.rent.epochCollected is for the epoch of `height`. Snapshot GET only.
+   */
+  rentEpochCollected?: RentEpochCollected | null;
   /** Additive: tokens short on ERG, copied from snapshot_kv.rent.danger. Snapshot GET only. */
   rentDanger?: unknown[];
   /** Additive: home «Lithos» card, a cut of snapshot_kv.lithos_protocol (held ~15 s in RAM). Null until it has stats. */
@@ -1433,6 +1438,7 @@ export async function getHomePage(): Promise<HomePage | null> {
     readSnapshot<{
       addresses?: unknown;
       thisEpoch?: { boxCount?: unknown; rentNano?: unknown };
+      epochCollected?: unknown;
       danger?: unknown;
     }>(SNAP_RENT),
     lithosHome.get(),
@@ -1448,9 +1454,15 @@ export async function getHomePage(): Promise<HomePage | null> {
     ...(rentDanger != null ? { rentDanger } : {}),
     lithos,
   };
+  // Last epoch's sum never stands in for this one: omitted until the rent snapshot catches up.
+  const epochCollectedAt = (height: number | null | undefined) => {
+    const v = rentEpochCollectedAt(rentSnap?.payload?.epochCollected, height);
+    return v ? { rentEpochCollected: v } : {};
+  };
   if (snap?.payload && Array.isArray(snap.payload.blocks)) {
+    const height = snap.payload.height ?? snap.height;
     return {
-      height: snap.payload.height ?? snap.height,
+      height,
       // Cadence uses txCount/size only. userValueNano stays on /v1/blocks + block card.
       blocks: snap.payload.blocks,
       txs: (snap.payload.txs ?? []).map((t) => ({ ...t, confirmed: true })),
@@ -1462,6 +1474,7 @@ export async function getHomePage(): Promise<HomePage | null> {
       updatedAt: snap.updatedAt,
       ...homeKpisFromPayload(snap.payload),
       ...rentField,
+      ...epochCollectedAt(height),
     };
   }
   const [blocks, txs, status] = await Promise.all([
@@ -1470,8 +1483,9 @@ export async function getHomePage(): Promise<HomePage | null> {
     getStatusSnapshot(),
   ]);
   if (!blocks?.length && !txs?.length) return null;
+  const height = blocks?.[0]?.height ?? status?.tipHeight ?? null;
   return {
-    height: blocks?.[0]?.height ?? status?.tipHeight ?? null,
+    height,
     blocks: blocks ?? [],
     txs: txs ?? [],
     indexer: status ? publicIndexerStatus(status) : null,
@@ -1479,6 +1493,7 @@ export async function getHomePage(): Promise<HomePage | null> {
     source: "tables",
     updatedAt: status?.updatedAt ?? null,
     ...rentField,
+    ...epochCollectedAt(height),
   };
 }
 

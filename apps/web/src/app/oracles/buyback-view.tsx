@@ -39,7 +39,7 @@ import {
 import { formatErg, formatErgFixed, formatErgPrecise, formatPct, formatTokenAmount, formatTs, shortId, toEpochMs } from "@/lib/format";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { useKeepFresh, usePageSync } from "@/lib/page-sync";
-import { INK } from "@/lib/palette";
+import { INK, INK_TEXT } from "@/lib/palette";
 
 const DualLineChart = dynamic(() => import("@/components/DualLineChart"), {
   ssr: false,
@@ -294,11 +294,11 @@ export function BuybackView({ kind, initial }: { kind: BuybackKind; initial?: Bu
                   </div>
                   <div className="mt-2 flex items-center gap-3 text-[12px] text-[var(--muted)]">
                     <span className="inline-flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full" style={{ background: "#86a6f0" }} />
+                      <span className="h-2 w-2 rounded-full" style={{ background: "var(--c-token)" }} />
                       {t("buyback.chartErg")}
                     </span>
                     <span className="inline-flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full" style={{ background: "#e799b7" }} />
+                      <span className="h-2 w-2 rounded-full" style={{ background: "var(--c-addr)" }} />
                       {fill(t("buyback.chartToken"), { sym })}
                     </span>
                   </div>
@@ -350,15 +350,16 @@ export function BuybackView({ kind, initial }: { kind: BuybackKind; initial?: Bu
                 <ol className="mt-3 grid gap-3 sm:grid-cols-3">
                   {(
                     [
-                      ["buyback.stepTop", "buyback.stepTopBody", INK.violet],
-                      ["buyback.stepSwap", "buyback.stepSwapBody", INK.cyan],
-                      ["buyback.stepBack", "buyback.stepBackBody", INK.teal],
+                      ["buyback.stepTop", "buyback.stepTopBody", "violet"],
+                      ["buyback.stepSwap", "buyback.stepSwapBody", "cyan"],
+                      ["buyback.stepBack", "buyback.stepBackBody", "teal"],
                     ] as const
                   ).map(([title, body, ink], i) => (
                     <li key={title} className="flex gap-2.5">
+                      {/* The step number is a word: its ink's text tier on a wash of the mark. */}
                       <span
                         className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold"
-                        style={{ color: ink, background: `color-mix(in srgb, ${ink} 14%, transparent)` }}
+                        style={{ color: INK_TEXT[ink], background: `color-mix(in srgb, ${INK[ink]} 14%, transparent)` }}
                       >
                         {i + 1}
                       </span>

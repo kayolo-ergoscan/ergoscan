@@ -1,5 +1,8 @@
 "use client";
 
+import { pageInk } from "@/lib/look";
+import { isLightInk } from "@/lib/skin-ink";
+import { useInk } from "@/lib/use-ink";
 import { Tip } from "@/components/Tip";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
@@ -380,6 +383,7 @@ export function RentView({
               mark={<KpiMark id="due-month" />}
               window={data.next30d}
               covered={windowCovered(data.next30d, data.dueHeight, indexFloor)}
+              approx
               minHeight={indexFloor}
               locale={locale}
               t={t}
@@ -583,6 +587,7 @@ function RentCollectedChart({
   locale: string;
   t: (k: string) => string;
 }) {
+  const light = isLightInk(useInk());
   const sourceKey = daily && daily.length >= 2 ? rentSeriesSig(daily) : rentSeriesSig(series);
   const past = useMemo(() => {
     const source = daily && daily.length >= 2 ? daily : series ?? [];
@@ -624,14 +629,14 @@ function RentCollectedChart({
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-3 text-[12px] text-[var(--muted)]">
               <span className="inline-flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full" style={{ background: ERG_LINE }} />
+                <span className="h-2 w-2 rounded-full" style={{ background: pageInk(ERG_LINE, light) }} />
                 {t("rent.chartErg")}
               </span>
               {NO_AHEAD.length > 0 && (
                 <span className="inline-flex items-center gap-1.5">
                   <span
                     className="h-0 w-3 border-t-[1.5px] border-dashed"
-                    style={{ borderColor: ERG_LINE }}
+                    style={{ borderColor: pageInk(ERG_LINE, light) }}
                   />
                   {t("rent.chartAhead")}
                 </span>
@@ -830,6 +835,7 @@ function RentDanger({
 
 function RentWindowCard({
   enter,
+  approx = false,
   label,
   ink,
   mark,
@@ -840,6 +846,8 @@ function RentWindowCard({
   t,
 }: {
   enter?: number;
+  /** «≈»: the 30-day window counts token bytes for its first 7 days only (~2 % low). */
+  approx?: boolean;
   label: string;
   ink: string;
   mark: ReactNode;
@@ -859,7 +867,7 @@ function RentWindowCard({
       */}
       {showValue ? (
         <div className="mt-0.5 leading-[1.15]">
-          <KpiNum className="tabular-nums">{formatErgFixed(w.rentNano, locale)}</KpiNum>
+          <KpiNum className="tabular-nums">{`${approx ? "≈ " : ""}${formatErgFixed(w.rentNano, locale)}`}</KpiNum>
         </div>
       ) : (
         <p className="mt-0.5 text-[17px] font-semibold leading-[1.15] tabular-nums tracking-tight text-[var(--muted)]">

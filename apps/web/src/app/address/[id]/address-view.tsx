@@ -60,7 +60,7 @@ const RENT_DANGER_BLOCKS = 7 * BLOCKS_PER_DAY;
 import { NameMarquee } from "@/components/NameMarquee";
 import { partyNameMap, type AddrFlow, type AddrFlowKind } from "@/lib/tx-flow";
 import { asAddrFlowKind, rentTapeTone } from "@ergoscan/shared";
-import { INK } from "@/lib/palette";
+import { INK, INK_TEXT } from "@/lib/palette";
 import { useI18n, useT } from "@/lib/i18n/I18nProvider";
 import { setHashTab } from "@/lib/hash-tab";
 import { useChainTipRefresh, useKeepFresh, usePageSync } from "@/lib/page-sync";
@@ -1281,7 +1281,7 @@ export function AddressView({
                 {usd != null && (
                   <p
                     className="mt-2 text-[13px] font-medium tabular-nums"
-                    style={{ color: INK.violet }}
+                    style={{ color: INK_TEXT.violet }}
                   >
                     ${formatGroupedNumber(usd, 2, 2, locale)}
                   </p>
@@ -1761,7 +1761,7 @@ function ErgFigure({
         className={clsx(
           "ml-1 shrink-0 font-medium",
           size === "lg" ? "text-[13px]" : "text-[12px]",
-          tone ? "opacity-70" : "text-[var(--muted)]"
+          tone ? "word-dim opacity-70" : "text-[var(--muted)]"
         )}
       >
         ERG

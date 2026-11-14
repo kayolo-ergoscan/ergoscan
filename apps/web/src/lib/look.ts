@@ -21,7 +21,7 @@ type Family = "red" | "orange" | "yellow" | "green" | "teal" | "blue" | "violet"
  * one lightness band (OKLCH L 0.73–0.85, C ≤ 0.13) so crates, balls and chart lines stay
  * apart by hue without glowing on the black panel.
  */
-const FAMILY: Record<Family, string> = {
+export const FAMILY: Record<Family, string> = {
   red: "#f4918e", // --down
   orange: "#ef945f", // --c-tx
   yellow: "#ebcb71", // --c-block
@@ -64,11 +64,55 @@ function familyOf(rgb: [number, number, number]): Family {
   return "violet";
 }
 
+/**
+ * Pixel scenes (the home city and yard, the Lithos and rent cards) stay a night town on either
+ * ink: on the light one they sit under a dusk sky (light.css), so they paint with the dark inks.
+ * Wrap a synchronous paint in `onScene` and every lookInk/lookEdge inside it answers for the night.
+ */
+let scene = 0;
+
+export function onScene<T>(fn: () => T): T {
+  scene++;
+  try {
+    return fn();
+  } finally {
+    scene--;
+  }
+}
+
+function lightGround(): boolean {
+  if (scene > 0 || typeof document === "undefined") return false;
+  return document.documentElement.dataset.ink === "light";
+}
+
 const memo = new Map<string, string>();
+const memoLight = new Map<string, string>();
+let lightFamily: { ink: string; fam: Record<Family, string>; edge: string } | null = null;
+
+/** The light ink's canvas families (`--lk-*` in light.css: the mark tier on the light card). */
+function lightInks(): { fam: Record<Family, string>; edge: string } {
+  const ink = document.documentElement.dataset.ink ?? "";
+  if (lightFamily?.ink === ink) return lightFamily;
+  const cs = getComputedStyle(document.documentElement);
+  const fam = {} as Record<Family, string>;
+  for (const k of Object.keys(FAMILY) as Family[]) fam[k] = cs.getPropertyValue(`--lk-${k}`).trim() || FAMILY[k];
+  lightFamily = { ink, fam, edge: cs.getPropertyValue("--lk-edge").trim() || "#d4d3d1" };
+  memoLight.clear();
+  return lightFamily;
+}
 
 /** Map a canvas ink into the look's palette. No look on the page: unchanged. */
 export function lookInk(color: string): string {
   if (!currentLook() || !color) return color;
+  if (lightGround()) {
+    const { fam } = lightInks();
+    const lit = memoLight.get(color);
+    if (lit) return lit;
+    const rgb = rgbOf(color);
+    const out = rgb ? fam[familyOf(rgb)] : color;
+    memoLight.set(color, out);
+    return out;
+  }
   const hit = memo.get(color);
   if (hit) return hit;
   const rgb = rgbOf(color);
@@ -77,7 +121,16 @@ export function lookInk(color: string): string {
   return out;
 }
 
+/**
+ * A chart's own raw colour on the page: as given on the dark ink (the chart picked it), its
+ * family's mark on the light one. `light` comes from useInk, so the first render matches the server.
+ */
+export function pageInk(color: string, light: boolean): string {
+  return light ? lookInk(color) : color;
+}
+
 /** Edge stroke for drawn crates and balls. Null keeps the component's own. */
 export function lookEdge(): string | null {
-  return currentLook() ? "#0e0e0e" : null;
+  if (!currentLook()) return null;
+  return lightGround() ? lightInks().edge : "#0e0e0e";
 }

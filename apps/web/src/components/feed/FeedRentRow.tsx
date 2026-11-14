@@ -1,5 +1,8 @@
 "use client";
 
+import { pageInk } from "@/lib/look";
+import { isLightInk } from "@/lib/skin-ink";
+import { useInk } from "@/lib/use-ink";
 import type { CSSProperties } from "react";
 import Link from "next/link";
 import clsx from "clsx";
@@ -81,8 +84,9 @@ function RiskChips({ tokens }: { tokens: { tokenId: string; name: string | null 
   );
 }
 
+/** The node takes the whole box, tokens too, when it holds no more than its fee (value ≤ fee). */
 function cannotPay(row: RentBoxRow): boolean {
-  return bigOf(row.valueNano) < bigOf(row.rentNano);
+  return bigOf(row.valueNano) <= bigOf(row.rentNano);
 }
 
 /**
@@ -445,6 +449,7 @@ export function FeedRentPoolRow({
   enterClass?: string;
 }) {
   const { t, locale } = useI18n();
+  const light = isLightInk(useInk());
   const tag = feedLoc(locale);
   const named = !!row.address && row.name !== row.address;
   const pct = formatRentSharePct(row.share);
@@ -464,7 +469,7 @@ export function FeedRentPoolRow({
       enterClass={enterClass}
       title={
         <>
-          <span className="feed-ink" style={{ "--ink": row.ink } as CSSProperties} aria-hidden />
+          <span className="feed-ink" style={{ "--ink": pageInk(row.ink, light) } as CSSProperties} aria-hidden />
           {href ? (
             <Link prefetch={false} href={href} title={row.address ?? undefined} className={nameCls}>
               {label}

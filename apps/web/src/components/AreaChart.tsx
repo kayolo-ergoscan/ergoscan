@@ -10,6 +10,8 @@ import { chartChrome } from "@/lib/chart-chrome";
 import { formatDottedDate, formatH24 } from "@/lib/format";
 import { neonLine } from "@/lib/chart-neon";
 import { useInk } from "@/lib/use-ink";
+import { isLightInk } from "@/lib/skin-ink";
+import { pageInk } from "@/lib/look";
 import { TipFigure, TipHead, useFloatTip } from "@/components/Tip";
 import { pointRect } from "@/lib/tip-place";
 import {
@@ -118,9 +120,11 @@ export function AreaChart({
       return;
     }
     const chrome = chartChrome();
-    const day = ink === "day";
+    const day = isLightInk(ink);
     const up = seriesPts[seriesPts.length - 1]!.v >= seriesPts[0]!.v;
     const stroke = color ?? (up ? chrome.up : chrome.down);
+    /** Without the neon pass a given colour is printed as is: on the light ink it takes its mark. */
+    const flat = color ? pageInk(color, day) : stroke;
     const data = seriesPts.map((p) => [p.t, p.v] as [number, number]);
     const line =
       glow
@@ -142,8 +146,8 @@ export function AreaChart({
               symbol: "none" as const,
               smooth: fillOpacity <= 0.15 ? 0.65 : true,
               ...(windowMs > 0 && fillOpacity > 0.15 ? { smoothMonotone: "x" as const } : {}),
-              lineStyle: { width: lineWidth, color: stroke, cap: "round" as const, join: "round" as const },
-              ...(fillOpacity > 0 ? { areaStyle: { color: stroke, opacity: fillOpacity } } : {}),
+              lineStyle: { width: lineWidth, color: flat, cap: "round" as const, join: "round" as const },
+              ...(fillOpacity > 0 ? { areaStyle: { color: flat, opacity: fillOpacity } } : {}),
             },
           ];
     c.setOption(
@@ -161,7 +165,7 @@ export function AreaChart({
           showContent: false,
           axisPointer: {
             type: "line",
-            lineStyle: { color: showTip ? chrome.hair : stroke, width: 1, opacity: showTip ? 1 : 0.45 },
+            lineStyle: { color: showTip ? chrome.hair : flat, width: 1, opacity: showTip ? 1 : 0.45 },
           },
         },
         xAxis: {
@@ -235,7 +239,7 @@ export function AreaChart({
           pointRect(rect.left + px[0]!, rect.top + px[1]!, 6),
           <>
             <TipHead mono quiet>{when}</TipHead>
-            <TipFigure dot={stroke}>{fmt.current(best.v)}</TipFigure>
+            <TipFigure dot={flat}>{fmt.current(best.v)}</TipFigure>
           </>,
           { tapped: ev.pointerType === "touch" }
         );

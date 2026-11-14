@@ -31,7 +31,7 @@ import {
   type TokenListItem,
   type TxListItem,
 } from "@/lib/list-snapshots";
-import { INK } from "@/lib/palette";
+import { INK, INK_TEXT } from "@/lib/palette";
 import { useKeepFresh, usePageSync } from "@/lib/page-sync";
 
 type Header = {
@@ -225,7 +225,7 @@ function KindTile({
       <span className="min-w-0 flex-1">
         <span className="kpi-label-row">
           <KpiLabelMark mark={mark} color={ink} />
-          <span className="block truncate text-[13px] leading-[1.15]" style={{ color: INK.coral }}>
+          <span className="block truncate text-[13px] leading-[1.15]" style={{ color: INK_TEXT.coral }}>
             {label}
           </span>
         </span>

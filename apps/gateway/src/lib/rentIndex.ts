@@ -1,12 +1,11 @@
 /**
- * Storage rent from indexer boxes. Same windows as SigmaSpace (24h / 7d / 30d).
+ * Storage rent from indexer boxes: windows of 24h / 7d / 30d.
  * GET never hits the node. Window COUNTs stay off the hot path when snapshot_kv.rent exists.
  */
 import type pg from "pg";
 import {
   DEFAULT_RENT_PARAMS,
-  estimateBoxSizeBytes,
-  registerPayloadBytes,
+  ergoBoxSizeBytes,
   fillRentWeekGaps,
   keepRecentRentHours,
   parseRentSeries,
@@ -14,6 +13,8 @@ import {
   RENT_HOUR_WINDOW,
   RENT_SERIES_DAY_MS,
   RENT_SERIES_HOUR_MS,
+  rentTakeSql,
+  storageFeeNano,
   type RentSeriesPoint,
 } from "@ergoscan/shared";
 import { getIndexPool } from "./indexDb.js";
@@ -168,10 +169,18 @@ export type RentPage = RentKpis & {
   updatedAt: string | null;
 };
 
+/**
+ * Planner settings for the exact-size rent reads (same as the indexer). packed.boxes stats run
+ * stale, so a few-hundred-box window is costed as a million rows: JIT (~300 ms a statement) or a
+ * seq scan of the heap once the size needs heap columns and box_assets probes.
+ */
+const EXACT_SIZE_PLANNER = ["SET LOCAL jit = off", "SET LOCAL enable_seqscan = off", "SET LOCAL max_parallel_workers_per_gather = 0"];
+
 async function qTimeout<T extends pg.QueryResultRow>(
   sql: string,
   params: unknown[],
-  timeoutMs: number
+  timeoutMs: number,
+  settings: readonly string[] = []
 ): Promise<T[] | null> {
   const p = getIndexPool();
   if (!p) return null;
@@ -180,6 +189,7 @@ async function qTimeout<T extends pg.QueryResultRow>(
     c = await p.connect();
     await c.query("BEGIN");
     await c.query(`SET LOCAL statement_timeout = ${Math.max(1000, Math.trunc(timeoutMs))}`);
+    for (const set of settings) await c.query(set);
     const r = await c.query<T>(sql, params);
     await c.query("COMMIT");
     return r.rows;
@@ -223,46 +233,88 @@ function coverWindow(w: RentWindow, windowHi: number, minHeight: number | null):
   };
 }
 
-/** Unspent boxes with creation_height in (lo, hi]. lo=-1 means no lower bound. */
-const WINDOW_SQL = `
-SELECT COUNT(*)::int AS n,
-       COALESCE(SUM(value_nano), 0)::text AS value_nano,
-       COALESCE(SUM(
-         GREATEST(1, FLOOR(($1::numeric - creation_height) / $2))
-         * $3
-         * GREATEST(40, COALESCE(tree_bytes, 0) + 16)
-       ), 0)::text AS rent_nano
-FROM packed.boxes
-WHERE spent_tx_id IS NULL
-  AND creation_height IS NOT NULL
-  AND creation_height > $4
-  AND creation_height <= $5
-`;
-
-async function windowAgg(
-  tip: number,
+/**
+ * Unspent boxes with creation_height in (lo, hi] per window, one pass over (lo, max hi]. lo=-1
+ * means no lower bound. Exact serialized box size (shared rent-exact); token bytes need one
+ * box_assets primary-key probe per box, so only boxes created up to `tokensUpTo` (the 7-day
+ * window) are probed and the 30-day tail counts no tokens (~2 % of its bytes). OFFSET 0 keeps the
+ * size computed once per box, not once per FILTERed aggregate.
+ */
+async function windowsAgg(
   lo: number,
-  hi: number,
-  blocks: number
-): Promise<RentWindow> {
-  const rows = await qTimeout<{ n: number; rent_nano: string; value_nano: string }>(
-    WINDOW_SQL,
-    [tip, PERIOD, FEE, lo, hi],
-    4000
+  windows: ReadonlyArray<{ hi: number; blocks: number }>,
+  tokensUpTo: number
+): Promise<RentWindow[]> {
+  const maxHi = Math.max(...windows.map((w) => w.hi));
+  const cols = windows
+    .map((_, i) => {
+      const hi = `$${5 + i}`;
+      return `COUNT(*) FILTER (WHERE creation_height <= ${hi})::int AS n${i},
+              COALESCE(SUM(value_nano) FILTER (WHERE creation_height <= ${hi}), 0)::text AS v${i},
+              COALESCE(SUM(rent) FILTER (WHERE creation_height <= ${hi}), 0)::text AS r${i}`;
+    })
+    .join(",\n");
+  const rows = await qTimeout<Record<string, unknown>>(
+    `SELECT ${cols}
+     FROM (
+       SELECT b.creation_height, b.value_nano,
+              ${rentTakeSql("b", "$1", { tokensUpTo: "$4" })} AS rent
+       FROM packed.boxes b
+       WHERE b.spent_tx_id IS NULL
+         AND b.creation_height IS NOT NULL
+         AND b.creation_height > $2
+         AND b.creation_height <= $3
+       OFFSET 0
+     ) w`,
+    [FEE, lo, maxHi, tokensUpTo, ...windows.map((w) => w.hi)],
+    4000,
+    EXACT_SIZE_PLANNER
   );
-  if (!rows) return emptyWindow(blocks);
-  return mapWindow(blocks, rows[0]);
+  const row = rows?.[0];
+  return windows.map((w, i) =>
+    row
+      ? mapWindow(w.blocks, { n: row[`n${i}`], value_nano: row[`v${i}`], rent_nano: row[`r${i}`] })
+      : emptyWindow(w.blocks)
+  );
 }
 
+/** The live windows run only while snapshot_kv.rent is missing: at most once a minute, shared. */
+const KPIS_LIVE_MS = 60_000;
+let kpisMem: { at: number; kpis: RentKpis } | null = null;
+let kpisFlight: Promise<RentKpis | null> | null = null;
+
+/**
+ * The /rent windows read live, for the page's fallback when the indexer's rent snapshot is absent
+ * (~0.26 s of exact-size reads). Concurrent requests share one run; the answer is kept a minute.
+ */
 export async function rentKpisFromIndex(tipHeight: number): Promise<RentKpis | null> {
   if (!Number.isFinite(tipHeight) || tipHeight <= 0) return null;
-  const tip = Math.trunc(tipHeight);
+  if (kpisMem && Date.now() - kpisMem.at < KPIS_LIVE_MS) return kpisMem.kpis;
+  if (kpisFlight) return kpisFlight;
+  kpisFlight = rentKpisLive(Math.trunc(tipHeight))
+    .then((kpis) => {
+      if (kpis) kpisMem = { at: Date.now(), kpis };
+      return kpis;
+    })
+    .finally(() => {
+      kpisFlight = null;
+    });
+  return kpisFlight;
+}
+
+async function rentKpisLive(tip: number): Promise<RentKpis | null> {
   const dueHeight = tip - PERIOD;
-  const [due, next24h, next7d, next30d, oldest, minR] = await Promise.all([
-    windowAgg(tip, -1, dueHeight, 0),
-    windowAgg(tip, dueHeight, dueHeight + RENT_BLOCKS_24H, RENT_BLOCKS_24H),
-    windowAgg(tip, dueHeight, dueHeight + RENT_BLOCKS_7D, RENT_BLOCKS_7D),
-    windowAgg(tip, dueHeight, dueHeight + RENT_BLOCKS_30D, RENT_BLOCKS_30D),
+  const [[due], [next24h, next7d, next30d], oldest, minR] = await Promise.all([
+    windowsAgg(-1, [{ hi: dueHeight, blocks: 0 }], dueHeight),
+    windowsAgg(
+      dueHeight,
+      [
+        { hi: dueHeight + RENT_BLOCKS_24H, blocks: RENT_BLOCKS_24H },
+        { hi: dueHeight + RENT_BLOCKS_7D, blocks: RENT_BLOCKS_7D },
+        { hi: dueHeight + RENT_BLOCKS_30D, blocks: RENT_BLOCKS_30D },
+      ],
+      dueHeight + RENT_BLOCKS_7D
+    ),
     qTimeout<{ h: string | null }>(
       `SELECT creation_height::text AS h
        FROM packed.boxes
@@ -291,23 +343,15 @@ export async function rentKpisFromIndex(tipHeight: number): Promise<RentKpis | n
     dueHeight,
     periodBlocks: PERIOD,
     storageFeeFactor: FEE,
-    due: coverWindow(due, dueHeight, minHeight),
-    next24h: coverWindow(next24h, dueHeight + RENT_BLOCKS_24H, minHeight),
-    next7d: coverWindow(next7d, dueHeight + RENT_BLOCKS_7D, minHeight),
-    next30d: coverWindow(next30d, dueHeight + RENT_BLOCKS_30D, minHeight),
+    due: coverWindow(due!, dueHeight, minHeight),
+    next24h: coverWindow(next24h!, dueHeight + RENT_BLOCKS_24H, minHeight),
+    next7d: coverWindow(next7d!, dueHeight + RENT_BLOCKS_7D, minHeight),
+    next30d: coverWindow(next30d!, dueHeight + RENT_BLOCKS_30D, minHeight),
     oldestCreationHeight,
     blocksUntilFirst,
   };
 }
 
-function sizeOf(tree: string | null, assets: number, regs: unknown): number {
-  const raw = regs && typeof regs === "object" && !Array.isArray(regs) ? regs : {};
-  return estimateBoxSizeBytes({
-    ergoTree: tree ?? "",
-    assetsCount: assets,
-    registerBytes: registerPayloadBytes(raw),
-  });
-}
 
 export async function rentBoxesFromIndex(opts: {
   tipHeight: number;
@@ -344,13 +388,15 @@ export async function rentBoxesFromIndex(opts: {
     creation_height: string;
     creation_ts: string | null;
     ergo_tree: string | null;
+    tree_bytes: number | null;
+    output_index: number | null;
     additional_registers: unknown;
   }>(
     `SELECT encode(b.box_id, 'hex') AS box_id, ad.address,
             b.value_nano::text AS value_nano,
             b.creation_height::text AS creation_height,
             bl.timestamp_ms::text AS creation_ts,
-            sc.ergo_tree, b.additional_registers
+            sc.ergo_tree, b.tree_bytes, b.output_index, b.additional_registers
      FROM packed.boxes b
      LEFT JOIN packed.addr ad ON ad.id = b.addr_id
      LEFT JOIN packed.script sc ON sc.id = b.script_id
@@ -364,10 +410,11 @@ export async function rentBoxesFromIndex(opts: {
   if (!rows) return null;
   const ids = rows.map((r) => r.box_id);
   const tokensByBox = new Map<string, { tokenId: string; name: string | null }[]>();
+  const amountsByBox = new Map<string, string[]>();
   if (ids.length) {
-    const tok = await qTimeout<{ box_id: string; token_id: string; name: string | null }>(
+    const tok = await qTimeout<{ box_id: string; token_id: string; amount: string; name: string | null }>(
       `SELECT encode(a.box_id, 'hex') AS box_id,
-              encode(a.token_id, 'hex') AS token_id, t.name
+              encode(a.token_id, 'hex') AS token_id, a.amount::text AS amount, t.name
        FROM packed.box_assets a
        LEFT JOIN tokens t ON t.token_id = encode(a.token_id, 'hex')
        WHERE a.box_id IN (SELECT decode(lower(x), 'hex') FROM unnest($1::text[]) AS x)`,
@@ -378,18 +425,29 @@ export async function rentBoxesFromIndex(opts: {
       const list = tokensByBox.get(r.box_id) ?? [];
       list.push({ tokenId: r.token_id, name: r.name });
       tokensByBox.set(r.box_id, list);
+      const amounts = amountsByBox.get(r.box_id) ?? [];
+      amounts.push(r.amount);
+      amountsByBox.set(r.box_id, amounts);
     }
   }
   const items: RentBoxRow[] = rows.map((r) => {
     const creationHeight = n(r.creation_height);
     const tokens = tokensByBox.get(r.box_id) ?? [];
     const tokenCount = tokens.length;
-    const sizeBytes = sizeOf(r.ergo_tree, tokenCount, r.additional_registers);
+    const sizeBytes = ergoBoxSizeBytes({
+      valueNano: r.value_nano,
+      ergoTree: r.ergo_tree,
+      treeBytes: r.ergo_tree ? null : r.tree_bytes,
+      creationHeight,
+      tokenAmounts: amountsByBox.get(r.box_id) ?? [],
+      registers: r.additional_registers,
+      outputIndex: n(r.output_index),
+    });
     const dueAt = creationHeight + PERIOD;
     const blocksUntilRent = Math.max(0, dueAt - tip);
-    const periods = Math.max(1, Math.floor(Math.max(0, tip - creationHeight) / PERIOD));
     const rentDue = blocksUntilRent === 0;
-    const rentNano = String(BigInt(periods) * BigInt(FEE) * BigInt(sizeBytes));
+    // The fee itself (once per spend): rows show it beside the value and cap it there.
+    const rentNano = storageFeeNano(sizeBytes, FEE).toString();
     return {
       boxId: r.box_id,
       address: r.address,
@@ -493,23 +551,21 @@ export async function rentForecastFromIndex(tipHeight: number): Promise<RentSeri
   );
   const tipMs = Number(tipTs?.[0]?.t);
   if (!Number.isFinite(tipMs) || tipMs <= 0) return forecastMem?.points ?? [];
+  // Exact box size; tokens probed for the first 7 days only, as in windowsAgg.
   const rows = await qTimeout<{ t: string; boxes: number; rent_nano: string }>(
-    `SELECT ((($1::bigint + (creation_height + $2 - $3) * 120000) / $4) * $4)::bigint::text AS t,
+    `SELECT ((($1::bigint + (b.creation_height + $2 - $3) * 120000) / $4) * $4)::bigint::text AS t,
             COUNT(*)::int AS boxes,
-            COALESCE(SUM(
-              GREATEST(1, FLOOR(($3::numeric - creation_height) / $2))
-              * $5
-              * GREATEST(40, COALESCE(tree_bytes, 0) + 16)
-            ), 0)::text AS rent_nano
-     FROM packed.boxes
-     WHERE spent_tx_id IS NULL
-       AND creation_height IS NOT NULL
-       AND creation_height > $6
-       AND creation_height <= $7
+            COALESCE(SUM(${rentTakeSql("b", "$5", { tokensUpTo: "$8" })}), 0)::text AS rent_nano
+     FROM packed.boxes b
+     WHERE b.spent_tx_id IS NULL
+       AND b.creation_height IS NOT NULL
+       AND b.creation_height > $6
+       AND b.creation_height <= $7
      GROUP BY 1
      ORDER BY 1`,
-    [tipMs, PERIOD, tip, RENT_SERIES_DAY_MS, FEE, dueHeight, dueHeight + RENT_BLOCKS_30D],
-    3000
+    [tipMs, PERIOD, tip, RENT_SERIES_DAY_MS, FEE, dueHeight, dueHeight + RENT_BLOCKS_30D, dueHeight + RENT_BLOCKS_7D],
+    3000,
+    EXACT_SIZE_PLANNER
   );
   if (!rows) return forecastMem?.points ?? [];
   const points = mapSeriesRows(rows);

@@ -194,7 +194,7 @@
   }
 }
 
-html[data-ink="day"] .tip {
+html[data-ink="light"] .tip {
   --tip-shadow: 0 12px 30px -12px rgb(28 27 34 / 0.3), 0 2px 8px -2px rgb(28 27 34 / 0.14);
 }
 

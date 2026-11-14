@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
 import { AddrFactCard } from "@/components/AddrFactCard";
 import { KpiMark } from "@/components/kpi-marks";
-import { INK } from "@/lib/palette";
+import { INK, INK_TEXT } from "@/lib/palette";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { useKeepFresh, usePageSync } from "@/lib/page-sync";
 
@@ -478,7 +478,7 @@ export function ApiSite() {
             {status != null && (
               <span
                 className="font-mono text-[12px]"
-                style={{ color: status >= 200 && status < 300 ? INK.green : INK.gold }}
+                style={{ color: status >= 200 && status < 300 ? INK_TEXT.green : INK_TEXT.gold }}
               >
                 {status || "—"}
                 {ms != null ? ` · ${ms} ms` : ""}
@@ -516,8 +516,8 @@ function Method({ method }: { method: Method }) {
     <span
       className="inline-flex h-5 shrink-0 items-center rounded-[6px] px-1.5 font-mono text-[10px] font-semibold tracking-wide"
       style={{
-        color: method === "GET" ? INK.teal : INK.gold,
-        background: method === "GET" ? "color-mix(in srgb, #2dd4bf 16%, transparent)" : "color-mix(in srgb, #f0c14a 16%, transparent)",
+        color: method === "GET" ? INK_TEXT.teal : INK_TEXT.gold,
+        background: method === "GET" ? "color-mix(in srgb, var(--api-get) 16%, transparent)" : "color-mix(in srgb, var(--api-post) 16%, transparent)",
       }}
     >
       {method}

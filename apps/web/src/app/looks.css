@@ -107,6 +107,10 @@ html[data-look="c"][data-ink] {
   --k-quiet: #2f2f2f;
   --k-ink: #0e0e0e;
   --k-quiet-ink: #ffffff;
+  /* A kind printed as a word (header facts, a row's wins). */
+  --k-nft-text: var(--k-nft);
+  --k-rent-text: var(--k-rent);
+  --k-reward-text: var(--k-reward);
   --row-hover: #1f1f1f;
   --row-open: #202020;
   --detail-bg: #151515;
@@ -115,6 +119,50 @@ html[data-look="c"][data-ink] {
   --plate-now: #ffffff;
   --plate-now-ink: #0e0e0e;
   --skel: #262626;
+  /* Fill tier: solid tags and tiles with --k-ink on them. On black it is the mark itself. */
+  --f-block: var(--c-block);
+  --f-tx: var(--c-tx);
+  --f-addr: var(--c-addr);
+  --f-token: var(--c-token);
+  --f-box: var(--c-box);
+  --f-net: var(--c-net);
+  /* A page's own tags: a tint of its entity over the card. */
+  --tint: 20%;
+  /* A row's kind word: the tile's hue pulled toward the text ink. */
+  --kind-mix: 66%;
+  --track: #2a2a2a;
+  --selection: var(--c-block);
+  --pct-halo: 0 0 3px #000, 0 0 2px #000;
+  /* Evidence-class dots (EvidenceBadge). */
+  --ev-chain: var(--accent);
+  --ev-decoded: var(--k-nft);
+  --ev-telemetry: var(--c-net);
+  --ev-live: var(--up);
+  --ev-heuristic: var(--k-rent);
+  --ev-external: var(--muted);
+  /* The shared inks pages print inline (lib/palette.ts). Marks; *-text where they are words. */
+  --ink-cyan: #6db0f4;
+  --ink-green: #84deaf;
+  --ink-gold: #ebcb71;
+  --ink-coral: #ff8a65;
+  --ink-sky: #97c1f7;
+  --ink-violet: #c4b5fd;
+  --ink-teal: #69d3c6;
+  --ink-gix: #e879f9;
+  --ink-cyan-text: var(--ink-cyan);
+  --ink-green-text: var(--ink-green);
+  --ink-gold-text: var(--ink-gold);
+  --ink-coral-text: var(--ink-coral);
+  --ink-sky-text: var(--ink-sky);
+  --ink-violet-text: var(--ink-violet);
+  --ink-teal-text: var(--ink-teal);
+  --ink-gix-text: var(--ink-gix);
+  --kind-protocol: #eda4c0;
+  --kind-exchange: #dcc08a;
+  --kind-pool: #bdd86e;
+  --kind-contract: #9aa6e0;
+  /* The «other» share of a bar. */
+  --bar-rest: var(--muted-2);
   color-scheme: dark;
 }
 
@@ -168,51 +216,51 @@ html[data-look="c"] main [style*="tile-label"]:not([style*="background"]) {
 
 html[data-look="c"]:has(.nav-row[aria-current="page"][href="/blocks"]),
 html[data-look="c"]:has(.nav-row[aria-current="page"][href="/lithos"]) {
-  --tag: color-mix(in srgb, var(--c-block) 20%, var(--module));
+  --tag: color-mix(in srgb, var(--f-block) var(--tint), var(--module));
   --tag-ink: var(--c-block-text);
   --mark: var(--c-block);
 }
 html[data-look="c"]:has(.nav-row[aria-current="page"][href="/transactions"]),
 html[data-look="c"]:has(.nav-row[aria-current="page"][href="/mempool"]) {
-  --tag: color-mix(in srgb, var(--c-tx) 20%, var(--module));
+  --tag: color-mix(in srgb, var(--f-tx) var(--tint), var(--module));
   --tag-ink: var(--c-tx-text);
   --mark: var(--c-tx);
 }
 html[data-look="c"]:has(.nav-row[aria-current="page"][href="/addresses"]),
 html[data-look="c"]:has(.nav-row[aria-current="page"][href="/names"]) {
-  --tag: color-mix(in srgb, var(--c-addr) 20%, var(--module));
+  --tag: color-mix(in srgb, var(--f-addr) var(--tint), var(--module));
   --tag-ink: var(--c-addr-text);
   --mark: var(--c-addr);
 }
 html[data-look="c"]:has(.nav-row[aria-current="page"][href="/tokens"]),
 html[data-look="c"]:has(.nav-row[aria-current="page"][href="/nfts"]) {
-  --tag: color-mix(in srgb, var(--c-token) 20%, var(--module));
+  --tag: color-mix(in srgb, var(--f-token) var(--tint), var(--module));
   --tag-ink: var(--c-token-text);
   --mark: var(--c-token);
 }
 html[data-look="c"]:has(.nav-row[aria-current="page"][href^="/rent"]) {
-  --tag: color-mix(in srgb, var(--c-box) 20%, var(--module));
+  --tag: color-mix(in srgb, var(--f-box) var(--tint), var(--module));
   --tag-ink: var(--c-box-text);
   --mark: var(--c-box);
 }
 
 /* Home tiles: the tile's own subject. One tag per tile, each a different subject, so here the
-   tag stays a solid signal in the calm mark tier with black ink (≥ 8:1). */
+   tag stays a solid signal in the fill tier with the tile ink (≥ 8:1). */
 html[data-look="c"] .mod:has(a[href="/blocks"]) {
-  --tag: var(--c-block);
-  --tag-ink: #0e0e0e;
+  --tag: var(--f-block);
+  --tag-ink: var(--k-ink);
   --mark: var(--c-block);
 }
 html[data-look="c"] .mod:has(a[href="/mempool"]),
 html[data-look="c"] .mod:has(a[href="/transactions"]),
 html[data-look="c"] .mod:has(a[href="/fees"]) {
-  --tag: var(--c-tx);
-  --tag-ink: #0e0e0e;
+  --tag: var(--f-tx);
+  --tag-ink: var(--k-ink);
   --mark: var(--c-tx);
 }
 html[data-look="c"] .mod:has(a[href^="/rent"]) {
-  --tag: var(--c-box);
-  --tag-ink: #0e0e0e;
+  --tag: var(--f-box);
+  --tag-ink: var(--k-ink);
   --mark: var(--c-box);
 }
 
@@ -237,7 +285,7 @@ html[data-look="c"] main a[href^="/box/"] {
 /* A row's kind word (feed.css .feed-kind) is text: the tile's hue lifted toward the text colour,
    so a column of «Transfer» / «Wallet» reads calm next to its solid tile. */
 html[data-look="c"] .feed-kind {
-  color: color-mix(in oklab, var(--k) 66%, var(--text));
+  color: color-mix(in oklab, var(--k) var(--kind-mix), var(--text));
 }
 html[data-look="c"] [data-k="self"] .feed-kind,
 html[data-look="c"] [data-k="quiet"] .feed-kind {
@@ -245,7 +293,7 @@ html[data-look="c"] [data-k="quiet"] .feed-kind {
 }
 
 /* Nav glyphs in their entity colour. */
-html[data-look="c"] .nav-row .nav-glyph svg { color: #ffffff; }
+html[data-look="c"] .nav-row .nav-glyph svg { color: var(--text); }
 html[data-look="c"] .nav-row[href="/blocks"] .nav-glyph svg,
 html[data-look="c"] .nav-row[href="/lithos"] .nav-glyph svg { color: var(--c-block); }
 html[data-look="c"] .nav-row[href="/mempool"] .nav-glyph svg,
@@ -265,16 +313,16 @@ html[data-look="c"] .nav-row {
 }
 html[data-look="c"] .nav-row.is-pressed,
 html[data-look="c"] .nav-row[aria-current="page"] {
-  background: #ffffff !important;
-  color: #0e0e0e !important;
+  background: var(--invert) !important;
+  color: var(--invert-fg) !important;
   box-shadow: none !important;
 }
 html[data-look="c"] .nav-row[aria-current="page"] .nav-glyph svg {
-  color: #0e0e0e !important;
+  color: var(--invert-fg) !important;
 }
 
 html[data-look="c"] .nav-scan-corner path {
-  stroke: #ffffff;
+  stroke: var(--text);
 }
 html[data-look="c"] .nav-scan-word .nav-line > .nav-line:nth-child(1) {
   color: var(--c-tx) !important;
@@ -283,12 +331,12 @@ html[data-look="c"] .nav-scan-word .nav-line > .nav-line:nth-child(2) {
   color: var(--c-block) !important;
 }
 html[data-look="c"] .nav-scan-word .nav-line > .nav-line:nth-child(3) {
-  color: #ffffff !important;
+  color: var(--text) !important;
 }
 
 html[data-look="c"] [data-scout="price"],
 html[data-look="c"] [data-scout="mcap"] {
-  color: #ffffff !important;
+  color: var(--text) !important;
   font-weight: 600 !important;
 }
 
@@ -303,9 +351,9 @@ html[data-look="c"] .kpi-tile-mark svg {
 html[data-look="c"] main [style*="background"][style*="tile-label"] {
   background: var(--c-tx) !important;
 }
-/* Coral values (rent due) follow the look, in the text tier: they are names and figures. */
-html[data-look="c"] main [style*="#ff8a65"]:not([style*="tile-label"]),
-html[data-look="c"] main [style*="255, 138, 101"] {
+/* Coral values (rent due) follow the look, in the text tier: they are names and figures.
+   The hook is the palette token in the inline style (lib/palette.ts INK.coral). */
+html[data-look="c"] main [style*="--ink-coral"]:not([style*="tile-label"]) {
   color: var(--c-tx-text) !important;
 }
 
@@ -330,12 +378,12 @@ html[data-look="c"] .price-tape {
   background: var(--module);
 }
 html[data-look="c"] .price-tape-sym {
-  color: #ffffff !important;
+  color: var(--text) !important;
 }
 html[data-look="c"] .price-tape-chg.is-up { color: var(--up); }
 
 html[data-look="c"] .epoch-tape {
-  background: #2a2a2a !important;
+  background: var(--track) !important;
   border-radius: 2px !important;
 }
 html[data-look="c"] .epoch-tape-fill {
@@ -360,20 +408,20 @@ html[data-look="c"] .sheet-spin {
 }
 
 html[data-look="c"] ::selection {
-  background: var(--c-block);
-  color: #0e0e0e;
+  background: var(--selection);
+  color: var(--k-ink);
 }
 
 /* ───────────────────── refinements ───────────────────── */
 
 html[data-look="c"] .seg-on,
 html[data-look="c"][data-float] .seg-on {
-  background: #ffffff !important;
-  color: #0e0e0e !important;
+  background: var(--invert) !important;
+  color: var(--invert-fg) !important;
   box-shadow: none !important;
 }
 html[data-look="c"] .block-size-track {
-  background: #2a2a2a;
+  background: var(--track);
   border-radius: 3px;
 }
 html[data-look="c"] .block-size-liquid {
@@ -383,29 +431,29 @@ html[data-look="c"] .block-size-waves {
   display: none;
 }
 html[data-look="c"] .block-size-pct {
-  color: #ffffff;
-  text-shadow: 0 0 3px #000, 0 0 2px #000;
+  color: var(--text);
+  text-shadow: var(--pct-halo);
 }
 html[data-look="c"] .page-tail span[style]:nth-child(1) { color: var(--c-tx) !important; }
 html[data-look="c"] .page-tail span[style]:nth-child(2) { color: var(--c-block) !important; }
-html[data-look="c"] .page-tail span[style]:nth-child(3) { color: #ffffff !important; }
+html[data-look="c"] .page-tail span[style]:nth-child(3) { color: var(--text) !important; }
 
 /* Phone tab bar: the open tab is printed like the open nav row. */
 html[data-look="c"] .phone-tabbar a[aria-current="page"] {
-  background: #ffffff;
-  color: #0e0e0e !important;
+  background: var(--invert);
+  color: var(--invert-fg) !important;
   box-shadow: none !important;
 }
-html[data-look="c"] .phone-tabbar svg { color: #ffffff; }
+html[data-look="c"] .phone-tabbar svg { color: var(--text); }
 html[data-look="c"] .phone-tabbar a[href="/blocks"] svg { color: var(--c-block); }
 html[data-look="c"] .phone-tabbar a[href="/mempool"] svg,
 html[data-look="c"] .phone-tabbar a[href="/transactions"] svg { color: var(--c-tx); }
-html[data-look="c"] .phone-tabbar a[aria-current="page"] svg { color: #0e0e0e !important; }
+html[data-look="c"] .phone-tabbar a[aria-current="page"] svg { color: var(--invert-fg) !important; }
 
 /* Market-cap rank chip */
 html[data-look="c"] .mcap-rank {
-  color: #0e0e0e;
-  background: #ffffff;
+  color: var(--invert-fg);
+  background: var(--invert);
   border-radius: 4px !important;
 }
 html[data-look="c"] .mcap-vol { color: var(--c-token); }

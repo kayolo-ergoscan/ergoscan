@@ -58,7 +58,7 @@ export function drawZoneMarks(ctx: CanvasRenderingContext2D, spans: readonly Zon
   let free = -Infinity;
   for (const s of spans) {
     if (s.zone === 0) continue;
-    const ink = s.zone === 2 ? (inks.day ? "#a77f1f" : "#ebcb71") : inks.day ? "#5f5a50" : "#cfc8ba";
+    const ink = s.zone === 2 ? "#ebcb71" : "#cfc8ba";
     R(ctx, s.x0, y, Math.max(1, s.x1 - s.x0), 1, alpha(ink, s.zone === 2 ? 0.85 : 0.5));
     R(ctx, s.x0, y - 2, 1, 3, alpha(ink, 0.9));
     const label = s.zone === 2 ? words.turbo : words.normal;
@@ -72,12 +72,12 @@ export function drawZoneMarks(ctx: CanvasRenderingContext2D, spans: readonly Zon
 /** The wrapped pallet: the waiting txs the yard does not draw one by one, with their count. */
 export function drawPlusPallet(ctx: CanvasRenderingContext2D, x: number, ground: number, w: number, h: number, text: string, inks: Inks, small: boolean) {
   const top = ground - 2 - h;
-  R(ctx, x, ground - 2, w, 2, inks.day ? "#a8865a" : "#7a5f3f");
-  for (let i = x + 2; i < x + w - 1; i += 3) R(ctx, i, ground - 1, 1, 1, inks.day ? "#7a5f3f" : "#3a2c1d");
+  R(ctx, x, ground - 2, w, 2, "#7a5f3f");
+  for (let i = x + 2; i < x + w - 1; i += 3) R(ctx, i, ground - 1, 1, 1, "#3a2c1d");
   for (let yy = top; yy < ground - 2; yy += 5) {
-    R(ctx, x + 1, yy, w - 2, 4, inks.day ? "#b9b2a8" : "#4a4540");
-    R(ctx, x + 1, yy, w - 2, 1, inks.day ? "#cdc6bb" : "#5a554e");
-    for (let xx = x + 1 + ((yy >> 2) % 2) * 4; xx < x + w - 2; xx += 8) R(ctx, xx, yy + 1, 1, 3, inks.day ? "#a39c92" : "#3a3632");
+    R(ctx, x + 1, yy, w - 2, 4, "#4a4540");
+    R(ctx, x + 1, yy, w - 2, 1, "#5a554e");
+    for (let xx = x + 1 + ((yy >> 2) % 2) * 4; xx < x + w - 2; xx += 8) R(ctx, xx, yy + 1, 1, 3, "#3a3632");
   }
   R(ctx, x, top, w, ground - 2 - top, "rgba(214,220,226,0.16)");
   R(ctx, x + 2, top + 1, 1, ground - 4 - top, "rgba(240,244,248,0.35)");
@@ -85,6 +85,6 @@ export function drawPlusPallet(ctx: CanvasRenderingContext2D, x: number, ground:
   ctx.font = `600 ${small ? 9 : 10}px ${inks.mono}`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillStyle = inks.day ? "#14131a" : "#f3efe6";
+  ctx.fillStyle = "#f3efe6";
   ctx.fillText(text, x + w / 2, top + (ground - 2 - top) / 2 + 1);
 }

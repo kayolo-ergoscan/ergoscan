@@ -64,7 +64,6 @@ export type Frame = {
 };
 
 export type Inks = {
-  day: boolean;
   text: string;
   muted: string;
   muted2: string;
@@ -81,15 +80,13 @@ export function readInks(el: Element): Inks {
   const v = (name: string, fallback: string) => cs.getPropertyValue(name).trim() || fallback;
   const sans = v("--font-sans", "");
   const mono = v("--font-mono", "");
-  const day = (el as HTMLElement).dataset?.ink === "day";
   return {
-    day,
-    text: v("--text", day ? "#14131a" : "#ffffff"),
-    muted: v("--muted", day ? "rgba(20,19,26,0.6)" : "rgba(255,255,255,0.58)"),
-    muted2: v("--muted-2", day ? "rgba(20,19,26,0.42)" : "rgba(255,255,255,0.38)"),
-    wash: v("--wash", day ? "rgba(20,19,26,0.05)" : "rgba(255,255,255,0.06)"),
-    washMid: v("--wash-mid", day ? "rgba(20,19,26,0.09)" : "rgba(255,255,255,0.1)"),
-    washStrong: v("--wash-strong", day ? "rgba(20,19,26,0.16)" : "rgba(255,255,255,0.16)"),
+    text: v("--text", "#ffffff"),
+    muted: v("--muted", "rgba(255,255,255,0.58)"),
+    muted2: v("--muted-2", "rgba(255,255,255,0.38)"),
+    wash: v("--wash", "rgba(255,255,255,0.06)"),
+    washMid: v("--wash-mid", "rgba(255,255,255,0.1)"),
+    washStrong: v("--wash-strong", "rgba(255,255,255,0.16)"),
     kayolo: v("--ent-block", "#ffd23c"),
     sans: `${sans}${sans ? ", " : ""}ui-sans-serif, system-ui, sans-serif`,
     mono: `${mono}${mono ? ", " : ""}ui-monospace, monospace`,

@@ -900,7 +900,7 @@ export function CommandPalette() {
           key="search-backdrop"
           type="button"
           aria-label={t("nav.close")}
-          className="search-backdrop fixed inset-0 z-[60] bg-black/50"
+          className="search-backdrop fixed inset-0 z-[60] bg-[var(--backdrop)]"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0, transition: { duration: 0.14, ease: EASE } }}

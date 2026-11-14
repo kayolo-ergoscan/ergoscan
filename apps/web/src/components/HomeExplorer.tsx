@@ -16,7 +16,7 @@ import { KpiNum } from "@/components/KpiGrid";
 import { KpiMark } from "@/components/kpi-marks";
 import { ReelText } from "@/components/ReelText";
 import { DONUT_SLICES, HOME } from "@/lib/palette";
-import { lookInk } from "@/lib/look";
+import { lookInk, onScene } from "@/lib/look";
 import { fetchErgChart } from "@/lib/price-history";
 import type { ErgMarket } from "@/lib/list-snapshots";
 import {
@@ -38,11 +38,13 @@ import {
   parseRentTape,
   parseRentEpochBoxes,
   parseRentEpochNano,
+  parseRentEpochCollected,
+  type RentEpochCollected,
   type LithosHome,
   type RentTapeRow,
 } from "@ergoscan/shared";
 import { HomeLithos } from "@/components/HomeLithos";
-import { HomeRentTape } from "@/components/HomeRentTape";
+import { HomeRentHarbour } from "@/components/HomeRentHarbour";
 import { parseRentDanger, type RentDangerRow } from "@/lib/rent-danger";
 import { HomeCityPair } from "@/components/HomeCity";
 import { formingAfterSeal, mergeBlockRow, mergeBlockRows, type BlockRow } from "@/lib/home-tape";
@@ -126,6 +128,7 @@ export function HomeExplorer({
   initialRentTape = [],
   initialRentEpochNano = null,
   initialRentEpochBoxes = null,
+  initialRentEpochCollected = null,
   initialRentDanger = null,
   initialLithos = null,
   previewShare = false,
@@ -145,6 +148,8 @@ export function HomeExplorer({
   initialRentEpochNano?: string | null;
   /** Boxes that turn four years old before this header epoch ends. */
   initialRentEpochBoxes?: number | null;
+  /** Rent collected since this header epoch began (the snapshot's exact sum). */
+  initialRentEpochCollected?: RentEpochCollected | null;
   /** Tokens short on ERG, from the rent snapshot. Null until that field arrives. */
   initialRentDanger?: RentDangerRow[] | null;
   /** Home «Lithos» card from the Lithos snapshot. Null until the indexer writes its stats. */
@@ -183,6 +188,7 @@ export function HomeExplorer({
   const [rentTape, setRentTape] = useState<RentTapeRow[]>(initialRentTape);
   const [rentEpochNano, setRentEpochNano] = useState<string | null>(initialRentEpochNano);
   const [rentEpochBoxes, setRentEpochBoxes] = useState<number | null>(initialRentEpochBoxes);
+  const [rentEpochCollected, setRentEpochCollected] = useState<RentEpochCollected | null>(initialRentEpochCollected);
   const [rentDanger, setRentDanger] = useState<RentDangerRow[]>(initialRentDanger ?? []);
   const [rentDangerReady, setRentDangerReady] = useState(initialRentDanger != null);
   const [lithos, setLithos] = useState<LithosHome | null>(initialLithos);
@@ -250,6 +256,7 @@ export function HomeExplorer({
           rentTape?: unknown;
           rentEpochNano?: unknown;
           rentEpochBoxes?: unknown;
+          rentEpochCollected?: unknown;
           rentDanger?: unknown;
           lithos?: unknown;
         }>;
@@ -402,6 +409,8 @@ export function HomeExplorer({
           if (epochNano != null) setRentEpochNano(epochNano);
           const epochBoxes = parseRentEpochBoxes(j.rentEpochBoxes);
           if (epochBoxes != null) setRentEpochBoxes(epochBoxes);
+          // Absent when the snapshot's sum is from another epoch: then nothing, not last epoch's.
+          setRentEpochCollected(parseRentEpochCollected(j.rentEpochCollected));
           const danger = parseRentDanger(j.rentDanger);
           setRentDanger(danger ?? []);
           setRentDangerReady(true);
@@ -820,10 +829,11 @@ export function HomeExplorer({
         />
         </div>
 
-        <HomeRentTape
+        <HomeRentHarbour
           rows={rentTape}
           epochRentNano={rentEpochNano}
           epochBoxes={rentEpochBoxes}
+          epochCollected={rentEpochCollected}
           height={tipHeight}
           avgBlockMs={avgBlockMs}
           danger={rentDanger}
@@ -1161,7 +1171,7 @@ function EpochBar({
           <span className="epoch-slot inline-flex shrink-0 items-baseline gap-1 whitespace-nowrap font-semibold">
             <ReelText text={slot.toLocaleString(loc)} />
             {/* A phone keeps the slot and the %; the epoch length is the same every time. */}
-            <span className="font-medium opacity-70 max-sm:hidden">/ {ERGO_EPOCH_LEN.toLocaleString(loc)}</span>
+            <span className="word-dim font-medium opacity-70 max-sm:hidden">/ {ERGO_EPOCH_LEN.toLocaleString(loc)}</span>
           </span>
           <span className="epoch-slot inline-flex shrink-0 items-center gap-1 font-semibold">
             <EpochClock />
@@ -1170,7 +1180,7 @@ function EpochBar({
           <span className="epoch-left inline-flex shrink-0 items-center gap-1 whitespace-nowrap font-medium">
             <EpochFlag />
             <ReelText text={formatRemain(leftMs, locale)} />
-            <span className="font-normal opacity-80">{t("home.epochLeft")}</span>
+            <span className="word-dim font-normal opacity-80">{t("home.epochLeft")}</span>
           </span>
         </div>
       </div>
@@ -1430,7 +1440,7 @@ function HomeLiveStrip({
     pools.forEach((p, i) => {
       if (!p.address) return;
       const raw = DONUT_SLICES[i % DONUT_SLICES.length]!;
-      if (!raw.startsWith("rgba(255")) out[p.address] = lookInk(raw);
+      if (!raw.startsWith("rgba(255")) out[p.address] = onScene(() => lookInk(raw));
     });
     return out;
   }, [pools]);

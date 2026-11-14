@@ -6,7 +6,7 @@
 
 import { KNOWN_TOKENS, knownErgoTokenName } from "@ergoscan/shared";
 import { shortId } from "@/lib/format";
-import { INK } from "@/lib/palette";
+import { INK_TEXT } from "@/lib/palette";
 import { LOCAL_TOKEN_LOGOS } from "@/lib/token-logos.generated";
 
 export { LOCAL_TOKEN_LOGOS };
@@ -172,7 +172,7 @@ export const SIGRSV_ID =
 
 /** Every ticker, including SigRSV, uses the ERGO word orange. */
 export function tokenTickerInk(_tokenId?: string | null): string {
-  return INK.coral;
+  return INK_TEXT.coral;
 }
 
 export function isErgId(id: string | null | undefined): boolean {

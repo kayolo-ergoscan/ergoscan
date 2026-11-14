@@ -32,6 +32,7 @@ import { stampTemplateHashes } from "./lib/txTemplateHash.js";
 import { mempoolMeaning, mempoolMeaningSlim, warmMempoolMeanings, type CompactMeaning } from "./lib/txMeaning.js";
 import { SubblockEngine } from "./lib/subblocks.js";
 import { SealWatcher, lastBlockClock, nextSeenTip, type SeenTip } from "./lib/seal.js";
+import { announceRent } from "./lib/rentMoment.js";
 import { RecentIds, VanishClock, freshIds, mergePoll } from "./lib/live-pool.js";
 import { nodeVersionCache, type PeerSync } from "./lib/node-versions.js";
 import { registerExplorerRoutes } from "./routes/explorer.js";
@@ -372,6 +373,8 @@ function withEta(h: Omit<FeeHistogram, "ts" | "eta"> | ReturnType<typeof buildFe
 function applySeals(list: readonly SealEvent[]): void {
   if (!list.length) return;
   let moved = false;
+  // Rent miners collected in these blocks: one `rent.collected` each, a moment later.
+  announceRent(list, broadcast);
   for (const seal of list) {
     broadcast({ type: "block.sealed", data: seal });
     sealedRecent.add(seal.txIds, Date.now());

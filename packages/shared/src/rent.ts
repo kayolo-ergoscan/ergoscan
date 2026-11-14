@@ -1,6 +1,8 @@
 /**
  * Ergo storage rent (~4 years / 1_051_200 blocks).
- * rent ≈ periodsElapsed * storageFeeFactor * boxSizeBytes (nanoERG)
+ * fee = storageFeeFactor * boxSizeBytes (nanoERG), once per rent spend: no age multiplier (the
+ * node's ErgoInterpreter.checkExpiredBox, see storageFeeNano in rent-exact.ts). The miner takes
+ * min(box value, fee); a box worth no more than the fee goes whole, tokens included.
  */
 
 export type RentParams = {
@@ -27,7 +29,12 @@ export type BoxRentReport = {
   rentDue: boolean;
   periodsElapsed: number;
   sizeBytes: number | null;
+  /** What a miner takes on the rent spend: the fee, or the whole box when it holds no more (min(value, fee)). */
   estimatedRentNano: number | null;
+  /** The storage fee for the box's size, once per rent spend (null when rent is not due). */
+  storageFeeNano: number | null;
+  /** value ≤ fee: the rent spend takes the whole box, tokens included. */
+  takenWhole: boolean;
   minValueNano: number | null;
   boxValueNano: number | null;
   belowMinValue: boolean | null;
@@ -104,8 +111,14 @@ export function computeBoxRent(input: {
       : rentDue
         ? 0
         : params.storagePeriodBlocks - (ageBlocks % params.storagePeriodBlocks);
+  // One fee per rent spend, whatever the age (periodsElapsed is shown, never multiplied in).
+  const storageFeeNano = rentDue && sizeBytes > 0 ? params.storageFeeFactor * sizeBytes : null;
+  // A miner takes the fee, or the whole box (tokens too) when it holds no more: value ≤ fee.
+  // An unknown value (0) leaves the fee as the estimate and claims nothing about the box.
+  const knownValue = boxValueNano > 0 ? boxValueNano : null;
+  const takenWhole = storageFeeNano != null && knownValue != null && knownValue <= storageFeeNano;
   const estimatedRentNano =
-    rentDue && sizeBytes > 0 ? periodsElapsed * params.storageFeeFactor * sizeBytes : null;
+    storageFeeNano == null ? null : knownValue == null ? storageFeeNano : Math.min(storageFeeNano, knownValue);
   const ageYears = ageBlocks != null ? ageBlocks / BLOCKS_PER_YEAR : null;
 
   let note = "Rent not due yet; countdown is blocks until storage period elapses.";
@@ -122,6 +135,8 @@ export function computeBoxRent(input: {
     periodsElapsed,
     sizeBytes,
     estimatedRentNano,
+    storageFeeNano,
+    takenWhole,
     minValueNano,
     boxValueNano,
     belowMinValue,

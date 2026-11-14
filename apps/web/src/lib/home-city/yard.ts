@@ -205,7 +205,7 @@ export function yardRest(w: number, h: number, scene: Scene, id: string): { x: n
 function drawCrate(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, tx: YardTx, scene: Scene, flash: number, inks: Inks) {
   let ink = lookInk(tx.color);
   const dusty = tx.firstSeen > 0 && scene.now - tx.firstSeen > 2 * scene.avgBlockMs;
-  if (dusty) ink = shade(ink, inks.day ? 0.82 : 0.72);
+  if (dusty) ink = shade(ink, 0.72);
   const c = flash > 0 ? shade(ink, 1 + flash * 0.7) : ink;
   const x0 = Math.round(x);
   const y0 = Math.round(y);
@@ -222,7 +222,7 @@ function drawCrate(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   // Gold strap: at or above «Turbo».
   if (scene.fees && tx.feeRate >= scene.fees.turbo) {
     const sy = y0 + Math.floor(h / 2);
-    R(ctx, x0, sy, w - 1, 1, inks.day ? "#a77f1f" : "#ebcb71");
+    R(ctx, x0, sy, w - 1, 1, "#ebcb71");
     R(ctx, x0 + 1, sy, 1, 1, "#fff2c4");
   }
   if (dusty) {
@@ -232,30 +232,28 @@ function drawCrate(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 }
 
 function drawGround(ctx: CanvasRenderingContext2D, w: number, h: number, g: YGeo, inks: Inks) {
-  const earth = inks.day ? "#d9ccb4" : "#2a241e";
+  const earth = "#2a241e";
   R(ctx, 0, g.ground, w, h - g.ground, earth);
-  R(ctx, 0, g.ground, w, 1, inks.day ? "#bfae8f" : "#4a3f33");
+  R(ctx, 0, g.ground, w, 1, "#4a3f33");
   for (let x = 0; x < w; x += 3) {
     const n = hash01(`g${x}`, 1);
-    if (n > 0.6) R(ctx, x, g.ground + 2 + Math.floor(n * (h - g.ground - 3)), 1, 1, inks.day ? "#c3b495" : "#3d342a");
+    if (n > 0.6) R(ctx, x, g.ground + 2 + Math.floor(n * (h - g.ground - 3)), 1, 1, "#3d342a");
   }
   // A low site fence along the back of the lot: posts and two wires, dim, so the stacks read first.
   const fy = g.ground - (g.small ? 22 : 30);
-  const fence = inks.day ? "#c9c2b5" : "#34302b";
+  const fence = "#34302b";
   for (let x = 2; x < w - 4; x += g.small ? 18 : 24) R(ctx, x, fy, 1, g.ground - fy, fence);
-  R(ctx, 0, fy + 2, w, 1, inks.day ? "#d2ccc0" : "#2f2b27");
-  R(ctx, 0, fy + Math.round((g.ground - fy) / 2), w, 1, inks.day ? "#d6d0c4" : "#2b2824");
+  R(ctx, 0, fy + 2, w, 1, "#2f2b27");
+  R(ctx, 0, fy + Math.round((g.ground - fy) / 2), w, 1, "#2b2824");
   // Floodlight mast at the far end of the lot.
   const mx = w - (g.small ? 6 : 8);
   const top = g.small ? 14 : 16;
-  if (!inks.day) {
-    R(ctx, mx - 6, top - 3, 13, 9, "rgba(255,206,130,0.06)");
-    R(ctx, mx - 4, top - 2, 9, 7, "rgba(255,206,130,0.08)");
-  }
-  const steel = inks.day ? "#9a948a" : "#5b564e";
+  R(ctx, mx - 6, top - 3, 13, 9, "rgba(255,206,130,0.06)");
+  R(ctx, mx - 4, top - 2, 9, 7, "rgba(255,206,130,0.08)");
+  const steel = "#5b564e";
   R(ctx, mx, top + 2, 1, g.ground - top - 2, steel);
-  R(ctx, mx - 3, top, 5, 2, inks.day ? "#8a8478" : "#6b665d");
-  R(ctx, mx - 3, top + 2, 5, 1, inks.day ? "#c9a24e" : "#ffd37a");
+  R(ctx, mx - 3, top, 5, 2, "#6b665d");
+  R(ctx, mx - 3, top + 2, 5, 1, "#ffd37a");
   R(ctx, mx - 1, g.ground - 3, 3, 3, steel);
 }
 
@@ -281,8 +279,8 @@ export function drawYard(ctx: CanvasRenderingContext2D, w: number, h: number, sc
   drawGround(ctx, w, h, g, inks);
   drawZoneMarks(ctx, now.spans, g.ground + 1, inks, text, g.small);
   for (const p of now.pallets) {
-    R(ctx, p.x, g.ground - 2, p.w, 2, inks.day ? "#a8865a" : "#7a5f3f");
-    for (let i = p.x + 2; i < p.x + p.w - 1; i += 3) R(ctx, i, g.ground - 1, 1, 1, inks.day ? "#7a5f3f" : "#3a2c1d");
+    R(ctx, p.x, g.ground - 2, p.w, 2, "#7a5f3f");
+    for (let i = p.x + 2; i < p.x + p.w - 1; i += 3) R(ctx, i, g.ground - 1, 1, 1, "#3a2c1d");
   }
   const hits: YardHit[] = [];
   const afterById = after ? new Map(after.crates.map((c) => [c.tx.id, c])) : null;
@@ -348,14 +346,14 @@ export function flightSize(fromW: number, small: boolean, u: number): number {
 }
 
 /** A crate on the crane's hook, on its way to its storey. */
-export function drawCrateFlight(ctx: CanvasRenderingContext2D, x: number, y: number, color: string, ropeTop: number, small: boolean, day: boolean, size?: number) {
+export function drawCrateFlight(ctx: CanvasRenderingContext2D, x: number, y: number, color: string, ropeTop: number, small: boolean, size?: number) {
   const s = size ?? (small ? 6 : 8);
   const ink = lookInk(color);
   const x0 = Math.round(x - s / 2);
   const y0 = Math.round(y - s / 2);
-  const rope = day ? "rgba(110,104,94,0.8)" : "rgba(200,194,182,0.75)";
+  const rope = "rgba(200,194,182,0.75)";
   if (ropeTop < y0 - 1) R(ctx, Math.round(x), Math.round(ropeTop), 1, y0 - Math.round(ropeTop), rope);
-  R(ctx, Math.round(x) - 1, y0 - 2, 3, 2, day ? "#8a8478" : "#c8c2b6");
+  R(ctx, Math.round(x) - 1, y0 - 2, 3, 2, "#c8c2b6");
   R(ctx, x0, y0, s, s - 1, ink);
   R(ctx, x0, y0, s, 1, shade(ink, 1.32));
   R(ctx, x0 + s - 1, y0 + 1, 1, s - 2, shade(ink, 0.6));
@@ -434,14 +432,14 @@ export function cableAt(r: { pts: Pt[]; ropes: (number | null)[] }, u: number): 
   return { x: last.x, y: last.y, rope: last.y - RIDE };
 }
 
-export function drawYardCable(ctx: CanvasRenderingContext2D, cable: YardCable, a: number, day: boolean) {
+export function drawYardCable(ctx: CanvasRenderingContext2D, cable: YardCable, a: number) {
   if (a <= 0) return;
   ctx.save();
   ctx.globalAlpha = a;
   for (const l of cable.lines) {
     const x = Math.round(Math.min(l.x0, l.x1));
     const y = Math.round(Math.min(l.y0, l.y1));
-    R(ctx, x, y, Math.max(1, Math.round(Math.abs(l.x1 - l.x0))), Math.max(1, Math.round(Math.abs(l.y1 - l.y0))), day ? "rgba(110,104,94,0.7)" : "rgba(200,194,182,0.6)");
+    R(ctx, x, y, Math.max(1, Math.round(Math.abs(l.x1 - l.x0))), Math.max(1, Math.round(Math.abs(l.y1 - l.y0))), "rgba(200,194,182,0.6)");
   }
   for (const p of cable.pulleys) {
     R(ctx, Math.round(p.x) - 1, Math.round(p.y) - 1, 3, 3, "#8a8478");

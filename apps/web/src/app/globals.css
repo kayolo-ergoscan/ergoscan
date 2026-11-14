@@ -10,9 +10,9 @@
 }
 
 /*
- * OLED A is the default ink (`data-ink="oled"`).
- * Dim = office dark (old live gray). Day = AdaStat paper, same violet-gray hue.
- * Not a white/black invert. Skill gold/navy dumps stay rejected.
+ * Base tokens. The site look (looks.css, «Сигнал») restyles them for the dark ink, and light.css for
+ * the light one («Сумерки»); a rule here that prints a colour takes it from a token, so both inks
+ * reach it.
  */
 :root,
 html[data-ink="oled"] {
@@ -75,81 +75,28 @@ html[data-ink="oled"] {
   --stage-max: 1320px;
   --addr-bar: 2.5rem;
   --addr-row: 3.75rem;
+  /* Colours the rules below print, as tokens so light.css can answer them. */
+  --twin-ink: #ddd6fe;
+  --twin-bg: rgba(167, 139, 250, 0.28);
+  --stick-shadow: 8px 0 12px -8px rgba(0, 0, 0, 0.55);
+  --pop-shadow: 0 16px 32px rgba(0, 0, 0, 0.55);
+  --foot-shadow: 0 -12px 28px rgba(0, 0, 0, 0.28);
+  --tape-hover: rgba(255, 255, 255, 0.04);
+  --lithos-chip: #a855f7;
+  --lithos-chip-ink: #c084fc;
+  --lithos-chip-hover: #d8b4fe;
+  --mint: #f0c14a;
+  --backdrop: rgba(0, 0, 0, 0.5);
+  --ghost: rgba(255, 255, 255, 0.25);
+  --heart: #e25563;
+  --gix-wash: rgba(232, 121, 249, 0.14);
+  --gix-wash-hover: rgba(232, 121, 249, 0.2);
+  --api-get: #2dd4bf;
+  --api-post: #f0c14a;
+  --econ-round: #c98500;
+  --econ-finder: #199e70;
+  --econ-founders: #9085e9;
   color-scheme: dark;
-}
-
-/* Office dark — same hue, lifted canvas. Etherscan/Blockscout "Dim". */
-html[data-ink="dim"] {
-  --bg: #2e2d35;
-  --module: #35343d;
-  --bg-elevated: #3a3943;
-  --panel: #35343d;
-  --panel-hover: #3f3e48;
-  --border: rgba(255, 255, 255, 0.09);
-  --border-soft: rgba(255, 255, 255, 0.055);
-  --text: #f3f3f5;
-  --muted: rgba(243, 243, 245, 0.64);
-  --muted-2: rgba(243, 243, 245, 0.42);
-  --invert: #f3f3f5;
-  --invert-fg: #35343d;
-  --module-rgb: 53 52 61;
-  --panel-rgb: 53 52 61;
-  --wash-faint: rgba(255, 255, 255, 0.045);
-  --wash: rgba(255, 255, 255, 0.07);
-  --wash-mid: rgba(255, 255, 255, 0.11);
-  --wash-strong: rgba(255, 255, 255, 0.16);
-  --hair: rgba(255, 255, 255, 0.24);
-  --scrim: rgba(12, 11, 16, 0.5);
-  --float-shadow-press:
-    inset 0 1px 1px rgba(0, 0, 0, 0.42),
-    inset 0 4px 12px rgba(0, 0, 0, 0.28);
-  color-scheme: dark;
-}
-
-/*
- * Day — cool violet-gray canvas (OLED ink as paper). Cards are white.
- * Accent deepens so links hold 4.5:1 on paper. Not #fff page / #000 type.
- */
-html[data-ink="day"] {
-  --bg: #eceaf0;
-  --module: #ffffff;
-  --bg-elevated: #f6f5f8;
-  --panel: #ffffff;
-  --panel-hover: #f3f2f6;
-  --border: rgba(28, 27, 34, 0.09);
-  --border-soft: rgba(28, 27, 34, 0.055);
-  --text: #1c1b22;
-  --muted: #55545c;
-  --muted-2: #7a7982;
-  --link: #1468c4;
-  --accent: #1468c4;
-  --accent-rgb: 20 104 196;
-  --party: #7d5642;
-  --accent-soft: rgba(20, 104, 196, 0.12);
-  --brand: #1468c4;
-  --brand-soft: rgba(20, 104, 196, 0.1);
-  --soft: #1578d4;
-  --soft-rgb: 21 120 212;
-  --up: #0d8a54;
-  --up-rgb: 13 138 84;
-  --down: #c42d3f;
-  --down-rgb: 196 45 63;
-  --warning: #825400;
-  --invert: #1c1b22;
-  --invert-fg: #ffffff;
-  --module-rgb: 255 255 255;
-  --panel-rgb: 255 255 255;
-  --border-rgb: 28 27 34;
-  --wash-faint: rgba(28, 27, 34, 0.04);
-  --wash: rgba(28, 27, 34, 0.055);
-  --wash-mid: rgba(28, 27, 34, 0.09);
-  --wash-strong: rgba(28, 27, 34, 0.13);
-  --hair: rgba(28, 27, 34, 0.2);
-  --scrim: rgba(28, 27, 34, 0.36);
-  --float-shadow-press:
-    inset 0 1px 1px rgba(28, 27, 34, 0.14),
-    inset 0 4px 12px rgba(28, 27, 34, 0.1);
-  color-scheme: light;
 }
 
 html {
@@ -205,16 +152,6 @@ html[data-float="ada"] {
   --float-pad: 0.625rem;
   --float-shadow: 0 1px 2px rgba(0, 0, 0, 0.28), 0 3px 8px rgba(0, 0, 0, 0.2);
   --float-shadow-hover: 0 2px 4px rgba(0, 0, 0, 0.3), 0 6px 14px rgba(0, 0, 0, 0.26);
-}
-
-html[data-ink="dim"][data-float="ada"] {
-  --float-shadow: 0 1px 2px rgba(0, 0, 0, 0.22), 0 3px 8px rgba(0, 0, 0, 0.16);
-  --float-shadow-hover: 0 2px 4px rgba(0, 0, 0, 0.24), 0 6px 14px rgba(0, 0, 0, 0.2);
-}
-
-html[data-ink="day"][data-float="ada"] {
-  --float-shadow: 0 1px 2px rgba(28, 27, 34, 0.06), 0 3px 10px rgba(28, 27, 34, 0.06);
-  --float-shadow-hover: 0 2px 4px rgba(28, 27, 34, 0.08), 0 6px 16px rgba(28, 27, 34, 0.08);
 }
 
 html[data-float="ada"] .mod,
@@ -282,13 +219,15 @@ html[data-float="ada"] a.mod.kpi-tile--press.is-pressed {
   transition-duration: 80ms;
 }
 
+/* The washes replace the tile's own fill, so they lie on the page ground; light.css gives solid
+   --tile-pressed / --tile-hover instead (a darker wash on its light ground loses the tile's words). */
 .kpi-tile--press.is-pressed {
-  background-color: var(--wash-mid);
+  background-color: var(--tile-pressed, var(--wash-mid));
 }
 
 @media (hover: hover) {
   .kpi-tile--press:hover:not(.is-pressed):not(:active):not(.is-armed) {
-    background-color: var(--wash-faint);
+    background-color: var(--tile-hover, var(--wash-faint));
   }
 }
 
@@ -1724,14 +1663,10 @@ header button:hover {
 /* Token txs: 7 cells, one row. Must beat the 2/4-col `.addr-lane` default. */
 /* Same address on two or more visible token-tx rows. Beacon, not a yellow wash. */
 .token-tx-tape a[data-addr].is-twin {
-  color: #ddd6fe !important;
-  background: rgba(167, 139, 250, 0.28);
+  color: var(--twin-ink) !important;
+  background: var(--twin-bg);
   border-radius: 4px;
   text-decoration: none;
-}
-html[data-ink="day"] .token-tx-tape a[data-addr].is-twin {
-  color: #5b21b6 !important;
-  background: rgba(109, 40, 217, 0.14);
 }
 .addr-lane.token-tx-tape,
 .addr-head.token-tx-tape {
@@ -1959,9 +1894,7 @@ html[data-ink="day"] .token-tx-tape a[data-addr].is-twin {
 /* Phone tab bar offset. Desktop `--tabbar` stays 0. */
 @media (max-width: 1023px) {
   :root,
-  html[data-ink="oled"],
-  html[data-ink="dim"],
-  html[data-ink="day"] {
+  html[data-ink] {
     --toolbar: calc(3.5rem + 0.85rem + env(safe-area-inset-top, 0px));
     --tabbar: calc(4.25rem + env(safe-area-inset-bottom, 0px));
     --glass-fill: rgb(var(--module-rgb) / 0.48);
@@ -2059,10 +1992,6 @@ html[data-ink="day"] .token-tx-tape a[data-addr].is-twin {
     -webkit-backdrop-filter: saturate(1.12) blur(24px);
     backdrop-filter: saturate(1.12) blur(24px);
   }
-}
-
-html[data-ink="day"] {
-  --glass-fill: rgb(255 255 255 / 0.52);
 }
 
 @media (max-width: 1023px) and (prefers-reduced-transparency: reduce) {
@@ -2371,7 +2300,7 @@ html[data-ink="day"] {
     min-width: 0;
     overflow: hidden;
     background: var(--bg);
-    box-shadow: 8px 0 12px -8px rgba(0, 0, 0, 0.55);
+    box-shadow: var(--stick-shadow);
   }
   .addr-pan .addr-list > .block-lane-pair:first-child > .lane-id,
   .addr-pan .holder-tape > .block-lane-pair:first-child > .lane-id {
@@ -2720,7 +2649,7 @@ html[data-ink="day"] {
     z-index: 3;
     overflow: hidden;
     background: var(--bg);
-    box-shadow: 8px 0 12px -8px rgba(0, 0, 0, 0.55);
+    box-shadow: var(--stick-shadow);
   }
   .addr-pan .addr-head.oracle-lane > .oracle-col-name {
     z-index: 4;
@@ -2768,17 +2697,17 @@ html[data-ink="day"] {
 }
 .lithos-chip {
   border-radius: 999px;
-  background: color-mix(in srgb, #a855f7 24%, transparent);
+  background: color-mix(in srgb, var(--lithos-chip) 24%, transparent);
   padding: 0.15rem 0.4rem;
   font-size: 10px;
   font-weight: 600;
   line-height: 1;
   letter-spacing: -0.01em;
-  color: #c084fc;
+  color: var(--lithos-chip-ink);
 }
 .lithos-chip:hover {
-  background: color-mix(in srgb, #a855f7 36%, transparent);
-  color: #d8b4fe;
+  background: color-mix(in srgb, var(--lithos-chip) 36%, transparent);
+  color: var(--lithos-chip-hover);
 }
 .addr-lane.block-lane.lithos-finds,
 .addr-head.block-lane.lithos-finds {
@@ -2949,7 +2878,7 @@ html[data-ink="day"] {
   background-image: linear-gradient(var(--module), var(--module));
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.55);
+  box-shadow: var(--pop-shadow);
 }
 .name-marquee {
   display: block;
@@ -3112,7 +3041,7 @@ html[data-float="ada"] .explorer-dock {
   font-variant-numeric: tabular-nums;
 }
 .price-tape-chip:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--tape-hover);
 }
 .price-tape-sym {
   letter-spacing: -0.03em;
@@ -3344,7 +3273,7 @@ html[data-float="ada"] .explorer-dock {
 }
 
 .addr-foot.is-stuck {
-  box-shadow: 0 -12px 28px rgba(0, 0, 0, 0.28);
+  box-shadow: var(--foot-shadow);
 }
 
 .addr-foot-row {
@@ -3901,65 +3830,6 @@ html[data-float="ada"] .explorer-dock {
     transform: rotate(-8deg);
   }
 }
-.rent-crate-mark {
-  overflow: visible;
-  display: block;
-  color: inherit;
-}
-.rent-crate.is-soon,
-.rent-crate.is-on {
-  transform-origin: center bottom;
-  animation: rent-crate-pulse 1.8s var(--ease) infinite;
-}
-.rent-crate.is-enter,
-.rent-crate.is-enter.is-soon,
-.rent-crate.is-enter.is-on {
-  transform-origin: center bottom;
-  animation: rent-crate-enter 640ms var(--ease) both;
-}
-.rent-crate.is-taken {
-  transform-origin: center bottom;
-  animation: rent-crate-taken 720ms var(--ease) both;
-  pointer-events: none;
-}
-@keyframes rent-crate-pulse {
-  0%,
-  100% {
-    opacity: 0.5;
-    transform: translateY(0);
-  }
-  50% {
-    opacity: 1;
-    transform: translateY(-1px);
-  }
-}
-@keyframes rent-crate-taken {
-  0% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-  100% {
-    opacity: 0;
-    transform: translateY(10px) scale(0.92);
-  }
-}
-@keyframes rent-crate-enter {
-  0% {
-    opacity: 0;
-    transform: translateY(-36px) scale(0.82) rotate(-5deg);
-  }
-  54% {
-    opacity: 1;
-    transform: translateY(3px) scale(1.08, 0.92) rotate(0deg);
-  }
-  74% {
-    transform: translateY(-6px) scale(0.97, 1.04) rotate(1.5deg);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0) scale(1) rotate(0deg);
-  }
-}
 
 /* AdaStat `uk-animation-scale-up`: fade + scale .9 → 1, 500ms ease-out. Home KPI figures. */
 @keyframes kpi-scale-up {
@@ -4018,15 +3888,6 @@ html[data-float="ada"] .explorer-dock {
 
 .mcap-vol {
   color: #7eb6ff;
-}
-
-html[data-ink="day"] .mcap-rank {
-  color: #6d28d9;
-  background: rgba(109, 40, 217, 0.1);
-}
-
-html[data-ink="day"] .mcap-vol {
-  color: #1468c4;
 }
 
 .holders-mark {
@@ -4361,35 +4222,6 @@ html[data-look="c"] .holders-mark {
   color: #2dd4bf;
 }
 
-html[data-ink="day"] .epoch-tape-fill {
-  background-color: #4c93e0;
-  animation-name: epoch-tape-breathe-day;
-}
-
-@keyframes epoch-tape-breathe-day {
-  0%,
-  100% {
-    box-shadow:
-      0 0 2px rgba(76, 147, 224, 0.14),
-      0 0 6px rgba(76, 147, 224, 0.05);
-    filter: brightness(0.96);
-  }
-  50% {
-    box-shadow:
-      0 0 4px rgba(76, 147, 224, 0.4),
-      0 0 10px rgba(76, 147, 224, 0.16);
-    filter: brightness(1.02);
-  }
-}
-
-html[data-ink="day"] .epoch-slot {
-  color: #2f78c8;
-}
-
-html[data-ink="day"] .epoch-left {
-  color: #0f766e;
-}
-
 .cadence-forming {
   box-shadow: inset 0 0 0 1px var(--hair);
 }
@@ -4547,10 +4379,6 @@ html[data-ink="day"] .epoch-left {
   .rent-miner.is-walking .rm-leg-front,
   .rent-miner.is-walking .rm-pick,
   .rent-miner.is-swinging .rm-pick,
-  .rent-crate.is-soon,
-  .rent-crate.is-on,
-  .rent-crate.is-enter,
-  .rent-crate.is-taken,
   .block-size-waves {
     animation: none !important;
   }
@@ -4695,10 +4523,6 @@ html[data-ink="day"] .epoch-left {
   --brand-new: #ff6a2b;
 }
 
-html[data-ink="day"] {
-  --brand-new: #e4561c;
-}
-
 .brand-mark {
   display: block;
   flex: none;
@@ -4770,8 +4594,7 @@ html[data-ink="day"] {
   font-size: 13px;
 }
 
-/* Glyph set (nav-icons.tsx): neutral line, one unit in the entity colour.
-   The day ink gets darker units so each keeps ≥ 3:1 on the paper. */
+/* Glyph set (nav-icons.tsx): neutral line, one unit in the entity colour. */
 :root {
   --ico-line: color-mix(in srgb, var(--text) 80%, transparent);
   --ent-block: #ffd23c;
@@ -4780,15 +4603,6 @@ html[data-ink="day"] {
   --ent-token: #5b8dff;
   --ent-box: #2fd27f;
   --ent-down: #ff5468;
-}
-
-html[data-ink="day"] {
-  --ent-block: #a97c00;
-  --ent-tx: #d24a12;
-  --ent-addr: #c92f78;
-  --ent-token: #2b5fd9;
-  --ent-box: #138a4c;
-  --ent-down: #d42a3c;
 }
 
 .ico-line {
@@ -5017,13 +4831,13 @@ html[data-ink="day"] {
   padding: 12px 14px;
 }
 .hdr-fact.is-violet { background: color-mix(in srgb, var(--k-nft, #c4b5fd) 18%, transparent); }
-.hdr-fact.is-sky { background: color-mix(in srgb, var(--c-token-text, #7eb6ff) 18%, transparent); }
+.hdr-fact.is-sky { background: color-mix(in srgb, var(--c-token-wash, var(--c-token-text, #7eb6ff)) 18%, transparent); }
 .hdr-fact.is-gold { background: color-mix(in srgb, var(--c-block, #f0c14a) 16%, transparent); }
 .hdr-fact.is-teal { background: color-mix(in srgb, var(--c-net, #2dd4bf) 16%, transparent); }
-.hdr-fact.is-violet dt { color: var(--k-nft, #c4b5fd); }
+.hdr-fact.is-violet dt { color: var(--k-nft-text, #c4b5fd); }
 .hdr-fact.is-sky dt { color: var(--c-token-text, #7eb6ff); }
-.hdr-fact.is-gold dt { color: var(--c-block, #f0c14a); }
-.hdr-fact.is-teal dt { color: var(--c-net, #2dd4bf); }
+.hdr-fact.is-gold dt { color: var(--c-block-word, var(--c-block, #f0c14a)); }
+.hdr-fact.is-teal dt { color: var(--c-net-word, var(--c-net, #2dd4bf)); }
 .hdr-fact dt {
   margin: 0;
   font-size: 12px;
@@ -5129,13 +4943,13 @@ html[data-ink="day"] {
   line-height: 1.3;
   color: var(--muted);
 }
-.hdr-row.is-violet .hdr-k { color: var(--k-nft, #c4b5fd); }
+.hdr-row.is-violet .hdr-k { color: var(--k-nft-text, #c4b5fd); }
 .hdr-row.is-sky .hdr-k { color: var(--c-token-text, #7eb6ff); }
-.hdr-row.is-cyan .hdr-k { color: var(--c-token, #3ca2ff); }
-.hdr-row.is-teal .hdr-k { color: var(--c-net, #2dd4bf); }
-.hdr-row.is-green .hdr-k { color: var(--c-box, #5ee0a0); }
-.hdr-row.is-gold .hdr-k { color: var(--c-block, #f0c14a); }
-.hdr-row.is-coral .hdr-k { color: var(--k-rent, #ff8a65); }
+.hdr-row.is-cyan .hdr-k { color: var(--c-token-word, var(--c-token, #3ca2ff)); }
+.hdr-row.is-teal .hdr-k { color: var(--c-net-word, var(--c-net, #2dd4bf)); }
+.hdr-row.is-green .hdr-k { color: var(--c-box-word, var(--c-box, #5ee0a0)); }
+.hdr-row.is-gold .hdr-k { color: var(--c-block-word, var(--c-block, #f0c14a)); }
+.hdr-row.is-coral .hdr-k { color: var(--k-rent-text, #ff8a65); }
 .hdr-hex,
 .hdr-num,
 .hdr-empty {
@@ -5301,11 +5115,13 @@ html[data-ink="day"] {
     transform: translateY(-50%);
   }
 }
+/* The nodes lie on the page ground: a faint white lift on dark; light.css lifts them to the card
+   (--lift-faint), since its washes darken the ground under the words. */
 .box-life-node {
   min-width: 0;
   border-radius: 14px;
   border: 1px solid var(--border);
-  background: var(--wash-faint, transparent);
+  background: var(--lift-faint, var(--wash-faint, transparent));
   padding: 10px 12px;
 }
 .box-life-node.is-box {
@@ -5361,19 +5177,11 @@ html[data-ink="day"] {
 }
 .box-io.is-out {
   color: var(--c-token-text, #7eb6ff);
-  background: color-mix(in srgb, var(--c-token-text, #7eb6ff) 16%, transparent);
+  background: color-mix(in srgb, var(--c-token-wash, var(--c-token-text, #7eb6ff)) 16%, transparent);
 }
 .box-io.is-idle {
   color: var(--muted);
   background: var(--wash);
-}
-html[data-ink="day"] .box-io.is-in {
-  color: #0d8a54;
-  background: color-mix(in srgb, #0d8a54 12%, transparent);
-}
-html[data-ink="day"] .box-io.is-out {
-  color: #1468c4;
-  background: color-mix(in srgb, #1468c4 12%, transparent);
 }
 .box-type {
   display: inline-flex;
@@ -5403,7 +5211,7 @@ html[data-ink="day"] .box-io.is-out {
   left: 0;
   width: 2px;
   border-radius: 1px;
-  background: #f0c14a;
+  background: var(--mint);
 }
 .reg-bank {
   display: grid;

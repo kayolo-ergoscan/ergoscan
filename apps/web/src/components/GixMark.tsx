@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import clsx from "clsx";
-import { INK } from "@/lib/palette";
+import { INK_TEXT } from "@/lib/palette";
 import { copyText } from "@/lib/copy-text";
 
 function loc(locale: string): string {
@@ -46,8 +46,8 @@ export function GixMark({
       )}
       style={
         ready
-          ? { background: "rgba(232, 121, 249, 0.14)" }
-          : { background: "rgba(255, 255, 255, 0.04)" }
+          ? { background: "var(--gix-wash)" }
+          : { background: "var(--tape-hover)" }
       }
       title={hint}
     >
@@ -56,7 +56,7 @@ export function GixMark({
           "shrink-0 font-semibold lowercase leading-none tracking-[0.16em]",
           size === "md" ? "text-[10px]" : "text-[9px]"
         )}
-        style={{ color: INK.gix }}
+        style={{ color: INK_TEXT.gix }}
       >
         gix
       </span>
@@ -66,7 +66,7 @@ export function GixMark({
           size === "md" ? "text-[14px]" : "text-[12px]",
           !ready && "text-[var(--muted-2)]"
         )}
-        style={ready ? { color: INK.gix } : undefined}
+        style={ready ? { color: INK_TEXT.gix } : undefined}
       >
         {pretty}
       </span>
@@ -80,10 +80,10 @@ export function GixMark({
             });
           }}
           className={clsx(
-            "chip-press inline-flex shrink-0 items-center justify-center overflow-hidden rounded-[4px] leading-none transition-colors duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[rgba(232,121,249,0.2)]",
+            "chip-press inline-flex shrink-0 items-center justify-center overflow-hidden rounded-[4px] leading-none transition-colors duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[var(--gix-wash-hover)]",
             size === "md" ? "h-4 w-4" : "h-3 w-3"
           )}
-          style={{ color: INK.gix }}
+          style={{ color: INK_TEXT.gix }}
           aria-label={ok ? copiedLabel : copyLabel}
         >
           {ok ? (

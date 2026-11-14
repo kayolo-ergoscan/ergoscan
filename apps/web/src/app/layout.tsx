@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import Script from "next/script";
 import { Commissioner, Fira_Code, Fira_Sans, IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import { Providers } from "@/components/Providers";
 import { RegistryBook } from "@/components/RegistryBook";
@@ -22,6 +21,7 @@ import "./phone-shell.css";
 import "./tip.css";
 import "./detail-phone.css";
 import "./kayolo.css";
+import "./light.css";
 
 /** T1 default — Plex Sans has Cyrillic and `tnum`. */
 const sans = IBM_Plex_Sans({
@@ -147,9 +147,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       className={`dark ${sans.variable} ${faceT0.variable} ${faceT2.variable} ${mono.variable} ${faceT2Mono.variable}`}
     >
       <head>
-        <Script id="ergoscan-ink" strategy="beforeInteractive">
-          {INK_BOOT}
-        </Script>
+        {/* Inline in <head>, so it runs before <body> is parsed: the chosen ink is painted before the first frame. */}
+        <script id="ergoscan-ink" dangerouslySetInnerHTML={{ __html: INK_BOOT }} />
       </head>
       <body className="antialiased">
         <Providers>

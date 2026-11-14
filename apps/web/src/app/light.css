@@ -1,0 +1,280 @@
+/*
+ * «Сумерки»: the light ink of the site look (`data-ink="light"`, lib/skin-ink.ts). Same fonts,
+ * shapes, flat cards and one colour per chain entity as the dark look (looks.css); this file only
+ * answers its tokens. Values are solved in OKLCH; skin-ink.test.ts holds every pair to AA.
+ *
+ * Three tiers of each entity colour on the light card:
+ *   --c-*       mark: glyphs, chart lines, canvas inks — ≥ 3:1 on the card and a hovered row;
+ *   --c-*-text  text: links and names — ≥ 4.5:1 on the card and a hovered row;
+ *   --f-*       fill: solid tags and feed tiles under the text ink — ≥ 7:1.
+ * The inverse plate (open nav row, chosen tab) is the text ink with the card ink on it, the light
+ * twin of the white plate on black. Pixel scenes stay the night town, under a dusk sky.
+ */
+
+html[data-look="c"][data-ink="light"] {
+  --bg: #c3c2c0;
+  --module: #d4d3d1;
+  --panel: #d4d3d1;
+  --bg-elevated: #dad9d7;
+  --panel-hover: #cdccca;
+  --row-hover: #cdccca;
+  --row-open: #cbcac8;
+  --detail-bg: #cccbc9;
+  --chip-bg: #c6c5c3;
+  --chip-hover: #bebdbb;
+  --skel: #c4c3c1;
+  /* A pressed or hovered press-tile (globals.css): solid, a step under the card. The dark washes
+     replace the tile's fill, and a darker wash on the light page ground loses the tile's words. */
+  --tile-pressed: var(--row-open);
+  --tile-hover: var(--row-hover);
+  /* A faint lift off the page ground (a box's life nodes): dark lifts with a white wash, the light
+     ground lifts to the card. */
+  --lift-faint: var(--module);
+  --track: #b9b8b6;
+  --border: transparent;
+  --border-soft: transparent;
+  --module-rgb: 212 211 209;
+  --panel-rgb: 212 211 209;
+  --border-rgb: 21 21 19;
+  --wash-faint: rgb(21 21 19 / 0.035);
+  --wash: rgb(21 21 19 / 0.06);
+  --wash-mid: rgb(21 21 19 / 0.1);
+  --wash-strong: rgb(21 21 19 / 0.16);
+  --hair: rgb(21 21 19 / 0.22);
+  --scrim: rgb(21 21 19 / 0.32);
+  --backdrop: rgb(21 21 19 / 0.32);
+  --ghost: rgb(21 21 19 / 0.3);
+  --tape-hover: rgb(21 21 19 / 0.05);
+  --stick-shadow: 8px 0 12px -8px rgb(21 21 19 / 0.22);
+  --pop-shadow: 0 16px 32px rgb(21 21 19 / 0.2);
+  --foot-shadow: 0 -12px 28px rgb(21 21 19 / 0.12);
+  --float-shadow-press: inset 0 0 0 2px var(--text);
+
+  --text: #151513;
+  --muted: #403f3d;
+  --muted-2: #51504e;
+  --link: #151513;
+  --invert: #151513;
+  --invert-fg: #d4d3d1;
+  --plate-now: #151513;
+  --plate-now-ink: #d4d3d1;
+  --tag: #bebdbb;
+  --tag-ink: #151513;
+  --mark: #403f3d;
+  --tile-label: #151513;
+  --pct-halo: none;
+
+  --c-block: #836503;
+  --c-tx: #a84e13;
+  --c-addr: #a84771;
+  --c-token: #4666b8;
+  --c-box: #027749;
+  --c-net: #007384;
+  --c-block-text: #624b02;
+  --c-tx-text: #823700;
+  --c-addr-text: #812f54;
+  --c-token-text: #304a90;
+  --c-box-text: #025b37;
+  --c-net-text: #025663;
+  /* A mark printed as words (a block's header facts and rows, the Lithos seam line): dark prints the
+     mark itself (the var() fallback where it is used), the light card needs the text tier. */
+  --c-block-word: var(--c-block-text);
+  --c-tx-word: var(--c-tx-text);
+  --c-addr-word: var(--c-addr-text);
+  --c-token-word: var(--c-token-text);
+  --c-box-word: var(--c-box-text);
+  --c-net-word: var(--c-net-text);
+  /* The tint under token words (a block's «sky» fact, a box's «out»): dark tints with the text tier,
+     the light card with the fill, or the wash would darken under its own word. */
+  --c-token-wash: var(--f-token);
+  --f-block: #d6b973;
+  --f-tx: #e0a383;
+  --f-addr: #df9cb5;
+  --f-token: #99b2ea;
+  --f-box: #83c39e;
+  --f-net: #6dc1d2;
+  /* Page tags: a stronger tint, the pale fills need it to read as a tag. */
+  --tint: 55%;
+  --selection: var(--f-block);
+
+  /* The accent is printed as words (links, carets): the block's text tier. */
+  --accent: #624b02;
+  --accent-rgb: 98 75 2;
+  --accent-soft: rgb(131 101 3 / 0.16);
+  --brand: #624b02;
+  --brand-soft: rgb(131 101 3 / 0.12);
+  --brand-new: #bb4003;
+  --soft: #624b02;
+  --soft-rgb: 98 75 2;
+  --warning: #624b02;
+  /* Gains and losses are words, also on their own 16 % wash (a price chip, a box's «in»). */
+  --up: #005224;
+  --up-rgb: 0 82 36;
+  --down: #89141d;
+  --down-rgb: 137 20 29;
+  --party: #88614b;
+
+  /* Feed tiles: the fill tier under the text ink. The kind word leans further to the ink. */
+  --k-transfer: #e0a383;
+  --k-token: #99b2ea;
+  --k-nft: #bfa5df;
+  --k-defi: #6dc1d2;
+  --k-oracle: #a9b7c8;
+  --k-bridge: #b4b3b1;
+  --k-reward: #d6b973;
+  --k-rent: #e39f8e;
+  --k-box: #83c39e;
+  --k-contract: #df9cb5;
+  --k-mixer: #8f8e8c;
+  --k-quiet: #bebdbb;
+  --k-ink: #151513;
+  --k-quiet-ink: #151513;
+  --k-nft-text: #614082;
+  --k-rent-text: #833724;
+  --k-reward-text: var(--c-block-text);
+  --kind-mix: 30%;
+  --bar-rest: #6a6968;
+
+  --ev-chain: #836503;
+  --ev-decoded: #8155ae;
+  --ev-telemetry: #007384;
+  --ev-live: #045c2d;
+  --ev-heuristic: #b4452a;
+  --ev-external: #51504e;
+
+  /* lib/palette.ts inks: marks, and their *-text tier for words. */
+  --ink-cyan: #286cab;
+  --ink-green: #0f784e;
+  --ink-gold: var(--c-block);
+  --ink-coral: #b44723;
+  --ink-sky: #456b9c;
+  --ink-violet: #6f5fa1;
+  --ink-teal: #00776d;
+  --ink-gix: #964ba1;
+  --ink-cyan-text: #01518d;
+  --ink-green-text: #015b3a;
+  --ink-gold-text: var(--c-block-text);
+  --ink-coral-text: #8b3111;
+  --ink-sky-text: #2b507f;
+  --ink-violet-text: #554483;
+  --ink-teal-text: #045951;
+  --ink-gix-text: #73367d;
+  --kind-protocol: #975570;
+  --kind-exchange: #806632;
+  --kind-pool: #5d7100;
+  --kind-contract: #5c669c;
+  --heart: #b5414d;
+  --mint: var(--c-block);
+  --econ-round: #915f05;
+  --econ-finder: #007954;
+  --econ-founders: #695cbc;
+  /* Washes under a word: a pale fill, so the word keeps the text tier. */
+  --twin-ink: #4f3a8a;
+  --twin-bg: rgb(191 165 223 / 0.45);
+  --lithos-chip: #bfa5df;
+  --lithos-chip-ink: #694293;
+  --lithos-chip-hover: #55327a;
+  --gix-wash: rgb(217 163 223 / 0.3);
+  --gix-wash-hover: rgb(217 163 223 / 0.45);
+  --api-get: #6dc1d2;
+  --api-post: #d6b973;
+
+  /* Canvas inks by hue family (lib/look.ts lookInk): the mark tier. */
+  --lk-red: #b64241;
+  --lk-orange: #a84e13;
+  --lk-yellow: #836503;
+  --lk-green: #027749;
+  --lk-teal: #007384;
+  --lk-blue: #4666b8;
+  --lk-violet: #a84771;
+  --lk-grey: #51504e;
+  --lk-edge: #d4d3d1;
+
+  color-scheme: light;
+}
+
+/*
+ * Pixel scenes (the home city and yard, the Lithos and rent cards) keep the night town under a
+ * dusk sky. Their painters run in onScene (lib/look.ts) and read these inks off the canvas.
+ */
+html[data-look="c"][data-ink="light"] canvas[data-scene] {
+  border-radius: 6px;
+  background: linear-gradient(180deg, #3d4260 0%, #4f5272 45%, #62566e 75%, #5d5062 100%);
+  --text: #ffffff;
+  --muted: #f1eef5;
+  --muted-2: #e4e0ea;
+  --wash: rgba(255, 255, 255, 0.08);
+  --wash-mid: rgba(255, 255, 255, 0.12);
+  --wash-strong: rgba(255, 255, 255, 0.2);
+  --module: #3d4260;
+  --c-block: #ebcb71;
+  --k-nft: #c19fe9;
+  --k-rent: #ee9781;
+  --up: #88d9a5;
+  --brand-new: #ff9560;
+  --ent-block: #ebcb71;
+  --ent-tx: #ef945f;
+  --ent-addr: #e799b7;
+  --ent-token: #86a6f0;
+  --ent-box: #71d29d;
+}
+
+/* Hollow kind tiles (pending, quiet): a pale fill would vanish as a ring, so ring and glyph lean
+   toward the text ink; the hovered and open rows keep their outer ring. */
+html[data-look="c"][data-ink="light"] .feed-tile.is-hollow {
+  --k-line: color-mix(in oklab, var(--k) 50%, var(--text));
+  box-shadow: inset 0 0 0 2px var(--k-line);
+  color: color-mix(in oklab, var(--k) 40%, var(--text));
+}
+@media (hover: hover) {
+  html[data-look="c"][data-ink="light"] .feed-row:hover .feed-tile.is-hollow {
+    box-shadow: inset 0 0 0 2px var(--k-line), 0 0 0 2px var(--row-hover), 0 0 0 4px var(--k);
+  }
+}
+html[data-look="c"][data-ink="light"] .feed-row.is-open .feed-tile.is-hollow {
+  box-shadow: inset 0 0 0 2px var(--k-line), 0 0 0 2px var(--row-open), 0 0 0 4px var(--k);
+}
+
+html[data-look="c"][data-ink="light"] .mcap-vol {
+  color: var(--c-token-text);
+}
+
+/* A word dimmed beside its figure (a unit, «left», «/ 1,024»; `word-dim` or .feed-unit), in its
+   figure's ink. Dark dims it with opacity; on the light card that drops it under AA, so it is a solid
+   ink part way to --muted: both hold 4.5:1 on every card, so the blend does. */
+html[data-look="c"][data-ink="light"] :is(.word-dim, .feed-unit) {
+  opacity: 1;
+  color: color-mix(in oklab, currentColor 55%, var(--muted));
+}
+
+/* The chosen phone tab is the inverse plate; detail-phone.css dims its count with opacity, which
+   drops under AA on this plate: a solid ink part way to the plate instead. */
+@media (max-width: 1023px) {
+  html[data-look="c"][data-ink="light"] .detail-tab.seg-on .detail-tab-n {
+    opacity: 1;
+    color: color-mix(in oklab, currentColor 62%, var(--invert));
+  }
+}
+
+/* A tip chip takes whatever ink its caller passes (a mark, a fill, a canvas family, --up). On the
+   light card the chip is that ink lifted to the fill tier, under the tile ink. */
+html[data-look="c"][data-ink="light"] .tip-chip.is-ink {
+  background: color-mix(in oklab, var(--tip-ink) 50%, #ffffff);
+  color: var(--k-ink);
+}
+
+/* Sheets and the phone menu: a lighter shade on the light ground. */
+html[data-ink="light"] .sheet-scrim {
+  background: var(--scrim);
+}
+html[data-ink="light"] .bottom-sheet {
+  box-shadow: 0 -12px 40px rgb(21 21 19 / 0.18);
+}
+html[data-ink="light"] .kayolo-panel.is-phone {
+  box-shadow: 0 14px 34px -14px rgb(21 21 19 / 0.3);
+}
+
+/* The Basis mark is a white picture: on the light card it is printed in the text ink. */
+html[data-ink="light"] .basis-mark-bob {
+  filter: brightness(0) opacity(0.88);
+}

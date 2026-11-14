@@ -349,12 +349,12 @@ export function OracleFeedView({
                 </div>
                 <div className="mt-2 flex items-center gap-3 text-[12px] text-[var(--muted)]">
                   <span className="inline-flex items-center gap-1.5">
-                    <span className="h-2 w-2 rounded-full" style={{ background: "#86a6f0" }} />
+                    <span className="h-2 w-2 rounded-full" style={{ background: "var(--c-token)" }} />
                     {t("oracles.chartOracle")}
                   </span>
                   {def.market ? (
                     <span className="inline-flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full" style={{ background: "#e799b7" }} />
+                      <span className="h-2 w-2 rounded-full" style={{ background: "var(--c-addr)" }} />
                       {t("oracles.chartMarket")}
                     </span>
                   ) : null}
